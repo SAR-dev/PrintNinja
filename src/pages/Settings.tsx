@@ -1,0 +1,195 @@
+import { useTranslation } from "react-i18next";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTheme } from "@/lib/theme/ThemeProvider";
+import { Palette, Globe, Key, Link, Shield } from "lucide-react";
+
+export function SettingsPage() {
+  const { t } = useTranslation();
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold">{t("settings_page.title")}</h1>
+
+      <Tabs defaultValue="general" className="w-full">
+        <TabsList>
+          <TabsTrigger value="general">
+            <Palette className="h-4 w-4" />
+            General
+          </TabsTrigger>
+          <TabsTrigger value="fonts">
+            <Globe className="h-4 w-4" />
+            {t("settings_page.fonts")}
+          </TabsTrigger>
+          <TabsTrigger value="api">
+            <Key className="h-4 w-4" />
+            {t("settings_page.api")}
+          </TabsTrigger>
+          <TabsTrigger value="deeplinks">
+            <Link className="h-4 w-4" />
+            {t("settings_page.deep_links")}
+          </TabsTrigger>
+          <TabsTrigger value="security">
+            <Shield className="h-4 w-4" />
+            Security
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="general" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t("settings_page.theme")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Select value={theme} onValueChange={(v) => setTheme(v as "light" | "dark" | "system")}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="light">{t("settings_page.light")}</SelectItem>
+                  <SelectItem value="dark">{t("settings_page.dark")}</SelectItem>
+                  <SelectItem value="system">{t("settings_page.system")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t("settings_page.retention")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Keep history for (days)</Label>
+                  <Input type="number" defaultValue="30" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Max records</Label>
+                  <Input type="number" defaultValue="10000" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="fonts" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t("settings_page.fonts")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-md border">
+                <div>
+                  <p className="text-sm font-medium">Noto Sans (Latin)</p>
+                  <p className="text-xs text-muted-foreground">Bundled with app</p>
+                </div>
+                <Badge>Installed</Badge>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-md border">
+                <div>
+                  <p className="text-sm font-medium">Noto Sans CJK</p>
+                  <p className="text-xs text-muted-foreground">Japanese, Chinese, Korean</p>
+                </div>
+                <Button variant="outline" size="sm">Download</Button>
+              </div>
+              <Button variant="outline" className="w-full">
+                Upload Font (TTF, OTF, WOFF2)
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="api" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Local REST API</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-md border">
+                <div>
+                  <p className="text-sm font-medium">API Server</p>
+                  <p className="text-xs text-muted-foreground">Default: 127.0.0.1:17717</p>
+                </div>
+                <Badge variant="secondary">Disabled</Badge>
+              </div>
+              <div className="space-y-2">
+                <Label>Port</Label>
+                <Input type="number" defaultValue="17717" />
+              </div>
+              <div className="space-y-2">
+                <Label>API Key</Label>
+                <div className="flex gap-2">
+                  <Input type="password" value="pn_live_xxxxxxxx" readOnly />
+                  <Button variant="outline">Regenerate</Button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="lan-access" />
+                <Label htmlFor="lan-access">Allow LAN access</Label>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="deeplinks" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Trusted Sources</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Manage which apps and domains can trigger prints without confirmation.
+              </p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-3 rounded-md border">
+                  <div>
+                    <p className="text-sm font-medium">POS System</p>
+                    <p className="text-xs text-muted-foreground">pos.local</p>
+                  </div>
+                  <Badge>Trusted</Badge>
+                </div>
+              </div>
+              <Button variant="outline" className="w-full">
+                Add Trusted Source
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="security" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Security</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>{t("settings_page.allowed_domains")}</Label>
+                <Input placeholder="api.example.com, pos.local" />
+                <p className="text-xs text-muted-foreground">
+                  Comma-separated list of allowed domains for data URLs
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="block-private" defaultChecked />
+                <Label htmlFor="block-private">Block private IP ranges</Label>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

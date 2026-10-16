@@ -1,0 +1,70 @@
+mod commands;
+mod db;
+mod render;
+mod transport;
+mod queue;
+mod error;
+
+use tauri::Manager;
+use tauri_plugin_sql::Migration;
+use tauri_plugin_sql::MigrationKind;
+
+pub use error::{AppError, AppResult};
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive("printninja=info".parse().unwrap()),
+        )
+        .init();
+
+    let migrations = vec![Migration {
+        version: 1,
+        description: "initial_schema",
+        sql: include_str!("db/schema.sql"),
+        kind: MigrationKind::Up,
+    }];
+
+    tauri::Builder::default()
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations("sqlite:printninja.db", migrations)
+                .build(),
+        )
+        .setup(|app| {
+            let db_path = app.path().app_data_dir()?.join("printninja.db");
+            std::fs::create_dir_all(db_path.parent().unwrap())?;
+            let db_url = format!("sqlite:{}", db_path.display());
+            app.manage(db::Database { url: db_url });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::ping,
+            commands::printer::list_printers,
+            commands::printer::add_printer,
+            commands::printer::delete_printer,
+            commands::template::list_templates,
+            commands::template::create_template,
+            commands::template::delete_template,
+            commands::history::list_jobs,
+            commands::history::get_job,
+            commands::history::reprint_job,
+            commands::history::retry_job,
+            commands::history::delete_job,
+            commands::settings::get_setting,
+            commands::settings::set_setting,
+            commands::print::print_html,
+            commands::print::enumerate_system_printers,
+            commands::print::spike_test_print,
+            commands::version::list_versions,
+            commands::version::create_version,
+            commands::version::delete_version,
+            commands::font::list_fonts,
+            commands::font::upload_font,
+            commands::font::delete_font,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
