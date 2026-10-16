@@ -46,6 +46,9 @@ pub trait PrinterTransport: Send + Sync {
 }
 
 pub mod windows_spooler;
+pub mod ipp;
+pub mod raw_tcp;
+pub mod android_bridge;
 
 pub struct TransportRegistry;
 
