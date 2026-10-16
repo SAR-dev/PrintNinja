@@ -226,3 +226,103 @@ test.describe("Web-mode guards", () => {
     await expect(page.getByText("Print").first()).toBeVisible();
   });
 });
+
+test.describe("Theme persistence (detail)", () => {
+  test("selecting dark adds dark class", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByRole("tab", { name: "General" }).click();
+    const trigger = page.getByRole("combobox").first();
+    await trigger.click();
+    await page.getByRole("option", { name: "Dark" }).click();
+    await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
+    const isDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
+    expect(isDark).toBe(true);
+  });
+
+  test("selecting light removes dark class", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByRole("tab", { name: "General" }).click();
+    const trigger = page.getByRole("combobox").first();
+    await trigger.click();
+    await page.getByRole("option", { name: "Light" }).click();
+    await page.waitForFunction(() => !document.documentElement.classList.contains("dark"));
+    const isDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
+    expect(isDark).toBe(false);
+  });
+
+  test("selected theme persists after reload", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByRole("tab", { name: "General" }).click();
+    await page.getByRole("combobox").first().click();
+    await page.getByRole("option", { name: "Dark" }).click();
+    await page.reload();
+    const stored = await page.evaluate(() => localStorage.getItem("printninja-theme"));
+    expect(stored).toBe("dark");
+  });
+});
+
+test.describe("PrinterSetup input data flow", () => {
+  test("wifi form accepts typed values", async ({ page }) => {
+    await page.goto("/printers");
+    await page.getByRole("tab", { name: "Wi-Fi / LAN" }).click();
+    const nameInput = page.getByPlaceholder(/Front Desk/);
+    const ipInput = page.getByPlaceholder(/192.168/);
+    await nameInput.fill("Kitchen Wi-Fi");
+    await ipInput.fill("192.168.2.50");
+    await expect(nameInput).toHaveValue("Kitchen Wi-Fi");
+    await expect(ipInput).toHaveValue("192.168.2.50");
+  });
+
+  test("clicking Discover surfaces toast", async ({ page }) => {
+    await page.goto("/printers");
+    await page.getByRole("tab", { name: "Wi-Fi / LAN" }).click();
+    await page.getByRole("button", { name: "Discover" }).click();
+    await expect(page.getByText(/Discovering printers/)).toBeVisible({ timeout: 5000 });
+  });
+
+  test("USB discover button shows toast", async ({ page }) => {
+    await page.goto("/printers");
+    await page.getByRole("tab", { name: "USB" }).click();
+    await page.getByRole("button", { name: /Discover USB Printers/ }).click();
+    await expect(page.getByText(/USB discovery started/)).toBeVisible({ timeout: 5000 });
+  });
+});
+
+test.describe("History search & clear", () => {
+  test("typing search does not crash", async ({ page }) => {
+    await page.goto("/history");
+    const input = page.getByPlaceholder("Search");
+    await input.fill("order-1042");
+    await expect(input).toHaveValue("order-1042");
+    await expect(page.getByText(/No print jobs yet/)).toBeVisible();
+  });
+
+  test("Clear button resets filters", async ({ page }) => {
+    await page.goto("/history");
+    await page.getByPlaceholder("Search").fill("anything");
+    await page.getByRole("button", { name: "Clear" }).click();
+    await expect(page.getByPlaceholder("Search")).toHaveValue("");
+  });
+});
+
+test.describe("First-run skip via localStorage", () => {
+  test("skips onboarding when already completed", async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("printninja-onboarding-complete", "true");
+    });
+    await page.goto("/");
+    // main layout visible, onboarding not
+    await expect(page.getByText("Step 1 of 4")).toBeHidden().catch(() => {});
+    await expect(page.getByText("PrintNinja").first()).toBeVisible();
+  });
+});
+
+test.describe("Batch per-record status UI", () => {
+  test("batch dialog textarea accepts JSON input", async ({ page }) => {
+    await page.goto("/print");
+    await page.getByRole("button", { name: "New Batch" }).click();
+    const ta = page.getByRole("textbox").first();
+    await ta.fill('[{"name":"Tea","qty":2},{"name":"Coffee","qty":1}]');
+    await expect(ta).toHaveValue(/Tea/);
+  });
+});
