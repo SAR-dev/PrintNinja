@@ -72,9 +72,9 @@ export function DesignerPage() {
   const [newTemplateName, setNewTemplateName] = useState("");
   const [htmlCode, setHtmlCode] = useState(DEFAULT_TEMPLATE_HTML);
   const [cssCode, setCssCode] = useState(DEFAULT_TEMPLATE_CSS);
-  const [templateName, setTemplateName] = useState("Sample Receipt");
-  const [pageWidth, setPageWidth] = useState(80);
-  const [pageHeight, setPageHeight] = useState(200);
+  const [templateName, setTemplateName] = useState(STARTER_TEMPLATES[0].name);
+  const [pageWidth, setPageWidth] = useState(STARTER_TEMPLATES[0]?.page_w_mm ?? 80);
+  const [pageHeight, setPageHeight] = useState(STARTER_TEMPLATES[0]?.page_h_mm ?? 200);
   const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
   const [zoom, setZoom] = useState(1);
   const [activeTab, setActiveTab] = useState("canvas");
