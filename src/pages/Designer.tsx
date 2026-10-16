@@ -42,7 +42,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
 import { BARCODE_TYPES, validateBarcode, generateBarcodeSvg } from "@/lib/utils/barcode";
-import { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS, DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
+import { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS, DEFAULT_MOCK_DATA, STARTER_TEMPLATES } from "@/lib/templates/defaultTemplate";
 import { VisualDesigner } from "@/components/VisualDesigner";
 import { renderTemplate } from "@/lib/render/renderTemplate";
 
@@ -82,11 +82,9 @@ export function DesignerPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Templates available in the designer
-  const [templates, _setTemplates] = useState<Array<{ id: number; name: string; html: string; css: string }>>([
-    { id: 1, name: "Sample Receipt", html: DEFAULT_TEMPLATE_HTML, css: DEFAULT_TEMPLATE_CSS },
-    { id: 2, name: "Shipping Label", html: `<div class="label">\n  <h1>Shipping Label</h1>\n  <p>To: {{customer.name}}</p>\n  <p>Order #{{order.id}}</p>\n  {{#each items}}{{name}} (x{{qty}})\n{{/each}}\n</div>`, css: `body { font-family: sans-serif; padding: 2mm; }` },
-    { id: 3, name: "Invoice A4", html: `<div class="invoice">\n  <h1>Invoice</h1>\n  <p>Customer: {{customer.name}}</p>\n  <table class="w-full">\n    <tr><th>Item</th><th>Qty</th><th>Total</th></tr>\n    {{#each items}}<tr><td>{{name}}</td><td>{{qty}}</td><td>{{currency total}}</td></tr>{{/each}}\n  </table>\n  <p>Total: {{currency order.total}}</p>\n</div>`, css: `body { font-family: "Times New Roman", serif; margin: 20mm; }` },
-  ]);
+  const [templates, _setTemplates] = useState<Array<{ id: number; name: string; html: string; css: string; page_w_mm?: number; page_h_mm?: number; orientation?: string }>>(
+    STARTER_TEMPLATES.map((t, i) => ({ id: i + 1, name: t.name, html: t.html, css: t.css, page_w_mm: t.page_w_mm, page_h_mm: t.page_h_mm, orientation: t.orientation })),
+  );
   const [currentTemplateId, setCurrentTemplateId] = useState(1);
 
   // Sample datasets (variables)
@@ -98,11 +96,14 @@ export function DesignerPage() {
     },
   ]);
 
-  const loadTemplate = (tpl: { id: number; name: string; html: string; css: string }) => {
+  const loadTemplate = (tpl: { id: number; name: string; html: string; css: string; page_w_mm?: number; page_h_mm?: number; orientation?: string }) => {
     setCurrentTemplateId(tpl.id);
     setTemplateName(tpl.name);
     setHtmlCode(tpl.html);
     setCssCode(tpl.css);
+    if (tpl.page_w_mm) setPageWidth(tpl.page_w_mm);
+    if (tpl.page_h_mm) setPageHeight(tpl.page_h_mm);
+    if (tpl.orientation) setOrientation(tpl.orientation as "portrait" | "landscape");
     toast.success(`Loaded "${tpl.name}"`);
   };
   const [selectedDatasetName, setSelectedDatasetName] = useState("Sample Order");
