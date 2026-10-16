@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +43,21 @@ export function PrintPage() {
   const [printers, setPrinters] = useState<PrinterInfo[]>([]);
   const [showBatchDialog, setShowBatchDialog] = useState(false);
   const [batchInput, setBatchInput] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await invoke<PrinterInfo[]>("enumerate_system_printers");
+        setPrinters(list);
+        if (list.length > 0 && !store.printerId) {
+          store.setPrinterId(list[0].name);
+        }
+      } catch (e) {
+        console.error("Failed to load printers:", e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleBatchPrint = async () => {
     if (!batchInput.trim()) {

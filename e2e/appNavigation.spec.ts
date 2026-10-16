@@ -56,6 +56,12 @@ test.describe("Designer", () => {
     await expect(page.locator("text=Designer").first()).toBeVisible();
   });
 
+  test("can switch templates", async ({ page }) => {
+    await page.goto("/");
+    await page.locator("button:has-text('Shipping Label')").first().click();
+    await expect(page.locator("text=Active").first()).toBeVisible({ timeout: 5000 });
+  });
+
   test("page setup shows width and height inputs", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("input").first()).toBeVisible();

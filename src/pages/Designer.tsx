@@ -79,6 +79,14 @@ export function DesignerPage() {
   const [zoom, setZoom] = useState(1);
   const [activeTab, setActiveTab] = useState("canvas");
 
+  // Templates available in the designer
+  const [templates, _setTemplates] = useState<Array<{ id: number; name: string; html: string; css: string }>>([
+    { id: 1, name: "Sample Receipt", html: DEFAULT_TEMPLATE_HTML, css: DEFAULT_TEMPLATE_CSS },
+    { id: 2, name: "Shipping Label", html: `<div class="label">\n  <h1>Shipping Label</h1>\n  <p>To: {{customer.name}}</p>\n  <p>Order #{{order.id}}</p>\n  {{#each items}}{{name}} (x{{qty}})\n{{/each}}\n</div>`, css: `body { font-family: sans-serif; padding: 2mm; }` },
+    { id: 3, name: "Invoice A4", html: `<div class="invoice">\n  <h1>Invoice</h1>\n  <p>Customer: {{customer.name}}</p>\n  <table class="w-full">\n    <tr><th>Item</th><th>Qty</th><th>Total</th></tr>\n    {{#each items}}<tr><td>{{name}}</td><td>{{qty}}</td><td>{{currency total}}</td></tr>{{/each}}\n  </table>\n  <p>Total: {{currency order.total}}</p>\n</div>`, css: `body { font-family: "Times New Roman", serif; margin: 20mm; }` },
+  ]);
+  const [currentTemplateId, setCurrentTemplateId] = useState(1);
+
   // Sample datasets (variables)
   const [datasets, setDatasets] = useState<Array<{ name: string; json: string; isDefault: boolean }>>([
     {
@@ -87,6 +95,14 @@ export function DesignerPage() {
       isDefault: true,
     },
   ]);
+
+  const loadTemplate = (tpl: { id: number; name: string; html: string; css: string }) => {
+    setCurrentTemplateId(tpl.id);
+    setTemplateName(tpl.name);
+    setHtmlCode(tpl.html);
+    setCssCode(tpl.css);
+    toast.success(`Loaded "${tpl.name}"`);
+  };
   const [selectedDatasetName, setSelectedDatasetName] = useState("Sample Order");
   const [showDatasetDialog, setShowDatasetDialog] = useState(false);
   const [datasetName, setDatasetName] = useState("");
@@ -186,14 +202,25 @@ export function DesignerPage() {
               <CardTitle className="text-sm">Templates</CardTitle>
             </CardHeader>
             <CardContent className="space-y-1">
-              <div className="flex items-center gap-2 p-2 rounded-md bg-secondary">
-                <FileText className="h-4 w-4" />
-                <span className="text-sm">{templateName}</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer">
-                <FileText className="h-4 w-4" />
-                <span className="text-sm">Shipping Label</span>
-              </div>
+              {templates.map((tpl) => {
+                const active = tpl.id === currentTemplateId;
+                return (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => loadTemplate(tpl)}
+                    className={`flex w-full items-center gap-2 rounded-md p-2 text-left text-sm transition-colors ${active ? "bg-secondary font-medium" : "hover:bg-muted"}`}
+                  >
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{tpl.name}</span>
+                    {active && (
+                      <span className="ml-auto rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                        Active
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </CardContent>
           </Card>
 
