@@ -27,6 +27,7 @@ import {
   Download,
   Upload,
   RotateCcw,
+  Trash2,
   ZoomIn,
   ZoomOut,
   Save,
@@ -77,6 +78,22 @@ export function DesignerPage() {
   const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
   const [zoom, setZoom] = useState(1);
   const [activeTab, setActiveTab] = useState("canvas");
+
+  // Sample datasets (variables)
+  const [datasets, setDatasets] = useState<Array<{ name: string; json: string; isDefault: boolean }>>([
+    {
+      name: "Sample Order",
+      json: JSON.stringify(DEFAULT_MOCK_DATA, null, 2),
+      isDefault: true,
+    },
+  ]);
+  const [selectedDatasetName, setSelectedDatasetName] = useState("Sample Order");
+  const [showDatasetDialog, setShowDatasetDialog] = useState(false);
+  const [datasetName, setDatasetName] = useState("");
+  const [datasetJson, setDatasetJson] = useState("{\n  \n}");
+  const [editingDataset, setEditingDataset] = useState<string | null>(null);
+  const [editJson, setEditJson] = useState("");
+  const [showEditDataset, setShowEditDataset] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -376,33 +393,119 @@ export function DesignerPage() {
           )}
 
           {activeTab === "variables" && (
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm">{t("designer.variables")}</CardTitle>
-                  <Button variant="outline" size="sm" className="h-7 text-xs">
-                    <Plus className="h-3 w-3" />
-                    Add Dataset
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex items-center justify-between p-2 rounded-md border bg-secondary">
-                  <div>
-                    <p className="text-sm font-medium">Sample Order</p>
-                    <p className="text-xs text-muted-foreground">{"{{store}}, {{order}}, {{order.items}}"}</p>
+            <div className="space-y-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm">{t("designer.variables")}</CardTitle>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
+                      setDatasetName("");
+                      setDatasetJson("{\n  \n}");
+                      setShowDatasetDialog(true);
+                    }}>
+                      <Plus className="h-3 w-3" />
+                      Add Dataset
+                    </Button>
                   </div>
-                  <Badge>Default</Badge>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded-md border">
-                  <div>
-                    <p className="text-sm font-medium">Empty Order</p>
-                    <p className="text-xs text-muted-foreground">{"{{store}}, {{order}}"}</p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {datasets.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No datasets yet. Add one to preview and validate templates.</p>
+                  ) : (
+                    datasets.map((ds) => {
+                      let parsed: any;
+                      try { parsed = JSON.parse(ds.json); } catch { parsed = null; }
+                      const fields = parsed ? Object.keys(parsed) : [];
+                      return (
+                        <div key={ds.name} className="border rounded-md p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="dataset"
+                                checked={selectedDatasetName === ds.name}
+                                onChange={() => setSelectedDatasetName(ds.name)}
+                              />
+                              <span className="text-sm font-medium">{ds.name}</span>
+                              {ds.isDefault && <Badge variant="secondary" className="text-[10px]">Default</Badge>}
+                            </div>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => {
+                                setEditingDataset(ds.name);
+                                setEditJson(ds.json);
+                                setShowEditDataset(true);
+                              }}>
+                                Edit
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => {
+                                setDatasets((prev) => prev.filter((d) => d.name !== ds.name));
+                                if (selectedDatasetName === ds.name) {
+                                  setSelectedDatasetName(datasets[0]?.name ?? "");
+                                }
+                                toast.success("Dataset deleted");
+                              }} disabled={ds.isDefault}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <p>Fields:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {fields.map((f) => (
+                                <button
+                                  key={f}
+                                  type="button"
+                                  className="rounded-full border px-2 py-0.5 font-mono text-[10px] hover:bg-muted cursor-pointer"
+                                  onClick={() => {
+                                    const token = `{{${f}}}`;
+                                    navigator.clipboard?.writeText(token);
+                                    toast.success(`Copied ${token}`);
+                                  }}
+                                  title="Copy to clipboard"
+                                >
+                                  {"{{"}{f}{"}}"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <details className="text-xs">
+                            <summary className="cursor-pointer text-muted-foreground">View JSON</summary>
+                            <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted p-2 font-mono text-[10px]">{ds.json}</pre>
+                          </details>
+                        </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Quick Insert</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Click a variable chip below to copy it, then paste into the HTML/CSS.
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {["store.name", "store.address", "order.id", "order.date", "order.customer", "order.items", "order.total", "order.subtotal", "order.tax", "barcode", "qr"].map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        className="rounded-full border px-2 py-0.5 font-mono text-[10px] hover:bg-primary hover:text-primary-foreground cursor-pointer"
+                        onClick={() => {
+                          const token = `{{${v}}}`;
+                          navigator.clipboard?.writeText(token);
+                          toast.success(`Copied ${token}`);
+                        }}
+                      >
+                        {"{{"}{v}{"}}"}
+                      </button>
+                    ))}
                   </div>
-                  <Button variant="ghost" size="sm" className="h-6 text-xs">Load</Button>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           {/* Action Bar */}
@@ -538,6 +641,79 @@ export function DesignerPage() {
               <QrCode className="h-4 w-4" />
               Insert
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Dataset Dialog */}
+      <Dialog open={showDatasetDialog} onOpenChange={setShowDatasetDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Dataset</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Name</Label>
+              <Input value={datasetName} onChange={(e) => setDatasetName(e.target.value)} placeholder="e.g. Empty Order" />
+            </div>
+            <div className="space-y-1">
+              <Label>JSON data</Label>
+              <textarea
+                className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-xs font-mono"
+                value={datasetJson}
+                onChange={(e) => setDatasetJson(e.target.value)}
+                rows={8}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDatasetDialog(false)}>Cancel</Button>
+            <Button onClick={() => {
+              if (!datasetName.trim()) {
+                toast.error("Dataset name required");
+                return;
+              }
+              try {
+                JSON.parse(datasetJson);
+              } catch {
+                toast.error("Invalid JSON");
+                return;
+              }
+              setDatasets((prev) => [...prev, { name: datasetName, json: datasetJson, isDefault: false }]);
+              setShowDatasetDialog(false);
+              toast.success(`Dataset "${datasetName}" added`);
+            }}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dataset Dialog */}
+      <Dialog open={showEditDataset} onOpenChange={setShowEditDataset}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Dataset: {editingDataset}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <textarea
+              className="w-full min-h-[160px] rounded-md border border-input bg-background px-3 py-2 text-xs font-mono"
+              value={editJson}
+              onChange={(e) => setEditJson(e.target.value)}
+              rows={10}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDataset(false)}>Cancel</Button>
+            <Button onClick={() => {
+              try {
+                JSON.parse(editJson);
+              } catch {
+                toast.error("Invalid JSON");
+                return;
+              }
+              setDatasets((prev) => prev.map((d) => d.name === editingDataset ? { ...d, json: editJson } : d));
+              setShowEditDataset(false);
+              toast.success("Dataset updated");
+            }}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
