@@ -315,18 +315,25 @@ export function DesignerPage() {
                   <div
                     ref={canvasRef}
                     className="bg-white shadow-lg border border-gray-200 relative"
-                    style={{ width: canvasWidth, height: canvasHeight }}
+                    style={{ width: canvasWidth, height: canvasHeight, transformOrigin: "top left" }}
                   >
-                    <div className="absolute inset-0 p-4 text-xs text-gray-800" style={{ fontSize: `${12 * zoom}px` }}>
-                      <h1 className="text-lg font-bold" style={{ fontSize: `${18 * zoom}px` }}>{"{{store.name}}"}</h1>
-                      <p>{"Order #{{order.id}}"}</p>
-                      <div className="mt-2 space-y-1">
-                        <div className="flex justify-between"><span>Tea x2</span><span>$7.00</span></div>
-                        <div className="flex justify-between"><span>Coffee x1</span><span>$4.50</span></div>
-                      </div>
-                      <hr className="my-2" />
-                      <div className="flex justify-between font-bold"><span>Total</span><span>$11.50</span></div>
-                    </div>
+                    <iframe
+                      srcDoc={renderTemplate(
+                        htmlCode,
+                        cssCode,
+                        (() => {
+                          try {
+                            const ds = datasets.find((d) => d.name === selectedDatasetName) ?? datasets[0];
+                            return JSON.parse(ds.json);
+                          } catch {
+                            return DEFAULT_MOCK_DATA;
+                          }
+                        })(),
+                      )}
+                      className="pointer-events-none"
+                      title="Canvas preview"
+                      style={{ width: "100%", height: "100%", border: 0 }}
+                    />
                   </div>
                 </div>
               </CardContent>
