@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -13,8 +14,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Printer, Eye, Zap, CheckCircle2, XCircle } from "lucide-react";
+
+import { Printer, Eye, Zap, CheckCircle2, XCircle, Play } from "lucide-react";
 import { toast } from "sonner";
+import { usePrintStore } from "@/lib/store/printStore";
+import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 interface PrintResponse {
   success: boolean;
@@ -33,93 +39,94 @@ interface PrinterInfo {
 
 export function PrintPage() {
   const { t } = useTranslation();
+  const store = usePrintStore();
   const [printers, setPrinters] = useState<PrinterInfo[]>([]);
-  const [selectedPrinter, setSelectedPrinter] = useState<string>("");
-  const [status, setStatus] = useState<"idle" | "printing" | "success" | "failed">("idle");
-  const [duration, setDuration] = useState<number>(0);
-  const [error, setError] = useState<string>("");
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [batchInput, setBatchInput] = useState("");
+
+  const handleBatchPrint = async () => {
+    if (!batchInput.trim()) {
+      toast.error("Please enter batch data");
+      return;
+    }
+    try {
+      const data = JSON.parse(batchInput);
+      await invoke("create_batch", {
+        req: { template_id: 1, printer_id: 1, data, mode: store.batchMode2 },
+      });
+      toast.success("Batch created");
+      setShowBatchDialog(false);
+    } catch (e) {
+      toast.error(`Invalid JSON: ${e}`);
+    }
+  };
 
   const loadPrinters = async () => {
     try {
       const list = await invoke<PrinterInfo[]>("enumerate_system_printers");
       setPrinters(list);
-      if (list.length > 0 && !selectedPrinter) {
-        setSelectedPrinter(list[0].name);
-      }
     } catch (e) {
       console.error("Failed to load printers:", e);
     }
   };
 
-  const handleSpikeTest = async () => {
-    setStatus("printing");
-    setError("");
+  const handlePrint = async () => {
+    if (!store.printerId) {
+      toast.error("Please select a printer");
+      return;
+    }
+    store.setStatus("printing");
+    store.setError("");
+
     try {
-      const result = await invoke<PrintResponse>("spike_test_print");
-      setDuration(result.duration_ms);
+      const data = store.useTestData ? DEFAULT_MOCK_DATA : {};
+
+      const result = await invoke<PrintResponse>("print_html", {
+        req: {
+          printer_name: store.printerId,
+          html: `<html><body><pre>${JSON.stringify(data, null, 2)}</pre></body></html>`,
+          page_width_mm: 210,
+          page_height_mm: 297,
+          orientation: store.orientation,
+          copies: store.copies,
+        },
+      });
+
+      store.setDurationMs(result.duration_ms);
 
       if (result.success) {
-        setStatus("success");
-        toast.success(`Printed successfully in ${result.duration_ms}ms`);
+        store.setStatus("success");
+        toast.success(`Printed in ${result.duration_ms}ms`);
       } else {
-        setStatus("failed");
-        setError(result.error || "Unknown error");
+        store.setStatus("failed");
+        store.setError(result.error || "Unknown error");
         toast.error(`Print failed: ${result.error}`);
       }
     } catch (e) {
-      setStatus("failed");
-      setError(String(e));
+      store.setStatus("failed");
+      store.setError(String(e));
       toast.error(`Print failed: ${e}`);
     }
   };
 
-  const handlePrint = async () => {
-    if (!selectedPrinter) {
-      toast.error("Please select a printer");
-      return;
-    }
-    setStatus("printing");
-    setError("");
+  const handleSpikeTest = async () => {
+    store.setStatus("printing");
+    store.setError("");
 
     try {
-      const testHtml = `
-<!DOCTYPE html>
-<html>
-<head><title>PrintNinja</title></head>
-<body>
-    <h1>PrintNinja Print Test</h1>
-    <p>Printer: ${selectedPrinter}</p>
-    <p>Time: ${new Date().toLocaleString()}</p>
-    <hr>
-    <p>This is a test print from PrintNinja.</p>
-</body>
-</html>`;
-
-      const result = await invoke<PrintResponse>("print_html", {
-        req: {
-          printer_name: selectedPrinter,
-          html: testHtml,
-          page_width_mm: 210,
-          page_height_mm: 297,
-          orientation: "portrait",
-          copies: 1,
-        },
-      });
-
-      setDuration(result.duration_ms);
+      const result = await invoke<PrintResponse>("spike_test_print");
+      store.setDurationMs(result.duration_ms);
 
       if (result.success) {
-        setStatus("success");
-        toast.success(`Printed successfully in ${result.duration_ms}ms`);
+        store.setStatus("success");
+        toast.success(`Spike test printed in ${result.duration_ms}ms`);
       } else {
-        setStatus("failed");
-        setError(result.error || "Unknown error");
-        toast.error(`Print failed: ${result.error}`);
+        store.setStatus("failed");
+        store.setError(result.error || "Unknown error");
       }
     } catch (e) {
-      setStatus("failed");
-      setError(String(e));
-      toast.error(`Print failed: ${e}`);
+      store.setStatus("failed");
+      store.setError(String(e));
     }
   };
 
@@ -132,7 +139,7 @@ export function PrintPage() {
         </Button>
       </div>
 
-      {/* Phase 1 Spike Section */}
+      {/* Phase 1 Spike */}
       <Card className="border-2 border-dashed border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-950/20">
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -144,52 +151,38 @@ export function PrintPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-yellow-700 dark:text-yellow-300">
-            This tests the core pipeline: HTML to PDF to silent print on Windows.
+            Tests the core pipeline: HTML to PDF to silent print on Windows.
           </p>
-
-          <div className="flex flex-wrap gap-3">
-            <Button
-              onClick={handleSpikeTest}
-              disabled={status === "printing"}
-              className="bg-yellow-600 hover:bg-yellow-700"
-            >
+          <div className="flex gap-3">
+            <Button onClick={handleSpikeTest} disabled={store.status === "printing"} className="bg-yellow-600 hover:bg-yellow-700">
               <Zap className="h-4 w-4" />
-              {status === "printing" ? "Printing..." : "Spike Test Print"}
+              {store.status === "printing" ? "Printing..." : "Spike Test Print"}
             </Button>
           </div>
-
-          {status !== "idle" && (
+          {store.status !== "idle" && (
             <div className="flex items-center gap-3 p-3 rounded-md bg-white/50 dark:bg-black/20">
-              {status === "success" && (
+              {store.status === "success" && (
                 <>
                   <CheckCircle2 className="h-5 w-5 text-green-600" />
                   <div>
-                    <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                      Print successful
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Duration: {duration}ms
-                    </p>
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400">Print successful</p>
+                    <p className="text-xs text-muted-foreground">Duration: {store.durationMs}ms</p>
                   </div>
                 </>
               )}
-              {status === "failed" && (
+              {store.status === "failed" && (
                 <>
                   <XCircle className="h-5 w-5 text-red-600" />
                   <div>
-                    <p className="text-sm font-medium text-red-700 dark:text-red-400">
-                      Print failed
-                    </p>
-                    <p className="text-xs text-muted-foreground">{error}</p>
+                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Print failed</p>
+                    <p className="text-xs text-muted-foreground">{store.error}</p>
                   </div>
                 </>
               )}
-              {status === "printing" && (
+              {store.status === "printing" && (
                 <>
                   <div className="h-5 w-5 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />
-                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                    Printing...
-                  </p>
+                  <p className="text-sm text-yellow-700 dark:text-yellow-300">Printing...</p>
                 </>
               )}
             </div>
@@ -208,22 +201,20 @@ export function PrintPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>{t("print.printer")}</Label>
-                  <Select value={selectedPrinter} onValueChange={setSelectedPrinter}>
+                  <Select value={store.printerId} onValueChange={store.setPrinterId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select printer" />
                     </SelectTrigger>
                     <SelectContent>
                       {printers.map((p) => (
-                        <SelectItem key={p.id} value={p.name}>
-                          {p.name}
-                        </SelectItem>
+                        <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>{t("print.template")}</Label>
-                  <Select>
+                  <Select value={store.templateId} onValueChange={store.setTemplateId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select template" />
                     </SelectTrigger>
@@ -237,20 +228,32 @@ export function PrintPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="data-url">{t("print.data_url")}</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="data-url">{t("print.data_url")}</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="test-data" className="text-xs text-muted-foreground">Test Data</Label>
+                    <Switch id="test-data" checked={store.useTestData} onCheckedChange={store.setUseTestData} />
+                  </div>
+                </div>
                 <Input
                   id="data-url"
                   placeholder="https://api.example.com/orders/123"
+                  value={store.dataUrl}
+                  onChange={(e) => store.setDataUrl(e.target.value)}
+                  disabled={store.useTestData}
                 />
+                {store.useTestData && (
+                  <p className="text-xs text-muted-foreground">
+                    Using mock data: {DEFAULT_MOCK_DATA.store.name} - Order #{DEFAULT_MOCK_DATA.order.id}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <Label>{t("print.orientation")}</Label>
-                  <Select defaultValue="portrait">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select value={store.orientation} onValueChange={(v) => store.setOrientation(v as "portrait" | "landscape")}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="portrait">Portrait</SelectItem>
                       <SelectItem value="landscape">Landscape</SelectItem>
@@ -259,10 +262,8 @@ export function PrintPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>{t("print.fit_mode")}</Label>
-                  <Select defaultValue="fit-width">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select value={store.fitMode} onValueChange={(v) => store.setFitMode(v as "actual" | "fit-width" | "fit-page" | "shrink" | "fill")}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="actual">{t("print.fit_actual")}</SelectItem>
                       <SelectItem value="fit-width">{t("print.fit_width")}</SelectItem>
@@ -274,43 +275,70 @@ export function PrintPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="copies">{t("print.copies")}</Label>
-                  <Input id="copies" type="number" min="1" defaultValue="1" />
+                  <Input id="copies" type="number" min="1" value={store.copies} onChange={(e) => store.setCopies(Number(e.target.value))} />
                 </div>
                 <div className="space-y-2">
-                  <Label>{t("print.test_data")}</Label>
-                  <Button variant="outline" className="w-full">
-                    {t("print.test_data")}
-                  </Button>
+                  <Label>Page Range</Label>
+                  <Input placeholder="e.g. 1-5" value={store.pageRange} onChange={(e) => store.setPageRange(e.target.value)} />
                 </div>
               </div>
 
-              {/* Margins */}
               <div className="space-y-2">
                 <Label>{t("print.margins")}</Label>
                 <div className="grid grid-cols-4 gap-2">
                   <div className="space-y-1">
-                    <Label htmlFor="mt" className="text-xs text-muted-foreground">
-                      {t("print.margin_top")}
-                    </Label>
-                    <Input id="mt" type="number" defaultValue="5" />
+                    <Label htmlFor="mt" className="text-xs text-muted-foreground">{t("print.margin_top")}</Label>
+                    <Input id="mt" type="number" value={store.marginTop} onChange={(e) => store.setMarginTop(Number(e.target.value))} />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="mr" className="text-xs text-muted-foreground">
-                      {t("print.margin_right")}
-                    </Label>
-                    <Input id="mr" type="number" defaultValue="5" />
+                    <Label htmlFor="mr" className="text-xs text-muted-foreground">{t("print.margin_right")}</Label>
+                    <Input id="mr" type="number" value={store.marginRight} onChange={(e) => store.setMarginRight(Number(e.target.value))} />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="mb" className="text-xs text-muted-foreground">
-                      {t("print.margin_bottom")}
-                    </Label>
-                    <Input id="mb" type="number" defaultValue="5" />
+                    <Label htmlFor="mb" className="text-xs text-muted-foreground">{t("print.margin_bottom")}</Label>
+                    <Input id="mb" type="number" value={store.marginBottom} onChange={(e) => store.setMarginBottom(Number(e.target.value))} />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="ml" className="text-xs text-muted-foreground">
-                      {t("print.margin_left")}
-                    </Label>
-                    <Input id="ml" type="number" defaultValue="5" />
+                    <Label htmlFor="ml" className="text-xs text-muted-foreground">{t("print.margin_left")}</Label>
+                    <Input id="ml" type="number" value={store.marginLeft} onChange={(e) => store.setMarginLeft(Number(e.target.value))} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Switch id="grayscale" checked={store.grayscale} onCheckedChange={store.setGrayscale} />
+                <Label htmlFor="grayscale">Grayscale</Label>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Batch Print */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Batch Print</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => setShowBatchDialog(true)}>
+                  <Play className="h-4 w-4" />
+                  New Batch
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Mode</Label>
+                  <Select value={store.batchMode2} onValueChange={(v) => store.setBatchMode2(v as "single_job" | "per_record")}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="single_job">Single Job</SelectItem>
+                      <SelectItem value="per_record">Per Record</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Status</Label>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">No batch</Badge>
                   </div>
                 </div>
               </div>
@@ -319,7 +347,7 @@ export function PrintPage() {
 
           {/* Actions */}
           <div className="flex gap-3">
-            <Button size="lg" className="flex-1" onClick={handlePrint} disabled={status === "printing"}>
+            <Button size="lg" className="flex-1" onClick={handlePrint} disabled={store.status === "printing"}>
               <Printer className="h-5 w-5" />
               {t("print.print")}
             </Button>
@@ -352,17 +380,53 @@ export function PrintPage() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
-                <Badge variant="secondary">
-                  {t("print.queued")}
-                </Badge>
-                <span className="text-sm text-muted-foreground">
-                  Waiting to print...
-                </span>
+                <Badge variant="secondary">{t("print.queued")}</Badge>
+                <span className="text-sm text-muted-foreground">Waiting to print...</span>
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* Batch Dialog */}
+      <Dialog open={showBatchDialog} onOpenChange={setShowBatchDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Batch Print</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>JSON Array</Label>
+              <Textarea
+                placeholder='[{"name":"Tea","qty":2},{"name":"Coffee","qty":1}]'
+                value={batchInput}
+                onChange={(e) => setBatchInput(e.target.value)}
+                rows={8}
+                className="font-mono text-xs"
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <Label className="text-xs">Mode</Label>
+                <Select value={store.batchMode2} onValueChange={(v) => store.setBatchMode2(v as "single_job" | "per_record")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="single_job">Single Job</SelectItem>
+                    <SelectItem value="per_record">Per Record</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBatchDialog(false)}>Cancel</Button>
+            <Button onClick={handleBatchPrint}>
+              <Play className="h-4 w-4" />
+              Start Batch
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

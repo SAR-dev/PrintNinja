@@ -1,0 +1,116 @@
+import { create } from "zustand";
+
+export interface PrinterProfile {
+  id: number;
+  printer_id: number;
+  template_id: number;
+  settings_json: string;
+}
+
+export interface PrintJob {
+  id: number;
+  status: "queued" | "printing" | "success" | "failed" | "cancelled";
+  error?: string;
+  duration_ms?: number;
+}
+
+export interface Batch {
+  id: number;
+  total: number;
+  done: number;
+  failed: number;
+  mode: "single_job" | "per_record";
+  status: "queued" | "printing" | "success" | "failed" | "cancelled";
+}
+
+interface PrintState {
+  printerId: string;
+  templateId: string;
+  dataUrl: string;
+  httpMethod: string;
+  orientation: "portrait" | "landscape";
+  marginTop: number;
+  marginRight: number;
+  marginBottom: number;
+  marginLeft: number;
+  fitMode: "actual" | "fit-width" | "fit-page" | "shrink" | "fill";
+  copies: number;
+  useTestData: boolean;
+  selectedDataset: string;
+  pageRange: string;
+  grayscale: boolean;
+  status: "idle" | "queued" | "printing" | "success" | "failed";
+  error: string;
+  durationMs: number;
+  batchMode: boolean;
+  batchData: string;
+  batchMode2: "single_job" | "per_record";
+
+  setPrinterId: (v: string) => void;
+  setTemplateId: (v: string) => void;
+  setDataUrl: (v: string) => void;
+  setHttpMethod: (v: string) => void;
+  setOrientation: (v: "portrait" | "landscape") => void;
+  setMarginTop: (v: number) => void;
+  setMarginRight: (v: number) => void;
+  setMarginBottom: (v: number) => void;
+  setMarginLeft: (v: number) => void;
+  setFitMode: (v: "actual" | "fit-width" | "fit-page" | "shrink" | "fill") => void;
+  setCopies: (v: number) => void;
+  setUseTestData: (v: boolean) => void;
+  setSelectedDataset: (v: string) => void;
+  setPageRange: (v: string) => void;
+  setGrayscale: (v: boolean) => void;
+  setStatus: (v: "idle" | "queued" | "printing" | "success" | "failed") => void;
+  setError: (v: string) => void;
+  setDurationMs: (v: number) => void;
+  setBatchMode: (v: boolean) => void;
+  setBatchData: (v: string) => void;
+  setBatchMode2: (v: "single_job" | "per_record") => void;
+}
+
+export const usePrintStore = create<PrintState>((set) => ({
+  printerId: "",
+  templateId: "",
+  dataUrl: "",
+  httpMethod: "GET",
+  orientation: "portrait",
+  marginTop: 5,
+  marginRight: 5,
+  marginBottom: 5,
+  marginLeft: 5,
+  fitMode: "fit-width",
+  copies: 1,
+  useTestData: false,
+  selectedDataset: "Sample Order",
+  pageRange: "",
+  grayscale: false,
+  status: "idle",
+  error: "",
+  durationMs: 0,
+  batchMode: false,
+  batchData: "",
+  batchMode2: "per_record",
+
+  setPrinterId: (printerId) => set({ printerId }),
+  setTemplateId: (templateId) => set({ templateId }),
+  setDataUrl: (dataUrl) => set({ dataUrl }),
+  setHttpMethod: (httpMethod) => set({ httpMethod }),
+  setOrientation: (orientation) => set({ orientation }),
+  setMarginTop: (marginTop) => set({ marginTop }),
+  setMarginRight: (marginRight) => set({ marginRight }),
+  setMarginBottom: (marginBottom) => set({ marginBottom }),
+  setMarginLeft: (marginLeft) => set({ marginLeft }),
+  setFitMode: (fitMode) => set({ fitMode }),
+  setCopies: (copies) => set({ copies }),
+  setUseTestData: (useTestData) => set({ useTestData }),
+  setSelectedDataset: (selectedDataset) => set({ selectedDataset }),
+  setPageRange: (pageRange) => set({ pageRange }),
+  setGrayscale: (grayscale) => set({ grayscale }),
+  setStatus: (status) => set({ status }),
+  setError: (error) => set({ error }),
+  setDurationMs: (durationMs) => set({ durationMs }),
+  setBatchMode: (batchMode) => set({ batchMode }),
+  setBatchData: (batchData) => set({ batchData }),
+  setBatchMode2: (batchMode2) => set({ batchMode2 }),
+}));

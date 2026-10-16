@@ -3,6 +3,7 @@ mod db;
 mod render;
 mod transport;
 mod queue;
+mod data;
 mod error;
 
 use tauri::Manager;
@@ -64,6 +65,14 @@ pub fn run() {
             commands::font::list_fonts,
             commands::font::upload_font,
             commands::font::delete_font,
+            commands::profile::list_profiles,
+            commands::profile::save_profile,
+            commands::profile::delete_profile,
+            commands::batch::create_batch,
+            commands::batch::list_batches,
+            commands::batch::get_batch,
+            commands::batch::cancel_batch,
+            commands::batch::retry_batch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
