@@ -2,12 +2,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, Semaphore};
 
-/// Per-printer job queue with sequential processing
-pub struct PrintQueue {
-    semaphores: HashMap<String, Arc<Semaphore>>,
-    tx: mpsc::Sender<QueueJob>,
-}
-
 #[derive(Debug, Clone)]
 pub struct QueueJob {
     pub job_id: String,
@@ -15,6 +9,11 @@ pub struct QueueJob {
     pub data: Vec<u8>,
     pub mime_type: String,
     pub copies: u32,
+}
+
+pub struct PrintQueue {
+    semaphores: HashMap<String, Arc<Semaphore>>,
+    tx: mpsc::Sender<QueueJob>,
 }
 
 impl PrintQueue {
