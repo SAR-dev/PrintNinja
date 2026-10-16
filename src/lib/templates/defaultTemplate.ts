@@ -3,12 +3,12 @@ export const DEFAULT_TEMPLATE_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
 </head>
-<body class="bg-white text-slate-900 font-sans antialiased">
+<body class="bg-white text-slate-900 font-sans antialiased p-6">
   <!-- Header band -->
-  <div class="border-b-2 border-slate-800 pb-4 mb-4">
+  <div class="border-b-2 border-slate-800 pb-6 mb-6 px-2">
     <div class="flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="h-10 w-10 rounded-lg bg-slate-800 text-white flex items-center justify-center text-base font-bold">
+      <div class="flex items-center gap-4">
+        <div class="h-12 w-12 rounded-xl bg-slate-800 text-white flex items-center justify-center text-lg font-bold shrink-0">
           PN
         </div>
         <div>
@@ -157,8 +157,8 @@ export const DEFAULT_MOCK_DATA = {
 // Starter templates shown in the Designer's template list
 export const STARTER_TEMPLATES = [
   {
-    name: "Receipt 80mm",
-    page_w_mm: 80,
+    name: "Receipt 100mm",
+    page_w_mm: 100,
     page_h_mm: 200,
     orientation: "portrait" as const,
     html: DEFAULT_TEMPLATE_HTML,
