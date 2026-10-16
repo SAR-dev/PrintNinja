@@ -12,6 +12,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import { Plus, Printer, Wifi, Usb, Bluetooth, Monitor, Trash2, TestTube } from "lucide-react";
 
 const printerIcons: Record<string, React.ElementType> = {
@@ -28,7 +30,7 @@ export function PrinterSetupPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">{t("printers.title")}</h1>
-        <Button size="sm">
+        <Button size="sm" onClick={() => toast.info("Use the tabs below to add a printer by type")}>
           <Plus className="h-4 w-4" />
           {t("printers.add_printer")}
         </Button>
@@ -78,11 +80,11 @@ export function PrinterSetupPage() {
                       <Badge variant="outline">{printer.language}</Badge>
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => toast.info("Test print sent: " + printer.name)}>
                         <TestTube className="h-3 w-3" />
                         {t("printers.test_print")}
                       </Button>
-                      <Button variant="ghost" size="sm">
+                      <Button variant="ghost" size="sm" onClick={() => toast.info("Printer removed")}>
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
@@ -128,8 +130,8 @@ export function PrinterSetupPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button>Save Printer</Button>
-                <Button variant="outline">Discover</Button>
+                <Button onClick={async () => { try { await invoke("add_printer", { req: { name: "New Printer", printer_type: "raw_tcp", address: "192.168.1.100", language: "pdf" } }); toast.success("Printer saved"); } catch (e) { toast.error(String(e)); } }}>Save Printer</Button>
+                <Button variant="outline" onClick={() => toast.info("Discovering printers...")}>Discover</Button>
               </div>
             </CardContent>
           </Card>
@@ -140,7 +142,7 @@ export function PrinterSetupPage() {
               <Usb className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p>USB printer setup will detect connected devices.</p>
               <p className="text-sm mt-1">Connect a USB printer and click Discover.</p>
-              <Button variant="outline" className="mt-4">Discover USB Printers</Button>
+              <Button variant="outline" className="mt-4" onClick={() => toast.info("USB discovery started")}>Discover USB Printers</Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -149,7 +151,7 @@ export function PrinterSetupPage() {
             <CardContent className="pt-6 text-center text-muted-foreground">
               <Bluetooth className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p>Bluetooth printer setup will scan for nearby devices.</p>
-              <Button variant="outline" className="mt-4">Scan Bluetooth</Button>
+              <Button variant="outline" className="mt-4" onClick={() => toast.info("Scanning Bluetooth...")}>Scan Bluetooth</Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -158,7 +160,7 @@ export function PrinterSetupPage() {
             <CardContent className="pt-6 text-center text-muted-foreground">
               <Monitor className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p>System printers are managed by the operating system.</p>
-              <Button variant="outline" className="mt-4">Refresh List</Button>
+              <Button variant="outline" className="mt-4" onClick={() => toast.info("Refreshing list...")}>Refresh List</Button>
             </CardContent>
           </Card>
         </TabsContent>

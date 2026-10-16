@@ -64,7 +64,7 @@ test.describe("Designer", () => {
 
   test("page setup shows width and height inputs", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("input").first()).toBeVisible();
+    await expect(page.locator('input[type="number"]').first()).toBeVisible();
   });
 
   test("create new template dialog", async ({ page }) => {

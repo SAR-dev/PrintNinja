@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RotateCcw, Download, Search, Trash2, Eye } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { useHistoryStore, type HistoryJob } from "@/lib/store/historyStore";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -64,8 +65,14 @@ export function HistoryPage() {
     toast.success(`Retrying job #${job.id}`);
   };
 
-  const handleDelete = (job: HistoryJob) => {
-    toast.success(`Deleted job #${job.id}`);
+  const handleDelete = async (job: HistoryJob) => {
+    try {
+      await invoke("delete_job", { id: job.id });
+      store.setJobs(store.jobs.filter((j) => j.id !== job.id));
+      toast.success(`Deleted job #${job.id}`);
+    } catch (e) {
+      toast.error(`Failed: ${e}`);
+    }
   };
 
   const handleExportCsv = () => {

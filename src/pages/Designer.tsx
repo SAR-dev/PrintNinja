@@ -79,6 +79,8 @@ export function DesignerPage() {
   const [zoom, setZoom] = useState(1);
   const [activeTab, setActiveTab] = useState("canvas");
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Templates available in the designer
   const [templates, _setTemplates] = useState<Array<{ id: number; name: string; html: string; css: string }>>([
     { id: 1, name: "Sample Receipt", html: DEFAULT_TEMPLATE_HTML, css: DEFAULT_TEMPLATE_CSS },
@@ -183,15 +185,45 @@ export function DesignerPage() {
             <Plus className="h-4 w-4" />
             {t("designer.newTemplate")}
           </Button>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
             <Upload className="h-4 w-4" />
             Import
           </Button>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => {
+            const data = { name: templateName, html: htmlCode, css: cssCode };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${templateName.replace(/\s+/g, "-")}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast.success("Template exported");
+          }}>
             <Download className="h-4 w-4" />
             Export
           </Button>
         </div>
+        <input
+          type="file"
+          accept="application/json,text/html"
+          ref={fileInputRef}
+          className="hidden"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            try {
+              const text = await file.text();
+              const data = JSON.parse(text);
+              setTemplateName(data.name || file.name.replace(/\.(json|html)$/, ""));
+              if (data.html) setHtmlCode(data.html);
+              if (data.css) setCssCode(data.css);
+              toast.success("Template imported");
+            } catch {
+              toast.error("Invalid template file");
+            }
+          }}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
@@ -559,7 +591,13 @@ export function DesignerPage() {
                 <Save className="h-4 w-4" />
                 Save Version
               </Button>
-              <Button size="sm">
+              <Button size="sm" onClick={() => {
+                // Live preview via compiled output
+                const rendered = renderTemplate(htmlCode, cssCode, DEFAULT_MOCK_DATA as any);
+                // Open in new tab
+                const win = window.open("", "_blank");
+                if (win) { win.document.write(rendered); win.document.close(); }
+              }}>
                 <Check className="h-4 w-4" />
                 Save & Preview
               </Button>

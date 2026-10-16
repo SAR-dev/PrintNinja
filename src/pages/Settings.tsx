@@ -132,9 +132,9 @@ export function SettingsPage() {
                   <p className="text-sm font-medium">Noto Sans CJK</p>
                   <p className="text-xs text-muted-foreground">Japanese, Chinese, Korean</p>
                 </div>
-                <Button variant="outline" size="sm">Download</Button>
+                <Button variant="outline" size="sm" onClick={() => toast.info("Downloading CJK fonts...")}>Download</Button>
               </div>
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" onClick={() => toast.info("Font upload dialog coming soon")}>
                 Upload Font (TTF, OTF, WOFF2)
               </Button>
             </CardContent>

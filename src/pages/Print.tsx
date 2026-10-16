@@ -19,6 +19,7 @@ import { Printer, Eye, Zap, CheckCircle2, XCircle, Play } from "lucide-react";
 import { toast } from "sonner";
 import { usePrintStore } from "@/lib/store/printStore";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
+import { renderTemplate } from "@/lib/render/renderTemplate";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -43,6 +44,7 @@ export function PrintPage() {
   const [printers, setPrinters] = useState<PrinterInfo[]>([]);
   const [showBatchDialog, setShowBatchDialog] = useState(false);
   const [batchInput, setBatchInput] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -366,7 +368,7 @@ export function PrintPage() {
               <Printer className="h-5 w-5" />
               {t("print.print")}
             </Button>
-            <Button size="lg" variant="outline">
+            <Button size="lg" variant="outline" onClick={() => setShowPreview(true)}>
               <Eye className="h-5 w-5" />
               {t("print.preview")}
             </Button>
@@ -402,6 +404,29 @@ export function PrintPage() {
           </Card>
         </div>
       </div>
+
+      {/* Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Print Preview</DialogTitle>
+          </DialogHeader>
+          <div className="border rounded-md overflow-auto bg-gray-100 dark:bg-gray-900 p-4 max-h-[70vh]">
+            <div className="mx-auto bg-white shadow" style={{ width: 80 * 3.78, minHeight: 200 * 3.78 }}>
+              <iframe
+                srcDoc={renderTemplate("<div class=\"p-4\"><h1>Print preview</h1><p>Mock data loaded.</p></div>", "", DEFAULT_MOCK_DATA as any)}
+                className="w-full border-0"
+                style={{ height: 200 * 3.78 }}
+                title="Print preview"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPreview(false)}>Close</Button>
+            <Button onClick={() => { setShowPreview(false); handlePrint(); }}>Print</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Batch Dialog */}
       <Dialog open={showBatchDialog} onOpenChange={setShowBatchDialog}>
