@@ -157,8 +157,8 @@ export const DEFAULT_MOCK_DATA = {
 // Starter templates shown in the Designer's template list
 export const STARTER_TEMPLATES = [
   {
-    name: "Receipt 100mm",
-    page_w_mm: 100,
+    name: "Receipt 120mm",
+    page_w_mm: 120,
     page_h_mm: 200,
     orientation: "portrait" as const,
     html: DEFAULT_TEMPLATE_HTML,
