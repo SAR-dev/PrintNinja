@@ -43,6 +43,7 @@ import { css } from "@codemirror/lang-css";
 import { BARCODE_TYPES, validateBarcode, generateBarcodeSvg } from "@/lib/utils/barcode";
 import { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS, DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
 import { VisualDesigner } from "@/components/VisualDesigner";
+import { renderTemplate } from "@/lib/render/renderTemplate";
 
 const PAGE_PRESETS = [
   { label: "A4", width: 210, height: 297 },
@@ -361,45 +362,13 @@ export function DesignerPage() {
             <Card>
               <CardContent className="p-0">
                 <div className="flex items-center justify-center min-h-[500px] bg-gray-100 dark:bg-gray-900 rounded-b-lg">
-                  <div className="bg-white shadow-lg border p-6 text-sm" style={{ width: pageWidth * MM_TO_PX, minHeight: pageHeight * MM_TO_PX }}>
-                    <div className="flex justify-between items-center mb-4">
-                      <h1 className="text-lg font-bold">{DEFAULT_MOCK_DATA.store.name}</h1>
-                      <span className="text-gray-500">#{DEFAULT_MOCK_DATA.order.id}</span>
-                    </div>
-                    <div className="mb-4">
-                      <p className="text-gray-600">{DEFAULT_MOCK_DATA.order.date}</p>
-                      <p className="text-gray-600">Customer: {DEFAULT_MOCK_DATA.order.customer}</p>
-                    </div>
-                    <table className="w-full mb-4">
-                      <thead>
-                        <tr className="border-b-2 border-gray-300">
-                          <th className="text-left py-1">Item</th>
-                          <th className="text-right py-1">Qty</th>
-                          <th className="text-right py-1">Price</th>
-                          <th className="text-right py-1">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {DEFAULT_MOCK_DATA.order.items.map((item, i) => (
-                          <tr key={i} className="border-b border-gray-100">
-                            <td className="py-1">{item.name}</td>
-                            <td className="text-right py-1">{item.qty}</td>
-                            <td className="text-right py-1">${item.price.toFixed(2)}</td>
-                            <td className="text-right py-1">${item.total.toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="flex justify-end">
-                      <div className="text-right">
-                        <p className="text-gray-600">Subtotal: ${DEFAULT_MOCK_DATA.order.subtotal.toFixed(2)}</p>
-                        <p className="text-gray-600">Tax: ${DEFAULT_MOCK_DATA.order.tax.toFixed(2)}</p>
-                        <p className="text-lg font-bold">Total: ${DEFAULT_MOCK_DATA.order.total.toFixed(2)}</p>
-                      </div>
-                    </div>
-                    <div className="mt-6 text-center text-gray-400 text-xs">
-                      <p>Thank you for your business!</p>
-                    </div>
+                  <div className="bg-white shadow-lg border overflow-auto" style={{ width: pageWidth * MM_TO_PX, minHeight: pageHeight * MM_TO_PX }}>
+                    <iframe
+                      srcDoc={renderTemplate(htmlCode, cssCode, DEFAULT_MOCK_DATA as any)}
+                      className="w-full border-0"
+                      style={{ height: pageHeight * MM_TO_PX, width: "100%" }}
+                      title="Preview"
+                    />
                   </div>
                 </div>
               </CardContent>

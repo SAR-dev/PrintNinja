@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
@@ -8,9 +8,10 @@ import {
   History,
   Pencil,
   Menu,
-  X,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useTranslation } from "react-i18next";
 
 const navItems = [
@@ -32,10 +33,44 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Close mobile drawer whenever route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
   const handleNavigate = (path: string) => {
     navigate(path);
     setMobileMenuOpen(false);
   };
+
+  const NavList = ({ variant = "desktop" as "desktop" | "mobile" }) => (
+    <nav
+      className={cn(
+        "flex flex-col gap-1",
+        variant === "desktop" ? "p-4" : "p-2",
+      )}
+    >
+      {navItems.map((item) => {
+        const active = isActivePath(location.pathname, item.path);
+        return (
+          <Button
+            key={item.path}
+            variant={active ? "secondary" : "ghost"}
+            className={cn(
+              "w-full justify-start gap-3 touch-target min-h-11",
+              active && "bg-secondary font-medium",
+            )}
+            onClick={() => handleNavigate(item.path)}
+            aria-current={active ? "page" : undefined}
+            type="button"
+          >
+            <item.icon className="h-5 w-5" />
+            {t(item.labelKey)}
+          </Button>
+        );
+      })}
+    </nav>
+  );
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -45,41 +80,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Printer className="h-6 w-6 text-primary" />
           <span className="text-lg font-bold">PrintNinja</span>
         </div>
-        <nav className="flex-1 space-y-1 p-4">
-          {navItems.map((item) => {
-            const active = isActivePath(location.pathname, item.path);
-            return (
-              <Button
-                key={item.path}
-                variant={active ? "secondary" : "ghost"}
-                className={cn(
-                  "w-full justify-start gap-3",
-                  active && "bg-secondary font-medium",
-                )}
-                onClick={() => handleNavigate(item.path)}
-              >
-                <item.icon className="h-5 w-5" />
-                {t(item.labelKey)}
-              </Button>
-            );
-          })}
-        </nav>
+        <NavList variant="desktop" />
       </aside>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t bg-card">
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t bg-card"
+        aria-label="Primary"
+      >
         <div className="flex items-center justify-around h-16">
           {navItems.map((item) => {
             const active = isActivePath(location.pathname, item.path);
             return (
               <button
                 key={item.path}
+                type="button"
                 onClick={() => handleNavigate(item.path)}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1 w-16 h-full text-xs transition-colors",
-                  active
-                    ? "text-primary font-medium"
-                    : "text-muted-foreground hover:text-foreground",
+                  "flex flex-col items-center justify-center gap-1 w-16 h-full text-xs transition-colors min-h-11",
+                  active ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <item.icon className="h-5 w-5" />
@@ -96,39 +116,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Printer className="h-6 w-6 text-primary" />
           <span className="text-lg font-bold">PrintNinja</span>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        >
-          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
+        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" type="button" aria-label="Open menu">
+              <Menu className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-72 max-w-[80vw]">
+            <div className="mt-4 flex flex-col gap-2">
+              {navItems.map((item) => {
+                const active = isActivePath(location.pathname, item.path);
+                return (
+                  <Button
+                    key={item.path}
+                    variant={active ? "secondary" : "ghost"}
+                    className={cn("w-full justify-start gap-3", active && "font-medium")}
+                    onClick={() => handleNavigate(item.path)}
+                    type="button"
+                    aria-current={active ? "page" : undefined}
+                  >
+                    <item.icon className="h-5 w-5" />
+                    {t(item.labelKey)}
+                    {active && <ChevronRight className="ml-auto h-4 w-4" />}
+                  </Button>
+                );
+              })}
+            </div>
+          </SheetContent>
+        </Sheet>
       </header>
-
-      {/* Mobile Sheet Menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMobileMenuOpen(false)}>
-          <div
-            className="absolute right-0 top-16 h-full w-64 bg-card shadow-xl p-4 space-y-1"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {navItems.map((item) => {
-              const active = isActivePath(location.pathname, item.path);
-              return (
-                <Button
-                  key={item.path}
-                  variant={active ? "secondary" : "ghost"}
-                  className={cn("w-full justify-start gap-3")}
-                  onClick={() => handleNavigate(item.path)}
-                >
-                  <item.icon className="h-5 w-5" />
-                  {t(item.labelKey)}
-                </Button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto pt-16 pb-16 md:pt-0 md:pb-0">
