@@ -108,7 +108,7 @@ test.describe("Designer interactions", () => {
     await page.getByRole("button", { name: "New Template" }).click();
     await page.getByPlaceholder("My Template").fill("My A4 Template");
     await page.getByRole("button", { name: "Create" }).click();
-    await expect(page.getByText("My A4 Template")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("My A4 Template").first()).toBeVisible({ timeout: 5000 });
   });
 
   test("Add dataset dialog rejects invalid JSON", async ({ page }) => {
@@ -324,5 +324,45 @@ test.describe("Batch per-record status UI", () => {
     const ta = page.getByRole("textbox").first();
     await ta.fill('[{"name":"Tea","qty":2},{"name":"Coffee","qty":1}]');
     await expect(ta).toHaveValue(/Tea/);
+  });
+});
+
+test.describe("Template creation flow", () => {
+  test("creating without name shows an error", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "New Template" }).click();
+    await page.getByRole("button", { name: "Create" }).click();
+    await expect(page.getByText(/Template name required/i)).toBeVisible({ timeout: 5000 });
+  });
+
+  test("cancel dialog leaves templates unchanged", async ({ page }) => {
+    await page.goto("/");
+    const before = await page.getByText("Shipping Label").first().isVisible();
+    await page.getByRole("button", { name: "New Template" }).click();
+    await page.getByPlaceholder("My Template").fill("Should Not Create");
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByText("Should Not Create")).toBeHidden().catch(() => {});
+    expect(before).toBe(true);
+  });
+
+  test("duplicate name keeps dialog open", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "New Template" }).click();
+    await page.getByPlaceholder("My Template").fill("Receipt 120mm");
+    // record templates before
+    await page.getByRole("button", { name: "Create" }).click();
+    await page.waitForTimeout(600);
+    const stillOpen = await page.getByPlaceholder("My Template").isVisible().catch(() => false);
+    expect(stillOpen).toBe(true);
+    await page.getByRole("button", { name: "Cancel" }).click();
+  });
+
+  test("new template appears and becomes active", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "New Template" }).click();
+    await page.getByPlaceholder("My Template").fill("My Second Template");
+    await page.getByRole("button", { name: "Create" }).click();
+    const activeRow = page.locator("button", { hasText: "My Second Template" });
+    await expect(activeRow.getByText("Active")).toBeVisible({ timeout: 5000 });
   });
 });

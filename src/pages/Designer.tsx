@@ -82,7 +82,7 @@ export function DesignerPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Templates available in the designer
-  const [templates, _setTemplates] = useState<Array<{ id: number; name: string; html: string; css: string; page_w_mm?: number; page_h_mm?: number; orientation?: string }>>(
+  const [templates, setTemplates] = useState<Array<{ id: number; name: string; html: string; css: string; page_w_mm?: number; page_h_mm?: number; orientation?: string }>>(
     STARTER_TEMPLATES.map((t, i) => ({ id: i + 1, name: t.name, html: t.html, css: t.css, page_w_mm: t.page_w_mm, page_h_mm: t.page_h_mm, orientation: t.orientation })),
   );
   const [currentTemplateId, setCurrentTemplateId] = useState(1);
@@ -105,6 +105,32 @@ export function DesignerPage() {
     if (tpl.page_h_mm) setPageHeight(tpl.page_h_mm);
     if (tpl.orientation) setOrientation(tpl.orientation as "portrait" | "landscape");
     toast.success(`Loaded "${tpl.name}"`);
+  };
+
+  const createNewTemplate = () => {
+    const name = newTemplateName.trim();
+    if (!name) {
+      toast.error("Template name required");
+      return;
+    }
+    if (templates.some((t) => t.name.toLowerCase() === name.toLowerCase())) {
+      toast.error("Template already exists");
+      return;
+    }
+    const id = templates.length ? Math.max(...templates.map((t) => t.id)) + 1 : 1;
+    const tpl = {
+      id,
+      name,
+      html: DEFAULT_TEMPLATE_HTML,
+      css: DEFAULT_TEMPLATE_CSS,
+      page_w_mm: STARTER_TEMPLATES[0].page_w_mm,
+      page_h_mm: STARTER_TEMPLATES[0].page_h_mm,
+      orientation: STARTER_TEMPLATES[0].orientation,
+    };
+    setTemplates((prev) => [...prev, tpl]);
+    loadTemplate(tpl);
+    setNewTemplateName("");
+    setShowNewTemplateDialog(false);
   };
   const [selectedDatasetName, setSelectedDatasetName] = useState("Sample Order");
   const [showDatasetDialog, setShowDatasetDialog] = useState(false);
@@ -805,13 +831,7 @@ export function DesignerPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowNewTemplateDialog(false)}>Cancel</Button>
-            <Button onClick={() => {
-              if (newTemplateName) {
-                setTemplateName(newTemplateName);
-                setShowNewTemplateDialog(false);
-                toast.success(`Template "${newTemplateName}" created`);
-              }
-            }}>Create</Button>
+            <Button onClick={createNewTemplate}>Create</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
