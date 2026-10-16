@@ -208,4 +208,8 @@ impl WindowsSpooler {
     pub fn new(_printer_name: String) -> Self {
         Self
     }
+
+    pub fn send_raw(&self, _data: &[u8]) -> Result<(), String> {
+        Err("Windows spooler not available on this platform".to_string())
+    }
 }

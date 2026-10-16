@@ -42,6 +42,7 @@ import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
 import { BARCODE_TYPES, validateBarcode, generateBarcodeSvg } from "@/lib/utils/barcode";
 import { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS, DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
+import { VisualDesigner } from "@/components/VisualDesigner";
 
 const PAGE_PRESETS = [
   { label: "A4", width: 210, height: 297 },
@@ -269,9 +270,10 @@ export function DesignerPage() {
         {/* Main Canvas + Code */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-[320px]">
-              <TabsList className="grid w-full grid-cols-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-[420px]">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="canvas" className="text-xs">{t("designer.canvas")}</TabsTrigger>
+                <TabsTrigger value="visual" className="text-xs">Visual</TabsTrigger>
                 <TabsTrigger value="code" className="text-xs">{t("designer.code")}</TabsTrigger>
                 <TabsTrigger value="preview" className="text-xs">{t("designer.preview")}</TabsTrigger>
                 <TabsTrigger value="variables" className="text-xs">{t("designer.variables")}</TabsTrigger>
@@ -311,6 +313,15 @@ export function DesignerPage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {activeTab === "visual" && (
+            <VisualDesigner
+              initialHtml={htmlCode}
+              initialCss={cssCode}
+              onHtmlChange={setHtmlCode}
+              onCssChange={setCssCode}
+            />
           )}
 
           {activeTab === "code" && (
