@@ -2,7 +2,7 @@ mod api;
 mod commands;
 mod db;
 mod deeplink;
-mod render;
+pub mod render;
 mod transport;
 mod queue;
 mod data;

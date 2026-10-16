@@ -14,10 +14,11 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTheme } from "@/lib/theme/ThemeProvider";
-import { Palette, Globe, Key, Link, Shield } from "lucide-react";
+import { Palette, Globe, Key, Link, Shield, Download } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
+import { diagnostics } from "@/lib/diagnostics";
 
 export function SettingsPage() {
   const { t } = useTranslation();
@@ -88,6 +89,27 @@ export function SettingsPage() {
                   <Input type="number" defaultValue="10000" />
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Diagnostics</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Export application logs and diagnostics for troubleshooting.
+              </p>
+              <Button variant="outline" onClick={() => {
+                diagnostics.download();
+                toast.success("Diagnostics exported");
+              }}>
+                <Download className="h-4 w-4 mr-2" />
+                Export Diagnostics
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Secrets and API tokens are redacted from the export.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>
