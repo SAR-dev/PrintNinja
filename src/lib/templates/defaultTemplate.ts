@@ -3,13 +3,13 @@ export const DEFAULT_TEMPLATE_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
 </head>
-<body class="p-6 text-sm font-sans">
-  <div class="flex justify-between items-center mb-4">
-    <h1 class="text-lg font-bold">{{store.name}}</h1>
-    <span class="text-gray-500">#{{order.id}}</span>
+<body class="p-8 text-sm font-sans">
+  <div class="flex justify-between items-center pb-4 border-b border-gray-200 mb-4">
+    <h1 class="text-xl font-bold">{{store.name}}</h1>
+    <span class="text-gray-500 font-mono">#{{order.id}}</span>
   </div>
 
-  <div class="mb-4">
+  <div class="space-y-1 mb-4 px-2 py-2 rounded bg-gray-50">
     <p class="text-gray-600">{{order.date}}</p>
     <p class="text-gray-600">Customer: {{order.customer}}</p>
   </div>
@@ -17,33 +17,35 @@ export const DEFAULT_TEMPLATE_HTML = `<!DOCTYPE html>
   <table class="w-full mb-4">
     <thead>
       <tr class="border-b-2 border-gray-300">
-        <th class="text-left py-1">Item</th>
-        <th class="text-right py-1">Qty</th>
-        <th class="text-right py-1">Price</th>
-        <th class="text-right py-1">Total</th>
+        <th class="text-left py-2 px-2">Item</th>
+        <th class="text-right py-2 px-2">Qty</th>
+        <th class="text-right py-2 px-2">Price</th>
+        <th class="text-right py-2 px-2">Total</th>
       </tr>
     </thead>
     <tbody>
       {{#each order.items}}
       <tr class="border-b border-gray-100">
-        <td class="py-1">{{name}}</td>
-        <td class="text-right py-1">{{qty}}</td>
-        <td class="text-right py-1">{{currency price}}</td>
-        <td class="text-right py-1">{{currency total}}</td>
+        <td class="py-2 px-2">{{name}}</td>
+        <td class="text-right py-2 px-2">{{qty}}</td>
+        <td class="text-right py-2 px-2">{{currency price}}</td>
+        <td class="text-right py-2 px-2">{{currency total}}</td>
       </tr>
       {{/each}}
     </tbody>
   </table>
 
-  <div class="flex justify-end">
-    <div class="text-right">
+  <div class="flex justify-end px-2">
+    <div class="text-right space-y-1">
       <p class="text-gray-600">Subtotal: {{currency order.subtotal}}</p>
       <p class="text-gray-600">Tax: {{currency order.tax}}</p>
-      <p class="text-lg font-bold">Total: {{currency order.total}}</p>
+      <div class="border-t border-gray-300 pt-2">
+        <p class="text-lg font-bold">Total: {{currency order.total}}</p>
+      </div>
     </div>
   </div>
 
-  <div class="mt-6 text-center text-gray-400 text-xs">
+  <div class="mt-8 pt-4 border-t border-gray-200 text-center text-gray-400 text-xs">
     <p>Thank you for your business!</p>
   </div>
 </body>
