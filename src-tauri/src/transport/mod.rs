@@ -49,6 +49,8 @@ pub mod windows_spooler;
 pub mod ipp;
 pub mod raw_tcp;
 pub mod android_bridge;
+pub mod escpos;
+pub mod label_langs;
 
 pub struct TransportRegistry;
 

@@ -1,6 +1,9 @@
 use anyhow::Result;
 use std::path::PathBuf;
 
+pub mod raster;
+pub mod handlebars;
+
 pub struct PdfRenderer {
     cache_dir: PathBuf,
 }

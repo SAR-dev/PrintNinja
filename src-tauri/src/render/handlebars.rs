@@ -87,7 +87,7 @@ fn pad_left_helper(
     let value = h.param(0).and_then(|v| v.value().as_str()).unwrap_or("");
     let width = h.param(1).and_then(|v| v.value().as_u64()).unwrap_or(0) as usize;
     let pad = h.param(2).and_then(|v| v.value().as_str()).unwrap_or(" ");
-    out.write(&format!("{:>width$}", value, width = width, pad = pad))?;
+    out.write(&format!("{:>width$}", value, width = width))?;
     Ok(())
 }
 
