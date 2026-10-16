@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,10 +15,16 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Palette, Globe, Key, Link, Shield } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 
 export function SettingsPage() {
   const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
+  const [apiPort, setApiPort] = useState(17717);
+  const [lanAccess, setLanAccess] = useState(false);
+  const [apiKey, setApiKey] = useState("pn_live_xxxxxxxx");
 
   return (
     <div className="space-y-6">
@@ -121,24 +128,39 @@ export function SettingsPage() {
               <div className="flex items-center justify-between p-3 rounded-md border">
                 <div>
                   <p className="text-sm font-medium">API Server</p>
-                  <p className="text-xs text-muted-foreground">Default: 127.0.0.1:17717</p>
+                  <p className="text-xs text-muted-foreground">
+                    {lanAccess ? "0.0.0.0" : "127.0.0.1"}:{apiPort}
+                  </p>
                 </div>
                 <Badge variant="secondary">Disabled</Badge>
               </div>
               <div className="space-y-2">
                 <Label>Port</Label>
-                <Input type="number" defaultValue="17717" />
+                <Input type="number" value={apiPort} onChange={(e) => setApiPort(Number(e.target.value))} />
               </div>
               <div className="space-y-2">
                 <Label>API Key</Label>
                 <div className="flex gap-2">
-                  <Input type="password" value="pn_live_xxxxxxxx" readOnly />
-                  <Button variant="outline">Regenerate</Button>
+                  <Input type="password" value={apiKey} readOnly />
+                  <Button variant="outline" onClick={async () => {
+                    const key = await invoke<string>("regenerate_api_key");
+                    setApiKey(key);
+                    toast.success("New API key generated");
+                  }}>Regenerate</Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="lan-access" />
-                <Label htmlFor="lan-access">Allow LAN access</Label>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Switch id="lan-access" checked={lanAccess} onCheckedChange={setLanAccess} />
+                  <Label htmlFor="lan-access">Allow LAN access</Label>
+                </div>
+                <Button variant="default" onClick={() => {
+                  toast.promise(invoke<string>("start_api_server", { port: apiPort, lanAccess }), {
+                    loading: "Starting API server...",
+                    success: "API server started",
+                    error: (e) => `Failed: ${e}`,
+                  });
+                }}>Start Server</Button>
               </div>
             </CardContent>
           </Card>

@@ -1,5 +1,7 @@
+mod api;
 mod commands;
 mod db;
+mod deeplink;
 mod render;
 mod transport;
 mod queue;
@@ -73,6 +75,11 @@ pub fn run() {
             commands::batch::get_batch,
             commands::batch::cancel_batch,
             commands::batch::retry_batch,
+            commands::api::start_api_server,
+            commands::api::stop_api_server,
+            commands::api::get_api_status,
+            commands::api::regenerate_api_key,
+            commands::deeplink_cmd::parse_deeplink,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
