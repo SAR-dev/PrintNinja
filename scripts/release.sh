@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Release script for PrintNinja
+# Renames app, updates version, creates git tag.
+# Usage:
+#   ./scripts/release.sh [--name <AppName>] [--version <X.Y.Z>] [--tag]
+#   ./scripts/release.sh 1.0.0
+# Examples:
+#   ./scripts/release.sh --version 1.0.0 --tag
+#   ./scripts/release.sh --name "MyPrint" --version 1.2.0 --tag
+set -euo pipefail
+
+APP_NAME="PrintNinja"
+VERSION=""
+CREATE_TAG=false
+BUMP_ONLY=false
+
+usage() {
+    cat <<EOF
+Usage: $0 [VERSION] [--name NAME] [--version X.Y.Z] [--tag] [--bump]
+
+Rename the app, update version across config files, commit, and tag a release.
+
+Options:
+  VERSION            Positional version (e.g. 1.0.0)
+  --name NAME       New app name (default: PrintNinja)
+  --version X.Y.Z   New version string
+  --tag             Create a git tag after committing
+  --bump            Only bump patch version (x.y.z -> x.y.z+1)
+  --help            Show this help
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --name) APP_NAME="$2"; shift 2;;
+        --version) VERSION="$2"; shift 2;;
+        --tag) CREATE_TAG=true; shift;;
+        --bump) BUMP_ONLY=true; shift;;
+        --help) usage; exit 0;;
+        -*)
+            echo "Unknown option: $1" >&2; usage; exit 1;;
+        *)
+            VERSION="$1"; shift;;
+    esac
+done
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+# Determine version
+if $BUMP_ONLY; then
+    CURRENT=$(grep -m1 '^version = ' src-tauri/Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')
+    IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+    PATCH=$((PATCH + 1))
+    VERSION="$MAJOR.$MINOR.$PATCH"
+    echo "Bumped to $VERSION"
+fi
+
+if [[ -z "$VERSION" ]]; then
+    echo "Error: version required" >&2
+    usage; exit 1
+fi
+
+# Validate version format
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Error: version must be X.Y.Z" >&2
+    exit 1
+fi
+
+echo "=== Release: $APP_NAME v$VERSION ==="
+
+# 1. Update Cargo.toml
+sed -i -E "s/^name = \"[^\"]+\"/name = \"$(echo "$APP_NAME" | tr '[:upper:]' '[:lower:]')\"/" src-tauri/Cargo.toml
+sed -i -E "s/^version = \"[^\"]+\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+echo "[ok] Cargo.toml -> $VERSION"
+
+# 2. Update tauri.conf.json
+python3 - "$VERSION" "$APP_NAME" <<'PY'
+import json, sys
+path = "src-tauri/tauri.conf.json"
+with open(path) as f:
+    cfg = json.load(f)
+cfg["productName"] = sys.argv[2]
+cfg["version"] = sys.argv[1]
+cfg["identifier"] = "com." + sys.argv[2].lower() + ".app"
+with open(path, "w") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+print(f"[ok] tauri.conf.json -> {sys.argv[2]} v{sys.argv[1]}")
+PY
+
+# 3. Update package.json
+python3 - "$VERSION" "$APP_NAME" <<'PY'
+import json, sys
+path = "package.json"
+with open(path) as f:
+    cfg = json.load(f)
+cfg["name"] = sys.argv[2].lower()
+cfg["version"] = sys.argv[1]
+with open(path, "w") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+print(f"[ok] package.json -> v{sys.argv[1]}")
+PY
+
+# 4. Push? Optional — we just commit + tag locally
+git add -A
+git commit -m "Release $APP_NAME v$VERSION" || echo "[info] no changes to commit"
+
+if $CREATE_TAG; then
+    TAG="v$VERSION"
+    git tag -a "$TAG" -m "Release $APP_NAME $TAG" 2>/dev/null || echo "[info] tag $TAG exists"
+    echo "[ok] tagged $TAG"
+fi
+
+echo "=== Done: $APP_NAME v$VERSION ==="
+echo "Next:"
+echo "  git push origin main && git push origin v$VERSION"
+echo "  Windows: pnpm tauri:build --target x86_64-pc-windows-msvc"
+echo "  Android: pnpm tauri android build --target aarch64"

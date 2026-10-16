@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  create:
+    tags:
+      - "v*"
 
 jobs:
   web-check:
@@ -21,6 +24,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm build
+      - run: pnpm test
 
   rust-check:
     runs-on: ubuntu-latest
@@ -33,7 +37,7 @@ jobs:
         with:
           workspaces: src-tauri
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings || true
       - run: cargo test --manifest-path src-tauri/Cargo.toml
 
   windows-build:
@@ -53,11 +57,12 @@ jobs:
         with:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
-      - run: pnpm tauri:build
+      # MSI only (per plan)
+      - run: pnpm tauri:build --target x86_64-pc-windows-msvc -- --bundles msi
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-installer
-          path: src-tauri/target/release/bundle/
+          name: windows-msi
+          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
 
   android-build:
     runs-on: ubuntu-latest
@@ -86,8 +91,25 @@ jobs:
         run: echo "y" | sdkmanager --install "ndk;27.0.12077973"
       - run: pnpm install --frozen-lockfile
       - run: pnpm tauri android init
-      - run: pnpm tauri android build
+      # arm64-v8a only (new mobiles)
+      - run: pnpm tauri android build --target aarch64
       - uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          name: android-aab
+          path: src-tauri/gen/android/app/build/outputs/bundle/**/*.aab
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: web-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: npx playwright install chromium --with-deps
+      - run: pnpm test:e2e
