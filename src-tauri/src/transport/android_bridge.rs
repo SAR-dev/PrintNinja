@@ -1,4 +1,3 @@
-
 #[cfg(mobile)]
 mod mobile {
     use super::*;
@@ -24,13 +23,16 @@ mod mobile {
         ) -> Result<Vec<u8>, String> {
             // Invoke Kotlin command
             let result: serde_json::Value = app
-                .invoke("plugin:android-print|html_to_pdf", serde_json::json!({
-                    "html": html,
-                    "pageWidthMm": page_width_mm,
-                    "pageHeightMm": page_height_mm,
-                    "orientation": orientation,
-                    "margins": margins_json,
-                }))
+                .invoke(
+                    "plugin:android-print|html_to_pdf",
+                    serde_json::json!({
+                        "html": html,
+                        "pageWidthMm": page_width_mm,
+                        "pageHeightMm": page_height_mm,
+                        "orientation": orientation,
+                        "margins": margins_json,
+                    }),
+                )
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -44,7 +46,10 @@ mod mobile {
             app: tauri::AppHandle,
         ) -> Result<Vec<PrinterInfo>, String> {
             let result: serde_json::Value = app
-                .invoke("plugin:android-print|enumerate_usb_printers", serde_json::json!({}))
+                .invoke(
+                    "plugin:android-print|enumerate_usb_printers",
+                    serde_json::json!({}),
+                )
                 .await
                 .map_err(|e| e.to_string())?;
 

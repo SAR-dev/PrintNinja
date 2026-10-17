@@ -27,7 +27,9 @@ pub struct PrintJob {
 
 #[tauri::command]
 pub fn list_jobs(db: State<DbState>) -> AppResult<Vec<PrintJob>> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let mut stmt = conn.prepare(&format!("{}", SELECT_JOB_COLUMNS))?;
@@ -40,7 +42,9 @@ pub fn list_jobs(db: State<DbState>) -> AppResult<Vec<PrintJob>> {
 
 #[tauri::command]
 pub fn get_job(db: State<DbState>, id: i64) -> AppResult<PrintJob> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let sql = format!("{} WHERE id = ?1", SELECT_JOB_COLUMNS);
@@ -51,15 +55,14 @@ pub fn get_job(db: State<DbState>, id: i64) -> AppResult<PrintJob> {
 
 #[tauri::command]
 pub fn reprint_job(db: State<DbState>, id: i64) -> AppResult<PrintJob> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     // Reprint must clone the ORIGINAL job so the exact template version,
     // settings and copies are reproduced (PLANNING.md 4).
-    let sql = format!(
-        "{} WHERE id = ?1",
-        SELECT_JOB_COLUMNS
-    );
+    let sql = format!("{} WHERE id = ?1", SELECT_JOB_COLUMNS);
     let original = conn.query_row(&sql, [id], map_job)?;
 
     conn.execute(
@@ -88,7 +91,9 @@ pub fn reprint_job(db: State<DbState>, id: i64) -> AppResult<PrintJob> {
 
 #[tauri::command]
 pub fn retry_job(db: State<DbState>, id: i64) -> AppResult<PrintJob> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let exists: i64 =
@@ -113,7 +118,9 @@ pub fn retry_job(db: State<DbState>, id: i64) -> AppResult<PrintJob> {
 
 #[tauri::command]
 pub fn delete_job(db: State<DbState>, id: i64) -> AppResult<()> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let affected = conn.execute("DELETE FROM print_jobs WHERE id = ?1", [id])?;

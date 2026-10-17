@@ -122,9 +122,9 @@ pub fn create_transport(
             name.to_string(),
         ))),
         #[cfg(windows)]
-        PrinterType::Bluetooth => Some(Box::new(
-            windows_bluetooth::WindowsBluetoothPrinter::new(name.to_string()),
-        )),
+        PrinterType::Bluetooth => Some(Box::new(windows_bluetooth::WindowsBluetoothPrinter::new(
+            name.to_string(),
+        ))),
         // Off Windows there is no spooler and no USB/Bluetooth transport, so
         // every other variant is unsupported here.
         #[cfg(not(windows))]
@@ -179,8 +179,9 @@ impl TransportRegistry {
         address: &str,
         job: RenderedJob,
     ) -> Result<(), String> {
-        let transport = create_transport(printer_type, name, address)
-            .ok_or_else(|| format!("`{printer_type}` printers are not supported on this platform"))?;
+        let transport = create_transport(printer_type, name, address).ok_or_else(|| {
+            format!("`{printer_type}` printers are not supported on this platform")
+        })?;
         transport.send(job).await
     }
 
@@ -190,8 +191,9 @@ impl TransportRegistry {
         name: &str,
         address: &str,
     ) -> Result<(), String> {
-        let transport = create_transport(printer_type, name, address)
-            .ok_or_else(|| format!("`{printer_type}` printers are not supported on this platform"))?;
+        let transport = create_transport(printer_type, name, address).ok_or_else(|| {
+            format!("`{printer_type}` printers are not supported on this platform")
+        })?;
         transport.test().await
     }
 }

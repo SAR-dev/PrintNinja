@@ -20,7 +20,9 @@ const VALID_CREATED_BY: &[&str] = &["manual", "autosave", "restore"];
 
 #[tauri::command]
 pub fn list_versions(db: State<DbState>, template_id: i64) -> AppResult<Vec<TemplateVersion>> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let mut stmt = conn.prepare(
@@ -70,7 +72,9 @@ pub fn create_version(db: State<DbState>, req: CreateVersionRequest) -> AppResul
         )));
     }
 
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let mut conn = guard.connection()?;
     let tx = conn.transaction()?;
 
@@ -143,7 +147,9 @@ pub fn create_version(db: State<DbState>, req: CreateVersionRequest) -> AppResul
 /// it creates a NEW version whose content matches the old one.
 #[tauri::command]
 pub fn restore_version(db: State<DbState>, id: i64) -> AppResult<TemplateVersion> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let mut conn = guard.connection()?;
     let tx = conn.transaction()?;
 
@@ -163,7 +169,13 @@ pub fn restore_version(db: State<DbState>, id: i64) -> AppResult<TemplateVersion
         "INSERT INTO template_versions
            (template_id, version_no, html, css, label, note, created_by)
          VALUES (?1, ?2, ?3, ?4, 'Restored', ?5, 'restore')",
-        rusqlite::params![template_id, next_no, html, css, format!("restored from version id {}", id)],
+        rusqlite::params![
+            template_id,
+            next_no,
+            html,
+            css,
+            format!("restored from version id {}", id)
+        ],
     )?;
     let new_id = tx.last_insert_rowid();
 
@@ -200,7 +212,9 @@ pub fn restore_version(db: State<DbState>, id: i64) -> AppResult<TemplateVersion
 
 #[tauri::command]
 pub fn delete_version(db: State<DbState>, id: i64) -> AppResult<()> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let affected = conn.execute("DELETE FROM template_versions WHERE id = ?1", [id])?;
@@ -226,12 +240,10 @@ pub struct VersionDiff {
 
 /// Line-level diff of any two versions of the same template (PLANNING.md 7.3).
 #[tauri::command]
-pub fn diff_versions(
-    db: State<DbState>,
-    from_id: i64,
-    to_id: i64,
-) -> AppResult<VersionDiff> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+pub fn diff_versions(db: State<DbState>, from_id: i64, to_id: i64) -> AppResult<VersionDiff> {
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let load = |id: i64| -> rusqlite::Result<(i64, i64, String, String)> {
@@ -243,10 +255,10 @@ pub fn diff_versions(
         )
     };
 
-    let (t_from, n_from, html_from, css_from) = load(from_id)
-        .map_err(|_| AppError::NotFound(format!("Version {} not found", from_id)))?;
-    let (t_to, n_to, html_to, css_to) = load(to_id)
-        .map_err(|_| AppError::NotFound(format!("Version {} not found", to_id)))?;
+    let (t_from, n_from, html_from, css_from) =
+        load(from_id).map_err(|_| AppError::NotFound(format!("Version {} not found", from_id)))?;
+    let (t_to, n_to, html_to, css_to) =
+        load(to_id).map_err(|_| AppError::NotFound(format!("Version {} not found", to_id)))?;
 
     if t_from != t_to {
         return Err(AppError::Validation(

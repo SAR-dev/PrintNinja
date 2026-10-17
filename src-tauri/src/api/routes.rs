@@ -58,10 +58,12 @@ pub fn router_with_state(state: ApiState, lan_access: bool) -> Router {
         .route("/v1/jobs/{id}/retry", post(retry_job))
         .route("/v1/openapi.json", get(openapi))
         .with_state(state.clone())
-        .layer(middleware::from_fn(move |req: axum::extract::Request, next: Next| {
-            let auth = auth_ctx.clone();
-            async move { auth_middleware_inner(auth, req, next).await }
-        }))
+        .layer(middleware::from_fn(
+            move |req: axum::extract::Request, next: Next| {
+                let auth = auth_ctx.clone();
+                async move { auth_middleware_inner(auth, req, next).await }
+            },
+        ))
         .layer(cors)
 }
 
@@ -288,9 +290,7 @@ async fn print_job(
                     [name],
                     |r| r.get(0),
                 )
-                .map_err(|_| {
-                    ApiRejection::NotFound(format!("Template '{}' not found", name))
-                })?,
+                .map_err(|_| ApiRejection::NotFound(format!("Template '{}' not found", name)))?,
             ),
             _ => None,
         };
@@ -407,15 +407,21 @@ async fn batch_print(
 
     let template_id: i64 = match &req.template {
         Some(n) if !n.is_empty() => tx
-            .query_row("SELECT id FROM templates WHERE name = ?1 COLLATE NOCASE", [n], |r| r.get(0))
+            .query_row(
+                "SELECT id FROM templates WHERE name = ?1 COLLATE NOCASE",
+                [n],
+                |r| r.get(0),
+            )
             .map_err(|_| ApiRejection::NotFound(format!("Template '{}' not found", n)))?,
         _ => return Err(ApiRejection::BadRequest("template is required".into())),
     };
 
     let printer_id: i64 = tx
-        .query_row("SELECT id FROM printers WHERE name = ?1 COLLATE NOCASE", [&req.printer], |r| {
-            r.get(0)
-        })
+        .query_row(
+            "SELECT id FROM printers WHERE name = ?1 COLLATE NOCASE",
+            [&req.printer],
+            |r| r.get(0),
+        )
         .map_err(|_| ApiRejection::NotFound(format!("Printer '{}' not found", req.printer)))?;
 
     let mode = req.mode.unwrap_or_else(|| "per_record".into());
@@ -563,7 +569,9 @@ async fn retry_job(
         return Err(ApiRejection::NotFound(format!("Job {} not found", id)));
     }
 
-    Ok(Json(json!({ "job_id": id.to_string(), "status": "queued" })))
+    Ok(Json(
+        json!({ "job_id": id.to_string(), "status": "queued" }),
+    ))
 }
 
 async fn cancel_job(
@@ -610,9 +618,7 @@ impl From<rusqlite::Error> for ApiRejection {
     }
 }
 
-impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, crate::db::Database>>>
-    for ApiRejection
-{
+impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, crate::db::Database>>> for ApiRejection {
     fn from(_: std::sync::PoisonError<std::sync::MutexGuard<'_, crate::db::Database>>) -> Self {
         ApiRejection(AppError::Internal("DB lock poisoned".into()))
     }

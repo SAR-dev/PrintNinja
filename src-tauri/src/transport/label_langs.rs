@@ -27,10 +27,7 @@ pub mod tspl {
         cmd.push_str("DIRECTION 0,0\n");
         cmd.push_str("REFERENCE 0,0\n");
         cmd.push_str("SET TEAR ON\n");
-        cmd.push_str(&format!(
-            "BITMAP 0,0,{},{}\n",
-            bytes_per_row, image.height
-        ));
+        cmd.push_str(&format!("BITMAP 0,0,{},{}\n", bytes_per_row, image.height));
 
         // Append bitmap data as hex-like bytes (TSPL expects raw bytes after BITMAP command with \r\n terminator)
         let bytes_per_row = image.width.div_ceil(8);
@@ -43,8 +40,7 @@ pub mod tspl {
         cmd.push_str("\nPRINT 1\n");
         cmd
     }
-
-    }
+}
 
 /// ZPL (Zebra) encoder for thermal label printers
 pub mod zpl {
@@ -54,7 +50,12 @@ pub mod zpl {
         "^XA\n".to_string() // Start format
     }
 
-    pub fn print_bitmap(image: &RasterImage, _label_w_mm: f64, _label_h_mm: f64, dpi: u32) -> String {
+    pub fn print_bitmap(
+        image: &RasterImage,
+        _label_w_mm: f64,
+        _label_h_mm: f64,
+        dpi: u32,
+    ) -> String {
         let bytes_per_row = (image.width + 7) / 8;
         let total_bytes = bytes_per_row * image.height;
 
@@ -62,8 +63,12 @@ pub mod zpl {
         cmd.push_str("^XA\n"); // Start format
         cmd.push_str(&format!("^MMT\n")); // Media tracking
         cmd.push_str(&format!("^PR6\n")); // Print rate
-        // Graphic field command
-        cmd.push_str(&format!("^FO0,0^GFA,{},{}", total_bytes, bytes_per_row * image.height));
+                                          // Graphic field command
+        cmd.push_str(&format!(
+            "^FO0,0^GFA,{},{}",
+            total_bytes,
+            bytes_per_row * image.height
+        ));
         cmd.push_str(&format!(",{},", bytes_per_row));
 
         for byte in &image.dots {
@@ -119,27 +124,25 @@ pub struct LabelPrinterTransport {
 impl LabelPrinterTransport {
     pub fn encode(&self, image: &crate::render::raster::RasterImage) -> Vec<u8> {
         match self.language.as_str() {
-            "tspl" => {
-                tspl::print_bitmap(image, self.label_w_mm, self.label_h_mm, self.gap_mm, self.dpi)
-                    .into_bytes()
-            }
+            "tspl" => tspl::print_bitmap(
+                image,
+                self.label_w_mm,
+                self.label_h_mm,
+                self.gap_mm,
+                self.dpi,
+            )
+            .into_bytes(),
             "zpl" => {
-                zpl::print_bitmap(
-                    image,
-                    self.label_w_mm,
-                    self.label_h_mm,
-                    self.dpi,
-                )
-                .into_bytes()
+                zpl::print_bitmap(image, self.label_w_mm, self.label_h_mm, self.dpi).into_bytes()
             }
-            "cpcl" => {
-                cpcl::print_bitmap(image, self.label_w_mm, self.dpi).into_bytes()
-            }
+            "cpcl" => cpcl::print_bitmap(image, self.label_w_mm, self.dpi).into_bytes(),
             _ => {
                 // Fallback: raw ESC/POS
                 let mut data = Vec::new();
                 data.extend_from_slice(&crate::transport::escpos::EscPosEncoder::init());
-                data.extend_from_slice(&crate::transport::escpos::EscPosEncoder::print_raster(image));
+                data.extend_from_slice(&crate::transport::escpos::EscPosEncoder::print_raster(
+                    image,
+                ));
                 data
             }
         }

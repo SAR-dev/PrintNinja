@@ -69,13 +69,15 @@ impl RasterImage {
                     pixels[idx + 1] = (pixels[idx + 1] + err * 7 / 16).clamp(0, 255);
                 }
                 if y + 1 < height && x > 0 {
-                    pixels[idx + width - 1] = (pixels[idx + width - 1] + err * 3 / 16).clamp(0, 255);
+                    pixels[idx + width - 1] =
+                        (pixels[idx + width - 1] + err * 3 / 16).clamp(0, 255);
                 }
                 if y + 1 < height {
                     pixels[idx + width] = (pixels[idx + width] + err * 5 / 16).clamp(0, 255);
                 }
                 if y + 1 < height && x + 1 < width {
-                    pixels[idx + width + 1] = (pixels[idx + width + 1] + err * 1 / 16).clamp(0, 255);
+                    pixels[idx + width + 1] =
+                        (pixels[idx + width + 1] + err * 1 / 16).clamp(0, 255);
                 }
             }
         }

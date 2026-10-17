@@ -18,12 +18,13 @@ pub struct Printer {
 }
 
 const VALID_PRINTER_TYPES: &[&str] = &["ipp", "raw_tcp", "usb", "bluetooth", "system"];
-const VALID_LANGUAGES: &[&str] =
-    &["pdf", "escpos", "tspl", "zpl", "cpcl", "raster"];
+const VALID_LANGUAGES: &[&str] = &["pdf", "escpos", "tspl", "zpl", "cpcl", "raster"];
 
 #[tauri::command]
 pub fn list_printers(db: State<DbState>) -> AppResult<Vec<Printer>> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let mut stmt = conn.prepare(
@@ -81,7 +82,9 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
         )));
     }
 
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let exists: i64 = conn.query_row(
@@ -136,7 +139,9 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
 
 #[tauri::command]
 pub fn delete_printer(db: State<DbState>, id: i64) -> AppResult<()> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let affected = conn.execute("DELETE FROM printers WHERE id = ?1", [id])?;
@@ -148,7 +153,9 @@ pub fn delete_printer(db: State<DbState>, id: i64) -> AppResult<()> {
 
 #[tauri::command]
 pub fn get_printer(db: State<DbState>, id: i64) -> AppResult<Printer> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     conn.query_row(

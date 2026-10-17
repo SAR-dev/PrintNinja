@@ -1,6 +1,6 @@
 use crate::db::DbState;
-use crate::queue::PrintQueue;
 use crate::error::{AppError, AppResult};
+use crate::queue::PrintQueue;
 use crate::render::handlebars::TemplateEngine;
 use crate::render::PdfRenderer;
 use serde::{Deserialize, Serialize};
@@ -121,9 +121,8 @@ pub fn apply_layout(html: &str, css: &str, w_mm: f64, h_mm: f64, req: &PrintRequ
     // Strip any pre-existing @page so we don't end up with two conflicting rules.
     let cleaned_css = strip_at_page(css);
 
-    let page_rule = format!(
-        "@page {{ size: {pw}mm {ph}mm; margin: {mt}mm {mr}mm {mb}mm {ml}mm; }}"
-    );
+    let page_rule =
+        format!("@page {{ size: {pw}mm {ph}mm; margin: {mt}mm {mr}mm {mb}mm {ml}mm; }}");
 
     let fit_rule = match req.fit_mode.as_deref().unwrap_or("fit-width") {
         "fit-width" => "html,body{width:100%;height:auto;}",
@@ -141,12 +140,7 @@ pub fn apply_layout(html: &str, css: &str, w_mm: f64, h_mm: f64, req: &PrintRequ
     if let Some(idx) = html.find("</head>") {
         format!("{}<style>{}</style>{}", &html[..idx], styles, &html[idx..])
     } else if let Some(idx) = html.find("<body") {
-        format!(
-            "{}<style>{}</style>{}",
-            &html[..idx],
-            styles,
-            &html[idx..]
-        )
+        format!("{}<style>{}</style>{}", &html[..idx], styles, &html[idx..])
     } else {
         format!("<style>{styles}</style>{html}")
     }
@@ -214,24 +208,23 @@ pub async fn run_print(
     let copies = req.copies.unwrap_or(1).max(1);
 
     // ── 1. Resolve content ───────────────────────────────────────────
-    let (mut html, mut css, template_version_id, mut w_mm, mut h_mm) =
-        match req.template_id {
-            Some(tid) => {
-                let guard = db
-                    .lock()
-                    .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
-                let conn = guard.connection()?;
-                let (h, c, vid, tw, th) = resolve_template(&conn, tid, req.template_version_id)?;
-                (h, c, Some(vid), tw, th)
-            }
-            None => (
-                req.html.clone(),
-                String::new(),
-                req.template_version_id,
-                req.page_width_mm.unwrap_or(210.0),
-                req.page_height_mm.unwrap_or(297.0),
-            ),
-        };
+    let (mut html, mut css, template_version_id, mut w_mm, mut h_mm) = match req.template_id {
+        Some(tid) => {
+            let guard = db
+                .lock()
+                .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+            let conn = guard.connection()?;
+            let (h, c, vid, tw, th) = resolve_template(&conn, tid, req.template_version_id)?;
+            (h, c, Some(vid), tw, th)
+        }
+        None => (
+            req.html.clone(),
+            String::new(),
+            req.template_version_id,
+            req.page_width_mm.unwrap_or(210.0),
+            req.page_height_mm.unwrap_or(297.0),
+        ),
+    };
 
     if let (Some(w), Some(h)) = (req.page_width_mm, req.page_height_mm) {
         if req.template_id.is_none() {
@@ -257,7 +250,7 @@ pub async fn run_print(
                     Ok(v) => fetched = Some(v),
                     Err(e) => {
                         record_job(
-        db,
+                            db,
                             &req,
                             "failed",
                             Some(e.to_string()),
@@ -287,14 +280,27 @@ pub async fn run_print(
         .map_err(|e| AppError::Internal(format!("Cannot create {}: {e}", cache_dir.display())))?;
     let renderer = PdfRenderer::new(cache_dir.to_path_buf());
     let pdf_bytes = match renderer
-        .html_to_pdf(&final_html, w_mm, h_mm, req.orientation.as_deref().unwrap_or("portrait"))
+        .html_to_pdf(
+            &final_html,
+            w_mm,
+            h_mm,
+            req.orientation.as_deref().unwrap_or("portrait"),
+        )
         .await
     {
         Ok(b) => b,
         Err(e) => {
             let msg = e.to_string();
             record_job(
-        db, &req, "failed", Some(msg.clone()), &html, None, copies as i64, start)?;
+                db,
+                &req,
+                "failed",
+                Some(msg.clone()),
+                &html,
+                None,
+                copies as i64,
+                start,
+            )?;
             return Ok(PrintResponse {
                 success: false,
                 job_id: String::new(),
@@ -348,7 +354,13 @@ pub async fn run_print(
                     },
                 )
                 .await
-                .map_err(|e| if copy > 0 { format!("copy {}/{copies}: {e}", copy + 1) } else { e })?;
+                .map_err(|e| {
+                    if copy > 0 {
+                        format!("copy {}/{copies}: {e}", copy + 1)
+                    } else {
+                        e
+                    }
+                })?;
             }
             Ok(())
         })
@@ -590,7 +602,13 @@ mod tests {
 
     #[test]
     fn layout_injects_page_size_and_margins() {
-        let out = apply_layout("<html><head></head><body>x</body></html>", "", 100.0, 200.0, &req());
+        let out = apply_layout(
+            "<html><head></head><body>x</body></html>",
+            "",
+            100.0,
+            200.0,
+            &req(),
+        );
         assert!(out.contains("size: 100mm 200mm"), "{}", out);
         assert!(out.contains("margin: 5mm 6mm 7mm 8mm"), "{}", out);
     }

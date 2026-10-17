@@ -154,7 +154,10 @@ mod tests {
     fn extract_json_path_returns_null_for_missing_key() {
         let data = serde_json::json!({"a": 1});
         assert_eq!(extract_json_path(&data, "missing"), serde_json::Value::Null);
-        assert_eq!(extract_json_path(&data, "a.missing.deep"), serde_json::Value::Null);
+        assert_eq!(
+            extract_json_path(&data, "a.missing.deep"),
+            serde_json::Value::Null
+        );
     }
 
     #[tokio::test]

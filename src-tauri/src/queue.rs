@@ -67,10 +67,7 @@ impl PrintQueue {
     ///
     /// Exposed so tests can exercise the "queue is full" path without
     /// waiting out the production timeout.
-    pub fn build(
-        capacity: usize,
-        submit_timeout: Duration,
-    ) -> (Self, mpsc::Receiver<QueueJob>) {
+    pub fn build(capacity: usize, submit_timeout: Duration) -> (Self, mpsc::Receiver<QueueJob>) {
         let (tx, rx) = mpsc::channel(capacity);
         let queue = Self {
             semaphores: Arc::new(Mutex::new(HashMap::new())),
@@ -263,7 +260,11 @@ mod tests {
         for t in tasks {
             t.await.unwrap().unwrap();
         }
-        assert_eq!(peak.load(Ordering::SeqCst), 1, "never more than one in flight");
+        assert_eq!(
+            peak.load(Ordering::SeqCst),
+            1,
+            "never more than one in flight"
+        );
     }
 
     /// Serialising must not turn the queue into a global lock.
