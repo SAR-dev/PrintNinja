@@ -145,3 +145,107 @@ pub fn delete_printer(db: State<DbState>, id: i64) -> AppResult<()> {
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn get_printer(db: State<DbState>, id: i64) -> AppResult<Printer> {
+    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let conn = guard.connection()?;
+
+    conn.query_row(
+        "SELECT id, name, type, address, language, paper_width_mm, dpi,
+                default_settings_json, created_at, updated_at
+         FROM printers WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(Printer {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                printer_type: row.get(2)?,
+                address: row.get(3)?,
+                language: row.get(4)?,
+                paper_width_mm: row.get(5)?,
+                dpi: row.get(6)?,
+                default_settings_json: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+            })
+        },
+    )
+    .map_err(|_| AppError::NotFound(format!("Printer {} not found", id)))
+}
+
+/// Send a small test page to a configured printer.
+#[tauri::command]
+pub async fn test_printer(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    id: i64,
+) -> AppResult<()> {
+    // Load the printer so we know where to send and which language to speak.
+    let printer = {
+        let guard = db
+            .lock()
+            .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+        let conn = guard.connection()?;
+        conn.query_row(
+            "SELECT id, name, type, address, language, paper_width_mm, dpi,
+                    default_settings_json, created_at, updated_at
+             FROM printers WHERE id = ?1",
+            [id],
+            |row| {
+                Ok(Printer {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    printer_type: row.get(2)?,
+                    address: row.get(3)?,
+                    language: row.get(4)?,
+                    paper_width_mm: row.get(5)?,
+                    dpi: row.get(6)?,
+                    default_settings_json: row.get(7)?,
+                    created_at: row.get(8)?,
+                    updated_at: row.get(9)?,
+                })
+            },
+        )
+        .map_err(|_| AppError::NotFound(format!("Printer {} not found", id)))?
+    };
+
+    let html = TEST_PAGE_HTML.replace("{{name}}", &printer.name);
+
+    let req = crate::commands::print::PrintRequest {
+        printer_name: printer.name.clone(),
+        html,
+        page_width_mm: printer.paper_width_mm.map(|v| v as f64),
+        page_height_mm: None,
+        orientation: Some("portrait".into()),
+        copies: Some(1),
+        margin_top: None,
+        margin_right: None,
+        margin_bottom: None,
+        margin_left: None,
+        fit_mode: None,
+        template_id: None,
+        template_version_id: None,
+        data: None,
+        data_url: None,
+        test: Some(true),
+        source: Some("test".into()),
+    };
+
+    let res = crate::commands::print::print_html(app, db, req).await?;
+    if res.success {
+        Ok(())
+    } else {
+        Err(AppError::Internal(
+            res.error.unwrap_or_else(|| "test print failed".into()),
+        ))
+    }
+}
+
+const TEST_PAGE_HTML: &str = r#"<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="font-family:sans-serif;padding:24px;text-align:center">
+  <h1 style="font-size:24px;margin:0 0 8px">PrintNinja</h1>
+  <p style="margin:0;color:#555">{{name}}</p>
+  <hr style="margin:24px 0">
+  <p style="font-size:12px;color:#888">Test page — if you can read this, printing works.</p>
+</body></html>"#;

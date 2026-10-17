@@ -100,7 +100,7 @@ test.describe("Printer Setup", () => {
 
   test("shows add printer button", async ({ page }) => {
     await page.goto("/printers");
-    await expect(page.locator("button:has-text('Add Printer')")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add Printer" }).first()).toBeVisible();
   });
 });
 

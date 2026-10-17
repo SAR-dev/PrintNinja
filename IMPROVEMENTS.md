@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batches 1–4 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding) — items marked ☑ below.
+**Batches 1–5 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -88,11 +88,11 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
-| 54 | Printer cards render from hard-coded array — never from `list_printers` or `enumerate_system_printers`. “All” tab shows same 4 mocks on every launch. | P1 | ☐ |
-| 55 | `Save Printer` hard-codes `name: "New Printer", address: "192.168.1.100"` — ignores user-typed form values. | P1 | ☐ |
-| 56 | `Test Print` / `Trash` now toast only — `Test` should call `transport.test()`/`invoke("test_printer")`, Trash should call `delete_printer` and remove from list. | P1 | ☐ |
-| 57 | No form validation (IP format, required fields) — `zod` + `react-hook-form` planned but not used. | P2 | ☐ |
-| 58 | `Language` / `Paper width` / `DPI` selectors not bound to state — value lost on Save. | P1 | ☐ |
+| 54 | Printer cards render from hard-coded array — never from `list_printers` or `enumerate_system_printers`. “All” tab shows same 4 mocks on every launch. | P1 | ☑ done |
+| 55 | `Save Printer` hard-codes `name: "New Printer", address: "192.168.1.100"` — ignores user-typed form values. | P1 | ☑ done |
+| 56 | `Test Print` / `Trash` now toast only — `Test` should call `transport.test()`/`invoke("test_printer")`, Trash should call `delete_printer` and remove from list. | P1 | ☑ done |
+| 57 | No form validation (IP format, required fields) — `zod` + `react-hook-form` planned but not used. | P2 | ☑ done |
+| 58 | `Language` / `Paper width` / `DPI` selectors not bound to state — value lost on Save. | P1 | ☑ done |
 
 ---
 
@@ -114,13 +114,13 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
-| 66 | `apiPort` / `lanAccess` local `useState` not persisted to SQLite — resets on reload. Should call `set_setting` / `get_setting`. | P1 | ☐ |
-| 67 | `Start Server` calls `start_api_server` but never checks `get_api_status` — badge always “Disabled”, no loading state, no error handling if port in use. | P1 | ☐ |
-| 68 | API Key shown as `type="password"` with no reveal toggle — users cannot copy it after regenerate. | P2 | ☐ |
+| 66 | `apiPort` / `lanAccess` local `useState` not persisted to SQLite — resets on reload. Should call `set_setting` / `get_setting`. | P1 | ☑ done |
+| 67 | `Start Server` calls `start_api_server` but never checks `get_api_status` — badge always “Disabled”, no loading state, no error handling if port in use. | P1 | ☑ done |
+| 68 | API Key shown as `type="password"` with no reveal toggle — users cannot copy it after regenerate. | P2 | ☑ done |
 | 69 | Diagnostics export is a no-op spinner? Actually works, but not redacting secrets per PLANNING.md — `diagnostics.download()` dumps raw store which may contain tokens. | P2 | ☐ |
-| 70 | Deep Links “Trusted Sources” card shows hard-coded `pos.local` entry — not fetched from `deeplink_trusted_sources` table (which doesn’t exist yet). | P1 | ☐ |
-| 71 | Retention inputs (`days`, `maxRecords`) not wired — no `onChange` persists. | P1 | ☐ |
-| 72 | Font tab “Download CJK” / “Upload” are toast-only — `font.rs` commands not invoked. | P1 | ☐ |
+| 70 | Deep Links “Trusted Sources” card shows hard-coded `pos.local` entry — not fetched from `deeplink_trusted_sources` table (which doesn’t exist yet). | P1 | ☑ done |
+| 71 | Retention inputs (`days`, `maxRecords`) not wired — no `onChange` persists. | P1 | ☑ done |
+| 72 | Font tab “Download CJK” / “Upload” are toast-only — `font.rs` commands not invoked. | P1 | ☑ done |
 
 ---
 
@@ -142,7 +142,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
 | 79 | Many pages mix `t("print.fit_actual")` with hard-coded English fallbacks (`"Wi-Fi / LAN"` tab label literal). Incomplete i18n coverage — run `biome` i18n lint. | P3 | ☐ |
-| 80 | `PrintStore` / `HistoryStore` / `TemplateStore` all use `zustand` without `persist` middleware — all user work lost on refresh before DB wiring. Should persist to SQLite via invoke or `zustand/middleware`. | P2 | ☐ |
+| 80 | `PrintStore` / `HistoryStore` / `TemplateStore` all use `zustand` without `persist` middleware — all user work lost on refresh before DB wiring. Should persist to SQLite via invoke or `zustand/middleware`. | P2 | ☑ done |
 | 81 | `Designer` canvas `iframe` loads `https://cdn.tailwindcss.com` per PLANNING.md — no offline fallback, no CSP, and Tailwind CDN is dev-only. Bundle via `tailwindcss` PostCSS for production. | P2 | ☐ |
 | 82 | `Designer` `renderTemplate` re-registers Handlebars helpers on every call (`Handlebars.registerHelper`) without dedupe — leaks helpers, global singleton polluted across renders. Should reuse single `Handlebars` instance. | P2 | ☐ |
 | 83 | `PrinterSetup` and `Print` both call `enumerate_system_printers` — no caching, every navigation re-scans. Should memoize with `TanStack Query`. | P3 | ☐ |

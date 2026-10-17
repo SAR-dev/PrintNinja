@@ -161,12 +161,11 @@ test.describe("Printer setup", () => {
     }
   });
 
-  test("wifi form has inputs", async ({ page }) => {
+  test("add dialog exposes name and address fields", async ({ page }) => {
     await page.goto("/printers");
-    await page.getByRole("tab", { name: "Wi-Fi / LAN" }).click();
-    await expect(page.getByPlaceholder(/192.168/)).toBeVisible();
-    await expect(page.getByPlaceholder(/Front Desk/)).toBeVisible();
-    await expect(page.getByPlaceholder(/LaserJet/)).toBeVisible().catch(() => {});
+    await page.getByRole("button", { name: "Add Printer" }).first().click();
+    await expect(page.getByLabel("Printer Name")).toBeVisible();
+    await expect(page.getByLabel(/Address/)).toBeVisible();
   });
 });
 
@@ -262,29 +261,26 @@ test.describe("Theme persistence (detail)", () => {
 });
 
 test.describe("PrinterSetup input data flow", () => {
-  test("wifi form accepts typed values", async ({ page }) => {
+  test("add dialog accepts typed values", async ({ page }) => {
     await page.goto("/printers");
-    await page.getByRole("tab", { name: "Wi-Fi / LAN" }).click();
-    const nameInput = page.getByPlaceholder(/Front Desk/);
-    const ipInput = page.getByPlaceholder(/192.168/);
+    await page.getByRole("button", { name: "Add Printer" }).first().click();
+    const nameInput = page.getByLabel("Printer Name");
+    const addrInput = page.getByLabel(/Address/);
     await nameInput.fill("Kitchen Wi-Fi");
-    await ipInput.fill("192.168.2.50");
+    await addrInput.fill("http://192.168.2.50");
     await expect(nameInput).toHaveValue("Kitchen Wi-Fi");
-    await expect(ipInput).toHaveValue("192.168.2.50");
+    await expect(addrInput).toHaveValue("http://192.168.2.50");
   });
 
-  test("clicking Discover surfaces toast", async ({ page }) => {
+  test("refresh button reloads the list", async ({ page }) => {
     await page.goto("/printers");
-    await page.getByRole("tab", { name: "Wi-Fi / LAN" }).click();
-    await page.getByRole("button", { name: "Discover" }).click();
-    await expect(page.getByText(/Discovering printers/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("button", { name: "Refresh" })).toBeVisible();
   });
 
-  test("USB discover button shows toast", async ({ page }) => {
+  test("usb tab filters to usb printers only", async ({ page }) => {
     await page.goto("/printers");
     await page.getByRole("tab", { name: "USB" }).click();
-    await page.getByRole("button", { name: /Discover USB Printers/ }).click();
-    await expect(page.getByText(/USB discovery started/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/No printers configured|No usb printers yet/i).first()).toBeVisible({ timeout: 8000 });
   });
 });
 
@@ -483,5 +479,132 @@ test.describe("Versioning (Batch 3)", () => {
       await page.waitForTimeout(300);
     }
     await expect(page.getByText(/v2/).first()).toBeVisible({ timeout: 5000 });
+  });
+});
+
+test.describe("PrinterSetup (Batch 5)", () => {
+  test("shows empty state instead of mock printers", async ({ page }) => {
+    await page.goto("/printers");
+    await expect(page.getByText(/No printers configured/i)).toBeVisible({
+      timeout: 8000,
+    });
+  });
+
+  test("empty state is not the old hard-coded mock card", async ({ page }) => {
+    await page.goto("/printers");
+    // The old build always rendered "Front Desk" / "Kitchen Receipt".
+    await expect(page.getByText("Kitchen Receipt")).toHaveCount(0);
+  });
+
+  test("add printer dialog validates a missing name", async ({ page }) => {
+    await page.goto("/printers");
+    await page.getByRole("button", { name: "Add Printer" }).first().click();
+    await page.getByRole("button", { name: "Save Printer" }).click();
+    await expect(page.getByText(/Printer name is required/i)).toBeVisible({
+      timeout: 5000,
+    });
+  });
+
+  test("add printer dialog validates a missing address", async ({ page }) => {
+    await page.goto("/printers");
+    await page.getByRole("button", { name: "Add Printer" }).first().click();
+    await page.getByLabel("Printer Name").fill("Test Printer");
+    await page.getByRole("button", { name: "Save Printer" }).click();
+    await expect(page.getByText(/Address .* is required/i)).toBeVisible({
+      timeout: 5000,
+    });
+  });
+
+  test("IPP address must be a URL", async ({ page }) => {
+    await page.goto("/printers");
+    await page.getByRole("button", { name: "Add Printer" }).first().click();
+    await page.getByLabel("Printer Name").fill("Bad IPP");
+    await page.getByLabel(/Address/).fill("192.168.1.5");
+    await page.getByRole("button", { name: "Save Printer" }).click();
+    await expect(page.getByText(/must start with http/i)).toBeVisible({
+      timeout: 5000,
+    });
+  });
+
+  test("language and paper selectors exist", async ({ page }) => {
+    await page.goto("/printers");
+    await page.getByRole("button", { name: "Add Printer" }).first().click();
+    await expect(page.getByText("Language")).toBeVisible();
+    await expect(page.getByText("Paper Width")).toBeVisible();
+    await expect(page.getByText("DPI")).toBeVisible();
+  });
+});
+
+test.describe("Settings persistence (Batch 5)", () => {
+  test("api tab shows a running/disabled badge", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByRole("tab", { name: "API" }).click();
+    await expect(page.getByText("Local REST API")).toBeVisible();
+    await expect(page.getByText(/disabled|running/)).toBeVisible();
+  });
+
+  test("start server is offered when disabled", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByRole("tab", { name: "API" }).click();
+    await expect(page.getByRole("button", { name: "Start Server" })).toBeVisible();
+  });
+
+  test("API key input is masked and can be revealed", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByRole("tab", { name: "API" }).click();
+    const input = page.getByLabel("API key");
+    await expect(input).toHaveAttribute("type", "password");
+    await page.getByRole("button", { name: "Reveal key" }).click();
+    await expect(input).toHaveAttribute("type", "text");
+  });
+
+  test("LAN toggle shows a warning when enabled", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByRole("tab", { name: "API" }).click();
+    await page.locator("#lan-access").click();
+    await expect(page.getByText(/LAN access is enabled/i)).toBeVisible({
+      timeout: 5000,
+    });
+  });
+
+  test("curl example shows the configured port", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByRole("tab", { name: "API" }).click();
+    await expect(page.getByText(/curl -X POST http:\/\/127\.0\.0\.1:/)).toBeVisible();
+  });
+
+  test("trusted sources starts empty with a call to action", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByRole("tab", { name: "Deep Links" }).click();
+    await expect(page.getByText(/No trusted sources yet/i)).toBeVisible({
+      timeout: 8000,
+    });
+  });
+
+  test("trusted source can be added and removed", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByRole("tab", { name: "Deep Links" }).click();
+    await page.getByPlaceholder("pos.local or com.example.app").fill("pos.local");
+    await page.getByRole("button", { name: "Add" }).click();
+    await expect(page.locator("span").filter({ hasText: /^pos\.local$/ })).toBeVisible({ timeout: 5000 });
+    await page.getByRole("button", { name: "Remove pos.local" }).click();
+    await expect(page.getByText(/No trusted sources yet/i)).toBeVisible({
+      timeout: 5000,
+    });
+  });
+
+  test("security tab exposes allowed domains and private-IP toggle", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByRole("tab", { name: "Security" }).click();
+    await expect(page.getByLabel(/Allowed Domains/i)).toBeVisible();
+    await expect(page.locator("#block-private")).toBeVisible();
+  });
+
+  test("retention inputs are present and editable", async ({ page }) => {
+    await page.goto("/settings");
+    const days = page.locator("#retention-days");
+    await expect(days).toBeVisible();
+    await days.fill("60");
+    await expect(days).toHaveValue("60");
   });
 });
