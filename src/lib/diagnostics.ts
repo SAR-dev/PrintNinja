@@ -45,8 +45,30 @@ export class DiagnosticLog {
     return [...this.entries];
   }
 
+  private isSensitiveKey(key: string): boolean {
+    const k = key.toLowerCase();
+    return k.includes("token") || k.includes("password") || k.includes("secret") || k === "api_key" || k.includes("authorization") || k.includes("credential");
+  }
+
+  private redactContext(context?: Record<string, string>): Record<string, string> | undefined {
+    if (!context) return undefined;
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(context)) {
+      out[k] = this.isSensitiveKey(k) ? "***" : v;
+    }
+    return out;
+  }
+
+  private redactedEntries(): DiagnosticEntry[] {
+    return this.entries.map((e) => ({
+      ...e,
+      context: this.redactContext(e.context),
+      message: this.isSensitiveKey(e.message) ? "[redacted]" : e.message,
+    }));
+  }
+
   export(): string {
-    return JSON.stringify(this.entries, null, 2);
+    return JSON.stringify(this.redactedEntries(), null, 2);
   }
 
   download() {

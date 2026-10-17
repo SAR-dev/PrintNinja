@@ -471,19 +471,30 @@ export function DesignerPage() {
           type="file"
           accept="application/json,text/html"
           ref={fileInputRef}
+          data-testid="template-import"
+          aria-hidden="true"
           className="hidden"
           onChange={async (e) => {
             const file = e.target.files?.[0];
             if (!file) return;
             try {
               const text = await file.text();
-              const data = JSON.parse(text);
-              setTemplateName(data.name || file.name.replace(/\.(json|html)$/, ""));
-              if (data.html) setHtmlCode(data.html);
-              if (data.css) setCssCode(data.css);
-              toast.success("Template imported");
+              const isHtml = file.name.toLowerCase().endsWith(".html") || text.trim().toLowerCase().startsWith("<!doctype") || text.trim().toLowerCase().startsWith("<html");
+              if (isHtml) {
+                setTemplateName(file.name.replace(/\.html$/i, ""));
+                setHtmlCode(text);
+                toast.success("HTML template imported");
+              } else {
+                const data = JSON.parse(text);
+                setTemplateName(data.name || file.name.replace(/\.(json|html)$/, ""));
+                if (data.html) setHtmlCode(data.html);
+                if (data.css) setCssCode(data.css);
+                toast.success("Template imported");
+              }
             } catch {
               toast.error("Invalid template file");
+            } finally {
+              if (fileInputRef.current) fileInputRef.current.value = "";
             }
           }}
         />
@@ -1126,12 +1137,17 @@ export function DesignerPage() {
             </div>
             <div className="space-y-1">
               <Label>JSON data</Label>
-              <textarea
-                className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-xs font-mono"
-                value={datasetJson}
-                onChange={(e) => setDatasetJson(e.target.value)}
-                rows={8}
-              />
+              <div className="rounded-md border overflow-hidden">
+                <CodeMirror
+                  value={datasetJson}
+                  height="160px"
+                  extensions={[html()]}
+                  onChange={setDatasetJson}
+                  theme="dark"
+                  basicSetup={{ lintKeymap: true }}
+                />
+              </div>
+              {(() => { try { JSON.parse(datasetJson); return null; } catch (e) { return <p className="text-xs text-red-500">{String(e).split("\n")[0]}</p>; }})()}
             </div>
           </div>
           <DialogFooter>
@@ -1162,12 +1178,16 @@ export function DesignerPage() {
             <DialogTitle>Edit Dataset: {editingDataset}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <textarea
-              className="w-full min-h-[160px] rounded-md border border-input bg-background px-3 py-2 text-xs font-mono"
-              value={editJson}
-              onChange={(e) => setEditJson(e.target.value)}
-              rows={10}
-            />
+            <div className="rounded-md border overflow-hidden">
+              <CodeMirror
+                value={editJson}
+                height="200px"
+                extensions={[html()]}
+                onChange={setEditJson}
+                theme="dark"
+              />
+            </div>
+            {(() => { try { JSON.parse(editJson); return null; } catch (e) { return <p className="text-xs text-red-500">{String(e).split("\n")[0]}</p>; }})()}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditDataset(false)}>Cancel</Button>

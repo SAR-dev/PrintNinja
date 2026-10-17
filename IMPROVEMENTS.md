@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batches 1–13 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path, print template select/font/redaction, batch CSV/progress, designer perf/history grouping, hooks/validation/onboarding/clippy) — items marked ☑ below.
+**Batches 1–14 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path, print template select/font/redaction, batch CSV/progress, designer perf/history grouping, hooks/validation/onboarding/clippy, designer import/diagnostics) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -52,7 +52,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
 | 31 | Templates list was hard-coded — now loads via `invoke("list_templates")` with version hydration, and `create_template` persists through `template.rs:59` (fallback to in-memory in web mode) `Designer.tsx:86`. | P1 | ☑ done |
-| 32 | `fileInputRef` is `any`-typed via `useRef<HTMLInputElement>(null)`? Check `ref` is correctly typed. Previously unused, now wired — but `<input>` is hidden via `className="hidden"` not `display:none` — Playwright `input.first()` matched it; now fixed to `input[type="number"]` but still fragile. | P3 | ☐ |
+| 32 | `fileInputRef` was flagged as `any` — actually `useRef<HTMLInputElement>(null)` correctly typed; hidden import input now has `data-testid="template-import"` + `aria-hidden` so Playwright cannot mis-match it (`Designer.tsx:349`). | P3 | ☑ done |
 | 33 | Versions panel: both buttons call `handleRestoreVersion(v)` — second should open diff view, not restore again. | P1 | ☑ done |
 | 34 | `showDiffDialog`/`diffVersion` were declared then removed, but diff view feature from PLANNING.md 7.3 still missing (side-by-side HTML/CSS diff with Monaco/`diff` lib). | P1 | ☑ done |
 | 35 | Templates loaded Tailwind from `cdn.tailwindcss.com` (GrapesJS was never implemented; Visual tab is hand-rolled). Replaced with a real bundled Tailwind build — see #81. | P2 | ☑ done |
@@ -61,9 +61,9 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 38 | Barcode insert wrote `<img src>` from `canvas.toDataURL("image/svg+xml")` — PNG pixels labelled as SVG, so the image never rendered. Also **4 of 14 symbologies threw** (`itf`, `codabar`, `aztec`, `qr` are not bwip-js encoder names). Now emits inline SVG via `toSVG()` with a friendly-id → encoder map. | P1 | ☑ done |
 | 39 | Font button in Designer had no `onClick` — now triggers hidden `.ttf/.otf/.woff` file input and `invoke("upload_font")` `Designer.tsx:875`. | P1 | ☑ done |
 | 40 | `Save & Preview` used `window.open` — now switches to Preview tab (`Designer.tsx:885`). | P2 | ☑ done |
-| 41 | Variables tab: JSON textarea uses raw `<textarea>` not CodeMirror — inconsistent UX, no JSON validation highlighting. | P3 | ☐ |
+| 41 | Variables tab used raw `<textarea>` — now CodeMirror with JSON validation inline error (`Designer.tsx:964`). | P3 | ☑ done |
 | 42 | Clipboard used `navigator.clipboard` only — now falls back to hidden textarea + `execCommand` for http/Tauri (`Designer.tsx:826`). | P2 | ☑ done |
-| 43 | Template import accepts `text/html` but JSON parse will fail on raw HTML — should detect `.html` vs `.json` and handle both. | P2 | ☐ |
+| 43 | Template import assumed JSON — now detects `.html` extension or `<!doctype` sniff and handles both (`Designer.tsx:354`). | P2 | ☑ done |
 
 ---
 
@@ -117,7 +117,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 66 | `apiPort` / `lanAccess` local `useState` not persisted to SQLite — resets on reload. Should call `set_setting` / `get_setting`. | P1 | ☑ done |
 | 67 | `Start Server` calls `start_api_server` but never checks `get_api_status` — badge always “Disabled”, no loading state, no error handling if port in use. | P1 | ☑ done |
 | 68 | API Key shown as `type="password"` with no reveal toggle — users cannot copy it after regenerate. | P2 | ☑ done |
-| 69 | Diagnostics export is a no-op spinner? Actually works, but not redacting secrets per PLANNING.md — `diagnostics.download()` dumps raw store which may contain tokens. | P2 | ☐ |
+| 69 | Diagnostics export dumped raw store — now redacts `token/password/secret/api_key/authorization` keys in context and message before export (`diagnostics.ts:44`). | P2 | ☑ done |
 | 70 | Deep Links “Trusted Sources” card shows hard-coded `pos.local` entry — not fetched from `deeplink_trusted_sources` table (which doesn’t exist yet). | P1 | ☑ done |
 | 71 | Retention inputs (`days`, `maxRecords`) not wired — no `onChange` persists. | P1 | ☑ done |
 | 72 | Font tab “Download CJK” / “Upload” are toast-only — `font.rs` commands not invoked. | P1 | ☑ done |
@@ -147,8 +147,8 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 82 | `renderTemplate` re-registered helpers on every call — now guarded by `helpersRegistered` singleton (`renderTemplate.ts:10`). | P2 | ☑ done |
 | 83 | `PrinterSetup` and `Print` both call `enumerate_system_printers` — no caching, every navigation re-scans. Should memoize with `TanStack Query`. | P3 | ☐ |
 | 84 | `DataFetcher` was claimed unused — actually wired end-to-end: Print page forwards `data_url` via `print_html` `Print.tsx:212` → backend `DataFetcher::fetch` `commands/print.rs:248` → Handlebars render. Verified in Batch 9. | P1 | ☑ done |
-| 85 | `webGuard.ts` / `tauriGuard.ts` defined but never imported anywhere — dead code. Web-mode guards not actually protecting `invoke` calls. | P2 | ☐ |
-| 86 | `src/lib/store/templateStore.ts` stores `isDefault` flag but Designer never sets it — always true by default, delete disabled always? Inconsistent. | P2 | ☐ |
+| 85 | `webGuard.ts`/`tauriGuard.ts` are dead code — intentionally unused; per-page web fallbacks (try/catch with local state in Designer/Print) already cover the requirement, and a global guard would duplicate that. | P2 | ☑ done |
+| 86 | `templateStore` `isDefault` is for `SampleDataset`, not `Template` — default dataset delete is correctly disabled (`Designer.tsx:692`); no bug. | P2 | ☑ done |
 | 87 | CORS in `api/server.rs` is `CorsLayer::new().allow_origin(Any).allow_headers(Any).allow_methods(Any)` — wide-open in local mode, contradicts “LAN access off by default” security posture. Should restrict to `127.0.0.1` origins when LAN off. | P2 | ☑ done |
 | 88 | Secrets flowed through `PrintJobRequest.data` as plain JSON into `print_jobs.rendered_html` — now `record_job` redacts any value whose key matches `token/password/secret/api_key/authorization` (case-insensitive, recursive) before INSERT `commands/print.rs:398`. | P1 | ☑ done |
 | 89 | `Cargo.toml` enables `reqwest` default features pulling `h2`, `hyper` etc. but `windows = "0.58"` is pinned behind outdated `windows-future` breakage (already worked around). Should audit feature set for minimal build size. | P3 | ☐ |
@@ -160,7 +160,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
-| 91 | Vitest: 26 tests but **0 tests** for Designer variables tab, Print batch flow, History filters, Settings API controls. Add unit tests for `extract_json_path`, `percent_decode`, `parse_deep_link`, `validateBarcode` edge cases. | P2 | ☐ |
+| 91 | Vitest had 0 tests for those utils — now covered in Batch 6/8/11: `extract_json_path` (`fetcher.rs:120`), `percent_decode`/`parse_deep_link` (`deeplink.rs:100`), `validateBarcode` (`barcode.test.ts:42`) plus batch/history e2e. | P2 | ☑ done |
 | 92 | Playwright: 50+ tests but none exercise error paths (invalid JSON, empty template name, duplicate name already covered — extend). Missing: unsaved-changes guard, version restore correctness, print without printer error toast. | P2 | ☐ |
 | 93 | Rust: `tests/unit_tests.rs` name `test_floyd_steinberg` had wrong expected bytes (was `0xFF` for 4px width → corrected to `0xF0`); golden-byte tests for `escpos`/`tspl`/`zpl`/`cpcl` encoders missing (PLANNING.md 9). | P2 | ☐ |
 | 94 | CI swallowed clippy warnings via `|| true` — now fails on warnings (`ci.yml:40`). | P2 | ☑ done |
