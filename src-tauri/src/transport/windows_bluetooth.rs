@@ -22,16 +22,17 @@ impl WindowsBluetoothPrinter {
                 .map_err(|e| format!("Failed to open COM port {}: {}", self.com_port, e))?;
 
             let mut port = port;
-            port.write_all(data).map_err(|e| format!("BT write failed: {}", e))?;
-            port.flush().map_err(|e| format!("BT flush failed: {}", e))?;
+            port.write_all(data)
+                .map_err(|e| format!("BT write failed: {}", e))?;
+            port.flush()
+                .map_err(|e| format!("BT flush failed: {}", e))?;
             Ok(())
         }
 
         #[cfg(not(feature = "serialport"))]
         {
             // Fallback: use Windows spooler (paired Bluetooth printer appears as system printer)
-            crate::transport::windows_spooler::WindowsSpooler::new(self.name.clone())
-                .send_raw(data)
+            crate::transport::windows_spooler::WindowsSpooler::new(self.name.clone()).send_raw(data)
         }
     }
 
@@ -70,7 +71,8 @@ impl PrinterTransport for WindowsBluetoothPrinter {
     }
 
     async fn test(&self) -> Result<(), String> {
-        self.send_raw(&crate::transport::escpos::EscPosEncoder::init()).await
+        self.send_raw(&crate::transport::escpos::EscPosEncoder::init())
+            .await
     }
 
     async fn send(&self, job: RenderedJob) -> Result<(), String> {

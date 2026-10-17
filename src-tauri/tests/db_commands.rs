@@ -111,7 +111,9 @@ fn printer_insert_and_list() {
 #[test]
 fn printer_delete_reports_not_found() {
     let (_state, conn) = test_db();
-    let affected = conn.execute("DELETE FROM printers WHERE id = 9999", []).unwrap();
+    let affected = conn
+        .execute("DELETE FROM printers WHERE id = 9999", [])
+        .unwrap();
     assert_eq!(affected, 0);
 }
 
@@ -239,7 +241,9 @@ fn history_job_insert_and_delete() {
     let id = conn.last_insert_rowid();
 
     let status: String = conn
-        .query_row("SELECT status FROM print_jobs WHERE id = ?1", [id], |r| r.get(0))
+        .query_row("SELECT status FROM print_jobs WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(status, "success");
 

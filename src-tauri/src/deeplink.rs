@@ -44,8 +44,14 @@ pub fn parse_deep_link(url: &str) -> Result<DeepLinkAction, String> {
                 copies: params.get("copies").and_then(|s| s.parse().ok()),
                 orientation: params.get("orientation").map(|s| s.to_string()),
                 fit: params.get("fit").map(|s| s.to_string()),
-                test: params.get("test").map(|s| s == "1" || s == "true").unwrap_or(false),
-                confirm: params.get("confirm").map(|s| s != "0" && s != "false").unwrap_or(true),
+                test: params
+                    .get("test")
+                    .map(|s| s == "1" || s == "true")
+                    .unwrap_or(false),
+                confirm: params
+                    .get("confirm")
+                    .map(|s| s != "0" && s != "false")
+                    .unwrap_or(true),
                 callback: params.get("callback").map(|s| s.to_string()),
             };
             Ok(DeepLinkAction::Print(print))
@@ -66,10 +72,7 @@ fn parse_query_params(query: &str) -> HashMap<String, String> {
     let mut params = HashMap::new();
     for pair in query.split('&') {
         if let Some((key, value)) = pair.split_once('=') {
-            params.insert(
-                percent_decode(key),
-                percent_decode(value),
-            );
+            params.insert(percent_decode(key), percent_decode(value));
         }
     }
     params
@@ -122,7 +125,8 @@ mod tests {
 
     #[test]
     fn parse_deep_link_decodes_template_with_plus() {
-        let action = parse_deep_link("printninja://print?template=My+Receipt&printer=Desk").unwrap();
+        let action =
+            parse_deep_link("printninja://print?template=My+Receipt&printer=Desk").unwrap();
         match action {
             DeepLinkAction::Print(p) => {
                 assert_eq!(p.template.as_deref(), Some("My Receipt"));

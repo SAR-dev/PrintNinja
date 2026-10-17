@@ -36,7 +36,10 @@ impl EscPosEncoder {
         let height = image.height;
 
         let mut cmd = vec![
-            0x1D, 0x76, 0x30, 0x00, // GS v 0, mode: normal
+            0x1D,
+            0x76,
+            0x30,
+            0x00, // GS v 0, mode: normal
             (width_bytes & 0xFF) as u8,
             (width_bytes >> 8) as u8,
             (height & 0xFF) as u8,

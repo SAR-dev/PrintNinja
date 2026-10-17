@@ -15,7 +15,9 @@ impl ApiKey {
     pub fn generate() -> (String, String) {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        let key: String = (0..32).map(|_| rng.sample(rand::distributions::Alphanumeric) as char).collect();
+        let key: String = (0..32)
+            .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+            .collect();
         let prefixed = format!("pn_live_{}", key);
         let hash = hash_key(&prefixed);
         (prefixed, hash)

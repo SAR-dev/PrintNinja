@@ -26,11 +26,9 @@ fn port_from_settings(db: &DbState, key: &str, default: u16) -> u16 {
         .ok()
         .and_then(|g| {
             let conn = g.connection().ok()?;
-            conn.query_row(
-                "SELECT value FROM settings WHERE key = ?1",
-                [key],
-                |r| r.get::<_, String>(0),
-            )
+            conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+                r.get::<_, String>(0)
+            })
             .ok()?
             .parse()
             .ok()
@@ -43,11 +41,9 @@ fn bool_from_settings(db: &DbState, key: &str, default: bool) -> bool {
         .ok()
         .and_then(|g| {
             let conn = g.connection().ok()?;
-            conn.query_row(
-                "SELECT value FROM settings WHERE key = ?1",
-                [key],
-                |r| r.get::<_, String>(0),
-            )
+            conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+                r.get::<_, String>(0)
+            })
             .ok()
         })
         .map(|v| v == "true" || v == "1")
@@ -72,7 +68,13 @@ pub fn get_api_status(app: AppHandle, db: State<DbState>) -> AppResult<ApiStatus
                 )
                 .ok()
         })
-        .unwrap_or_else(|| if lan { "0.0.0.0".into() } else { "127.0.0.1".into() });
+        .unwrap_or_else(|| {
+            if lan {
+                "0.0.0.0".into()
+            } else {
+                "127.0.0.1".into()
+            }
+        });
 
     Ok(ApiStatus {
         running: RUNNING.load(Ordering::Relaxed),
@@ -134,7 +136,11 @@ pub fn start_api_server(
     let listener = tokio::net::TcpListener::from_std(listener)
         .map_err(|e| AppError::Internal(format!("Listener setup failed: {}", e)))?;
 
-    let display_addr = if lan { host.to_string() } else { host.to_string() };
+    let display_addr = if lan {
+        host.to_string()
+    } else {
+        host.to_string()
+    };
     app.manage(ApiServerHandle {
         address: display_addr,
         port,
@@ -215,7 +221,9 @@ pub fn stop_api_server() -> AppResult<()> {
 pub fn regenerate_api_key(db: State<DbState>) -> AppResult<String> {
     let (plaintext, hash) = ApiKey::generate();
 
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     conn.execute(

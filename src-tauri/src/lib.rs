@@ -1,20 +1,20 @@
 pub mod api;
 pub mod commands;
+mod data;
 pub mod db;
 mod deeplink;
+mod error;
+pub mod queue;
 pub mod render;
 pub mod transport;
-pub mod queue;
-mod data;
-mod error;
 
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri_plugin_sql::Migration;
 use tauri_plugin_sql::MigrationKind;
 
-pub use error::{AppError, AppResult};
 pub use db::DbState;
+pub use error::{AppError, AppResult};
 // Re-exported so integration tests can assert API-key verification.
 pub use commands::api::verify_api_key;
 

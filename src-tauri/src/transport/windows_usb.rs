@@ -13,7 +13,13 @@ pub struct WindowsUsbPrinter {
 
 impl WindowsUsbPrinter {
     pub fn new(name: String, vendor_id: u16, product_id: u16) -> Self {
-        Self { name, vendor_id, product_id, interface: 0, endpoint: 1 }
+        Self {
+            name,
+            vendor_id,
+            product_id,
+            interface: 0,
+            endpoint: 1,
+        }
     }
 
     pub async fn send_raw(&self, data: &[u8]) -> Result<(), String> {
@@ -32,15 +38,15 @@ impl WindowsUsbPrinter {
                             Ok(d) => d,
                             Err(_) => continue,
                         };
-                        if desc.vendor_id() == self.vendor_id && desc.product_id() == self.product_id {
+                        if desc.vendor_id() == self.vendor_id
+                            && desc.product_id() == self.product_id
+                        {
                             match device.open() {
                                 Ok(handle) => {
                                     let _ = handle.claim_interface(self.interface);
-                                    let written = handle.write_bulk(
-                                        self.endpoint,
-                                        data,
-                                        timeout,
-                                    ).map_err(|e| e.to_string())?;
+                                    let written = handle
+                                        .write_bulk(self.endpoint, data, timeout)
+                                        .map_err(|e| e.to_string())?;
                                     if written > 0 {
                                         let _ = handle.release_interface(self.interface);
                                         return Ok(());
@@ -59,8 +65,7 @@ impl WindowsUsbPrinter {
         #[cfg(not(feature = "rusb"))]
         {
             // Fallback: use the Windows spooler with USB port
-            crate::transport::windows_spooler::WindowsSpooler::new(self.name.clone())
-                .send_raw(data)
+            crate::transport::windows_spooler::WindowsSpooler::new(self.name.clone()).send_raw(data)
         }
     }
 
@@ -87,11 +92,19 @@ impl WindowsUsbPrinter {
                 for device in context.devices().unwrap_or_default() {
                     if let Ok(desc) = device.device_descriptor() {
                         if known_vendor_ids.contains(&desc.vendor_id()) {
-                            let name = format!("USB Printer {:04x}:{:04x}", desc.vendor_id(), desc.product_id());
+                            let name = format!(
+                                "USB Printer {:04x}:{:04x}",
+                                desc.vendor_id(),
+                                desc.product_id()
+                            );
                             printers.push(PrinterInfo {
                                 id: name.clone(),
                                 name,
-                                address: format!("{:04x}:{:04x}", desc.vendor_id(), desc.product_id()),
+                                address: format!(
+                                    "{:04x}:{:04x}",
+                                    desc.vendor_id(),
+                                    desc.product_id()
+                                ),
                                 printer_type: PrinterType::Usb,
                                 language: PrinterLanguage::Escpos,
                                 status: "online".to_string(),
@@ -113,7 +126,8 @@ impl PrinterTransport for WindowsUsbPrinter {
     }
 
     async fn test(&self) -> Result<(), String> {
-        self.send_raw(&crate::transport::escpos::EscPosEncoder::init()).await
+        self.send_raw(&crate::transport::escpos::EscPosEncoder::init())
+            .await
     }
 
     async fn send(&self, job: RenderedJob) -> Result<(), String> {

@@ -63,7 +63,10 @@ fn date_helper(
         return Ok(());
     };
 
-    let format = h.param(1).and_then(|v| v.value().as_str()).unwrap_or("%Y-%m-%d");
+    let format = h
+        .param(1)
+        .and_then(|v| v.value().as_str())
+        .unwrap_or("%Y-%m-%d");
     let rendered = match format {
         "short" => dt.format("%d %b %Y").to_string(),
         "long" => dt.format("%d %B %Y, %H:%M").to_string(),
@@ -241,6 +244,9 @@ mod tests {
     fn currency_supports_custom_symbol() {
         let engine = TemplateEngine::new();
         let data = serde_json::json!({ "p": 3 });
-        assert_eq!(engine.render("{{currency p \"€\"}}", &data).unwrap(), "€3.00");
+        assert_eq!(
+            engine.render("{{currency p \"€\"}}", &data).unwrap(),
+            "€3.00"
+        );
     }
 }

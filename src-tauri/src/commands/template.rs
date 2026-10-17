@@ -19,7 +19,9 @@ const VALID_ORIENTATIONS: &[&str] = &["portrait", "landscape"];
 
 #[tauri::command]
 pub fn list_templates(db: State<DbState>) -> AppResult<Vec<Template>> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let mut stmt = conn.prepare(
@@ -79,7 +81,9 @@ pub fn create_template(db: State<DbState>, req: CreateTemplateRequest) -> AppRes
         ));
     }
 
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let mut conn = guard.connection()?;
     let tx = conn.transaction()?;
 
@@ -125,10 +129,7 @@ pub fn create_template(db: State<DbState>, req: CreateTemplateRequest) -> AppRes
     Ok(template)
 }
 
-fn tx_guard_to_template(
-    conn: &rusqlite::Connection,
-    id: i64,
-) -> rusqlite::Result<Template> {
+fn tx_guard_to_template(conn: &rusqlite::Connection, id: i64) -> rusqlite::Result<Template> {
     conn.query_row(
         "SELECT id, name, current_version_id, page_w_mm, page_h_mm,
                 orientation, created_at, updated_at
@@ -151,7 +152,9 @@ fn tx_guard_to_template(
 
 #[tauri::command]
 pub fn delete_template(db: State<DbState>, id: i64) -> AppResult<()> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let affected = conn.execute("DELETE FROM templates WHERE id = ?1", [id])?;

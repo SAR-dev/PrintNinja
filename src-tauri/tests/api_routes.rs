@@ -61,12 +61,13 @@ fn seed_printers_and_templates(db: &Db) -> (String, String) {
     )
     .unwrap();
     let tid = c.last_insert_rowid();
-    let vid = c.execute(
-        "INSERT INTO template_versions (template_id, version_no, html, css, created_by)
+    let vid = c
+        .execute(
+            "INSERT INTO template_versions (template_id, version_no, html, css, created_by)
          VALUES (?1, 1, '<p>hi</p>', '', 'manual')",
-        [tid],
-    )
-    .unwrap();
+            [tid],
+        )
+        .unwrap();
     // The real `create_template` sets this; without it the template has
     // versions on disk but nothing "current" to render.
     c.execute(
@@ -188,7 +189,11 @@ async fn jobs_id_supports_both_get_and_delete() {
         )
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::OK, "GET /v1/jobs/{{id}} must not 404/405");
+    assert_eq!(
+        res.status(),
+        StatusCode::OK,
+        "GET /v1/jobs/{{id}} must not 404/405"
+    );
 
     // DELETE /v1/jobs/1 must cancel the queued job.
     let app = router(&db);
@@ -203,12 +208,18 @@ async fn jobs_id_supports_both_get_and_delete() {
         )
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::NO_CONTENT, "DELETE must reach its handler");
+    assert_eq!(
+        res.status(),
+        StatusCode::NO_CONTENT,
+        "DELETE must reach its handler"
+    );
 
     let guard = db.lock().unwrap();
     let c = guard.connection().unwrap();
     let status: String = c
-        .query_row("SELECT status FROM print_jobs WHERE id = 1", [], |r| r.get(0))
+        .query_row("SELECT status FROM print_jobs WHERE id = 1", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(status, "cancelled");
 }
@@ -279,7 +290,6 @@ async fn duplicate_idempotency_key_does_not_create_a_second_job() {
         .unwrap();
     assert_eq!(n, 1, "idempotent replay must not print twice");
 }
-
 
 /// Build the router the way the real app does.
 ///
@@ -479,9 +489,11 @@ async fn batch_print_creates_one_job_per_record() {
     let guard = db.lock().unwrap();
     let c = guard.connection().unwrap();
     let n: i64 = c
-        .query_row("SELECT COUNT(*) FROM print_jobs WHERE source='api'", [], |r| {
-            r.get(0)
-        })
+        .query_row(
+            "SELECT COUNT(*) FROM print_jobs WHERE source='api'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(n, 3);
 }
@@ -501,7 +513,11 @@ async fn openapi_documents_bearer_auth() {
         .await
         .unwrap();
 
-    assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "openapi also requires a key");
+    assert_eq!(
+        res.status(),
+        StatusCode::UNAUTHORIZED,
+        "openapi also requires a key"
+    );
 }
 
 #[tokio::test]

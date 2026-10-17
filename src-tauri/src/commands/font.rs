@@ -19,7 +19,9 @@ const VALID_FORMATS: &[&str] = &["ttf", "otf", "woff", "woff2"];
 
 #[tauri::command]
 pub fn list_fonts(db: State<DbState>) -> AppResult<Vec<FontInfo>> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let mut stmt = conn.prepare(
@@ -63,11 +65,7 @@ pub async fn upload_font(
         return Err(AppError::Validation("Font file name required".into()));
     }
 
-    let ext = base
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_ascii_lowercase();
+    let ext = base.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
     if !VALID_FORMATS.contains(&ext.as_str()) {
         return Err(AppError::Validation(format!(
             "Unsupported font format '{}'. Expected one of {:?}",
@@ -93,9 +91,7 @@ pub async fn upload_font(
     let family = family
         .map(|f| f.trim().to_string())
         .filter(|f| !f.is_empty())
-        .unwrap_or_else(|| {
-            base.trim_end_matches(&format!(".{}", ext)).to_string()
-        });
+        .unwrap_or_else(|| base.trim_end_matches(&format!(".{}", ext)).to_string());
 
     let path_str = dest.to_string_lossy().to_string();
     let guard = db
@@ -128,11 +124,15 @@ pub async fn upload_font(
 
 #[tauri::command]
 pub fn delete_font(db: State<DbState>, id: i64) -> AppResult<()> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let path: Option<String> = conn
-        .query_row("SELECT file_path FROM fonts WHERE id = ?1", [id], |r| r.get(0))
+        .query_row("SELECT file_path FROM fonts WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
         .ok();
 
     let affected = conn.execute("DELETE FROM fonts WHERE id = ?1", [id])?;

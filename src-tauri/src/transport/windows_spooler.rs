@@ -11,7 +11,7 @@ use std::ptr::null_mut;
 #[cfg(windows)]
 mod winapi {
     use std::os::raw::{c_char, c_void};
-    
+
     pub type HANDLE = *mut c_void;
     pub type BOOL = i32;
     pub type DWORD = u32;
@@ -59,13 +59,26 @@ mod winapi {
     }
 
     extern "system" {
-        pub fn OpenPrinterA(pPrinterName: LPSTR, phPrinter: *mut HANDLE, pDefault: *mut c_void) -> BOOL;
+        pub fn OpenPrinterA(
+            pPrinterName: LPSTR,
+            phPrinter: *mut HANDLE,
+            pDefault: *mut c_void,
+        ) -> BOOL;
         pub fn ClosePrinter(hPrinter: HANDLE) -> BOOL;
-        pub fn StartDocPrinterA(hPrinter: HANDLE, Level: DWORD, pDocInfo: *mut DOC_INFO_1A) -> DWORD;
+        pub fn StartDocPrinterA(
+            hPrinter: HANDLE,
+            Level: DWORD,
+            pDocInfo: *mut DOC_INFO_1A,
+        ) -> DWORD;
         pub fn EndDocPrinter(hPrinter: HANDLE) -> BOOL;
         pub fn StartPagePrinter(hPrinter: HANDLE) -> BOOL;
         pub fn EndPagePrinter(hPrinter: HANDLE) -> BOOL;
-        pub fn WritePrinter(hPrinter: HANDLE, pBuf: LPVOID, cbBuf: DWORD, pcWritten: LPDWORD) -> BOOL;
+        pub fn WritePrinter(
+            hPrinter: HANDLE,
+            pBuf: LPVOID,
+            cbBuf: DWORD,
+            pcWritten: LPDWORD,
+        ) -> BOOL;
         pub fn EnumPrintersA(
             Flags: DWORD,
             Name: LPSTR,
@@ -95,8 +108,8 @@ impl WindowsSpooler {
 
     /// Enumerate all local system printers
     pub fn enumerate_printers() -> Vec<PrinterInfo> {
-        use winapi::*;
         use std::ffi::CStr;
+        use winapi::*;
 
         let mut printers = Vec::new();
         let mut bytes_needed: DWORD = 0;
@@ -178,8 +191,8 @@ impl WindowsSpooler {
 
     /// Send raw bytes to the printer via the spooler
     pub fn send_raw(&self, data: &[u8]) -> Result<(), String> {
-        use winapi::*;
         use std::ffi::CStr;
+        use winapi::*;
 
         let printer_name = CString::new(self.printer_name.clone()).map_err(|e| e.to_string())?;
         let doc_name = CString::new("PrintNinja Job").map_err(|e| e.to_string())?;

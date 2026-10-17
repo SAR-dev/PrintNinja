@@ -19,7 +19,9 @@ pub fn list_profiles(
     printer_id: Option<i64>,
     template_id: Option<i64>,
 ) -> AppResult<Vec<PrinterProfile>> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let mut sql = String::from(
@@ -71,14 +73,13 @@ pub fn save_profile(db: State<DbState>, req: SaveProfileRequest) -> AppResult<Pr
     serde_json::from_str::<serde_json::Value>(&req.settings_json)
         .map_err(|e| AppError::Validation(format!("Invalid settings JSON: {}", e)))?;
 
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     // Ensure the referenced rows exist so profiles never dangle.
-    for (id, table) in [
-        (req.printer_id, "printers"),
-        (req.template_id, "templates"),
-    ] {
+    for (id, table) in [(req.printer_id, "printers"), (req.template_id, "templates")] {
         let n: i64 = conn.query_row(
             &format!("SELECT COUNT(*) FROM {} WHERE id = ?1", table),
             [id],
@@ -124,7 +125,9 @@ pub fn save_profile(db: State<DbState>, req: SaveProfileRequest) -> AppResult<Pr
 
 #[tauri::command]
 pub fn delete_profile(db: State<DbState>, id: i64) -> AppResult<()> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let affected = conn.execute("DELETE FROM printer_profiles WHERE id = ?1", [id])?;

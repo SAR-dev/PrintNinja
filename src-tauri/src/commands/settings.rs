@@ -5,7 +5,9 @@ use tauri::State;
 /// Deep-link sources allowed to skip the confirmation sheet.
 #[tauri::command]
 pub fn get_trusted_sources(db: State<DbState>) -> AppResult<Vec<String>> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let raw: Option<String> = conn
@@ -36,7 +38,9 @@ pub fn set_trusted_sources(db: State<DbState>, sources: Vec<String>) -> AppResul
     let json = serde_json::to_string(&sources)
         .map_err(|e| AppError::Internal(format!("serialize failed: {}", e)))?;
 
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     conn.execute(
@@ -50,7 +54,9 @@ pub fn set_trusted_sources(db: State<DbState>, sources: Vec<String>) -> AppResul
 
 #[tauri::command]
 pub fn get_setting(db: State<DbState>, key: String) -> AppResult<Option<String>> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let mut stmt = conn.prepare("SELECT value FROM settings WHERE key = ?1")?;
@@ -69,7 +75,9 @@ pub fn set_setting(db: State<DbState>, key: String, value: String) -> AppResult<
         return Err(AppError::Validation("Setting key required".into()));
     }
 
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     conn.execute(

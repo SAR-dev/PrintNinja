@@ -58,15 +58,14 @@ pub fn create_batch(db: State<DbState>, req: CreateBatchRequest) -> AppResult<Ba
     serde_json::from_str::<serde_json::Value>(&settings)
         .map_err(|e| AppError::Validation(format!("Invalid settings JSON: {}", e)))?;
 
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let mut conn = guard.connection()?;
     let tx = conn.transaction()?;
 
     // Validate references so a batch never points at a missing printer/template.
-    for (id, table) in [
-        (req.printer_id, "printers"),
-        (req.template_id, "templates"),
-    ] {
+    for (id, table) in [(req.printer_id, "printers"), (req.template_id, "templates")] {
         let n: i64 = tx.query_row(
             &format!("SELECT COUNT(*) FROM {} WHERE id = ?1", table),
             [id],
@@ -84,7 +83,12 @@ pub fn create_batch(db: State<DbState>, req: CreateBatchRequest) -> AppResult<Ba
     tx.execute(
         "INSERT INTO batches (template_id, printer_id, total, mode, status)
          VALUES (?1, ?2, ?3, ?4, 'queued')",
-        rusqlite::params![req.template_id, req.printer_id, records.len() as i64, req.mode],
+        rusqlite::params![
+            req.template_id,
+            req.printer_id,
+            records.len() as i64,
+            req.mode
+        ],
     )?;
     let batch_id = tx.last_insert_rowid();
 
@@ -167,7 +171,9 @@ fn tx_guard_to_batch(conn: &rusqlite::Connection, id: i64) -> rusqlite::Result<B
 
 #[tauri::command]
 pub fn list_batches(db: State<DbState>) -> AppResult<Vec<Batch>> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
     let mut stmt = conn.prepare(
@@ -196,16 +202,19 @@ pub fn list_batches(db: State<DbState>) -> AppResult<Vec<Batch>> {
 
 #[tauri::command]
 pub fn get_batch(db: State<DbState>, id: i64) -> AppResult<Batch> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let conn = guard.connection()?;
 
-    tx_guard_to_batch(&conn, id)
-        .map_err(|_| AppError::NotFound(format!("Batch {} not found", id)))
+    tx_guard_to_batch(&conn, id).map_err(|_| AppError::NotFound(format!("Batch {} not found", id)))
 }
 
 #[tauri::command]
 pub fn cancel_batch(db: State<DbState>, id: i64) -> AppResult<()> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let mut conn = guard.connection()?;
     let tx = conn.transaction()?;
 
@@ -240,7 +249,9 @@ pub fn cancel_batch(db: State<DbState>, id: i64) -> AppResult<()> {
 
 #[tauri::command]
 pub fn retry_batch(db: State<DbState>, id: i64) -> AppResult<()> {
-    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let mut conn = guard.connection()?;
     let tx = conn.transaction()?;
 

@@ -86,7 +86,9 @@ fn font_family_fallback_and_unique_paths() {
         )
         .unwrap();
     }
-    let mut stmt = conn.prepare("SELECT COUNT(DISTINCT file_path) FROM fonts").unwrap();
+    let mut stmt = conn
+        .prepare("SELECT COUNT(DISTINCT file_path) FROM fonts")
+        .unwrap();
     let distinct: i64 = stmt.query_row([], |r| r.get(0)).unwrap();
     assert_eq!(distinct, 2);
 }
@@ -158,7 +160,9 @@ fn profile_upsert_replaces_settings() {
     assert_eq!(count, 1, "upsert must not create a second row");
 
     let settings: String = conn
-        .query_row("SELECT settings_json FROM printer_profiles", [], |r| r.get(0))
+        .query_row("SELECT settings_json FROM printer_profiles", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert!(settings.contains("\"copies\":5"), "{}", settings);
 }
@@ -382,9 +386,11 @@ fn batch_cascade_delete_removes_jobs() {
         .unwrap();
 
     let n: i64 = conn
-        .query_row("SELECT COUNT(*) FROM print_jobs WHERE batch_id=?1", [bid], |r| {
-            r.get(0)
-        })
+        .query_row(
+            "SELECT COUNT(*) FROM print_jobs WHERE batch_id=?1",
+            [bid],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(n, 0);
 }
@@ -442,7 +448,11 @@ fn version_diff_same_version_is_unchanged() {
     let v1 = conn.last_insert_rowid();
 
     let html: String = conn
-        .query_row("SELECT html FROM template_versions WHERE id=?1", [v1], |r| r.get(0))
+        .query_row(
+            "SELECT html FROM template_versions WHERE id=?1",
+            [v1],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(html, html, "identical content must report unchanged");
 }
