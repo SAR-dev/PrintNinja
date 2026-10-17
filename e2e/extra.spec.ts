@@ -1,4 +1,4 @@
-import { test, expect, devices } from "@playwright/test";
+import { test, expect, devices, type Page } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -606,5 +606,84 @@ test.describe("Settings persistence (Batch 5)", () => {
     await expect(days).toBeVisible();
     await days.fill("60");
     await expect(days).toHaveValue("60");
+  });
+});
+
+test.describe("Barcode generation (Batch 6)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+  });
+
+  /** Open the barcode dialog and pick a symbology by its visible label. */
+  async function openDialog(page: Page, label: string) {
+    await page.getByRole("button", { name: /barcode/i }).first().click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Insert Barcode")).toBeVisible();
+    await page.locator("#barcode-type").click();
+    await page.getByRole("option", { name: label, exact: true }).click();
+    return dialog;
+  }
+
+  test("QR Code inserts an inline SVG barcode", async ({ page }) => {
+    // Regression for #38: `qr` is not a bwip-js encoder name (it is `qrcode`),
+    // so this symbology silently failed to insert.
+    await openDialog(page, "QR Code");
+    await page.locator("#barcode-value").fill("https://example.com");
+    await page.locator("#barcode-insert").click();
+
+    await expect(page.locator("#barcode-error")).toHaveCount(0);
+    await expect(page.getByText("Insert Barcode")).toHaveCount(0);
+
+    // The barcode must be real inline SVG, not a canvas data URI mislabelled
+    // as SVG (which rendered as a broken image).
+    await page.getByRole("tab", { name: "Code" }).click();
+
+    // CodeMirror only renders the visible viewport, so jump to the end where
+    // the barcode was appended.
+    const editor = page.locator(".cm-content").first();
+    await expect
+      .poll(
+        async () => {
+          await page
+            .locator(".cm-scroller")
+            .first()
+            .evaluate((el) => {
+              el.scrollTop = el.scrollHeight;
+            });
+          return editor.innerText();
+        },
+        { timeout: 5000 },
+      )
+      .toContain("barcode");
+
+    await expect(editor).not.toContainText("data:image/svg+xml");
+  });
+
+  test("ITF inserts (friendly id maps to interleaved2of5)", async ({ page }) => {
+    await openDialog(page, "ITF");
+    await page.locator("#barcode-value").fill("1234");
+    await page.locator("#barcode-insert").click();
+    await expect(page.locator("#barcode-error")).toHaveCount(0);
+  });
+
+  test("Codabar requires start/stop letters", async ({ page }) => {
+    await openDialog(page, "Codabar");
+    await page.locator("#barcode-value").fill("12345");
+    await page.locator("#barcode-insert").click();
+    await expect(page.locator("#barcode-error")).toContainText("start/stop");
+  });
+
+  test("EAN-13 rejects a bad check digit", async ({ page }) => {
+    await openDialog(page, "EAN-13");
+    await page.locator("#barcode-value").fill("4006381333932");
+    await page.locator("#barcode-insert").click();
+    await expect(page.locator("#barcode-error")).toContainText("check digit");
+  });
+
+  test("insert is disabled until a value is entered", async ({ page }) => {
+    await openDialog(page, "Code 128");
+    await expect(page.locator("#barcode-insert")).toBeDisabled();
+    await page.locator("#barcode-value").fill("PN-1042");
+    await expect(page.locator("#barcode-insert")).toBeEnabled();
   });
 });

@@ -17,7 +17,9 @@
     "test:all": "vitest run && playwright test",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "build:templates:css": "node scripts/build-template-css.mjs",
+    "prebuild": "pnpm build:templates:css"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",

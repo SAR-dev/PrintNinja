@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batches 1–5 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring) — items marked ☑ below.
+**Batches 1–6 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -37,8 +37,8 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 21 | `src-tauri/src/transport/ipp.rs:36` | `build_ipp_request` pushes version+op+id then stops — no attribute groups, no `charset`, `naturalLanguage`, `printer-uri`, `copies`. Server will reject. Need real IPP encoder. | P1 | ☐ |
 | 22 | `src-tauri/src/data/fetcher.rs:49` | Size check uses `content_length` header only; chunked responses bypass limit. Must count `response.bytes().len()` after `text().await`. | P2 | ☐ |
 | 23 | `src-tauri/src/data/fetcher.rs:22` | `method` string not validated — `"GET "` or empty panics in `Method::from_bytes`. Validate and default to GET. | P2 | ☐ |
-| 24 | `src-tauri/src/render/handlebars.rs:90` | `pad_left_helper` fetches `pad` param but never uses it (`format!("{:>width$}", ...)` pads with spaces only). Custom pad char ignored. | P2 | ☐ |
-| 25 | `src-tauri/src/render/handlebars.rs:52` | `date_helper` just echoes `"value (format)"` — not a real date formatter. Should parse ISO date. | P2 | ☐ |
+| 24 | `src-tauri/src/render/handlebars.rs:90` | `pad_left_helper` fetched `pad` but always padded with spaces. Now honours a custom pad char, counts chars not bytes, and never truncates. | P2 | ☑ done |
+| 25 | `src-tauri/src/render/handlebars.rs:52` | `date_helper` echoed `"value (format)"`. Now parses RFC-3339, supports `short/long/time/datetime` + strftime patterns, and passes unparseable values through unchanged. | P2 | ☑ done |
 | 26 | `src-tauri/src/deeplink.rs:percent_decode` | Manual decoder does not handle `+` → space, and silently drops `%` on invalid hex. Use `urlencoding` crate already in Cargo.toml. | P2 | ☐ |
 | 27 | `src-tauri/src/api/server.rs:54` | `axum::serve(listener, app).await` blocks forever; `running` flag and `stop()` never actually stop the server (no `oneshot`/`CancellationToken`). | P1 | ☑ done |
 | 28 | `src-tauri/src/api/routes.rs:64,94` | `print_job`/`batch_print` take `HeaderMap` but never check `Authorization: Bearer` — API is wide-open. PLANNING.md requires per-client keys, scopes, IP allowlist. | P1 | ☑ done |
@@ -55,10 +55,10 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 32 | `fileInputRef` is `any`-typed via `useRef<HTMLInputElement>(null)`? Check `ref` is correctly typed. Previously unused, now wired — but `<input>` is hidden via `className="hidden"` not `display:none` — Playwright `input.first()` matched it; now fixed to `input[type="number"]` but still fragile. | P3 | ☐ |
 | 33 | Versions panel: both buttons call `handleRestoreVersion(v)` — second should open diff view, not restore again. | P1 | ☑ done |
 | 34 | `showDiffDialog`/`diffVersion` were declared then removed, but diff view feature from PLANNING.md 7.3 still missing (side-by-side HTML/CSS diff with Monaco/`diff` lib). | P1 | ☑ done |
-| 35 | `VisualDesigner.tsx` GrapesJS loaded via CDN `unpkg.com` — breaks offline, no CSP, no error fallback when network fails. Should bundle via `grapesjs` npm or show “Visual mode unavailable offline”. | P2 | ☐ |
+| 35 | Templates loaded Tailwind from `cdn.tailwindcss.com` (GrapesJS was never implemented; Visual tab is hand-rolled). Replaced with a real bundled Tailwind build — see #81. | P2 | ☑ done |
 | 36 | GrapesJS → CodeMirror sync uses `syncDirection` state toggle inside `useEffect` deps — causes stale closure and double-render loop. | P2 | ☐ |
 | 37 | Canvas preview iframe `srcDoc` re-renders on every keystroke without debounce — causes typing lag on large templates. Debounce `htmlCode`/`cssCode` → 300ms. | P2 | ☐ |
-| 38 | Barcode `Insert` writes `<img src="dataUri">` with full data URI including `image/svg+xml` via canvas `toDataURL("image/svg+xml")` — `bwip-js` canvas is PNG, not SVG. Will produce broken image. Use `bwip-js` SVG path or correct MIME. | P1 | ☐ |
+| 38 | Barcode insert wrote `<img src>` from `canvas.toDataURL("image/svg+xml")` — PNG pixels labelled as SVG, so the image never rendered. Also **4 of 14 symbologies threw** (`itf`, `codabar`, `aztec`, `qr` are not bwip-js encoder names). Now emits inline SVG via `toSVG()` with a friendly-id → encoder map. | P1 | ☑ done |
 | 39 | Font button in Designer has no `onClick` — dead button. Should open font manager or upload dialog. | P1 | ☐ |
 | 40 | `Save & Preview` opens a new tab with `window.open` — blocked by popup blocker in Tauri WebView. Should reuse preview tab or show modal. | P2 | ☐ |
 | 41 | Variables tab: JSON textarea uses raw `<textarea>` not CodeMirror — inconsistent UX, no JSON validation highlighting. | P3 | ☐ |
@@ -143,7 +143,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 |---|-------|----------|--------|
 | 79 | Many pages mix `t("print.fit_actual")` with hard-coded English fallbacks (`"Wi-Fi / LAN"` tab label literal). Incomplete i18n coverage — run `biome` i18n lint. | P3 | ☐ |
 | 80 | `PrintStore` / `HistoryStore` / `TemplateStore` all use `zustand` without `persist` middleware — all user work lost on refresh before DB wiring. Should persist to SQLite via invoke or `zustand/middleware`. | P2 | ☑ done |
-| 81 | `Designer` canvas `iframe` loads `https://cdn.tailwindcss.com` per PLANNING.md — no offline fallback, no CSP, and Tailwind CDN is dev-only. Bundle via `tailwindcss` PostCSS for production. | P2 | ☐ |
+| 81 | `Designer` canvas `iframe` loaded `https://cdn.tailwindcss.com` per render — offline-hostile, outside our CSP, recompiled Tailwind on every job. Now a committed, minified Tailwind build (`pnpm build:templates:css`) inlined into every document. Also fixed Rust `apply_layout` silently discarding template CSS for full-document templates. | P2 | ☑ done |
 | 82 | `Designer` `renderTemplate` re-registers Handlebars helpers on every call (`Handlebars.registerHelper`) without dedupe — leaks helpers, global singleton polluted across renders. Should reuse single `Handlebars` instance. | P2 | ☐ |
 | 83 | `PrinterSetup` and `Print` both call `enumerate_system_printers` — no caching, every navigation re-scans. Should memoize with `TanStack Query`. | P3 | ☐ |
 | 84 | `DataFetcher` never used in frontend — `dataUrl` on Print page never fetched. No fetch on `Print` → no real data path end-to-end. | P1 | ☐ |

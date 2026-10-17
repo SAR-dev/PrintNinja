@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 import CodeMirror from "@uiw/react-codemirror";
 import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
-import { BARCODE_TYPES, validateBarcode, generateBarcodeSvg } from "@/lib/utils/barcode";
+import { BARCODE_TYPES, validateBarcode, buildBarcodeHtml } from "@/lib/utils/barcode";
 import { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS, DEFAULT_MOCK_DATA, STARTER_TEMPLATES } from "@/lib/templates/defaultTemplate";
 import { VisualDesigner } from "@/components/VisualDesigner";
 import { renderTemplate } from "@/lib/render/renderTemplate";
@@ -237,13 +237,21 @@ export function DesignerPage() {
       setBarcodeError(error);
       return;
     }
-    const svg = generateBarcodeSvg({ type: barcodeType, value: barcodeValue });
-    if (svg) {
-      const barcodeHtml = `<img src="${svg}" alt="${barcodeType}" style="max-width: 100%;" />`;
-      setHtmlCode((prev) => prev + "\n" + barcodeHtml);
+    // Inline SVG (not a data URI): the printed HTML must not depend on an
+    // external image, and SVG stays crisp at any printer DPI.
+    const html = buildBarcodeHtml({
+      type: barcodeType,
+      value: barcodeValue,
+      scaleToWidth: 40,
+    });
+    if (html) {
+      setHtmlCode((prev) => prev + "\n" + html);
       setShowBarcodeDialog(false);
       setBarcodeValue("");
       setBarcodeError(null);
+      toast.success(`${barcodeType} barcode inserted`);
+    } else {
+      setBarcodeError("Could not generate this barcode");
     }
   };
 
@@ -929,9 +937,9 @@ export function DesignerPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label>Type</Label>
+              <Label htmlFor="barcode-type">Type</Label>
               <Select value={barcodeType} onValueChange={setBarcodeType}>
-                <SelectTrigger>
+                <SelectTrigger id="barcode-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -942,14 +950,16 @@ export function DesignerPage() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>Value</Label>
-              <Input placeholder="Enter barcode value" value={barcodeValue} onChange={(e) => { setBarcodeValue(e.target.value); setBarcodeError(null); }} />
-              {barcodeError && <p className="text-xs text-red-500">{barcodeError}</p>}
+              <Label htmlFor="barcode-value">Value</Label>
+              <Input id="barcode-value" placeholder="Enter barcode value" value={barcodeValue} onChange={(e) => { setBarcodeValue(e.target.value); setBarcodeError(null); }} />
+              {barcodeError && (
+                <p id="barcode-error" role="alert" className="text-xs text-red-500">{barcodeError}</p>
+              )}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowBarcodeDialog(false)}>Cancel</Button>
-            <Button onClick={handleInsertBarcode} disabled={!barcodeValue}>
+            <Button id="barcode-insert" onClick={handleInsertBarcode} disabled={!barcodeValue}>
               <QrCode className="h-4 w-4" />
               Insert
             </Button>

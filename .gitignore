@@ -38,3 +38,6 @@ src-tauri/gen/schemas
 playwright-report
 test-results
 coverage
+
+# TypeScript incremental build info
+*.tsbuildinfo

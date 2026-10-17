@@ -1,5 +1,5 @@
 declare module "bwip-js" {
-  interface ToCanvasOptions {
+  interface RenderOptions {
     bcid: string;
     text: string;
     scale?: number;
@@ -7,9 +7,14 @@ declare module "bwip-js" {
     width?: number;
     includetext?: boolean;
     textxalign?: string;
+    paddingwidth?: number;
+    paddingheight?: number;
   }
 
-  function toCanvas(canvas: HTMLCanvasElement, options: ToCanvasOptions): void;
+  export function toCanvas(
+    canvas: HTMLCanvasElement,
+    options: RenderOptions,
+  ): void;
 
-  export default { toCanvas };
+  export function toSVG(options: RenderOptions): string;
 }

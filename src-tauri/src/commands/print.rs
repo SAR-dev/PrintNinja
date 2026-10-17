@@ -123,15 +123,23 @@ pub fn apply_layout(html: &str, css: &str, w_mm: f64, h_mm: f64, req: &PrintRequ
         _ => "",
     };
 
-    if html.contains("</head>") {
+    // The template's own CSS must survive layout injection. It used to be
+    // dropped entirely whenever the HTML was a full document (which every
+    // bundled starter template is), so custom styling never reached the
+    // printer. User CSS first so the @page/fit rules win.
+    let styles = format!("{cleaned_css}\n{page_rule}\n{fit_rule}");
+
+    if let Some(idx) = html.find("</head>") {
+        format!("{}<style>{}</style>{}", &html[..idx], styles, &html[idx..])
+    } else if let Some(idx) = html.find("<body") {
         format!(
-            "{}<style>{}</style>{}</head>",
-            html.replace("</head>", "</head>").replacen("<head>", "", 0),
-            page_rule,
-            fit_rule
+            "{}<style>{}</style>{}",
+            &html[..idx],
+            styles,
+            &html[idx..]
         )
     } else {
-        format!("{}<style>{}</style>", page_rule, cleaned_css)
+        format!("<style>{styles}</style>{html}")
     }
 }
 
@@ -460,5 +468,76 @@ mod tests {
         let css = "@page { size: 5mm 5mm; }";
         let out = apply_layout("<head></head>", css, 100.0, 200.0, &req());
         assert_eq!(out.matches("@page").count(), 1, "{}", out);
+    }
+
+    #[test]
+    fn layout_keeps_template_css_for_full_documents() {
+        // Regression: the </head> branch built its <style> from the page rule
+        // and fit rule only, silently discarding the template's own CSS.
+        let css = ".brand{color:#f00}";
+        let out = apply_layout(
+            "<!DOCTYPE html><html><head></head><body>x</body></html>",
+            css,
+            100.0,
+            200.0,
+            &req(),
+        );
+        assert!(out.contains(".brand{color:#f00}"), "{}", out);
+        assert!(out.contains("size: 100mm 200mm"), "{}", out);
+    }
+
+    #[test]
+    fn layout_keeps_template_css_for_fragments() {
+        let css = ".brand{color:#f00}";
+        let out = apply_layout("<p>x</p>", css, 100.0, 200.0, &req());
+        assert!(out.contains(".brand{color:#f00}"), "{}", out);
+    }
+
+    #[test]
+    fn layout_injects_before_body_when_there_is_no_head() {
+        let out = apply_layout(
+            "<html><body>x</body></html>",
+            ".a{color:red}",
+            100.0,
+            200.0,
+            &req(),
+        );
+        assert!(out.contains(".a{color:red}"), "{}", out);
+        assert!(
+            out.find("<style").unwrap() < out.find("<body").unwrap(),
+            "{}",
+            out
+        );
+    }
+
+    #[test]
+    fn layout_page_rule_comes_after_user_css() {
+        // The injected @page must win over any user @page-ish rule.
+        let css = "body{color:red}";
+        let out = apply_layout("<head></head>", css, 100.0, 200.0, &req());
+        let css_at = out.find("color:red").unwrap();
+        let page_at = out.find("@page").unwrap();
+        assert!(css_at < page_at, "{}", out);
+    }
+
+    #[test]
+    fn layout_strips_user_page_rule_but_keeps_the_rest() {
+        let css = "@page{size:1mm 1mm}.keep{color:blue}";
+        let out = apply_layout("<head></head>", css, 100.0, 200.0, &req());
+        assert_eq!(out.matches("@page").count(), 1, "{}", out);
+        assert!(out.contains(".keep{color:blue}"), "{}", out);
+    }
+
+    #[test]
+    fn layout_does_not_mutate_the_body_markup() {
+        let out = apply_layout(
+            "<html><head></head><body><p>hi</p></body></html>",
+            "",
+            100.0,
+            200.0,
+            &req(),
+        );
+        assert!(out.contains("<body><p>hi</p></body>"), "{}", out);
+        assert_eq!(out.matches("</head>").count(), 1, "{}", out);
     }
 }
