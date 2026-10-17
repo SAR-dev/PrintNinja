@@ -2,7 +2,6 @@ use crate::db::DbState;
 use crate::error::{AppError, AppResult};
 use crate::render::handlebars::TemplateEngine;
 use crate::render::PdfRenderer;
-use crate::transport::windows_spooler::WindowsSpooler;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use tauri::{AppHandle, Manager, State};
@@ -269,7 +268,10 @@ pub async fn print_html(
 
     // ── 5. Send ─────────────────────────────────────────────────────
     #[cfg(windows)]
-    let result = WindowsSpooler::new(req.printer_name.clone()).send_raw(&pdf_bytes);
+    let result = crate::transport::windows_spooler::WindowsSpooler::new(
+        req.printer_name.clone(),
+    )
+    .send_raw(&pdf_bytes);
     #[cfg(not(windows))]
     let result: Result<(), String> =
         Err("Printing requires Windows or Android build".to_string());

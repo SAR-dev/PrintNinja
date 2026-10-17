@@ -1,6 +1,3 @@
-use anyhow::Result;
-use std::path::PathBuf;
-
 /// Represents a 1-bit raster image for thermal printing
 #[derive(Debug, Clone)]
 pub struct RasterImage {

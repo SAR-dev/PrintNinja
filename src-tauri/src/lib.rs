@@ -1,5 +1,5 @@
-mod api;
-mod commands;
+pub mod api;
+pub mod commands;
 pub mod db;
 mod deeplink;
 pub mod render;
@@ -15,6 +15,8 @@ use tauri_plugin_sql::MigrationKind;
 
 pub use error::{AppError, AppResult};
 pub use db::DbState;
+// Re-exported so integration tests can assert API-key verification.
+pub use commands::api::verify_api_key;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

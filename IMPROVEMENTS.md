@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batches 1–3 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff) — items marked ☑ below.
+**Batches 1–4 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -25,7 +25,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 9 | `src-tauri/src/commands/font.rs` | `list_fonts` stub; `upload_font` writes file but never inserts DB row; `delete_font` stub. | P1 | ☑ done |
 | 10 | `src-tauri/src/commands/profile.rs` | `list_profiles/save_profile/delete_profile` stubs — Printer Profiles feature non-functional. | P1 | ☑ done |
 | 11 | `src-tauri/src/commands/batch.rs` | `create_batch` does not create `print_jobs` rows, does not enqueue. `list/get/cancel/retry` stubs. | P1 | ☑ done |
-| 12 | `src-tauri/src/commands/api.rs:6,14` | `start_api_server/stop_api_server/get_api_status` stubs; `regenerate_api_key` generates but never stores hash. | P1 | ☐ |
+| 12 | `src-tauri/src/commands/api.rs:6,14` | `start_api_server/stop_api_server/get_api_status` stubs; `regenerate_api_key` generates but never stores hash. | P1 | ☑ done |
 | 13 | `src-tauri/src/db/mod.rs:10` | `Connection::open(&self.url)` where `url` is `"sqlite:/path/printninja.db"` — `rusqlite` expects a filesystem path, not `sqlite:` URI. Strip prefix or use `tauri-plugin-sql` exclusively. | P0 | ☑ done |
 | 14 | `src-tauri/src/db/mod.rs:14` | `DbState = Arc<Mutex<Database>>` defined but never `manage()`d as `DbState` nor injected via `State<DbState>` in commands. All commands ignore DB. | P1 | ☑ done |
 | 15 | `src-tauri/src/lib.rs:setup` | `app.manage(Database{url})` stores `Database` directly, not `DbState`; type mismatch with future `State` usage. Also `migrations` vec created but never passed to `Builder::add_migrations` for `printninja.db`? Check double-registration. | P2 | ☐ |
@@ -40,8 +40,8 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 24 | `src-tauri/src/render/handlebars.rs:90` | `pad_left_helper` fetches `pad` param but never uses it (`format!("{:>width$}", ...)` pads with spaces only). Custom pad char ignored. | P2 | ☐ |
 | 25 | `src-tauri/src/render/handlebars.rs:52` | `date_helper` just echoes `"value (format)"` — not a real date formatter. Should parse ISO date. | P2 | ☐ |
 | 26 | `src-tauri/src/deeplink.rs:percent_decode` | Manual decoder does not handle `+` → space, and silently drops `%` on invalid hex. Use `urlencoding` crate already in Cargo.toml. | P2 | ☐ |
-| 27 | `src-tauri/src/api/server.rs:54` | `axum::serve(listener, app).await` blocks forever; `running` flag and `stop()` never actually stop the server (no `oneshot`/`CancellationToken`). | P1 | ☐ |
-| 28 | `src-tauri/src/api/routes.rs:64,94` | `print_job`/`batch_print` take `HeaderMap` but never check `Authorization: Bearer` — API is wide-open. PLANNING.md requires per-client keys, scopes, IP allowlist. | P1 | ☐ |
+| 27 | `src-tauri/src/api/server.rs:54` | `axum::serve(listener, app).await` blocks forever; `running` flag and `stop()` never actually stop the server (no `oneshot`/`CancellationToken`). | P1 | ☑ done |
+| 28 | `src-tauri/src/api/routes.rs:64,94` | `print_job`/`batch_print` take `HeaderMap` but never check `Authorization: Bearer` — API is wide-open. PLANNING.md requires per-client keys, scopes, IP allowlist. | P1 | ☑ done |
 | 29 | `src-tauri/src/api/routes.rs:18,20` | Duplicate route path `/v1/jobs/{id}` for GET and DELETE in same router — axum will shadow one. Use separate `Router` nesting or `.route("/v1/jobs/{id}", get(...).delete(...))`. | P1 | ☑ done |
 | 30 | `src-tauri/src/api/auth.rs` | `hex` crate used but `hex = "0.4"` not verified to compile on Android; needs `hex` feature check. Also `hash_key` not constant-time compare — use `subtle` crate for verify. | P3 | ☐ |
 
@@ -149,7 +149,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 84 | `DataFetcher` never used in frontend — `dataUrl` on Print page never fetched. No fetch on `Print` → no real data path end-to-end. | P1 | ☐ |
 | 85 | `webGuard.ts` / `tauriGuard.ts` defined but never imported anywhere — dead code. Web-mode guards not actually protecting `invoke` calls. | P2 | ☐ |
 | 86 | `src/lib/store/templateStore.ts` stores `isDefault` flag but Designer never sets it — always true by default, delete disabled always? Inconsistent. | P2 | ☐ |
-| 87 | CORS in `api/server.rs` is `CorsLayer::new().allow_origin(Any).allow_headers(Any).allow_methods(Any)` — wide-open in local mode, contradicts “LAN access off by default” security posture. Should restrict to `127.0.0.1` origins when LAN off. | P2 | ☐ |
+| 87 | CORS in `api/server.rs` is `CorsLayer::new().allow_origin(Any).allow_headers(Any).allow_methods(Any)` — wide-open in local mode, contradicts “LAN access off by default” security posture. Should restrict to `127.0.0.1` origins when LAN off. | P2 | ☑ done |
 | 88 | Secrets (tokens) flow through `api/routes.rs` `PrintJobRequest.data` as plain JSON — PLANNING.md says tokens live in `keyring` and are redacted from logs/history. No redaction implemented. | P1 | ☐ |
 | 89 | `Cargo.toml` enables `reqwest` default features pulling `h2`, `hyper` etc. but `windows = "0.58"` is pinned behind outdated `windows-future` breakage (already worked around). Should audit feature set for minimal build size. | P3 | ☐ |
 | 90 | `src-tauri/Cargo.lock` committed — Tauri best practice is to commit, but pnpm `pnpm-workspace.yaml` generated artefact not gitignored check. | P3 | ☐ |
