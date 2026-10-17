@@ -46,8 +46,10 @@ pub fn run() {
                 std::fs::create_dir_all(parent)?;
             }
 
-            // Create the schema eagerly so rusqlite-backed commands work
-            // immediately (the sql plugin only migrates lazily on connect).
+            // Eager rusqlite schema + lazy tauri-plugin-sql migrations.
+            // The plugin migrates on first `get` (lazy), but `rusqlite`
+            // commands need tables immediately on setup. `IF NOT EXISTS` in
+            // `schema.sql` makes the double-apply safe.
             let conn = rusqlite::Connection::open(&db_path)?;
             conn.execute_batch(include_str!("db/schema.sql"))?;
             drop(conn);

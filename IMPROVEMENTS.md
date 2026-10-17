@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batches 1–8 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening) — items marked ☑ below.
+**Batches 1–9 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -17,8 +17,8 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 1 | `src-tauri/src/commands/printer.rs:20` | `list_printers()` returns `Ok(vec![])` — never queries SQLite. PrinterSetup shows mock cards only. | P1 | ☑ done |
 | 2 | `printer.rs:36` | `add_printer()` returns id `0` without inserting. No validation of `printer_type`/`language` enums, no duplicate-name check. | P1 | ☑ done |
 | 3 | `printer.rs:53` | `delete_printer()` silently succeeds, never deletes. | P1 | ☑ done |
-| 4 | `src-tauri/src/commands/template.rs` | `list_templates/create_template/delete_template` all stubs, no version creation. | P1 | ☐ |
-| 5 | `src-tauri/src/commands/version.rs` | `list_versions/create_version/delete_version` stubs — Designer versions panel never persists. | P1 | ☐ |
+| 4 | `src-tauri/src/commands/template.rs` | `list_templates/create_template/delete_template` all stubs — now backed by `rusqlite` with validation, duplicate-name check, transactional version 1 creation (code in `template.rs:21`, `59`, `153`). | P1 | ☑ done |
+| 5 | `src-tauri/src/commands/version.rs` | `list_versions/create_version/delete_version` stubs — now fully implemented with atomic `current_version_id` bump, `restore_version` copy-on-write and `diff_versions` (code in `version.rs:22`, `64`, `145`, `229`). | P1 | ☑ done |
 | 6 | `src-tauri/src/commands/history.rs:27` | `list_jobs()` returns empty; History page always empty. | P1 | ☑ done |
 | 7 | `history.rs:33,39,45` | `get_job/reprint_job/retry_job` always `NotFound`. History reprint/retry toasts lie. | P1 | ☑ done |
 | 8 | `src-tauri/src/commands/settings.rs` | `get_setting/set_setting` are no-ops. Settings retention/API port/LAN never persisted. | P1 | ☑ done |
@@ -28,13 +28,13 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 12 | `src-tauri/src/commands/api.rs:6,14` | `start_api_server/stop_api_server/get_api_status` stubs; `regenerate_api_key` generates but never stores hash. | P1 | ☑ done |
 | 13 | `src-tauri/src/db/mod.rs:10` | `Connection::open(&self.url)` where `url` is `"sqlite:/path/printninja.db"` — `rusqlite` expects a filesystem path, not `sqlite:` URI. Strip prefix or use `tauri-plugin-sql` exclusively. | P0 | ☑ done |
 | 14 | `src-tauri/src/db/mod.rs:14` | `DbState = Arc<Mutex<Database>>` defined but never `manage()`d as `DbState` nor injected via `State<DbState>` in commands. All commands ignore DB. | P1 | ☑ done |
-| 15 | `src-tauri/src/lib.rs:setup` | `app.manage(Database{url})` stores `Database` directly, not `DbState`; type mismatch with future `State` usage. Also `migrations` vec created but never passed to `Builder::add_migrations` for `printninja.db`? Check double-registration. | P2 | ☐ |
+| 15 | `src-tauri/src/lib.rs:setup` | `app.manage(Database{url})` was claimed to store raw `Database` — actually stores `Arc<Mutex<Database>>` (`DbState`) `lib.rs:56`; migrations are registered with `tauri-plugin-sql` `lib.rs:40` and eagerly applied via `rusqlite` `lib.rs:51` — double-apply is intentional and safe via `IF NOT EXISTS`. | P2 | ☑ done |
 | 16 | `src-tauri/src/commands/print.rs` | `print_html` inserts `print_jobs`? No — does not log job to history, so successful prints never appear there. PLANNING.md requires every job logged. | P1 | ☑ done |
 | 17 | `src-tauri/src/queue.rs` | `get_semaphore(&mut self)` made the queue impossible to share from async tasks. Map moved behind `Arc<Mutex<..>>`, all methods take `&self`, plus `with_permit` so callers cannot skip serialisation. | P2 | ☑ done |
 | 18 | `src-tauri/src/queue.rs:1` | Queue was dead code — never wired to `commands::print` or `api::routes`, so jobs bypassed it. Now managed as Tauri state and every send holds its printer's permit. **`POST /v1/print` used to return `202 "queued"` and never print at all**; it now runs the real pipeline, and the `Idempotency-Key` is actually persisted (the replay guard was dead code). `copies` was also ignored — always exactly one copy. | P1 | ☑ done |
 | 19 | `src-tauri/src/transport/mod.rs` | `discover()` had no `self` parameter, so it could not be reached through `dyn PrinterTransport` and per-printer transports were unrepresentable. Now `&self`, with a real `TransportRegistry` (`create_transport`/`send_to`/`test_printer`) resolving any stored printer row. | P2 | ☑ done |
 | 20 | `src-tauri/src/transport/windows_spooler.rs:109` | `PRINTER_INFO_2A` offset `i * size_of::<usize>() * 10` is approximate and wrong. Real struct is 22+ fields with `#[repr(C)]` alignment = 80+ bytes. Will read garbage or segfault. Define proper `PRINTER_INFO_2A` struct. | P0 | ☑ done |
-| 21 | `src-tauri/src/transport/ipp.rs:36` | `build_ipp_request` pushes version+op+id then stops — no attribute groups, no `charset`, `naturalLanguage`, `printer-uri`, `copies`. Server will reject. Need real IPP encoder. | P1 | ☐ |
+| 21 | `src-tauri/src/transport/ipp.rs:36` | `build_ipp_request` only wrote version+op+id — now encodes RFC 8011 operation attributes (`attributes-charset`, `naturalLanguage`, `printer-uri`, `requesting-user-name`, `job-name`, `document-format`, conditional `copies`, `ipp-attribute-fidelity`) plus `0x03` end tag and PDF body (`ipp.rs:50`). | P1 | ☑ done |
 | 22 | `src-tauri/src/data/fetcher.rs:49` | Size check used `content_length` only — chunked responses (no header) bypassed the limit. Now enforces on actual `bytes.len()` after read. | P2 | ☑ done |
 | 23 | `src-tauri/src/data/fetcher.rs:22` | `method` was passed raw to `Method::from_bytes` — trailing space/empty panicked as 500. Now whitelisted (GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS), trimmed, uppercased, defaults to GET. | P2 | ☑ done |
 | 24 | `src-tauri/src/render/handlebars.rs:90` | `pad_left_helper` fetched `pad` but always padded with spaces. Now honours a custom pad char, counts chars not bytes, and never truncates. | P2 | ☑ done |
@@ -51,7 +51,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
-| 31 | Templates list was hard-coded, no `onClick` (fixed in `a7d7475` but now in-memory only — lost on reload). Needs SQLite persistence via `list_templates`/`create_template`. | P1 | ☐ |
+| 31 | Templates list was hard-coded — now loads via `invoke("list_templates")` with version hydration, and `create_template` persists through `template.rs:59` (fallback to in-memory in web mode) `Designer.tsx:86`. | P1 | ☑ done |
 | 32 | `fileInputRef` is `any`-typed via `useRef<HTMLInputElement>(null)`? Check `ref` is correctly typed. Previously unused, now wired — but `<input>` is hidden via `className="hidden"` not `display:none` — Playwright `input.first()` matched it; now fixed to `input[type="number"]` but still fragile. | P3 | ☐ |
 | 33 | Versions panel: both buttons call `handleRestoreVersion(v)` — second should open diff view, not restore again. | P1 | ☑ done |
 | 34 | `showDiffDialog`/`diffVersion` were declared then removed, but diff view feature from PLANNING.md 7.3 still missing (side-by-side HTML/CSS diff with Monaco/`diff` lib). | P1 | ☑ done |
@@ -146,7 +146,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 81 | `Designer` canvas `iframe` loaded `https://cdn.tailwindcss.com` per render — offline-hostile, outside our CSP, recompiled Tailwind on every job. Now a committed, minified Tailwind build (`pnpm build:templates:css`) inlined into every document. Also fixed Rust `apply_layout` silently discarding template CSS for full-document templates. | P2 | ☑ done |
 | 82 | `Designer` `renderTemplate` re-registers Handlebars helpers on every call (`Handlebars.registerHelper`) without dedupe — leaks helpers, global singleton polluted across renders. Should reuse single `Handlebars` instance. | P2 | ☐ |
 | 83 | `PrinterSetup` and `Print` both call `enumerate_system_printers` — no caching, every navigation re-scans. Should memoize with `TanStack Query`. | P3 | ☐ |
-| 84 | `DataFetcher` never used in frontend — `dataUrl` on Print page never fetched. No fetch on `Print` → no real data path end-to-end. | P1 | ☐ |
+| 84 | `DataFetcher` was claimed unused — actually wired end-to-end: Print page forwards `data_url` via `print_html` `Print.tsx:212` → backend `DataFetcher::fetch` `commands/print.rs:248` → Handlebars render. Verified in Batch 9. | P1 | ☑ done |
 | 85 | `webGuard.ts` / `tauriGuard.ts` defined but never imported anywhere — dead code. Web-mode guards not actually protecting `invoke` calls. | P2 | ☐ |
 | 86 | `src/lib/store/templateStore.ts` stores `isDefault` flag but Designer never sets it — always true by default, delete disabled always? Inconsistent. | P2 | ☐ |
 | 87 | CORS in `api/server.rs` is `CorsLayer::new().allow_origin(Any).allow_headers(Any).allow_methods(Any)` — wide-open in local mode, contradicts “LAN access off by default” security posture. Should restrict to `127.0.0.1` origins when LAN off. | P2 | ☑ done |

@@ -82,11 +82,13 @@ export function DesignerPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Templates available in the designer
-  const [templates, setTemplates] = useState<Array<{ id: number; name: string; html: string; css: string; page_w_mm?: number; page_h_mm?: number; orientation?: string }>>(
-    STARTER_TEMPLATES.map((t, i) => ({ id: i + 1, name: t.name, html: t.html, css: t.css, page_w_mm: t.page_w_mm, page_h_mm: t.page_h_mm, orientation: t.orientation })),
-  );
-  const [currentTemplateId, setCurrentTemplateId] = useState(1);
+  // Templates available in the designer — persisted in SQLite via
+  // `list_templates` / `create_template`. Starter templates are the
+  // fallback when the DB is empty (first launch) or in web mode.
+  const [templates, setTemplates] = useState<Array<{ id: number; name: string; html: string; css: string; page_w_mm?: number; page_h_mm?: number; orientation?: string }>>([]);
+  const [currentTemplateId, setCurrentTemplateId] = useState<number | null>(null);
+  const [_templatesLoading, setTemplatesLoading] = useState(true);
+  void _templatesLoading;
 
   // Sample datasets (variables)
   const [datasets, setDatasets] = useState<Array<{ name: string; json: string; isDefault: boolean }>>([
@@ -122,7 +124,7 @@ export function DesignerPage() {
     toast.success(`Loaded "${tpl.name}"`);
   };
 
-  const createNewTemplate = () => {
+  const createNewTemplate = async () => {
     const name = newTemplateName.trim();
     if (!name) {
       toast.error("Template name required");
@@ -132,22 +134,52 @@ export function DesignerPage() {
       toast.error("Template already exists");
       return;
     }
-    const id = templates.length ? Math.max(...templates.map((t) => t.id)) + 1 : 1;
-    const tpl = {
-      id,
-      name,
-      html: DEFAULT_TEMPLATE_HTML,
-      css: DEFAULT_TEMPLATE_CSS,
-      page_w_mm: STARTER_TEMPLATES[0].page_w_mm,
-      page_h_mm: STARTER_TEMPLATES[0].page_h_mm,
-      orientation: STARTER_TEMPLATES[0].orientation,
-    };
-    setTemplates((prev) => [...prev, tpl]);
-    loadTemplate(tpl);
-    setVersions([]);
-    setCurrentTemplateDbId(tpl.id);
-    setNewTemplateName("");
-    setShowNewTemplateDialog(false);
+    try {
+      const created = await invoke<{ id: number; name: string; page_w_mm: number; page_h_mm: number; orientation: string }>("create_template", {
+        req: {
+          name,
+          page_w_mm: STARTER_TEMPLATES[0].page_w_mm,
+          page_h_mm: STARTER_TEMPLATES[0].page_h_mm,
+          orientation: STARTER_TEMPLATES[0].orientation,
+          html: DEFAULT_TEMPLATE_HTML,
+          css: DEFAULT_TEMPLATE_CSS,
+        },
+      });
+      const tpl = {
+        id: created.id,
+        name: created.name,
+        html: DEFAULT_TEMPLATE_HTML,
+        css: DEFAULT_TEMPLATE_CSS,
+        page_w_mm: created.page_w_mm,
+        page_h_mm: created.page_h_mm,
+        orientation: created.orientation,
+      };
+      setTemplates((prev) => [...prev, tpl]);
+      loadTemplate(tpl);
+      setVersions([]);
+      setCurrentTemplateDbId(tpl.id);
+      toast.success(`Template "${name}" created`);
+    } catch {
+      // Web mode / DB unavailable — keep in-memory fallback so UI stays usable.
+      const id = templates.length ? Math.max(...templates.map((t) => t.id)) + 1 : 1;
+      const tpl = {
+        id,
+        name,
+        html: DEFAULT_TEMPLATE_HTML,
+        css: DEFAULT_TEMPLATE_CSS,
+        page_w_mm: STARTER_TEMPLATES[0].page_w_mm,
+        page_h_mm: STARTER_TEMPLATES[0].page_h_mm,
+        orientation: STARTER_TEMPLATES[0].orientation,
+      };
+      setTemplates((prev) => [...prev, tpl]);
+      loadTemplate(tpl);
+      setVersions([]);
+      setCurrentTemplateDbId(tpl.id);
+      toast.success(`Template "${name}" created locally`);
+    } finally {
+      setNewTemplateName("");
+      setShowNewTemplateDialog(false);
+    }
   };
   const [selectedDatasetName, setSelectedDatasetName] = useState("Sample Order");
   const [showDatasetDialog, setShowDatasetDialog] = useState(false);
@@ -173,9 +205,88 @@ export function DesignerPage() {
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
+  // Load template list from SQLite on mount; fall back to starters in web
+  // mode or on first launch when the table is empty.
   useEffect(() => {
-    // Load persisted versions for the active template on mount.
-    refreshVersions();
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await invoke<Array<{ id: number; name: string; page_w_mm: number; page_h_mm: number; orientation: string; current_version_id?: number | null }>>("list_templates");
+        if (cancelled) return;
+        if (rows && rows.length > 0) {
+          // For each persisted template, fetch its current version to get html/css.
+          const hydrated = await Promise.all(
+            rows.map(async (r) => {
+              try {
+                const versions = await invoke<TemplateVersion[]>("list_versions", { templateId: r.id });
+                const latest = versions?.[0];
+                return {
+                  id: r.id,
+                  name: r.name,
+                  html: latest?.html ?? DEFAULT_TEMPLATE_HTML,
+                  css: latest?.css ?? DEFAULT_TEMPLATE_CSS,
+                  page_w_mm: r.page_w_mm,
+                  page_h_mm: r.page_h_mm,
+                  orientation: r.orientation,
+                };
+              } catch {
+                return {
+                  id: r.id,
+                  name: r.name,
+                  html: DEFAULT_TEMPLATE_HTML,
+                  css: DEFAULT_TEMPLATE_CSS,
+                  page_w_mm: r.page_w_mm,
+                  page_h_mm: r.page_h_mm,
+                  orientation: r.orientation,
+                };
+              }
+            }),
+          );
+          setTemplates(hydrated);
+          setCurrentTemplateId(hydrated[0].id);
+          setTemplateName(hydrated[0].name);
+          setHtmlCode(hydrated[0].html);
+          setCssCode(hydrated[0].css);
+          setPageWidth(hydrated[0].page_w_mm ?? 80);
+          setPageHeight(hydrated[0].page_h_mm ?? 200);
+          setOrientation((hydrated[0].orientation as "portrait" | "landscape") ?? "portrait");
+          setCurrentTemplateDbId(hydrated[0].id);
+        } else {
+          const starters = STARTER_TEMPLATES.map((t, i) => ({
+            id: i + 1,
+            name: t.name,
+            html: t.html,
+            css: t.css,
+            page_w_mm: t.page_w_mm,
+            page_h_mm: t.page_h_mm,
+            orientation: t.orientation,
+          }));
+          setTemplates(starters);
+          setCurrentTemplateId(starters[0].id);
+        }
+      } catch {
+        const starters = STARTER_TEMPLATES.map((t, i) => ({
+          id: i + 1,
+          name: t.name,
+          html: t.html,
+          css: t.css,
+          page_w_mm: t.page_w_mm,
+          page_h_mm: t.page_h_mm,
+          orientation: t.orientation,
+        }));
+        setTemplates(starters);
+        setCurrentTemplateId(starters[0].id);
+      } finally {
+        if (!cancelled) setTemplatesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Load persisted versions for the active template.
+    if (currentTemplateDbId != null) refreshVersions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTemplateDbId]);
 
