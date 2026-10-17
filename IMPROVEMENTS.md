@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batches 1–7 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline) — items marked ☑ below.
+**Batches 1–8 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -35,15 +35,15 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 19 | `src-tauri/src/transport/mod.rs` | `discover()` had no `self` parameter, so it could not be reached through `dyn PrinterTransport` and per-printer transports were unrepresentable. Now `&self`, with a real `TransportRegistry` (`create_transport`/`send_to`/`test_printer`) resolving any stored printer row. | P2 | ☑ done |
 | 20 | `src-tauri/src/transport/windows_spooler.rs:109` | `PRINTER_INFO_2A` offset `i * size_of::<usize>() * 10` is approximate and wrong. Real struct is 22+ fields with `#[repr(C)]` alignment = 80+ bytes. Will read garbage or segfault. Define proper `PRINTER_INFO_2A` struct. | P0 | ☑ done |
 | 21 | `src-tauri/src/transport/ipp.rs:36` | `build_ipp_request` pushes version+op+id then stops — no attribute groups, no `charset`, `naturalLanguage`, `printer-uri`, `copies`. Server will reject. Need real IPP encoder. | P1 | ☐ |
-| 22 | `src-tauri/src/data/fetcher.rs:49` | Size check uses `content_length` header only; chunked responses bypass limit. Must count `response.bytes().len()` after `text().await`. | P2 | ☐ |
-| 23 | `src-tauri/src/data/fetcher.rs:22` | `method` string not validated — `"GET "` or empty panics in `Method::from_bytes`. Validate and default to GET. | P2 | ☐ |
+| 22 | `src-tauri/src/data/fetcher.rs:49` | Size check used `content_length` only — chunked responses (no header) bypassed the limit. Now enforces on actual `bytes.len()` after read. | P2 | ☑ done |
+| 23 | `src-tauri/src/data/fetcher.rs:22` | `method` was passed raw to `Method::from_bytes` — trailing space/empty panicked as 500. Now whitelisted (GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS), trimmed, uppercased, defaults to GET. | P2 | ☑ done |
 | 24 | `src-tauri/src/render/handlebars.rs:90` | `pad_left_helper` fetched `pad` but always padded with spaces. Now honours a custom pad char, counts chars not bytes, and never truncates. | P2 | ☑ done |
 | 25 | `src-tauri/src/render/handlebars.rs:52` | `date_helper` echoed `"value (format)"`. Now parses RFC-3339, supports `short/long/time/datetime` + strftime patterns, and passes unparseable values through unchanged. | P2 | ☑ done |
-| 26 | `src-tauri/src/deeplink.rs:percent_decode` | Manual decoder does not handle `+` → space, and silently drops `%` on invalid hex. Use `urlencoding` crate already in Cargo.toml. | P2 | ☐ |
+| 26 | `src-tauri/src/deeplink.rs:percent_decode` | Manual decoder left `+` verbatim and mishandled invalid `%`. Now delegates to `urlencoding` with `+`→space pre-pass. | P2 | ☑ done |
 | 27 | `src-tauri/src/api/server.rs:54` | `axum::serve(listener, app).await` blocks forever; `running` flag and `stop()` never actually stop the server (no `oneshot`/`CancellationToken`). | P1 | ☑ done |
 | 28 | `src-tauri/src/api/routes.rs:64,94` | `print_job`/`batch_print` take `HeaderMap` but never check `Authorization: Bearer` — API is wide-open. PLANNING.md requires per-client keys, scopes, IP allowlist. | P1 | ☑ done |
 | 29 | `src-tauri/src/api/routes.rs:18,20` | Duplicate route path `/v1/jobs/{id}` for GET and DELETE in same router — axum will shadow one. Use separate `Router` nesting or `.route("/v1/jobs/{id}", get(...).delete(...))`. | P1 | ☑ done |
-| 30 | `src-tauri/src/api/auth.rs` | `hex` crate used but `hex = "0.4"` not verified to compile on Android; needs `hex` feature check. Also `hash_key` not constant-time compare — use `subtle` crate for verify. | P3 | ☐ |
+| 30 | `src-tauri/src/api/auth.rs` | `verify_key` used `==` (early-exit timing leak). Now constant-time XOR compare; length check is fixed 64-char hex so no leak. | P3 | ☑ done |
 
 ---
 

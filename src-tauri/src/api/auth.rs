@@ -35,7 +35,65 @@ pub fn hash_key(key: &str) -> String {
 
 pub fn verify_key(key: &str, hash: &str) -> bool {
     let computed = hash_key(key);
-    computed == hash
+    // `==` short-circuits on the first differing byte, leaking the prefix
+    // length via timing. Use a constant-time compare instead.
+    if computed.len() != hash.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (a, b) in computed.as_bytes().iter().zip(hash.as_bytes()) {
+        diff |= a ^ b;
+    }
+    diff == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verify_key_accepts_correct_key() {
+        let (plain, hash) = ApiKey::generate();
+        assert!(verify_key(&plain, &hash));
+        assert_eq!(hash_key(&plain), hash);
+    }
+
+    #[test]
+    fn verify_key_rejects_wrong_key() {
+        let (plain, hash) = ApiKey::generate();
+        assert!(!verify_key("pn_live_wrongkey00000000000000000000", &hash));
+        // Even a one-char difference must fail.
+        let mut almost = plain.clone();
+        let last = almost.pop().unwrap();
+        almost.push(if last == 'a' { 'b' } else { 'a' });
+        assert!(!verify_key(&almost, &hash));
+    }
+
+    #[test]
+    fn verify_key_rejects_different_length() {
+        let (_, hash) = ApiKey::generate();
+        assert!(!verify_key("short", &hash));
+        assert!(!verify_key("x", ""));
+        assert!(!verify_key("", &hash));
+    }
+
+    #[test]
+    fn hash_key_is_deterministic_and_hex() {
+        let h1 = hash_key("hello");
+        let h2 = hash_key("hello");
+        assert_eq!(h1, h2);
+        assert_eq!(h1.len(), 64);
+        assert!(h1.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(h1, hash_key("world"));
+    }
+
+    #[test]
+    fn generated_key_has_expected_format() {
+        let (plain, hash) = ApiKey::generate();
+        assert!(plain.starts_with("pn_live_"));
+        assert_eq!(plain.len(), 40);
+        assert_eq!(hash.len(), 64);
+    }
 }
 
 /// Rate limiter (simple token bucket)
