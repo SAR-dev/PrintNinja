@@ -15,7 +15,7 @@ const SheetContent = React.forwardRef<
   }
 >(({ side = "right", className, children, ...props }, ref) => (
   <SheetPortal>
-    <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
+    <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/80" />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(

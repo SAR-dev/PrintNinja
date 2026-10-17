@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Printer, Eye, Zap, CheckCircle2, XCircle, Play } from "lucide-react";
+import { useSystemPrinters } from "@/lib/hooks/useSystemPrinters";
 import { toast } from "sonner";
 import { usePrintStore } from "@/lib/store/printStore";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
@@ -55,7 +56,7 @@ const MM_TO_PX = 3.7795;
 export function PrintPage() {
   const { t } = useTranslation();
   const store = usePrintStore();
-  const [printers, setPrinters] = useState<PrinterInfo[]>([]);
+  const { printers, refresh: refreshSystemPrinters } = useSystemPrinters();
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showBatchDialog, setShowBatchDialog] = useState(false);
@@ -78,7 +79,6 @@ export function PrintPage() {
           invoke<TemplateRow[]>("list_templates").catch(() => []),
         ]);
         if (cancelled) return;
-        setPrinters(p);
         setTemplates(tpl);
         const { printerId, templateId } = usePrintStore.getState();
         if (p.length > 0 && !printerId) usePrintStore.getState().setPrinterId(p[0].name);
@@ -246,8 +246,7 @@ export function PrintPage() {
 
   const loadPrinters = async () => {
     try {
-      const list = await invoke<PrinterInfo[]>("enumerate_system_printers");
-      setPrinters(list);
+      const list = await refreshSystemPrinters();
       toast.success(`Found ${list.length} printer(s)`);
     } catch (e) {
       toast.error(`Failed: ${e}`);

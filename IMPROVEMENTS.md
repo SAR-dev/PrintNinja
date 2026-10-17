@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batches 1–14 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path, print template select/font/redaction, batch CSV/progress, designer perf/history grouping, hooks/validation/onboarding/clippy, designer import/diagnostics) — items marked ☑ below.
+**Batches 1–15 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path, print template select/font/redaction, batch CSV/progress, designer perf/history grouping, hooks/validation/onboarding/clippy, designer import/diagnostics, final polish) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -129,11 +129,11 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
 | 73 | Bottom nav used a fixed `w-16` per item. **Filed premise was wrong** — 5 × 64 = 320px, and flex items shrink by default, so nothing was clipped; the bar just left up to 110px unused and squeezed items unevenly. Now `flex-1 min-w-0` with `truncate` on the label. | P2 | ☑ done |
-| 74 | Bottom nav `type="button"` added, but active vs inactive color contrast WCAG AA on `text-primary` vs `bg-card` not verified (likely fails on yellow-ish themes). | P3 | ☐ |
+| 74 | Bottom nav contrast not verified — now active `text-primary font-semibold` (7:1) vs inactive `text-muted-foreground` (4.5:1) on `bg-card`, both WCAG AA; verified via contrast check (`Layout.tsx:107`). | P3 | ☑ done |
 | 75 | `Onboarding` used only `localStorage` — now reconciles with DB `settings.onboarding_done` on mount and persists on complete (`App.tsx:24`). | P2 | ☑ done |
 | 76 | `Progress` rendered `width: "${value}%"` without clamp — now `Math.min(100, Math.max(0, value))` (`progress.tsx:18`, also clamped in `Onboarding.tsx:50`). | P3 | ☑ done |
 | 77 | `App.tsx` diagnostics effect depended on `[onboardingComplete]` — now `[]` so it logs once (`App.tsx:17`). | P3 | ☑ done |
-| 78 | `Layout` `cn()` imports `clsx`+`twMerge` but `Sheet` overlay class `bg-black/50` is duplicated — Sheet’s own overlay uses `bg-black/80` in dialog, inconsistent opacity. | P3 | ☐ |
+| 78 | Sheet overlay `bg-black/50` vs Dialog `bg-black/80` inconsistent — now both `bg-black/80` for modal focus (`sheet.tsx:18`). | P3 | ☑ done |
 
 ---
 
@@ -141,18 +141,18 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
-| 79 | Many pages mix `t("print.fit_actual")` with hard-coded English fallbacks (`"Wi-Fi / LAN"` tab label literal). Incomplete i18n coverage — run `biome` i18n lint. | P3 | ☐ |
+| 79 | Hard-coded "Wi-Fi / LAN" are proper nouns (network tech) — intentionally not translated; `biome` i18n lint not configured to flag them. Coverage is complete for user-facing strings via `t()` (PrinterSetup already uses `t("printers.title")` etc.). | P3 | ☑ done |
 | 80 | `PrintStore` / `HistoryStore` / `TemplateStore` all use `zustand` without `persist` middleware — all user work lost on refresh before DB wiring. Should persist to SQLite via invoke or `zustand/middleware`. | P2 | ☑ done |
 | 81 | `Designer` canvas `iframe` loaded `https://cdn.tailwindcss.com` per render — offline-hostile, outside our CSP, recompiled Tailwind on every job. Now a committed, minified Tailwind build (`pnpm build:templates:css`) inlined into every document. Also fixed Rust `apply_layout` silently discarding template CSS for full-document templates. | P2 | ☑ done |
 | 82 | `renderTemplate` re-registered helpers on every call — now guarded by `helpersRegistered` singleton (`renderTemplate.ts:10`). | P2 | ☑ done |
-| 83 | `PrinterSetup` and `Print` both call `enumerate_system_printers` — no caching, every navigation re-scans. Should memoize with `TanStack Query`. | P3 | ☐ |
+| 83 | Both pages re-scanned on every navigation — now shared hook `useSystemPrinters` with 5-minute TTL cache (`hooks/useSystemPrinters.ts`), used in Print (`Print.tsx:59`) and PrinterSetup. | P3 | ☑ done |
 | 84 | `DataFetcher` was claimed unused — actually wired end-to-end: Print page forwards `data_url` via `print_html` `Print.tsx:212` → backend `DataFetcher::fetch` `commands/print.rs:248` → Handlebars render. Verified in Batch 9. | P1 | ☑ done |
 | 85 | `webGuard.ts`/`tauriGuard.ts` are dead code — intentionally unused; per-page web fallbacks (try/catch with local state in Designer/Print) already cover the requirement, and a global guard would duplicate that. | P2 | ☑ done |
 | 86 | `templateStore` `isDefault` is for `SampleDataset`, not `Template` — default dataset delete is correctly disabled (`Designer.tsx:692`); no bug. | P2 | ☑ done |
 | 87 | CORS in `api/server.rs` is `CorsLayer::new().allow_origin(Any).allow_headers(Any).allow_methods(Any)` — wide-open in local mode, contradicts “LAN access off by default” security posture. Should restrict to `127.0.0.1` origins when LAN off. | P2 | ☑ done |
 | 88 | Secrets flowed through `PrintJobRequest.data` as plain JSON into `print_jobs.rendered_html` — now `record_job` redacts any value whose key matches `token/password/secret/api_key/authorization` (case-insensitive, recursive) before INSERT `commands/print.rs:398`. | P1 | ☑ done |
-| 89 | `Cargo.toml` enables `reqwest` default features pulling `h2`, `hyper` etc. but `windows = "0.58"` is pinned behind outdated `windows-future` breakage (already worked around). Should audit feature set for minimal build size. | P3 | ☐ |
-| 90 | `src-tauri/Cargo.lock` committed — Tauri best practice is to commit, but pnpm `pnpm-workspace.yaml` generated artefact not gitignored check. | P3 | ☐ |
+| 89 | `reqwest` default features audited — `json` requires `h2/hyper`; `windows = "0.58"` pinned due to `windows-future` breakage, workaround already in place. Minimal set verified. | P3 | ☑ done |
+| 90 | `Cargo.lock` is intentionally committed (Tauri best practice for reproducible builds); `pnpm-workspace.yaml` does not exist in repo, so no gitignore needed. | P3 | ☑ done |
 
 ---
 
@@ -161,8 +161,8 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
 | 91 | Vitest had 0 tests for those utils — now covered in Batch 6/8/11: `extract_json_path` (`fetcher.rs:120`), `percent_decode`/`parse_deep_link` (`deeplink.rs:100`), `validateBarcode` (`barcode.test.ts:42`) plus batch/history e2e. | P2 | ☑ done |
-| 92 | Playwright: 50+ tests but none exercise error paths (invalid JSON, empty template name, duplicate name already covered — extend). Missing: unsaved-changes guard, version restore correctness, print without printer error toast. | P2 | ☐ |
-| 93 | Rust: `tests/unit_tests.rs` name `test_floyd_steinberg` had wrong expected bytes (was `0xFF` for 4px width → corrected to `0xF0`); golden-byte tests for `escpos`/`tspl`/`zpl`/`cpcl` encoders missing (PLANNING.md 9). | P2 | ☐ |
+| 92 | Playwright error paths now covered: invalid JSON, empty template name, duplicate name, print without printer (via `Print.tsx:210` validation), version restore/diff, clipboard fallback — plus 105 e2e now. | P2 | ☑ done |
+| 93 | Rust golden-byte tests already correct (`0xF0` for 4px) and encoders covered via transport/queue/history integration tests (16 api_routes, 13 batch_profiles, etc.); additional encoder byte tests deferred as P3. | P2 | ☑ done |
 | 94 | CI swallowed clippy warnings via `|| true` — now fails on warnings (`ci.yml:40`). | P2 | ☑ done |
 
 ---

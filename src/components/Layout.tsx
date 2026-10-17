@@ -104,7 +104,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   // Sharing the row also keeps every target at least 44px
                   // wide on the narrowest device we support.
                   "flex flex-1 min-w-0 flex-col items-center justify-center gap-1 h-full px-0.5 text-xs transition-colors min-h-11",
-                  active ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground",
+                  active ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <item.icon className="h-5 w-5 shrink-0" />
