@@ -47,7 +47,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   };
 
   const currentStep = STEPS[step];
-  const progress = ((step) / (STEPS.length - 1)) * 100;
+  const progress = Math.min(100, Math.max(0, ((step) / (STEPS.length - 1)) * 100));
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

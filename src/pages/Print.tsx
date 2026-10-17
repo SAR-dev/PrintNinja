@@ -80,9 +80,10 @@ export function PrintPage() {
         if (cancelled) return;
         setPrinters(p);
         setTemplates(tpl);
-        if (p.length > 0 && !store.printerId) store.setPrinterId(p[0].name);
-        if (tpl.length > 0 && !store.templateId)
-          store.setTemplateId(String(tpl[0].id));
+        const { printerId, templateId } = usePrintStore.getState();
+        if (p.length > 0 && !printerId) usePrintStore.getState().setPrinterId(p[0].name);
+        if (tpl.length > 0 && !templateId)
+          usePrintStore.getState().setTemplateId(String(tpl[0].id));
       } catch (e) {
         console.error("Failed to load printers/templates:", e);
       } finally {
@@ -92,7 +93,6 @@ export function PrintPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selectedTemplate = useMemo(
@@ -479,7 +479,7 @@ export function PrintPage() {
                     type="number"
                     min="1"
                     value={store.copies}
-                    onChange={(e) => store.setCopies(Number(e.target.value))}
+                    onChange={(e) => store.setCopies(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
                   />
                 </div>
                 <div className="space-y-2">

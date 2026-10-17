@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batches 1–12 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path, print template select/font/redaction, batch CSV/progress, designer perf/history grouping) — items marked ☑ below.
+**Batches 1–13 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path, print template select/font/redaction, batch CSV/progress, designer perf/history grouping, hooks/validation/onboarding/clippy) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -74,9 +74,9 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 44 | `handlePrint` sends `JSON.stringify(data)` as raw HTML `<pre>` — ignores selected template, orientation, margins, fit mode, page size. PLANNING.md requires `template + data → Handlebars → Layout → PDF`. | P1 | ☑ done |
 | 45 | `handlePrint` hard-codes `page_width_mm: 210, page_height_mm: 297` — ignores form margins/orientation. | P1 | ☑ done |
 | 46 | Preview dialog uses dummy `"<div class=\"p-4\">Mock data loaded.</div>"` — does not use selected template + data, so preview ≠ actual print. | P1 | ☑ done |
-| 47 | `useEffect` auto-load printers disables `react-hooks/exhaustive-deps` globally — masks stale closure of `store.printerId`. Should list `store` in deps or use `useRef`. | P2 | ☐ |
+| 47 | `useEffect` disabled `exhaustive-deps` and closed over stale `store.printerId` — now uses `usePrintStore.getState()` inside effect with `[]` deps (`Print.tsx:72`). | P2 | ☑ done |
 | 48 | Template `<Select>` options were hard-coded — now fetched via `invoke("list_templates")` in Print page `Print.tsx:72` and Designer hydration `Designer.tsx:86`. | P1 | ☑ done |
-| 49 | `copies` Input allows `0` or negative — should clamp to `>=1` via `zod` validation. | P2 | ☐ |
+| 49 | `copies` allowed 0/negative — now clamped to `>=1` in store and UI (`printStore.ts:105`, `Print.tsx:400`). | P2 | ☑ done |
 | 50 | Batch dialog had only JSON array textarea — now has CSV upload with header → variable mapping, preview table (5 rows) and auto-converted JSON (Print.tsx:794). | P1 | ☑ done |
 | 51 | Batch `Start Batch` sends `template_id: 1, printer_id: 1` hard-coded — not using form selection. | P1 | ☑ done |
 | 52 | No batch progress UI — now polls list_batches every 5s, shows latest batch badge, 5-row batch list with Cancel/Retry, and progress bar (Print.tsx:580). | P1 | ☑ done |
@@ -130,9 +130,9 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 |---|-------|----------|--------|
 | 73 | Bottom nav used a fixed `w-16` per item. **Filed premise was wrong** — 5 × 64 = 320px, and flex items shrink by default, so nothing was clipped; the bar just left up to 110px unused and squeezed items unevenly. Now `flex-1 min-w-0` with `truncate` on the label. | P2 | ☑ done |
 | 74 | Bottom nav `type="button"` added, but active vs inactive color contrast WCAG AA on `text-primary` vs `bg-card` not verified (likely fails on yellow-ish themes). | P3 | ☐ |
-| 75 | `Onboarding` stores `localStorage("printninja-onboarding-complete")` but never checks DB — reinstall loses DB but keeps flag. Should derive from `settings` row `onboarding_done`. | P2 | ☐ |
-| 76 | `Onboarding` progress `value={progress}` prop typed `number|undefined` but `Progress` renders `style.width: "${value}%"` without clamp — 100% overflow if rounding >100. | P3 | ☐ |
-| 77 | `App.tsx` `useEffect` for `diagnostics.info("App started")` has missing deps array? Actually `[onboardingComplete]` — will log twice if user toggles. Should use `[]`. | P3 | ☐ |
+| 75 | `Onboarding` used only `localStorage` — now reconciles with DB `settings.onboarding_done` on mount and persists on complete (`App.tsx:24`). | P2 | ☑ done |
+| 76 | `Progress` rendered `width: "${value}%"` without clamp — now `Math.min(100, Math.max(0, value))` (`progress.tsx:18`, also clamped in `Onboarding.tsx:50`). | P3 | ☑ done |
+| 77 | `App.tsx` diagnostics effect depended on `[onboardingComplete]` — now `[]` so it logs once (`App.tsx:17`). | P3 | ☑ done |
 | 78 | `Layout` `cn()` imports `clsx`+`twMerge` but `Sheet` overlay class `bg-black/50` is duplicated — Sheet’s own overlay uses `bg-black/80` in dialog, inconsistent opacity. | P3 | ☐ |
 
 ---
@@ -144,7 +144,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 79 | Many pages mix `t("print.fit_actual")` with hard-coded English fallbacks (`"Wi-Fi / LAN"` tab label literal). Incomplete i18n coverage — run `biome` i18n lint. | P3 | ☐ |
 | 80 | `PrintStore` / `HistoryStore` / `TemplateStore` all use `zustand` without `persist` middleware — all user work lost on refresh before DB wiring. Should persist to SQLite via invoke or `zustand/middleware`. | P2 | ☑ done |
 | 81 | `Designer` canvas `iframe` loaded `https://cdn.tailwindcss.com` per render — offline-hostile, outside our CSP, recompiled Tailwind on every job. Now a committed, minified Tailwind build (`pnpm build:templates:css`) inlined into every document. Also fixed Rust `apply_layout` silently discarding template CSS for full-document templates. | P2 | ☑ done |
-| 82 | `Designer` `renderTemplate` re-registers Handlebars helpers on every call (`Handlebars.registerHelper`) without dedupe — leaks helpers, global singleton polluted across renders. Should reuse single `Handlebars` instance. | P2 | ☐ |
+| 82 | `renderTemplate` re-registered helpers on every call — now guarded by `helpersRegistered` singleton (`renderTemplate.ts:10`). | P2 | ☑ done |
 | 83 | `PrinterSetup` and `Print` both call `enumerate_system_printers` — no caching, every navigation re-scans. Should memoize with `TanStack Query`. | P3 | ☐ |
 | 84 | `DataFetcher` was claimed unused — actually wired end-to-end: Print page forwards `data_url` via `print_html` `Print.tsx:212` → backend `DataFetcher::fetch` `commands/print.rs:248` → Handlebars render. Verified in Batch 9. | P1 | ☑ done |
 | 85 | `webGuard.ts` / `tauriGuard.ts` defined but never imported anywhere — dead code. Web-mode guards not actually protecting `invoke` calls. | P2 | ☐ |
@@ -163,7 +163,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 91 | Vitest: 26 tests but **0 tests** for Designer variables tab, Print batch flow, History filters, Settings API controls. Add unit tests for `extract_json_path`, `percent_decode`, `parse_deep_link`, `validateBarcode` edge cases. | P2 | ☐ |
 | 92 | Playwright: 50+ tests but none exercise error paths (invalid JSON, empty template name, duplicate name already covered — extend). Missing: unsaved-changes guard, version restore correctness, print without printer error toast. | P2 | ☐ |
 | 93 | Rust: `tests/unit_tests.rs` name `test_floyd_steinberg` had wrong expected bytes (was `0xFF` for 4px width → corrected to `0xF0`); golden-byte tests for `escpos`/`tspl`/`zpl`/`cpcl` encoders missing (PLANNING.md 9). | P2 | ☐ |
-| 94 | CI `rust-check` runs `cargo clippy -- -D warnings || true` — swallows warnings, should fail on warnings for real quality gate. | P2 | ☐ |
+| 94 | CI swallowed clippy warnings via `|| true` — now fails on warnings (`ci.yml:40`). | P2 | ☑ done |
 
 ---
 

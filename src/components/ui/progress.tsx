@@ -15,7 +15,7 @@ const Progress = React.forwardRef<
   >
     <div
       className="h-full bg-primary transition-all duration-300"
-      style={{ width: `${value}%` }}
+      style={{ width: `${Math.min(100, Math.max(0, Number(value) || 0))}%` }}
     />
   </div>
 ));

@@ -102,7 +102,7 @@ export const usePrintStore = create<PrintState>((set) => ({
   setMarginBottom: (marginBottom) => set({ marginBottom }),
   setMarginLeft: (marginLeft) => set({ marginLeft }),
   setFitMode: (fitMode) => set({ fitMode }),
-  setCopies: (copies) => set({ copies }),
+  setCopies: (copies) => set({ copies: Math.max(1, Math.floor(Number(copies) || 1)) }),
   setUseTestData: (useTestData) => set({ useTestData }),
   setSelectedDataset: (selectedDataset) => set({ selectedDataset }),
   setPageRange: (pageRange) => set({ pageRange }),
