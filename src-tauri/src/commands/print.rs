@@ -395,6 +395,59 @@ pub fn lookup_printer(db: &DbState, name: &str) -> Option<(String, String)> {
     .ok()
 }
 
+fn is_sensitive_key(key: &str) -> bool {
+    let k = key.to_ascii_lowercase();
+    k.contains("token")
+        || k.contains("password")
+        || k.contains("secret")
+        || k == "api_key"
+        || k == "apikey"
+        || k.contains("api-key")
+        || k.contains("authorization")
+        || k.contains("credential")
+        || k == "key"
+        || k == "auth"
+}
+
+fn collect_secrets(value: &serde_json::Value, out: &mut Vec<String>) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (k, v) in map {
+                if is_sensitive_key(k) {
+                    if let serde_json::Value::String(s) = v {
+                        if s.len() > 3 {
+                            out.push(s.clone());
+                        }
+                    }
+                }
+                collect_secrets(v, out);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for v in arr {
+                collect_secrets(v, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn redact_rendered_html(html: &str, req: &PrintRequest) -> String {
+    let mut secrets = Vec::new();
+    if let Some(data) = &req.data {
+        collect_secrets(data, &mut secrets);
+    }
+    if secrets.is_empty() {
+        return html.to_string();
+    }
+    let mut redacted = html.to_string();
+    for s in secrets {
+        // Avoid replacing short or common substrings; secrets are at least 4 chars.
+        redacted = redacted.replace(&s, "***");
+    }
+    redacted
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn record_job(
     db: &DbState,
@@ -429,6 +482,10 @@ pub fn record_job(
         },
     });
 
+    // Redact secrets from history: tokens/passwords that were in `data`
+    // must not be persisted verbatim (PLANNING.md keyring/redaction).
+    let redacted_html = redact_rendered_html(rendered_html, req);
+
     conn.execute(
         "INSERT INTO print_jobs
            (template_id, template_version_id, printer_id, source, source_url,
@@ -446,7 +503,7 @@ pub fn record_job(
             error,
             copies,
             settings.to_string(),
-            rendered_html,
+            redacted_html,
             i64::from(req.test.unwrap_or(false)),
             start.elapsed().as_millis() as i64,
             req.idempotency_key,
@@ -631,5 +688,57 @@ mod tests {
         );
         assert!(out.contains("<body><p>hi</p></body>"), "{}", out);
         assert_eq!(out.matches("</head>").count(), 1, "{}", out);
+    }
+
+    #[test]
+    fn redact_replaces_token_values_in_rendered_html() {
+        let mut r = req();
+        r.data = Some(serde_json::json!({"token": "sk-live-12345", "name": "Alice"}));
+        let html = "<p>sk-live-12345 by Alice</p>";
+        let out = redact_rendered_html(html, &r);
+        assert!(!out.contains("sk-live-12345"), "{}", out);
+        assert!(out.contains("***"), "{}", out);
+        assert!(out.contains("Alice"), "{}", out);
+    }
+
+    #[test]
+    fn redact_handles_nested_and_multiple_keys() {
+        let mut r = req();
+        r.data = Some(serde_json::json!({
+            "user": {"password": "hunter2", "email": "a@b.com"},
+            "api_key": "key-999"
+        }));
+        let html = "hunter2 a@b.com key-999";
+        let out = redact_rendered_html(html, &r);
+        assert!(!out.contains("hunter2"), "{}", out);
+        assert!(!out.contains("key-999"), "{}", out);
+        assert!(out.contains("a@b.com"), "{}", out);
+    }
+
+    #[test]
+    fn redact_is_case_insensitive_and_ignores_non_sensitive() {
+        let mut r = req();
+        r.data = Some(serde_json::json!({"Token": "ABC123", "order_id": "XYZ"}));
+        let html = "ABC123 XYZ";
+        let out = redact_rendered_html(html, &r);
+        assert!(!out.contains("ABC123"), "{}", out);
+        assert!(out.contains("XYZ"), "{}", out);
+    }
+
+    #[test]
+    fn redact_does_nothing_without_secrets() {
+        let r = req();
+        let html = "<p>hello</p>";
+        assert_eq!(redact_rendered_html(html, &r), html);
+    }
+
+    #[test]
+    fn is_sensitive_key_matches_expected_patterns() {
+        assert!(is_sensitive_key("token"));
+        assert!(is_sensitive_key("api_key"));
+        assert!(is_sensitive_key("authorization"));
+        assert!(is_sensitive_key("password"));
+        assert!(!is_sensitive_key("order_id"));
+        assert!(!is_sensitive_key("name"));
     }
 }

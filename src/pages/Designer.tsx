@@ -204,6 +204,7 @@ export function DesignerPage() {
   const [showDiff, setShowDiff] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const fontInputRef = useRef<HTMLInputElement>(null);
 
   // Load template list from SQLite on mount; fall back to starters in web
   // mode or on first launch when the table is empty.
@@ -872,10 +873,38 @@ export function DesignerPage() {
                 <QrCode className="h-4 w-4" />
                 Barcode
               </Button>
-              <Button variant="outline" size="sm">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fontInputRef.current?.click()}
+                title="Upload font for this template"
+              >
                 <Type className="h-4 w-4" />
                 Font
               </Button>
+              <input
+                ref={fontInputRef}
+                type="file"
+                accept=".ttf,.otf,.woff,.woff2"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+                    await invoke("upload_font", {
+                      fileName: file.name,
+                      fileData: bytes,
+                      family: file.name.replace(/\.[^/.]+$/, ""),
+                    });
+                    toast.success(`Font "${file.name}" uploaded`);
+                  } catch (err) {
+                    toast.error(`Font upload failed: ${err}`);
+                  } finally {
+                    if (fontInputRef.current) fontInputRef.current.value = "";
+                  }
+                }}
+              />
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setShowVersionDialog(true)}>

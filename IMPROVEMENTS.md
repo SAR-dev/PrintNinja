@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batches 1–9 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path) — items marked ☑ below.
+**Batches 1–10 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path, print template select/font/redaction) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -59,7 +59,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 36 | GrapesJS → CodeMirror sync uses `syncDirection` state toggle inside `useEffect` deps — causes stale closure and double-render loop. | P2 | ☐ |
 | 37 | Canvas preview iframe `srcDoc` re-renders on every keystroke without debounce — causes typing lag on large templates. Debounce `htmlCode`/`cssCode` → 300ms. | P2 | ☐ |
 | 38 | Barcode insert wrote `<img src>` from `canvas.toDataURL("image/svg+xml")` — PNG pixels labelled as SVG, so the image never rendered. Also **4 of 14 symbologies threw** (`itf`, `codabar`, `aztec`, `qr` are not bwip-js encoder names). Now emits inline SVG via `toSVG()` with a friendly-id → encoder map. | P1 | ☑ done |
-| 39 | Font button in Designer has no `onClick` — dead button. Should open font manager or upload dialog. | P1 | ☐ |
+| 39 | Font button in Designer had no `onClick` — now triggers hidden `.ttf/.otf/.woff` file input and `invoke("upload_font")` `Designer.tsx:875`. | P1 | ☑ done |
 | 40 | `Save & Preview` opens a new tab with `window.open` — blocked by popup blocker in Tauri WebView. Should reuse preview tab or show modal. | P2 | ☐ |
 | 41 | Variables tab: JSON textarea uses raw `<textarea>` not CodeMirror — inconsistent UX, no JSON validation highlighting. | P3 | ☐ |
 | 42 | Variables tab: `copy-to-clipboard` uses `navigator.clipboard` which requires secure context; fallback not handled in Tauri (http). Add fallback to `execCommand`. | P2 | ☐ |
@@ -75,7 +75,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 45 | `handlePrint` hard-codes `page_width_mm: 210, page_height_mm: 297` — ignores form margins/orientation. | P1 | ☑ done |
 | 46 | Preview dialog uses dummy `"<div class=\"p-4\">Mock data loaded.</div>"` — does not use selected template + data, so preview ≠ actual print. | P1 | ☑ done |
 | 47 | `useEffect` auto-load printers disables `react-hooks/exhaustive-deps` globally — masks stale closure of `store.printerId`. Should list `store` in deps or use `useRef`. | P2 | ☐ |
-| 48 | Template `<Select>` options are hard-coded strings (`receipt-80`, `label-4x6`, `invoice-a4`) not fetched from `list_templates`. | P1 | ☐ |
+| 48 | Template `<Select>` options were hard-coded — now fetched via `invoke("list_templates")` in Print page `Print.tsx:72` and Designer hydration `Designer.tsx:86`. | P1 | ☑ done |
 | 49 | `copies` Input allows `0` or negative — should clamp to `>=1` via `zod` validation. | P2 | ☐ |
 | 50 | Batch dialog: no CSV upload, no column mapping (PLANNING.md 7.8). Only JSON array textarea. | P1 | ☐ |
 | 51 | Batch `Start Batch` sends `template_id: 1, printer_id: 1` hard-coded — not using form selection. | P1 | ☑ done |
@@ -150,7 +150,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 85 | `webGuard.ts` / `tauriGuard.ts` defined but never imported anywhere — dead code. Web-mode guards not actually protecting `invoke` calls. | P2 | ☐ |
 | 86 | `src/lib/store/templateStore.ts` stores `isDefault` flag but Designer never sets it — always true by default, delete disabled always? Inconsistent. | P2 | ☐ |
 | 87 | CORS in `api/server.rs` is `CorsLayer::new().allow_origin(Any).allow_headers(Any).allow_methods(Any)` — wide-open in local mode, contradicts “LAN access off by default” security posture. Should restrict to `127.0.0.1` origins when LAN off. | P2 | ☑ done |
-| 88 | Secrets (tokens) flow through `api/routes.rs` `PrintJobRequest.data` as plain JSON — PLANNING.md says tokens live in `keyring` and are redacted from logs/history. No redaction implemented. | P1 | ☐ |
+| 88 | Secrets flowed through `PrintJobRequest.data` as plain JSON into `print_jobs.rendered_html` — now `record_job` redacts any value whose key matches `token/password/secret/api_key/authorization` (case-insensitive, recursive) before INSERT `commands/print.rs:398`. | P1 | ☑ done |
 | 89 | `Cargo.toml` enables `reqwest` default features pulling `h2`, `hyper` etc. but `windows = "0.58"` is pinned behind outdated `windows-future` breakage (already worked around). Should audit feature set for minimal build size. | P3 | ☐ |
 | 90 | `src-tauri/Cargo.lock` committed — Tauri best practice is to commit, but pnpm `pnpm-workspace.yaml` generated artefact not gitignored check. | P3 | ☐ |
 
