@@ -716,11 +716,11 @@ export function PrintPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-2 border-dashed border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-950/20">
+          <Card className="border-2 border-dashed border-cyan-500/50 bg-cyan-50/50 dark:bg-cyan-950/20">
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
-                <Zap className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                <CardTitle className="text-base text-yellow-800 dark:text-yellow-200">
+                <Zap className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                <CardTitle className="text-base text-cyan-800 dark:text-cyan-200">
                   Pipeline Test
                 </CardTitle>
               </div>
@@ -729,7 +729,7 @@ export function PrintPage() {
               <Button
                 onClick={handleSpikeTest}
                 disabled={store.status === "printing"}
-                className="bg-yellow-600 hover:bg-yellow-700 w-full"
+                className="bg-cyan-600 hover:bg-cyan-700 w-full"
               >
                 <Zap className="h-4 w-4" />
                 Send Test Page
