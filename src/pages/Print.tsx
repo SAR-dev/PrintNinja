@@ -60,6 +60,11 @@ export function PrintPage() {
   const [loading, setLoading] = useState(true);
   const [showBatchDialog, setShowBatchDialog] = useState(false);
   const [batchInput, setBatchInput] = useState("");
+  const [batchCsvFile, setBatchCsvFile] = useState<File | null>(null);
+  const [batchCsvPreview, setBatchCsvPreview] = useState<Array<Record<string, string>> | null>(null);
+  const [batchCsvHeaders, setBatchCsvHeaders] = useState<string[]>([]);
+  const [batches, setBatches] = useState<Array<{ id: number; total: number; done: number; failed: number; mode: string; status: string }>>([]);
+
   const [showPreview, setShowPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState<string>("");
 
@@ -131,9 +136,62 @@ export function PrintPage() {
     }
   };
 
+  const refreshBatches = async () => {
+    try {
+      const list = await invoke<Array<{ id: number; total: number; done: number; failed: number; mode: string; status: string }>>("list_batches");
+      setBatches(list ?? []);
+    } catch {}
+  };
+  useEffect(() => {
+    refreshBatches();
+    const id = setInterval(refreshBatches, 5000);
+    return () => clearInterval(id);
+  }, [showBatchDialog]);
+
+  const parseCsv = (text: string): { headers: string[]; rows: string[][] } => {
+    const lines: string[][] = [];
+    let cur = "";
+    let row: string[] = [];
+    let inQuote = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (c === '"') {
+        if (inQuote && text[i + 1] === '"') { cur += '"'; i++; } else { inQuote = !inQuote; }
+      } else if (c === "," && !inQuote) { row.push(cur.trim()); cur = ""; }
+      else if ((c === "\n" || c === "\r") && !inQuote) {
+        if (cur !== "" || row.length > 0) { row.push(cur.trim()); cur = ""; lines.push(row); row = []; }
+        if (c === "\r" && text[i + 1] === "\n") i++;
+      } else { cur += c; }
+    }
+    if (cur !== "" || row.length > 0) { row.push(cur.trim()); lines.push(row); }
+    if (lines.length === 0) return { headers: [], rows: [] };
+    const headers = lines[0].map((h) => h.trim());
+    return { headers, rows: lines.slice(1) };
+  };
+
+  const handleCsvUpload = async (file: File) => {
+    setBatchCsvFile(file);
+    try {
+      const text = await file.text();
+      const { headers, rows } = parseCsv(text);
+      if (headers.length === 0) { toast.error("CSV has no header row"); return; }
+      setBatchCsvHeaders(headers);
+      const jsonRows = rows.filter((r) => r.some((c) => c !== "")).map((r) => {
+        const obj: Record<string, string> = {};
+        headers.forEach((h, i) => { obj[h] = r[i] ?? ""; });
+        return obj;
+      });
+      setBatchCsvPreview(jsonRows.slice(0, 5));
+      setBatchInput(JSON.stringify(jsonRows, null, 2));
+      toast.success(`CSV loaded: ${jsonRows.length} row(s), ${headers.length} column(s)`);
+    } catch (e) {
+      toast.error(`CSV parse failed: ${e}`);
+    }
+  };
+
   const handleBatchPrint = async () => {
     if (!batchInput.trim()) {
-      toast.error("Please enter batch data");
+      toast.error("Please enter batch data or upload CSV");
       return;
     }
     let data: unknown;
@@ -144,24 +202,46 @@ export function PrintPage() {
       return;
     }
     if (!Array.isArray(data)) {
-      toast.error("Batch data must be a JSON array");
+      toast.error("Batch data must be a JSON array (CSV is converted to array)");
       return;
     }
+    if (!store.templateId) { toast.error("Select a template first"); return; }
+    if (!store.printerId) { toast.error("Select a printer first"); return; }
+    const printer = printers.find((p) => p.name === store.printerId);
+    let printerId = printer ? Number((printer as unknown as { id: number }).id) || 0 : 0;
+    if (!printerId) {
+      try {
+        const all = await invoke<Array<{ id: number; name: string }>>("list_printers");
+        const match = all.find((p) => p.name === store.printerId);
+        if (match) printerId = match.id;
+      } catch {}
+    }
+    if (!printerId) { toast.error("Could not resolve printer — re-select it"); return; }
     try {
       await invoke("create_batch", {
         req: {
           template_id: Number(store.templateId) || 0,
-          printer_id: 1,
+          printer_id: printerId,
           data,
           mode: store.batchMode2,
         },
       });
-      toast.success(`Batch queued: ${data.length} record(s)`);
+      toast.success(`Batch queued: ${(data as unknown[]).length} record(s)`);
       setShowBatchDialog(false);
       setBatchInput("");
+      setBatchCsvFile(null);
+      setBatchCsvPreview(null);
+      refreshBatches();
     } catch (e) {
       toast.error(`Batch failed: ${e}`);
     }
+  };
+
+  const handleCancelBatch = async (id: number) => {
+    try { await invoke("cancel_batch", { id }); toast.success(`Batch #${id} cancelled`); refreshBatches(); } catch (e) { toast.error(String(e)); }
+  };
+  const handleRetryBatch = async (id: number) => {
+    try { await invoke("retry_batch", { id }); toast.success(`Batch #${id} retry queued`); refreshBatches(); } catch (e) { toast.error(String(e)); }
   };
 
   const loadPrinters = async () => {
@@ -495,17 +575,20 @@ export function PrintPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Batch Print</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowBatchDialog(true)}
-                >
-                  <Play className="h-4 w-4" />
-                  New Batch
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={refreshBatches}>Refresh</Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowBatchDialog(true)}
+                  >
+                    <Play className="h-4 w-4" />
+                    New Batch
+                  </Button>
+                </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Mode</Label>
@@ -526,9 +609,39 @@ export function PrintPage() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Status</Label>
-                  <Badge variant="secondary">No batch</Badge>
+                  {batches.length === 0 ? (
+                    <Badge variant="secondary">No batches yet</Badge>
+                  ) : (
+                    <Badge variant={batches[0].status === "queued" || batches[0].status === "printing" ? "default" : batches[0].status === "success" ? "secondary" : "destructive"}>
+                      #{batches[0].id} {batches[0].status} {batches[0].done}/{batches[0].total}
+                    </Badge>
+                  )}
                 </div>
               </div>
+              {batches.length > 0 && (
+                <div className="space-y-2 max-h-48 overflow-auto">
+                  {batches.slice(0, 5).map((b) => (
+                    <div key={b.id} className="flex items-center justify-between rounded border p-2 text-xs">
+                      <div>
+                        <span className="font-medium">#{b.id}</span> {b.mode} · {b.status} · {b.done}/{b.total} done{b.failed > 0 ? `, ${b.failed} failed` : ""}
+                      </div>
+                      <div className="flex gap-1">
+                        {(b.status === "queued" || b.status === "printing") && (
+                          <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => handleCancelBatch(b.id)}>Cancel</Button>
+                        )}
+                        {(b.status === "failed" || b.status === "cancelled") && b.failed > 0 && (
+                          <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => handleRetryBatch(b.id)}>Retry</Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {batches.length > 0 && batches[0].total > 0 && (
+                <div className="h-2 w-full rounded bg-muted overflow-hidden">
+                  <div className="h-full bg-primary transition-all" style={{ width: `${Math.min(100, Math.round(((batches[0].done + batches[0].failed) / batches[0].total) * 100))}%` }} />
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -675,6 +788,25 @@ export function PrintPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
+              <Label>CSV Upload (optional)</Label>
+              <Input type="file" accept=".csv,text/csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvUpload(f); }} />
+              {batchCsvFile && <p className="text-xs text-muted-foreground">{batchCsvFile.name} · {batchCsvHeaders.length} columns{batchCsvPreview ? ` · preview ${batchCsvPreview.length} row(s)` : ""}</p>}
+              {batchCsvHeaders.length > 0 && (
+                <div className="rounded border p-2 text-xs">
+                  <p className="font-medium mb-1">Columns → variables: {batchCsvHeaders.join(", ")}</p>
+                  <p className="text-muted-foreground">Headers become template keys (e.g. {"{{"}name{"}}" }). Edit JSON below to rename if needed.</p>
+                  {batchCsvPreview && (
+                    <div className="mt-2 overflow-auto max-h-32">
+                      <table className="w-full text-xs">
+                        <thead><tr>{batchCsvHeaders.map((h) => <th key={h} className="text-left border-b p-1">{h}</th>)}</tr></thead>
+                        <tbody>{batchCsvPreview.map((row, i) => <tr key={i}>{batchCsvHeaders.map((h) => <td key={h} className="p-1 border-b truncate max-w-[120px]">{row[h]}</td>)}</tr>)}</tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="space-y-1">
               <Label>JSON Array</Label>
               <Textarea
                 placeholder='[{"name":"Tea","qty":2},{"name":"Coffee","qty":1}]'
@@ -683,6 +815,7 @@ export function PrintPage() {
                 rows={8}
                 className="font-mono text-xs"
               />
+              <p className="text-xs text-muted-foreground">CSV is auto-converted to this JSON. You can also paste JSON directly.</p>
             </div>
           </div>
           <DialogFooter>

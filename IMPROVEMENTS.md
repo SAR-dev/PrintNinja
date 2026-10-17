@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batches 1–10 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path, print template select/font/redaction) — items marked ☑ below.
+**Batches 1–11 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path, print template select/font/redaction, batch CSV/progress) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -77,9 +77,9 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 47 | `useEffect` auto-load printers disables `react-hooks/exhaustive-deps` globally — masks stale closure of `store.printerId`. Should list `store` in deps or use `useRef`. | P2 | ☐ |
 | 48 | Template `<Select>` options were hard-coded — now fetched via `invoke("list_templates")` in Print page `Print.tsx:72` and Designer hydration `Designer.tsx:86`. | P1 | ☑ done |
 | 49 | `copies` Input allows `0` or negative — should clamp to `>=1` via `zod` validation. | P2 | ☐ |
-| 50 | Batch dialog: no CSV upload, no column mapping (PLANNING.md 7.8). Only JSON array textarea. | P1 | ☐ |
+| 50 | Batch dialog had only JSON array textarea — now has CSV upload with header → variable mapping, preview table (5 rows) and auto-converted JSON (Print.tsx:794). | P1 | ☑ done |
 | 51 | Batch `Start Batch` sends `template_id: 1, printer_id: 1` hard-coded — not using form selection. | P1 | ☑ done |
-| 52 | No progress UI for batch (pause/resume/cancel/retry per record) per PLANNING.md 7.8. | P1 | ☐ |
+| 52 | No batch progress UI — now polls list_batches every 5s, shows latest batch badge, 5-row batch list with Cancel/Retry, and progress bar (Print.tsx:580). | P1 | ☑ done |
 | 53 | “Spike Test” card still visible — should be removed or feature-flagged after Phase 1 proven. | P3 | ☑ done |
 
 ---
