@@ -592,36 +592,7 @@ async fn cancel_job(
 }
 
 async fn openapi() -> Json<Value> {
-    Json(json!({
-        "openapi": "3.0.0",
-        "info": {
-            "title": "PrintNinja API",
-            "version": env!("CARGO_PKG_VERSION"),
-            "description": "Local REST API for PrintNinja print automation"
-        },
-        "components": {
-            "securitySchemes": {
-                "bearerAuth": { "type": "http", "scheme": "bearer" }
-            }
-        },
-        "security": [{ "bearerAuth": [] }],
-        "servers": [
-            { "url": "http://127.0.0.1:17717", "description": "Local server" }
-        ],
-        "paths": {
-            "/v1/health": { "get": { "summary": "Health check", "security": [] } },
-            "/v1/printers": { "get": { "summary": "List printers" } },
-            "/v1/templates": { "get": { "summary": "List templates" } },
-            "/v1/print": { "post": { "summary": "Create a print job" } },
-            "/v1/print/batch": { "post": { "summary": "Create a batch print" } },
-            "/v1/jobs": { "get": { "summary": "List jobs" } },
-            "/v1/jobs/{id}": {
-                "get": { "summary": "Get job status" },
-                "delete": { "summary": "Cancel queued job" }
-            },
-            "/v1/jobs/{id}/retry": { "post": { "summary": "Retry failed job" } }
-        }
-    }))
+    Json(serde_json::to_value(crate::api::openapi::OpenApiSpec::default()).unwrap())
 }
 
 /// Map internal errors onto HTTP responses instead of panicking.

@@ -600,3 +600,70 @@ async fn requests_without_a_key_do_not_collide() {
         .unwrap();
     assert_eq!(n, 2, "keyless requests must all be recorded");
 }
+
+/// The OpenAPI document is the API's contract, and `POST /v1/print` was
+/// documented as creating a queued job. It now renders and prints, so the
+/// documented status codes must match what the handler really returns.
+#[tokio::test]
+async fn openapi_documents_the_print_response_codes() {
+    let (db, _key) = setup();
+    let app = router(&db);
+
+    let res = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/openapi.json")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+    let (db, key) = setup();
+    let app = router(&db);
+    let res = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/openapi.json")
+                .header("authorization", format!("Bearer {}", key))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let spec: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    let responses = spec["paths"]["/v1/print"]["post"]["responses"]
+        .as_object()
+        .expect("documented responses");
+    for code in ["200", "400", "401", "404", "500"] {
+        assert!(responses.contains_key(code), "missing documented {code}");
+    }
+
+    // 202 is deliberately absent: the endpoint no longer lies about queueing.
+    assert!(
+        !responses.contains_key("202"),
+        "must not document the old fake 'queued' 202"
+    );
+
+    // The body is required and documented as such.
+    let required = spec["paths"]["/v1/print"]["post"]["requestBody"]["required"]
+        .as_bool()
+        .unwrap_or(false);
+    assert!(required, "requestBody must be required");
+    for field in ["template", "printer", "data"] {
+        assert!(
+            spec["paths"]["/v1/print"]["post"]["requestBody"]["content"]["application/json"]
+                ["schema"]["required"]
+                .as_array()
+                .map_or(false, |a| a.iter().any(|v| v.as_str() == Some(field))),
+            "{field} must be documented as required"
+        );
+    }
+}
