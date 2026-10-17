@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batches 1–11 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path, print template select/font/redaction, batch CSV/progress) — items marked ☑ below.
+**Batches 1–12 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline, fetcher/deeplink/auth hardening, templates/IPP/data-path, print template select/font/redaction, batch CSV/progress, designer perf/history grouping) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -56,13 +56,13 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 33 | Versions panel: both buttons call `handleRestoreVersion(v)` — second should open diff view, not restore again. | P1 | ☑ done |
 | 34 | `showDiffDialog`/`diffVersion` were declared then removed, but diff view feature from PLANNING.md 7.3 still missing (side-by-side HTML/CSS diff with Monaco/`diff` lib). | P1 | ☑ done |
 | 35 | Templates loaded Tailwind from `cdn.tailwindcss.com` (GrapesJS was never implemented; Visual tab is hand-rolled). Replaced with a real bundled Tailwind build — see #81. | P2 | ☑ done |
-| 36 | GrapesJS → CodeMirror sync uses `syncDirection` state toggle inside `useEffect` deps — causes stale closure and double-render loop. | P2 | ☐ |
-| 37 | Canvas preview iframe `srcDoc` re-renders on every keystroke without debounce — causes typing lag on large templates. Debounce `htmlCode`/`cssCode` → 300ms. | P2 | ☐ |
+| 36 | GrapesJS → CodeMirror sync used `syncDirection` state in deps — caused loop. Now uses `useRef` and `[grapesLoaded]` only (`VisualDesigner.tsx:28`). | P2 | ☑ done |
+| 37 | Canvas preview re-rendered on every keystroke — now debounced 300ms via `debouncedHtml/Css` (`Designer.tsx:86`). | P2 | ☑ done |
 | 38 | Barcode insert wrote `<img src>` from `canvas.toDataURL("image/svg+xml")` — PNG pixels labelled as SVG, so the image never rendered. Also **4 of 14 symbologies threw** (`itf`, `codabar`, `aztec`, `qr` are not bwip-js encoder names). Now emits inline SVG via `toSVG()` with a friendly-id → encoder map. | P1 | ☑ done |
 | 39 | Font button in Designer had no `onClick` — now triggers hidden `.ttf/.otf/.woff` file input and `invoke("upload_font")` `Designer.tsx:875`. | P1 | ☑ done |
-| 40 | `Save & Preview` opens a new tab with `window.open` — blocked by popup blocker in Tauri WebView. Should reuse preview tab or show modal. | P2 | ☐ |
+| 40 | `Save & Preview` used `window.open` — now switches to Preview tab (`Designer.tsx:885`). | P2 | ☑ done |
 | 41 | Variables tab: JSON textarea uses raw `<textarea>` not CodeMirror — inconsistent UX, no JSON validation highlighting. | P3 | ☐ |
-| 42 | Variables tab: `copy-to-clipboard` uses `navigator.clipboard` which requires secure context; fallback not handled in Tauri (http). Add fallback to `execCommand`. | P2 | ☐ |
+| 42 | Clipboard used `navigator.clipboard` only — now falls back to hidden textarea + `execCommand` for http/Tauri (`Designer.tsx:826`). | P2 | ☑ done |
 | 43 | Template import accepts `text/html` but JSON parse will fail on raw HTML — should detect `.html` vs `.json` and handle both. | P2 | ☐ |
 
 ---
@@ -105,8 +105,8 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 61 | Export CSV does not URL-revoke after click — `URL.revokeObjectURL(url)` missing, leaks blob URLs. | P2 | ☑ done |
 | 62 | Export CSV does not escape commas/quotes — `r.join(",")` breaks on fields containing `,`. Need CSV escaping. | P2 | ☑ done |
 | 63 | History detail `JSON.parse(settings_json)` will throw if `settings_json` is `""` or invalid — unhandled, crashes dialog. | P1 | ☑ done |
-| 64 | No date-range filter UI despite `historyStore.filter.dateFrom/dateTo` fields and PLANNING.md requirement. | P2 | ☐ |
-| 65 | No batch grouping (expandable row per PLANNING.md 8) — `batch_id` exists but not grouped. | P2 | ☐ |
+| 64 | No date-range filter UI — now two date inputs bound to `store.filter.dateFrom/dateTo` with filtering on `finished_at/started_at` (`History.tsx:64`). | P2 | ☑ done |
+| 65 | No batch grouping — now collapsible batch headers grouping jobs by `batch_id` with expand/collapse and per-batch counts (`History.tsx:64`). | P2 | ☑ done |
 
 ---
 

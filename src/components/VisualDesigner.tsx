@@ -25,7 +25,7 @@ export function VisualDesigner({
   const [grapesLoaded, setGrapesLoaded] = useState(false);
   const [htmlCode, setHtmlCode] = useState(initialHtml);
   const [cssCode, setCssCode] = useState(initialCss);
-  const [syncDirection, setSyncDirection] = useState<"visual" | "code">("visual");
+  const syncDirectionRef = useRef<"visual" | "code">("visual");
 
   useEffect(() => {
     // Dynamically load GrapesJS
@@ -116,7 +116,7 @@ export function VisualDesigner({
       }
 
       editor.on("change", () => {
-        if (syncDirection === "visual") {
+        if (syncDirectionRef.current === "visual") {
           const html = editor.getHtml();
           const css = editor.getCss();
           setHtmlCode(html);
@@ -130,13 +130,13 @@ export function VisualDesigner({
     } catch (e) {
       console.error("GrapesJS init failed:", e);
     }
-  }, [grapesLoaded, syncDirection, htmlCode, cssCode, onHtmlChange, onCssChange]);
+  }, [grapesLoaded]);
 
   const handleCodeChange = () => {
-    setSyncDirection("code");
+    syncDirectionRef.current = "code";
     onHtmlChange(htmlCode);
     onCssChange(cssCode);
-    setSyncDirection("visual");
+    syncDirectionRef.current = "visual";
   };
 
   return (

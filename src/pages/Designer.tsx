@@ -79,6 +79,15 @@ export function DesignerPage() {
   const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
   const [zoom, setZoom] = useState(1);
   const [activeTab, setActiveTab] = useState("canvas");
+  const [debouncedHtml, setDebouncedHtml] = useState(htmlCode);
+  const [debouncedCss, setDebouncedCss] = useState(cssCode);
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setDebouncedHtml(htmlCode);
+      setDebouncedCss(cssCode);
+    }, 300);
+    return () => clearTimeout(id);
+  }, [htmlCode, cssCode]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -670,8 +679,8 @@ export function DesignerPage() {
                   >
                     <iframe
                       srcDoc={renderTemplate(
-                        htmlCode,
-                        cssCode,
+                        debouncedHtml,
+                        debouncedCss,
                         (() => {
                           try {
                             const ds = datasets.find((d) => d.name === selectedDatasetName) ?? datasets[0];
@@ -814,10 +823,10 @@ export function DesignerPage() {
                                   key={f}
                                   type="button"
                                   className="rounded-full border px-2 py-0.5 font-mono text-[10px] hover:bg-muted cursor-pointer"
-                                  onClick={() => {
+                                  onClick={async () => {
                                     const token = `{{${f}}}`;
-                                    navigator.clipboard?.writeText(token);
-                                    toast.success(`Copied ${token}`);
+                                    try { await navigator.clipboard.writeText(token); toast.success(`Copied ${token}`); }
+                                    catch { const ta=document.createElement("textarea");ta.value=token;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);toast.success(`Copied ${token}`); }
                                   }}
                                   title="Copy to clipboard"
                                 >
@@ -851,10 +860,10 @@ export function DesignerPage() {
                         key={v}
                         type="button"
                         className="rounded-full border px-2 py-0.5 font-mono text-[10px] hover:bg-primary hover:text-primary-foreground cursor-pointer"
-                        onClick={() => {
+                        onClick={async () => {
                           const token = `{{${v}}}`;
-                          navigator.clipboard?.writeText(token);
-                          toast.success(`Copied ${token}`);
+                          try { await navigator.clipboard.writeText(token); toast.success(`Copied ${token}`); }
+                          catch { const ta=document.createElement("textarea");ta.value=token;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);toast.success(`Copied ${token}`); }
                         }}
                       >
                         {"{{"}{v}{"}}"}
@@ -912,11 +921,8 @@ export function DesignerPage() {
                 Save Version
               </Button>
               <Button size="sm" onClick={() => {
-                // Live preview via compiled output
-                const rendered = renderTemplate(htmlCode, cssCode, DEFAULT_MOCK_DATA as any);
-                // Open in new tab
-                const win = window.open("", "_blank");
-                if (win) { win.document.write(rendered); win.document.close(); }
+                setActiveTab("preview");
+                toast.success("Preview updated — see Preview tab");
               }}>
                 <Check className="h-4 w-4" />
                 Save & Preview

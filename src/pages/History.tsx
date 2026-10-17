@@ -68,6 +68,17 @@ export function HistoryPage() {
     if (store.filter.printer !== "all" && job.printer_id?.toString() !== store.filter.printer) return false;
     if (store.filter.source !== "all" && job.source !== store.filter.source) return false;
     if (store.filter.isTest !== null && job.is_test !== store.filter.isTest) return false;
+    if (store.filter.dateFrom) {
+      const from = new Date(store.filter.dateFrom);
+      const ts = job.finished_at || job.started_at;
+      if (ts && new Date(ts) < from) return false;
+    }
+    if (store.filter.dateTo) {
+      const to = new Date(store.filter.dateTo);
+      to.setHours(23, 59, 59, 999);
+      const ts = job.finished_at || job.started_at;
+      if (ts && new Date(ts) > to) return false;
+    }
     if (store.filter.search) {
       const q = store.filter.search.toLowerCase();
       const match = job.source_url?.toLowerCase().includes(q) ||
@@ -77,6 +88,28 @@ export function HistoryPage() {
     }
     return true;
   });
+
+  // Batch grouping (PLANNING §8): jobs with the same batch_id are collapsible
+  const [expandedBatches, setExpandedBatches] = useState<Set<number>>(new Set());
+  const toggleBatch = (id: number) => {
+    setExpandedBatches((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const grouped = (() => {
+    const batches = new Map<number, HistoryJob[]>();
+    const singles: HistoryJob[] = [];
+    for (const j of filteredJobs) {
+      if (j.batch_id != null) {
+        const arr = batches.get(j.batch_id) ?? [];
+        arr.push(j);
+        batches.set(j.batch_id, arr);
+      } else singles.push(j);
+    }
+    return { batches, singles };
+  })();
 
   const handleReprint = async (job: HistoryJob) => {
     try {
@@ -208,6 +241,8 @@ export function HistoryPage() {
                 <SelectItem value="3">Label Printer 1</SelectItem>
               </SelectContent>
             </Select>
+            <Input type="date" className="w-[150px]" value={store.filter.dateFrom} onChange={(e) => store.setFilter({ dateFrom: e.target.value })} placeholder="From" />
+            <Input type="date" className="w-[150px]" value={store.filter.dateTo} onChange={(e) => store.setFilter({ dateTo: e.target.value })} placeholder="To" />
             <Button variant="ghost" size="sm" onClick={store.clearFilter}>
               Clear
             </Button>
@@ -252,48 +287,106 @@ export function HistoryPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredJobs.map((job) => (
-                  <TableRow key={job.id}>
-                    <TableCell className="text-muted-foreground">#{job.id}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {job.finished_at || job.started_at || "—"}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {job.template_id ? `Template ${job.template_id}` : "—"}
-                    </TableCell>
-                    <TableCell>{job.printer_id ? `Printer ${job.printer_id}` : "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANTS[job.status] || "secondary"}>
-                        {job.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{job.duration_ms ? `${job.duration_ms}ms` : "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{job.source}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {job.template_version_id ? `v${job.template_version_id}` : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => store.setSelectedJob(job)}>
-                          <Eye className="h-3 w-3" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleReprint(job)}>
-                          <RotateCcw className="h-3 w-3" />
-                        </Button>
-                        {job.status === "failed" && (
-                          <Button variant="ghost" size="sm" onClick={() => handleRetry(job)}>
+                <>
+                  {Array.from(grouped.batches.entries()).map(([batchId, jobs]) => (
+                    <>
+                      <TableRow key={`batch-${batchId}`} className="bg-muted/50">
+                        <TableCell colSpan={5} className="font-medium">
+                          <button type="button" onClick={() => toggleBatch(batchId)} className="flex items-center gap-2">
+                            <span>{expandedBatches.has(batchId) ? "▼" : "▶"}</span> Batch #{batchId} · {jobs.length} job(s) · {jobs.filter((j) => j.status === "success").length} ok, {jobs.filter((j) => j.status === "failed").length} failed
+                          </button>
+                        </TableCell>
+                        <TableCell colSpan={4} className="text-right text-xs text-muted-foreground">
+                          {jobs[0]?.finished_at || jobs[0]?.started_at || ""}
+                        </TableCell>
+                      </TableRow>
+                      {expandedBatches.has(batchId) && jobs.map((job) => (
+                        <TableRow key={job.id} className="bg-muted/20">
+                          <TableCell className="text-muted-foreground pl-6">#{job.id}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {job.finished_at || job.started_at || "—"}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {job.template_id ? `Template ${job.template_id}` : "—"}
+                          </TableCell>
+                          <TableCell>{job.printer_id ? `Printer ${job.printer_id}` : "—"}</TableCell>
+                          <TableCell>
+                            <Badge variant={STATUS_VARIANTS[job.status] || "secondary"}>
+                              {job.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{job.duration_ms ? `${job.duration_ms}ms` : "—"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{job.source}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {job.template_version_id ? `v${job.template_version_id}` : "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => store.setSelectedJob(job)}>
+                                <Eye className="h-3 w-3" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleReprint(job)}>
+                                <RotateCcw className="h-3 w-3" />
+                              </Button>
+                              {job.status === "failed" && (
+                                <Button variant="ghost" size="sm" onClick={() => handleRetry(job)}>
+                                  <RotateCcw className="h-3 w-3" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="sm" onClick={() => handleDelete(job)}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </>
+                  ))}
+                  {grouped.singles.map((job) => (
+                    <TableRow key={job.id}>
+                      <TableCell className="text-muted-foreground">#{job.id}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {job.finished_at || job.started_at || "—"}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {job.template_id ? `Template ${job.template_id}` : "—"}
+                      </TableCell>
+                      <TableCell>{job.printer_id ? `Printer ${job.printer_id}` : "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant={STATUS_VARIANTS[job.status] || "secondary"}>
+                          {job.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{job.duration_ms ? `${job.duration_ms}ms` : "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{job.source}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {job.template_version_id ? `v${job.template_version_id}` : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => store.setSelectedJob(job)}>
+                            <Eye className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleReprint(job)}>
                             <RotateCcw className="h-3 w-3" />
                           </Button>
-                        )}
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(job)}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                          {job.status === "failed" && (
+                            <Button variant="ghost" size="sm" onClick={() => handleRetry(job)}>
+                              <RotateCcw className="h-3 w-3" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(job)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </>
               )}
             </TableBody>
           </Table>
