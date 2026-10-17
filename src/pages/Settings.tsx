@@ -250,23 +250,23 @@ export function SettingsPage() {
 
       <Tabs defaultValue="general" className="w-full">
         <TabsList>
-          <TabsTrigger value="general">
+          <TabsTrigger value="general" className="gap-2">
             <Palette className="h-4 w-4" />
             General
           </TabsTrigger>
-          <TabsTrigger value="fonts">
+          <TabsTrigger value="fonts" className="gap-2">
             <Globe className="h-4 w-4" />
             {t("settings_page.fonts")}
           </TabsTrigger>
-          <TabsTrigger value="api">
+          <TabsTrigger value="api" className="gap-2">
             <Key className="h-4 w-4" />
             {t("settings_page.api")}
           </TabsTrigger>
-          <TabsTrigger value="deeplinks">
+          <TabsTrigger value="deeplinks" className="gap-2">
             <Link className="h-4 w-4" />
             {t("settings_page.deep_links")}
           </TabsTrigger>
-          <TabsTrigger value="security">
+          <TabsTrigger value="security" className="gap-2">
             <Shield className="h-4 w-4" />
             Security
           </TabsTrigger>
