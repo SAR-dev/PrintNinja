@@ -24,7 +24,7 @@ const navItems = [
 
 function isActivePath(currentPath: string, itemPath: string): boolean {
   if (itemPath === "/") return currentPath === "/" || currentPath.startsWith("/template");
-  return currentPath.startsWith(itemPath);
+  return currentPath === itemPath || currentPath.startsWith(`${itemPath}/`);
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
