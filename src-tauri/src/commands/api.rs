@@ -92,6 +92,7 @@ pub struct ApiServerHandle {
 pub fn start_api_server(
     app: AppHandle,
     db: State<'_, DbState>,
+    queue: State<'_, crate::queue::PrintQueue>,
     port: Option<u16>,
     lan_access: Option<bool>,
 ) -> AppResult<String> {
@@ -156,7 +157,18 @@ pub fn start_api_server(
         *slot = Some(tx);
     }
 
-    let router = crate::api::routes::router_with_state(db.inner().clone(), lan);
+    // The routes need the same queue the desktop UI uses, so an API job and
+    // a UI job aimed at the same printer are serialised against each other.
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| AppError::Internal(format!("No cache dir: {e}")))?;
+    let state = crate::api::routes::ApiState {
+        db: db.inner().clone(),
+        queue: std::sync::Arc::new(queue.inner().clone()),
+        cache_dir,
+    };
+    let router = crate::api::routes::router_with_state(state, lan);
     let app2 = app.clone();
 
     let log_addr = addr.clone();

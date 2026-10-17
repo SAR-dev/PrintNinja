@@ -61,10 +61,17 @@ fn seed_printers_and_templates(db: &Db) -> (String, String) {
     )
     .unwrap();
     let tid = c.last_insert_rowid();
-    c.execute(
+    let vid = c.execute(
         "INSERT INTO template_versions (template_id, version_no, html, css, created_by)
          VALUES (?1, 1, '<p>hi</p>', '', 'manual')",
         [tid],
+    )
+    .unwrap();
+    // The real `create_template` sets this; without it the template has
+    // versions on disk but nothing "current" to render.
+    c.execute(
+        "UPDATE templates SET current_version_id = ?1 WHERE id = ?2",
+        rusqlite::params![vid, tid],
     )
     .unwrap();
     drop(guard);
@@ -78,7 +85,7 @@ fn seed_printers_and_templates(db: &Db) -> (String, String) {
 #[tokio::test]
 async fn health_is_open_without_a_key() {
     let (db, _key) = setup();
-    let app = printninja_lib::api::routes::router_with_state(db, false);
+    let app = router(&db);
 
     let res = app
         .oneshot(
@@ -96,7 +103,7 @@ async fn health_is_open_without_a_key() {
 #[tokio::test]
 async fn printers_requires_authorization() {
     let (db, _key) = setup();
-    let app = printninja_lib::api::routes::router_with_state(db, false);
+    let app = router(&db);
 
     let res = app
         .oneshot(
@@ -114,7 +121,7 @@ async fn printers_requires_authorization() {
 #[tokio::test]
 async fn wrong_key_is_rejected() {
     let (db, _key) = setup();
-    let app = printninja_lib::api::routes::router_with_state(db, false);
+    let app = router(&db);
 
     let res = app
         .oneshot(
@@ -134,7 +141,7 @@ async fn wrong_key_is_rejected() {
 async fn valid_key_is_accepted() {
     let (db, key) = setup();
     seed_printers_and_templates(&db);
-    let app = printninja_lib::api::routes::router_with_state(db, false);
+    let app = router(&db);
 
     let res = app
         .oneshot(
@@ -170,7 +177,7 @@ async fn jobs_id_supports_both_get_and_delete() {
     }
 
     // GET /v1/jobs/1 must work (previously shadowed by the DELETE route).
-    let app = printninja_lib::api::routes::router_with_state(db.clone(), false);
+    let app = router(&db);
     let res = app
         .oneshot(
             Request::builder()
@@ -184,7 +191,7 @@ async fn jobs_id_supports_both_get_and_delete() {
     assert_eq!(res.status(), StatusCode::OK, "GET /v1/jobs/{{id}} must not 404/405");
 
     // DELETE /v1/jobs/1 must cancel the queued job.
-    let app = printninja_lib::api::routes::router_with_state(db.clone(), false);
+    let app = router(&db);
     let res = app
         .oneshot(
             Request::builder()
@@ -223,7 +230,7 @@ async fn duplicate_idempotency_key_does_not_create_a_second_job() {
     .to_string();
 
     // First request creates the job.
-    let app = printninja_lib::api::routes::router_with_state(db.clone(), false);
+    let app = router(&db);
     let res = app
         .oneshot(
             Request::builder()
@@ -237,10 +244,15 @@ async fn duplicate_idempotency_key_does_not_create_a_second_job() {
         )
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::ACCEPTED);
+    // The first request runs the real pipeline. On a non-Windows CI host the
+    // print itself fails (no spooler), so assert only that it was *not*
+    // silently accepted as "queued" — and, crucially, that it still wrote a
+    // history row carrying the idempotency key, which is what makes the
+    // replay detectable at all.
+    assert_ne!(res.status(), StatusCode::ACCEPTED);
 
     // Replay must be rejected.
-    let app = printninja_lib::api::routes::router_with_state(db.clone(), false);
+    let app = router(&db);
     let res = app
         .oneshot(
             Request::builder()
@@ -268,16 +280,47 @@ async fn duplicate_idempotency_key_does_not_create_a_second_job() {
     assert_eq!(n, 1, "idempotent replay must not print twice");
 }
 
+
+/// Build the router the way the real app does.
+///
+/// The state carries a print queue and a cache dir so `POST /v1/print` runs
+/// the real pipeline instead of only inserting a "queued" row.
+fn router(db: &Db) -> axum::Router {
+    let cache = std::env::temp_dir().join(format!(
+        "printninja_api_cache_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    printninja_lib::api::routes::router_with_state(
+        printninja_lib::api::routes::ApiState {
+            db: db.clone(),
+            queue: std::sync::Arc::new(printninja_lib::queue::PrintQueue::new().0),
+            cache_dir: cache,
+        },
+        false,
+    )
+}
+
 // ───────────────────────────────────────────────────────────────
 // endpoint behaviour
 // ───────────────────────────────────────────────────────────────
 
+/// Regression for #18: `POST /v1/print` used to insert a row with
+/// `status = 'queued'` and return `202 Accepted` **without printing
+/// anything at all** — no render, no transport, no queue. It now runs the
+/// same pipeline as the desktop UI.
+///
+/// On a non-Windows CI host there is no spooler, so the print itself fails —
+/// which is exactly the point: the caller gets the real outcome, not a
+/// cheerful "queued" and no paper.
 #[tokio::test]
-async fn print_creates_a_queued_job_row() {
+async fn print_runs_the_real_pipeline_instead_of_lying_queued() {
     let (db, key) = setup();
     seed_printers_and_templates(&db);
 
-    let app = printninja_lib::api::routes::router_with_state(db.clone(), false);
+    let app = router(&db);
     let res = app
         .oneshot(
             Request::builder()
@@ -298,17 +341,81 @@ async fn print_creates_a_queued_job_row() {
         .await
         .unwrap();
 
-    assert_eq!(res.status(), StatusCode::ACCEPTED);
+    // Not 202/"queued" any more.
+    assert_ne!(res.status(), StatusCode::ACCEPTED);
 
+    // A history row is written either way, tagged as coming from the API.
     let guard = db.lock().unwrap();
     let c = guard.connection().unwrap();
-    let (status, source): (String, String) = c
-        .query_row("SELECT status, source FROM print_jobs LIMIT 1", [], |r| {
-            Ok((r.get(0)?, r.get(1)?))
-        })
+    let source: String = c
+        .query_row("SELECT source FROM print_jobs LIMIT 1", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(status, "queued");
     assert_eq!(source, "api");
+}
+
+/// The endpoint must reject a request it cannot actually render rather than
+/// accepting it and doing nothing.
+#[tokio::test]
+async fn print_requires_a_template() {
+    let (db, key) = setup();
+    seed_printers_and_templates(&db);
+
+    let app = router(&db);
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/print")
+                .header("authorization", format!("Bearer {}", key))
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::json!({ "printer": "Desk", "data": {} }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+/// A template whose `current_version_id` is unset has nothing to render.
+/// That used to be reported as a cheerful "queued"; it must be a 404.
+#[tokio::test]
+async fn print_rejects_a_template_with_no_current_version() {
+    let (db, key) = setup();
+    seed_printers_and_templates(&db);
+    {
+        let guard = db.lock().unwrap();
+        guard
+            .connection()
+            .unwrap()
+            .execute("UPDATE templates SET current_version_id = NULL", [])
+            .unwrap();
+    }
+
+    let app = router(&db);
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/print")
+                .header("authorization", format!("Bearer {}", key))
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::json!({
+                        "template": "Receipt",
+                        "printer": "Desk",
+                        "data": {}
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -316,7 +423,7 @@ async fn print_rejects_unknown_printer() {
     let (db, key) = setup();
     seed_printers_and_templates(&db);
 
-    let app = printninja_lib::api::routes::router_with_state(db, false);
+    let app = router(&db);
     let res = app
         .oneshot(
             Request::builder()
@@ -345,7 +452,7 @@ async fn batch_print_creates_one_job_per_record() {
     let (db, key) = setup();
     seed_printers_and_templates(&db);
 
-    let app = printninja_lib::api::routes::router_with_state(db.clone(), false);
+    let app = router(&db);
     let res = app
         .oneshot(
             Request::builder()
@@ -382,7 +489,7 @@ async fn batch_print_creates_one_job_per_record() {
 #[tokio::test]
 async fn openapi_documents_bearer_auth() {
     let (db, _key) = setup();
-    let app = printninja_lib::api::routes::router_with_state(db, false);
+    let app = router(&db);
 
     let res = app
         .oneshot(
@@ -405,4 +512,91 @@ async fn verify_stored_key_matches_hashed_value() {
 
     assert!(printninja_lib::verify_api_key(&conn, &plain));
     assert!(!printninja_lib::verify_api_key(&conn, "pn_live_nope"));
+}
+/// Regression for #18: nothing ever wrote `print_jobs.idempotency_key`, so the
+/// replay guard in `check_auth` — which looks for an existing row with that
+/// key — could never fire. A retried request printed twice.
+#[tokio::test]
+async fn the_idempotency_key_is_persisted_with_the_job() {
+    let (db, key) = setup();
+    seed_printers_and_templates(&db);
+
+    let app = router(&db);
+    let _ = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/print")
+                .header("authorization", format!("Bearer {}", key))
+                .header("content-type", "application/json")
+                .header("idempotency-key", "order-7777")
+                .body(axum::body::Body::from(
+                    serde_json::json!({
+                        "template": "Receipt",
+                        "printer": "Desk",
+                        "data": {}
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let guard = db.lock().unwrap();
+    let c = guard.connection().unwrap();
+    let stored: Option<String> = c
+        .query_row(
+            "SELECT idempotency_key FROM print_jobs ORDER BY id DESC LIMIT 1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        stored.as_deref(),
+        Some("order-7777"),
+        "the replay guard depends on this column being written"
+    );
+}
+
+/// A job with no `Idempotency-Key` header must not invent one — otherwise
+/// every keyless request would collide with every other keyless request.
+#[tokio::test]
+async fn requests_without_a_key_do_not_collide() {
+    let (db, key) = setup();
+    seed_printers_and_templates(&db);
+
+    for _ in 0..2 {
+        let app = router(&db);
+        let _ = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/print")
+                    .header("authorization", format!("Bearer {}", key))
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(
+                        serde_json::json!({
+                            "template": "Receipt",
+                            "printer": "Desk",
+                            "data": {}
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+
+    let guard = db.lock().unwrap();
+    let c = guard.connection().unwrap();
+    let n: i64 = c
+        .query_row(
+            "SELECT COUNT(*) FROM print_jobs WHERE idempotency_key IS NULL",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(n, 2, "keyless requests must all be recorded");
 }

@@ -1,4 +1,4 @@
-use crate::transport::{PrinterTransport, PrinterInfo, PrinterType, PrinterLanguage, RenderedJob};
+use crate::transport::{PrinterInfo, PrinterTransport, RenderedJob};
 use async_trait::async_trait;
 use std::time::Duration;
 
@@ -77,7 +77,7 @@ impl IppPrinter {
 
 #[async_trait]
 impl PrinterTransport for IppPrinter {
-    async fn discover() -> Vec<PrinterInfo> {
+    async fn discover(&self) -> Vec<PrinterInfo> {
         // mDNS discovery handled by Android NsdManager or system tools
         vec![]
     }

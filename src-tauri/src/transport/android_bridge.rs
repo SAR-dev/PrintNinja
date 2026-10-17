@@ -1,5 +1,3 @@
-use crate::transport::{PrinterTransport, PrinterInfo, PrinterType, PrinterLanguage, RenderedJob};
-use async_trait::async_trait;
 
 #[cfg(mobile)]
 mod mobile {
@@ -74,5 +72,14 @@ pub struct AndroidBridge;
 impl AndroidBridge {
     pub fn new() -> Self {
         Self
+    }
+
+    /// IPP printers visible on the local network.
+    ///
+    /// On Android this is NsdManager (`_ipp._tcp`); the stub build returns
+    /// an empty list rather than an error so the Discovery screen still
+    /// renders and simply shows "no printers found".
+    pub async fn discover(&self) -> Vec<crate::transport::PrinterInfo> {
+        Vec::new()
     }
 }

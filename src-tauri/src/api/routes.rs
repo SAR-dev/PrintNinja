@@ -12,15 +12,32 @@ use serde_json::{json, Value};
 use crate::db::DbState;
 use crate::error::AppError;
 
-pub type ApiState = (DbState, bool);
+/// Everything a route handler needs.
+///
+/// The queue and the app handle are here, not just the DB, because
+/// `POST /v1/print` used to insert a row with `status = 'queued'`, return
+/// `202 Accepted`, and never print anything at all. Now it runs the same
+/// pipeline as the desktop UI — including the per-printer queue permit — so
+/// an API caller and a UI user cannot interleave bytes on one thermal head.
+#[derive(Clone)]
+pub struct ApiState {
+    pub db: DbState,
+    pub queue: std::sync::Arc<crate::queue::PrintQueue>,
+    /// Where the PDF renderer writes intermediate files. A plain path, not an
+    /// `AppHandle`, so the router can be built in tests without standing up a
+    /// Tauri app.
+    pub cache_dir: std::path::PathBuf,
+}
 
 /// Build a router bound to the app's database state.
 ///
 /// NOTE: `/v1/jobs/{id}` is registered ONCE with `get(..).delete(..)`.
 /// Registering the same path twice makes axum shadow the first method,
 /// silently dropping GET or DELETE.
-pub fn router_with_state(db: DbState, lan_access: bool) -> Router {
-    let auth_ctx = AuthCtx { db: db.clone() };
+pub fn router_with_state(state: ApiState, lan_access: bool) -> Router {
+    let auth_ctx = AuthCtx {
+        db: state.db.clone(),
+    };
     let mut cors = tower_http::cors::CorsLayer::new()
         .allow_methods(tower_http::cors::Any)
         .allow_headers(tower_http::cors::Any);
@@ -40,7 +57,7 @@ pub fn router_with_state(db: DbState, lan_access: bool) -> Router {
         .route("/v1/jobs/{id}", get(get_job).delete(cancel_job))
         .route("/v1/jobs/{id}/retry", post(retry_job))
         .route("/v1/openapi.json", get(openapi))
-        .with_state(db.clone())
+        .with_state(state.clone())
         .layer(middleware::from_fn(move |req: axum::extract::Request, next: Next| {
             let auth = auth_ctx.clone();
             async move { auth_middleware_inner(auth, req, next).await }
@@ -165,7 +182,8 @@ async fn health() -> Json<Value> {
     }))
 }
 
-async fn list_printers(State(db): State<DbState>) -> Result<Json<Value>, ApiRejection> {
+async fn list_printers(State(state): State<ApiState>) -> Result<Json<Value>, ApiRejection> {
+    let db = state.db;
     let guard = db.lock().map_err(ApiRejection::from)?;
     let conn = guard.connection().map_err(ApiRejection::from)?;
 
@@ -191,7 +209,8 @@ async fn list_printers(State(db): State<DbState>) -> Result<Json<Value>, ApiReje
     Ok(Json(json!({ "printers": printers, "count": count })))
 }
 
-async fn list_templates(State(db): State<DbState>) -> Result<Json<Value>, ApiRejection> {
+async fn list_templates(State(state): State<ApiState>) -> Result<Json<Value>, ApiRejection> {
+    let db = state.db;
     let guard = db.lock().map_err(ApiRejection::from)?;
     let conn = guard.connection().map_err(ApiRejection::from)?;
 
@@ -237,81 +256,131 @@ struct PrintJobRequest {
 }
 
 async fn print_job(
-    State(db): State<DbState>,
+    State(state): State<ApiState>,
     headers: HeaderMap,
     Json(req): Json<PrintJobRequest>,
 ) -> Result<(StatusCode, Json<Value>), ApiRejection> {
+    let db = state.db.clone();
     let idempotency_key = headers
         .get("idempotency-key")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
-    let guard = db.lock().map_err(ApiRejection::from)?;
-    let conn = guard.connection().map_err(ApiRejection::from)?;
+    let settings = req.settings.unwrap_or_else(|| json!({}));
+    let copies = settings
+        .get("copies")
+        .and_then(|c| c.as_u64())
+        .unwrap_or(1)
+        .max(1) as u32;
 
-    let template_id: Option<i64> = match &req.template {
-        Some(name) if !name.is_empty() => conn
-            .query_row("SELECT id FROM templates WHERE name = ?1 COLLATE NOCASE", [name], |r| {
-                r.get(0)
-            })
-            .map_err(|_| ApiRejection::NotFound(format!("Template '{}' not found", name)))?,
-        _ => None,
-    };
+    // Everything that touches the DB happens in its own scope so the
+    // `MutexGuard` is definitely released before the print. Holding it across
+    // a network round-trip to a thermal printer would stall every other
+    // command, and the pipeline takes the lock again for its history write.
+    let (template_id, version_id) = {
+        let guard = db.lock().map_err(ApiRejection::from)?;
+        let conn = guard.connection().map_err(ApiRejection::from)?;
 
-    let printer_id: i64 = conn
-        .query_row(
-            "SELECT id FROM printers WHERE name = ?1 COLLATE NOCASE",
-            [&req.printer],
-            |r| r.get(0),
-        )
-        .map_err(|_| ApiRejection::NotFound(format!("Printer '{}' not found", req.printer)))?;
+        let template_id: Option<i64> = match &req.template {
+            Some(name) if !name.is_empty() => Some(
+                conn.query_row(
+                    "SELECT id FROM templates WHERE name = ?1 COLLATE NOCASE",
+                    [name],
+                    |r| r.get(0),
+                )
+                .map_err(|_| {
+                    ApiRejection::NotFound(format!("Template '{}' not found", name))
+                })?,
+            ),
+            _ => None,
+        };
 
-    let version_id: Option<i64> = template_id
-        .and_then(|tid| {
-            conn.query_row(
+        // A template is required: there is no HTML body in an API request,
+        // so without one there would be nothing to render.
+        let template_id = template_id.ok_or_else(|| {
+            ApiRejection::BadRequest(
+                "`template` is required (the API has no inline HTML body)".into(),
+            )
+        })?;
+
+        // Fail early with 404 rather than after a pointless render.
+        let known: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM printers WHERE name = ?1 COLLATE NOCASE",
+                [&req.printer],
+                |r| r.get(0),
+            )
+            .map_err(ApiRejection::from)?;
+        if known == 0 {
+            return Err(ApiRejection::NotFound(format!(
+                "Printer '{}' not found",
+                req.printer
+            )));
+        }
+
+        let version_id: Option<i64> = conn
+            .query_row(
                 "SELECT current_version_id FROM templates WHERE id = ?1",
-                [tid],
+                [template_id],
                 |r| r.get(0),
             )
             .ok()
-        })
-        .flatten();
+            .flatten();
 
-    let settings = req.settings.unwrap_or_else(|| json!({}));
-    let rendered = req
-        .data
-        .as_ref()
-        .map(|d| serde_json::to_string(d).unwrap_or_default())
-        .unwrap_or_default();
+        (Some(template_id), version_id)
+    };
 
-    conn.execute(
-        "INSERT INTO print_jobs
-           (template_id, template_version_id, printer_id, source, source_url,
-            status, copies, settings_json, rendered_html, idempotency_key, is_test)
-         VALUES (?1, ?2, ?3, 'api', ?4, 'queued', ?5, ?6, ?7, ?8, ?9)",
-        rusqlite::params![
-            template_id,
-            version_id,
-            printer_id,
-            req.data_url,
-            settings
-                .get("copies")
-                .and_then(|c| c.as_u64())
-                .unwrap_or(1) as i64,
-            settings.to_string(),
-            rendered,
-            idempotency_key,
-            i64::from(req.test.unwrap_or(false)),
-        ],
-    )
-    .map_err(ApiRejection::from)?;
+    // Run the real pipeline. This used to insert a row with
+    // `status = 'queued'` and return 202 without printing anything, so every
+    // API caller got a cheerful "queued" and no paper.
+    let print_req = crate::commands::print::PrintRequest {
+        printer_name: req.printer.clone(),
+        html: String::new(),
+        page_width_mm: None,
+        page_height_mm: None,
+        orientation: settings
+            .get("orientation")
+            .and_then(|o| o.as_str())
+            .map(str::to_string),
+        copies: Some(copies),
+        margin_top: None,
+        margin_right: None,
+        margin_bottom: None,
+        margin_left: None,
+        fit_mode: settings
+            .get("fit")
+            .and_then(|f| f.as_str())
+            .map(str::to_string),
+        template_id,
+        template_version_id: version_id,
+        data: req.data.clone(),
+        data_url: req.data_url.clone(),
+        test: req.test,
+        source: Some("api".into()),
+        // Persisted by `record_job`; the replay guard in `check_auth`
+        // looks for an existing row with this key.
+        idempotency_key,
+    };
 
-    let job_id = conn.last_insert_rowid().to_string();
+    let outcome =
+        crate::commands::print::run_print(&state.cache_dir, &state.db, &state.queue, print_req)
+            .await;
 
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(json!({ "job_id": job_id, "status": "queued" })),
-    ))
+    match outcome {
+        Ok(res) if res.success => Ok((
+            StatusCode::OK,
+            Json(json!({
+                "job_id": res.job_id,
+                "status": "success",
+                "duration_ms": res.duration_ms,
+            })),
+        )),
+        Ok(res) => {
+            let err = res.error.unwrap_or_else(|| "print failed".into());
+            Err(ApiRejection::from(crate::error::AppError::Internal(err)))
+        }
+        Err(e) => Err(ApiRejection::from(e)),
+    }
 }
 
 #[derive(Deserialize)]
@@ -323,9 +392,10 @@ struct BatchPrintRequest {
 }
 
 async fn batch_print(
-    State(db): State<DbState>,
+    State(state): State<ApiState>,
     Json(req): Json<BatchPrintRequest>,
 ) -> Result<(StatusCode, Json<Value>), ApiRejection> {
+    let db = state.db.clone();
     let records = req
         .data
         .as_array()
@@ -412,9 +482,10 @@ async fn batch_print(
 }
 
 async fn get_job(
-    State(db): State<DbState>,
+    State(state): State<ApiState>,
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, ApiRejection> {
+    let db = state.db.clone();
     let guard = db.lock().map_err(ApiRejection::from)?;
     let conn = guard.connection().map_err(ApiRejection::from)?;
 
@@ -442,7 +513,8 @@ async fn get_job(
     })))
 }
 
-async fn list_jobs(State(db): State<DbState>) -> Result<Json<Value>, ApiRejection> {
+async fn list_jobs(State(state): State<ApiState>) -> Result<Json<Value>, ApiRejection> {
+    let db = state.db;
     let guard = db.lock().map_err(ApiRejection::from)?;
     let conn = guard.connection().map_err(ApiRejection::from)?;
 
@@ -471,9 +543,10 @@ async fn list_jobs(State(db): State<DbState>) -> Result<Json<Value>, ApiRejectio
 }
 
 async fn retry_job(
-    State(db): State<DbState>,
+    State(state): State<ApiState>,
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, ApiRejection> {
+    let db = state.db.clone();
     let guard = db.lock().map_err(ApiRejection::from)?;
     let conn = guard.connection().map_err(ApiRejection::from)?;
 
@@ -494,9 +567,10 @@ async fn retry_job(
 }
 
 async fn cancel_job(
-    State(db): State<DbState>,
+    State(state): State<ApiState>,
     Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiRejection> {
+    let db = state.db.clone();
     let guard = db.lock().map_err(ApiRejection::from)?;
     let conn = guard.connection().map_err(ApiRejection::from)?;
 

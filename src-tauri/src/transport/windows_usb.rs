@@ -1,4 +1,4 @@
-use crate::transport::{PrinterTransport, PrinterInfo, PrinterType, PrinterLanguage, RenderedJob};
+use crate::transport::{PrinterInfo, PrinterTransport, RenderedJob};
 use async_trait::async_trait;
 use std::collections::HashMap;
 
@@ -108,7 +108,7 @@ impl WindowsUsbPrinter {
 
 #[async_trait]
 impl PrinterTransport for WindowsUsbPrinter {
-    async fn discover() -> Vec<PrinterInfo> {
+    async fn discover(&self) -> Vec<PrinterInfo> {
         Self::discover_thermal_usb()
     }
 

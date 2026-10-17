@@ -1,4 +1,5 @@
 use crate::db::DbState;
+use crate::queue::PrintQueue;
 use crate::error::{AppError, AppResult};
 use crate::render::handlebars::TemplateEngine;
 use crate::render::PdfRenderer;
@@ -44,6 +45,14 @@ pub struct PrintRequest {
     pub test: Option<bool>,
     #[serde(default)]
     pub source: Option<String>,
+    /// Caller-supplied de-duplication key (REST `Idempotency-Key` header).
+    ///
+    /// It is persisted with the job row, because the replay guard in the API
+    /// middleware works by looking for an existing row with this key. Before
+    /// this existed the guard was dead code: nothing ever wrote the column, so
+    /// a replayed request was never detected and printed twice.
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -170,11 +179,31 @@ fn strip_at_page(css: &str) -> String {
     out
 }
 
-/// Render the document and send it to the printer, logging a history row.
+/// Tauri command wrapper around [`run_print`].
 #[tauri::command]
 pub async fn print_html(
     app: AppHandle,
     db: State<'_, DbState>,
+    queue: State<'_, PrintQueue>,
+    req: PrintRequest,
+) -> AppResult<PrintResponse> {
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| AppError::Internal(format!("No cache dir: {e}")))?;
+    run_print(&cache_dir, &db, &queue, req).await
+}
+
+/// Render the document and send it to the printer, logging a history row.
+///
+/// Plain async function rather than only a `#[tauri::command]` so the REST
+/// API routes can reuse the exact same pipeline. Both entry points therefore
+/// share the render, the per-printer queue permit, and the history write — a
+/// caller cannot accidentally get a path that skips one of them.
+pub async fn run_print(
+    cache_dir: &std::path::Path,
+    db: &DbState,
+    queue: &PrintQueue,
     req: PrintRequest,
 ) -> AppResult<PrintResponse> {
     let start = Instant::now();
@@ -228,7 +257,7 @@ pub async fn print_html(
                     Ok(v) => fetched = Some(v),
                     Err(e) => {
                         record_job(
-                            &db,
+        db,
                             &req,
                             "failed",
                             Some(e.to_string()),
@@ -254,9 +283,9 @@ pub async fn print_html(
     let final_html = apply_layout(&html, &css, w_mm, h_mm, &req);
 
     // ── 4. PDF ──────────────────────────────────────────────────────
-    let cache_dir = app.path().app_cache_dir()?;
-    std::fs::create_dir_all(&cache_dir)?;
-    let renderer = PdfRenderer::new(cache_dir);
+    std::fs::create_dir_all(cache_dir)
+        .map_err(|e| AppError::Internal(format!("Cannot create {}: {e}", cache_dir.display())))?;
+    let renderer = PdfRenderer::new(cache_dir.to_path_buf());
     let pdf_bytes = match renderer
         .html_to_pdf(&final_html, w_mm, h_mm, req.orientation.as_deref().unwrap_or("portrait"))
         .await
@@ -264,7 +293,8 @@ pub async fn print_html(
         Ok(b) => b,
         Err(e) => {
             let msg = e.to_string();
-            record_job(&db, &req, "failed", Some(msg.clone()), &html, None, copies as i64, start)?;
+            record_job(
+        db, &req, "failed", Some(msg.clone()), &html, None, copies as i64, start)?;
             return Ok(PrintResponse {
                 success: false,
                 job_id: String::new(),
@@ -275,14 +305,54 @@ pub async fn print_html(
     };
 
     // ── 5. Send ─────────────────────────────────────────────────────
-    #[cfg(windows)]
-    let result = crate::transport::windows_spooler::WindowsSpooler::new(
-        req.printer_name.clone(),
-    )
-    .send_raw(&pdf_bytes);
-    #[cfg(not(windows))]
-    let result: Result<(), String> =
-        Err("Printing requires Windows or Android build".to_string());
+    // Resolve the stored printer row so the right transport is used and so
+    // the queue can serialise on a stable key. A printer that is not in the
+    // DB still prints, via the platform default.
+    let printer = lookup_printer(db, &req.printer_name);
+
+    let printer_type =
+        crate::transport::parse_printer_type(printer.as_ref().map_or("", |p| p.0.as_str()));
+    let address = printer.as_ref().map_or("", |p| p.1.as_str());
+
+    // Hold this printer's permit across the whole send. Two jobs for the
+    // same physical printer must never overlap, or their bytes interleave
+    // and the label comes out garbled. Jobs for *different* printers are
+    // unaffected — the semaphore is keyed per printer id.
+    let result = queue
+        .with_permit(&req.printer_name, async {
+            // Admit the job so a full queue reports back-pressure instead of
+            // silently dropping it.
+            queue
+                .submit(crate::queue::QueueJob {
+                    job_id: format!("pending-{}", uuid::Uuid::new_v4()),
+                    printer_id: req.printer_name.clone(),
+                    data: pdf_bytes.clone(),
+                    mime_type: "application/pdf".to_string(),
+                    copies,
+                })
+                .await?;
+
+            // `copies` used to be ignored entirely: exactly one copy reached
+            // the printer no matter what the operator selected.
+            for copy in 0..copies {
+                crate::transport::TransportRegistry::send_to(
+                    &printer_type,
+                    &req.printer_name,
+                    address,
+                    crate::transport::RenderedJob {
+                        job_id: format!("{}-{}", req.printer_name, copy + 1),
+                        printer_id: req.printer_name.clone(),
+                        data: pdf_bytes.clone(),
+                        mime_type: "application/pdf".to_string(),
+                        copies: 1,
+                    },
+                )
+                .await
+                .map_err(|e| if copy > 0 { format!("copy {}/{copies}: {e}", copy + 1) } else { e })?;
+            }
+            Ok(())
+        })
+        .await;
 
     let duration = start.elapsed().as_millis();
     let (status, err) = match result {
@@ -292,7 +362,7 @@ pub async fn print_html(
 
     // ── 6. History ──────────────────────────────────────────────────
     let job_id = record_job(
-        &db,
+        db,
         &req,
         status,
         err.clone(),
@@ -310,9 +380,24 @@ pub async fn print_html(
     })
 }
 
+/// Look up a printer's stored `(printer_type, address)` by name.
+///
+/// Returns `None` when the printer is not in the DB, which is legal: the
+/// caller falls back to the platform default transport.
+pub fn lookup_printer(db: &DbState, name: &str) -> Option<(String, String)> {
+    let guard = db.lock().ok()?;
+    let conn = guard.connection().ok()?;
+    conn.query_row(
+        "SELECT printer_type, COALESCE(address, '') FROM printers WHERE name = ?1 COLLATE NOCASE",
+        [name],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+    .ok()
+}
+
 #[allow(clippy::too_many_arguments)]
-fn record_job(
-    db: &State<DbState>,
+pub fn record_job(
+    db: &DbState,
     req: &PrintRequest,
     status: &str,
     error: Option<String>,
@@ -348,9 +433,9 @@ fn record_job(
         "INSERT INTO print_jobs
            (template_id, template_version_id, printer_id, source, source_url,
             status, error, copies, settings_json, rendered_html, is_test,
-            started_at, finished_at, duration_ms)
+            started_at, finished_at, duration_ms, idempotency_key)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
-                 datetime('now'), datetime('now'), ?12)",
+                 datetime('now'), datetime('now'), ?12, ?13)",
         rusqlite::params![
             req.template_id,
             template_version_id,
@@ -364,6 +449,7 @@ fn record_job(
             rendered_html,
             i64::from(req.test.unwrap_or(false)),
             start.elapsed().as_millis() as i64,
+            req.idempotency_key,
         ],
     )?;
 
@@ -385,7 +471,11 @@ pub fn enumerate_system_printers() -> AppResult<Vec<crate::transport::PrinterInf
 
 /// Spike command: print a hard-coded test page
 #[tauri::command]
-pub async fn spike_test_print(app: AppHandle, db: State<'_, DbState>) -> AppResult<PrintResponse> {
+pub async fn spike_test_print(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    queue: State<'_, PrintQueue>,
+) -> AppResult<PrintResponse> {
     let req = PrintRequest {
         printer_name: "Microsoft Print to PDF".to_string(),
         html: r#"<!DOCTYPE html><html><head><title>PrintNinja Test</title></head>
@@ -408,9 +498,10 @@ pub async fn spike_test_print(app: AppHandle, db: State<'_, DbState>) -> AppResu
         data_url: None,
         test: None,
         source: Some("test".into()),
+        idempotency_key: None,
     };
 
-    print_html(app, db, req).await
+    print_html(app, db, queue, req).await
 }
 
 #[cfg(test)]
@@ -436,6 +527,7 @@ mod tests {
             data_url: None,
             test: Some(true),
             source: None,
+            idempotency_key: None,
         }
     }
 

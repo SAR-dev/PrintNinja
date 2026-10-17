@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batches 1–6 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers) — items marked ☑ below.
+**Batches 1–7 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff, REST API auth + real binding, PrinterSetup + Settings wiring, barcodes + bundled print CSS + template helpers, print queue + transport registry + REST pipeline) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -30,9 +30,9 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 14 | `src-tauri/src/db/mod.rs:14` | `DbState = Arc<Mutex<Database>>` defined but never `manage()`d as `DbState` nor injected via `State<DbState>` in commands. All commands ignore DB. | P1 | ☑ done |
 | 15 | `src-tauri/src/lib.rs:setup` | `app.manage(Database{url})` stores `Database` directly, not `DbState`; type mismatch with future `State` usage. Also `migrations` vec created but never passed to `Builder::add_migrations` for `printninja.db`? Check double-registration. | P2 | ☐ |
 | 16 | `src-tauri/src/commands/print.rs` | `print_html` inserts `print_jobs`? No — does not log job to history, so successful prints never appear there. PLANNING.md requires every job logged. | P1 | ☑ done |
-| 17 | `src-tauri/src/queue.rs` | `PrintQueue::get_semaphore` takes `&mut self` — cannot be called concurrently from async tasks. Should be `Arc<Mutex<HashMap>>`. | P2 | ☐ |
-| 18 | `src-tauri/src/queue.rs:1` | Unused imports `Mutex`, `HashMap` in `print.rs` context; queue never wired to `commands::print` nor `api::routes`. Jobs bypass queue. | P1 | ☐ |
-| 19 | `src-tauri/src/transport/mod.rs` | `PrinterTransport::discover()` is `async fn discover() -> Vec<PrinterInfo>` without `&self` — trait object unsafe, cannot be dyn-dispatched per-printer. Should be `async fn discover(&self)`. | P2 | ☐ |
+| 17 | `src-tauri/src/queue.rs` | `get_semaphore(&mut self)` made the queue impossible to share from async tasks. Map moved behind `Arc<Mutex<..>>`, all methods take `&self`, plus `with_permit` so callers cannot skip serialisation. | P2 | ☑ done |
+| 18 | `src-tauri/src/queue.rs:1` | Queue was dead code — never wired to `commands::print` or `api::routes`, so jobs bypassed it. Now managed as Tauri state and every send holds its printer's permit. **`POST /v1/print` used to return `202 "queued"` and never print at all**; it now runs the real pipeline, and the `Idempotency-Key` is actually persisted (the replay guard was dead code). `copies` was also ignored — always exactly one copy. | P1 | ☑ done |
+| 19 | `src-tauri/src/transport/mod.rs` | `discover()` had no `self` parameter, so it could not be reached through `dyn PrinterTransport` and per-printer transports were unrepresentable. Now `&self`, with a real `TransportRegistry` (`create_transport`/`send_to`/`test_printer`) resolving any stored printer row. | P2 | ☑ done |
 | 20 | `src-tauri/src/transport/windows_spooler.rs:109` | `PRINTER_INFO_2A` offset `i * size_of::<usize>() * 10` is approximate and wrong. Real struct is 22+ fields with `#[repr(C)]` alignment = 80+ bytes. Will read garbage or segfault. Define proper `PRINTER_INFO_2A` struct. | P0 | ☑ done |
 | 21 | `src-tauri/src/transport/ipp.rs:36` | `build_ipp_request` pushes version+op+id then stops — no attribute groups, no `charset`, `naturalLanguage`, `printer-uri`, `copies`. Server will reject. Need real IPP encoder. | P1 | ☐ |
 | 22 | `src-tauri/src/data/fetcher.rs:49` | Size check uses `content_length` header only; chunked responses bypass limit. Must count `response.bytes().len()` after `text().await`. | P2 | ☐ |
@@ -128,7 +128,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
-| 73 | Bottom nav renders `5` buttons at `w-16` each = `80` width on 390px screen — overflows, last button clipped. Should use `flex-1` distribution. | P2 | ☐ |
+| 73 | Bottom nav used a fixed `w-16` per item. **Filed premise was wrong** — 5 × 64 = 320px, and flex items shrink by default, so nothing was clipped; the bar just left up to 110px unused and squeezed items unevenly. Now `flex-1 min-w-0` with `truncate` on the label. | P2 | ☑ done |
 | 74 | Bottom nav `type="button"` added, but active vs inactive color contrast WCAG AA on `text-primary` vs `bg-card` not verified (likely fails on yellow-ish themes). | P3 | ☐ |
 | 75 | `Onboarding` stores `localStorage("printninja-onboarding-complete")` but never checks DB — reinstall loses DB but keeps flag. Should derive from `settings` row `onboarding_done`. | P2 | ☐ |
 | 76 | `Onboarding` progress `value={progress}` prop typed `number|undefined` but `Progress` renders `style.width: "${value}%"` without clamp — 100% overflow if rounding >100. | P3 | ☐ |

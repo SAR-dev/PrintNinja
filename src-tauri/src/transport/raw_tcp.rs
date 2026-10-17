@@ -1,4 +1,4 @@
-use crate::transport::{PrinterTransport, PrinterInfo, PrinterType, PrinterLanguage, RenderedJob};
+use crate::transport::{PrinterInfo, PrinterTransport, RenderedJob};
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
@@ -40,7 +40,7 @@ impl RawTcpPrinter {
 
 #[async_trait]
 impl PrinterTransport for RawTcpPrinter {
-    async fn discover() -> Vec<PrinterInfo> {
+    async fn discover(&self) -> Vec<PrinterInfo> {
         vec![]
     }
 

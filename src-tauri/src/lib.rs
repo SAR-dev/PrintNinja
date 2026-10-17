@@ -3,8 +3,8 @@ pub mod commands;
 pub mod db;
 mod deeplink;
 pub mod render;
-mod transport;
-mod queue;
+pub mod transport;
+pub mod queue;
 mod data;
 mod error;
 
@@ -54,6 +54,12 @@ pub fn run() {
 
             let db_url = format!("sqlite:{}", db_path.display());
             app.manage(Arc::new(Mutex::new(db::Database { url: db_url })));
+
+            // One shared print queue for the whole app, so the Tauri command
+            // handlers, the REST API routes, and batch jobs all serialise
+            // per printer instead of interleaving bytes on a thermal head.
+            let (queue, _rx) = queue::PrintQueue::new();
+            app.manage(queue);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

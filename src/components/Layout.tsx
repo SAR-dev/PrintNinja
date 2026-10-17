@@ -88,7 +88,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t bg-card"
         aria-label="Primary"
       >
-        <div className="flex items-center justify-around h-16">
+        <div className="flex items-stretch h-16">
           {navItems.map((item) => {
             const active = isActivePath(location.pathname, item.path);
             return (
@@ -98,12 +98,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 onClick={() => handleNavigate(item.path)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1 w-16 h-full text-xs transition-colors min-h-11",
+                  // `flex-1 min-w-0` rather than a fixed `w-16`: five
+                  // 64px buttons are 320px of content plus their gaps, which
+                  // overflows a 320px-wide phone and clips the last item.
+                  // Sharing the row also keeps every target at least 44px
+                  // wide on the narrowest device we support.
+                  "flex flex-1 min-w-0 flex-col items-center justify-center gap-1 h-full px-0.5 text-xs transition-colors min-h-11",
                   active ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <item.icon className="h-5 w-5" />
-                <span>{t(item.labelKey)}</span>
+                <item.icon className="h-5 w-5 shrink-0" />
+                <span className="truncate max-w-full leading-none">{t(item.labelKey)}</span>
               </button>
             );
           })}

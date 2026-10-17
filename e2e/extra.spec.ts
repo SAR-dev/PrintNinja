@@ -687,3 +687,106 @@ test.describe("Barcode generation (Batch 6)", () => {
     await expect(page.locator("#barcode-insert")).toBeEnabled();
   });
 });
+
+test.describe("Mobile bottom nav (Batch 7)", () => {
+  // #73 was filed as "5 buttons at w-16 overflow a 390px screen and clip the
+  // last one". That is a miscalculation: 5 x 64 = 320, and flex items shrink
+  // by default, so the old layout squeezed each button to 56px and left 70px
+  // of the bar empty rather than pushing anything off-screen.
+  //
+  // The real defects were that the row did not use the space available, the
+  // buttons were not evenly sized once they shrank, and long labels got
+  // squeezed. These tests assert the invariants that actually matter.
+  for (const width of [280, 320, 360, 390, 430]) {
+    test(`nav distributes evenly across a ${width}px viewport`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 720 });
+      await page.goto("/");
+
+      const nav = page.getByRole("navigation", { name: "Primary" });
+      await expect(nav).toBeVisible();
+      const navBox = await nav.boundingBox();
+      expect(navBox, "bottom nav must render").not.toBeNull();
+
+      const buttons = nav.getByRole("button");
+      const count = await buttons.count();
+      expect(count).toBeGreaterThanOrEqual(5);
+
+      const boxes: { x: number; width: number }[] = [];
+      for (let i = 0; i < count; i++) {
+        const box = await buttons.nth(i).boundingBox();
+        expect(box, `item ${i} must be laid out`).not.toBeNull();
+        boxes.push(box!);
+      }
+
+      // Every item must sit inside the nav's own width, with none clipped
+      // off the right edge.
+      for (const [i, box] of boxes.entries()) {
+        expect(box.x, `item ${i} starts left of the nav`).toBeGreaterThanOrEqual(navBox!.x - 1);
+        expect(
+          box.x + box.width,
+          `item ${i} overflows the right edge`,
+        ).toBeLessThanOrEqual(navBox!.x + navBox!.width + 1);
+      }
+
+      // Items must be the same width, and together fill the bar. A fixed
+      // `w-16` leaves slack on any screen wider than 5 x 64.
+      const widths = boxes.map((b) => Math.round(b.width));
+      expect(new Set(widths).size, "items must be evenly sized").toBe(1);
+      const used = widths.reduce((a, b) => a + b, 0);
+      expect(
+        used,
+        `nav items use ${used}px of a ${Math.round(navBox!.width)}px bar`,
+      ).toBeGreaterThanOrEqual(navBox!.width - 1);
+
+      // No item is squeezed below a usable tap target.
+      for (const [i, w] of widths.entries()) {
+        expect(w, `item ${i} too narrow to tap`).toBeGreaterThanOrEqual(44);
+      }
+
+      // The document must not have gained a horizontal scrollbar.
+      const scrollW = await page.evaluate(
+        () => document.documentElement.scrollWidth,
+      );
+      expect(scrollW, "no horizontal page scroll").toBeLessThanOrEqual(width + 1);
+    });
+  }
+
+  test("nav labels are not truncated at common phone widths", async ({ page }) => {
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 720 });
+      await page.goto("/");
+      const nav = page.getByRole("navigation", { name: "Primary" });
+      const labels = nav.locator("span");
+      const count = await labels.count();
+      for (let i = 0; i < count; i++) {
+        const clipped = await labels.nth(i).evaluate((el) => {
+          const style = getComputedStyle(el);
+          return (
+            style.textOverflow === "ellipsis" &&
+            el.scrollWidth > el.clientWidth + 1
+          );
+        });
+        expect(clipped, `label ${i} is truncated at ${width}px`).toBe(false);
+      }
+    }
+  });
+
+  test("every nav item is reachable and highlights the active page", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 720 });
+    await page.goto("/");
+    const nav = page.getByRole("navigation", { name: "Primary" });
+    const buttons = nav.getByRole("button");
+
+    await buttons.first().click();
+    await expect(nav.getByRole("button").first()).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
+    // The last item is the one that used to sit at the far edge.
+    const last = buttons.last();
+    await expect(last).toBeVisible();
+    await last.click();
+    await expect(last).toHaveAttribute("aria-current", "page");
+  });
+});

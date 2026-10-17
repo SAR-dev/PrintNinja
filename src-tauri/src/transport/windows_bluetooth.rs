@@ -1,4 +1,4 @@
-use crate::transport::{PrinterTransport, PrinterInfo, PrinterType, PrinterLanguage, RenderedJob};
+use crate::transport::{PrinterInfo, PrinterTransport, RenderedJob};
 use async_trait::async_trait;
 
 /// Windows Bluetooth transport via COM port (paired Bluetooth printer)
@@ -65,7 +65,7 @@ impl WindowsBluetoothPrinter {
 
 #[async_trait]
 impl PrinterTransport for WindowsBluetoothPrinter {
-    async fn discover() -> Vec<PrinterInfo> {
+    async fn discover(&self) -> Vec<PrinterInfo> {
         Self::discover_paired_bluetooth()
     }
 

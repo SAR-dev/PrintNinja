@@ -179,6 +179,7 @@ pub fn get_printer(db: State<DbState>, id: i64) -> AppResult<Printer> {
 pub async fn test_printer(
     app: tauri::AppHandle,
     db: State<'_, DbState>,
+    queue: State<'_, crate::queue::PrintQueue>,
     id: i64,
 ) -> AppResult<()> {
     // Load the printer so we know where to send and which language to speak.
@@ -230,9 +231,10 @@ pub async fn test_printer(
         data_url: None,
         test: Some(true),
         source: Some("test".into()),
+        idempotency_key: None,
     };
 
-    let res = crate::commands::print::print_html(app, db, req).await?;
+    let res = crate::commands::print::print_html(app, db, queue, req).await?;
     if res.success {
         Ok(())
     } else {

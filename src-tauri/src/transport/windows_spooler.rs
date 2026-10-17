@@ -1,6 +1,10 @@
-use crate::transport::{PrinterTransport, PrinterInfo, PrinterType, PrinterLanguage, RenderedJob};
+#[cfg(windows)]
+use crate::transport::{PrinterInfo, PrinterTransport, RenderedJob};
+#[cfg(windows)]
 use async_trait::async_trait;
+#[cfg(windows)]
 use std::ffi::CString;
+#[cfg(windows)]
 use std::ptr::null_mut;
 
 // Windows API types for spooler
@@ -231,7 +235,7 @@ impl WindowsSpooler {
 #[cfg(windows)]
 #[async_trait]
 impl PrinterTransport for WindowsSpooler {
-    async fn discover() -> Vec<PrinterInfo> {
+    async fn discover(&self) -> Vec<PrinterInfo> {
         Self::enumerate_printers()
     }
 
