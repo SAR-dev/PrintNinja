@@ -24,6 +24,36 @@ mod winapi {
         pub pDatatype: LPSTR,
     }
 
+    /// `PRINTER_INFO_2A` as documented in winspool.h.
+    ///
+    /// This MUST be laid out exactly or we read garbage pointers and crash.
+    /// Field order per MSDN, each pointer is 8 bytes on 64-bit.
+    #[repr(C)]
+    #[allow(non_snake_case)]
+    pub struct PRINTER_INFO_2A {
+        pub pServerName: LPSTR,
+        pub pPrinterName: LPSTR,
+        pub pShareName: LPSTR,
+        pub pPortName: LPSTR,
+        pub pDriverName: LPSTR,
+        pub pComment: LPSTR,
+        pub pLocation: LPSTR,
+        pub pDevMode: LPVOID,
+        pub pSepFile: LPSTR,
+        pub pPrintProcessor: LPSTR,
+        pub pDatatype: LPSTR,
+        pub pParameters: LPSTR,
+        pub pSecurityDescriptor: LPVOID,
+        pub Attributes: DWORD,
+        pub Priority: DWORD,
+        pub DefaultPriority: DWORD,
+        pub StartTime: DWORD,
+        pub UntilTime: DWORD,
+        pub Status: DWORD,
+        pub cJobs: DWORD,
+        pub AveragePPM: DWORD,
+    }
+
     extern "system" {
         pub fn OpenPrinterA(pPrinterName: LPSTR, phPrinter: *mut HANDLE, pDefault: *mut c_void) -> BOOL;
         pub fn ClosePrinter(hPrinter: HANDLE) -> BOOL;
@@ -102,23 +132,38 @@ impl WindowsSpooler {
                 return printers;
             }
 
-            // PRINTER_INFO_2A layout: DWORD pServerName, pPrinterName, pShareName, pPortName, pDriverName, pComment, pLocation, pDevMode, pSepFile, pPrintProcessor, pDatatype, pParameters, pSecurityDescriptor, Attributes, Priority, DefaultPriority, StartTime, UntilTime, Status, cJobs, AveragePPM
-            // We need to parse the pointers correctly
-            let base = buffer.as_ptr() as usize;
-            for i in 0..num_printers as usize {
-                let offset = i * std::mem::size_of::<usize>() * 10; // Approximate
-                let ptr = base + offset;
-                
-                // pPrinterName is at offset 8 (after pServerName)
-                let name_ptr = *(ptr as *const *const u8) as *const i8;
-                if !name_ptr.is_null() {
-                    let name = CStr::from_ptr(name_ptr).to_string_lossy().to_string();
+            // Cast the buffer to an array of PRINTER_INFO_2A and read fields
+            // by name instead of guessing byte offsets (the old code used
+            // `size_of::<usize>() * 10` which read garbage / could fault).
+            let stride = std::mem::size_of::<PRINTER_INFO_2A>();
+            let capacity = bytes_needed as usize / stride;
+
+            if let Ok(infos) = buffer.as_slice().align_to::<PRINTER_INFO_2A>() {
+                for info in infos.iter().take(capacity.min(num_printers as usize)) {
+                    if info.pPrinterName.is_null() {
+                        continue;
+                    }
+                    let name = CStr::from_ptr(info.pPrinterName as *const i8)
+                        .to_string_lossy()
+                        .to_string();
+                    let port = if info.pPortName.is_null() {
+                        name.clone()
+                    } else {
+                        CStr::from_ptr(info.pPortName as *const i8)
+                            .to_string_lossy()
+                            .to_string()
+                    };
+
+                    // PRINTER_STATUS_OFFLINE (0x02) / PRINTER_STATUS_PAPEROUT (0x04)
+                    let offline = info.Status & 0x06 != 0;
+
                     printers.push(PrinterInfo {
                         id: name.clone(),
-                        name: name.clone(),
-                        address: name.clone(),
+                        name,
+                        address: port,
                         printer_type: PrinterType::System,
                         language: PrinterLanguage::Pdf,
+                        status: if offline { "offline" } else { "online" }.to_string(),
                     });
                 }
             }

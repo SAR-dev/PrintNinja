@@ -8,6 +8,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 /// Build the axum router
+///
+/// NOTE: `/v1/jobs/{id}` is registered ONCE with `get(..).delete(..)`.
+/// Registering the same path twice makes axum shadow the first method,
+/// silently dropping GET or DELETE.
 pub fn build_router() -> Router {
     Router::new()
         .route("/v1/health", get(health))
@@ -15,10 +19,9 @@ pub fn build_router() -> Router {
         .route("/v1/templates", get(list_templates))
         .route("/v1/print", post(print_job))
         .route("/v1/print/batch", post(batch_print))
-        .route("/v1/jobs/{id}", get(get_job))
         .route("/v1/jobs", get(list_jobs))
+        .route("/v1/jobs/{id}", get(get_job).delete(cancel_job))
         .route("/v1/jobs/{id}/retry", post(retry_job))
-        .route("/v1/jobs/{id}", delete(cancel_job))
         .route("/v1/openapi.json", get(openapi))
 }
 

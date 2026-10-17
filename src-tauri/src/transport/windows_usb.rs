@@ -94,6 +94,7 @@ impl WindowsUsbPrinter {
                                 address: format!("{:04x}:{:04x}", desc.vendor_id(), desc.product_id()),
                                 printer_type: PrinterType::Usb,
                                 language: PrinterLanguage::Escpos,
+                                status: "online".to_string(),
                             });
                         }
                     }

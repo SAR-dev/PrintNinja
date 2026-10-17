@@ -8,6 +8,7 @@ pub struct PrinterInfo {
     pub address: String,
     pub printer_type: PrinterType,
     pub language: PrinterLanguage,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

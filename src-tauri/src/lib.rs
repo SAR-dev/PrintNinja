@@ -1,6 +1,6 @@
 mod api;
 mod commands;
-mod db;
+pub mod db;
 mod deeplink;
 pub mod render;
 mod transport;
@@ -8,11 +8,13 @@ mod queue;
 mod data;
 mod error;
 
+use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri_plugin_sql::Migration;
 use tauri_plugin_sql::MigrationKind;
 
 pub use error::{AppError, AppResult};
+pub use db::DbState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -38,9 +40,18 @@ pub fn run() {
         )
         .setup(|app| {
             let db_path = app.path().app_data_dir()?.join("printninja.db");
-            std::fs::create_dir_all(db_path.parent().unwrap())?;
+            if let Some(parent) = db_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+
+            // Create the schema eagerly so rusqlite-backed commands work
+            // immediately (the sql plugin only migrates lazily on connect).
+            let conn = rusqlite::Connection::open(&db_path)?;
+            conn.execute_batch(include_str!("db/schema.sql"))?;
+            drop(conn);
+
             let db_url = format!("sqlite:{}", db_path.display());
-            app.manage(db::Database { url: db_url });
+            app.manage(Arc::new(Mutex::new(db::Database { url: db_url })));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -64,6 +75,7 @@ pub fn run() {
             commands::version::list_versions,
             commands::version::create_version,
             commands::version::delete_version,
+            commands::version::restore_version,
             commands::font::list_fonts,
             commands::font::upload_font,
             commands::font::delete_font,

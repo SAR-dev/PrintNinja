@@ -60,6 +60,7 @@ mod mobile {
                         address: item["address"].as_str().unwrap_or("").to_string(),
                         printer_type: PrinterType::Usb,
                         language: PrinterLanguage::Pdf,
+                        status: "online".to_string(),
                     });
                 }
             }

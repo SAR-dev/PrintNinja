@@ -52,6 +52,7 @@ impl WindowsBluetoothPrinter {
                         address: port_name,
                         printer_type: PrinterType::Bluetooth,
                         language: PrinterLanguage::Escpos,
+                        status: "online".to_string(),
                     });
                 }
             }

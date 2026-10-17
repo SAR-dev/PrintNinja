@@ -1,5 +1,7 @@
-use crate::error::AppResult;
+use crate::db::DbState;
+use crate::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
+use tauri::State;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateVersion {
@@ -14,10 +16,38 @@ pub struct TemplateVersion {
     pub created_by: String,
 }
 
+const VALID_CREATED_BY: &[&str] = &["manual", "autosave", "restore"];
+
 #[tauri::command]
-pub fn list_versions(template_id: i64) -> AppResult<Vec<TemplateVersion>> {
-    // TODO: Query from database
-    Ok(vec![])
+pub fn list_versions(db: State<DbState>, template_id: i64) -> AppResult<Vec<TemplateVersion>> {
+    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let conn = guard.connection()?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, template_id, version_no, html, css, label, note,
+                created_at, created_by
+         FROM template_versions
+         WHERE template_id = ?1
+         ORDER BY version_no DESC",
+    )?;
+
+    let versions = stmt
+        .query_map([template_id], |row| {
+            Ok(TemplateVersion {
+                id: row.get(0)?,
+                template_id: row.get(1)?,
+                version_no: row.get(2)?,
+                html: row.get(3)?,
+                css: row.get(4)?,
+                label: row.get(5)?,
+                note: row.get(6)?,
+                created_at: row.get(7)?,
+                created_by: row.get(8)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(versions)
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,23 +61,151 @@ pub struct CreateVersionRequest {
 }
 
 #[tauri::command]
-pub fn create_version(req: CreateVersionRequest) -> AppResult<TemplateVersion> {
-    // TODO: Insert into database
-    Ok(TemplateVersion {
-        id: 0,
-        template_id: req.template_id,
-        version_no: 1,
-        html: req.html,
-        css: req.css,
-        label: req.label,
-        note: req.note,
-        created_at: String::new(),
-        created_by: req.created_by.unwrap_or_else(|| "manual".to_string()),
-    })
+pub fn create_version(db: State<DbState>, req: CreateVersionRequest) -> AppResult<TemplateVersion> {
+    let created_by = req.created_by.unwrap_or_else(|| "manual".to_string());
+    if !VALID_CREATED_BY.contains(&created_by.as_str()) {
+        return Err(AppError::Validation(format!(
+            "Invalid created_by '{}'. Expected one of {:?}",
+            created_by, VALID_CREATED_BY
+        )));
+    }
+
+    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let mut conn = guard.connection()?;
+    let tx = conn.transaction()?;
+
+    let template_exists: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM templates WHERE id = ?1",
+        [req.template_id],
+        |r| r.get(0),
+    )?;
+    if template_exists == 0 {
+        return Err(AppError::NotFound(format!(
+            "Template {} not found",
+            req.template_id
+        )));
+    }
+
+    let next_no: i64 = tx.query_row(
+        "SELECT COALESCE(MAX(version_no), 0) + 1 FROM template_versions WHERE template_id = ?1",
+        [req.template_id],
+        |r| r.get(0),
+    )?;
+
+    tx.execute(
+        "INSERT INTO template_versions
+           (template_id, version_no, html, css, label, note, created_by)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![
+            req.template_id,
+            next_no,
+            req.html,
+            req.css,
+            req.label,
+            req.note,
+            created_by,
+        ],
+    )?;
+    let version_id = tx.last_insert_rowid();
+
+    tx.execute(
+        "UPDATE templates SET current_version_id = ?1, updated_at = datetime('now')
+         WHERE id = ?2",
+        rusqlite::params![version_id, req.template_id],
+    )?;
+
+    tx.commit()?;
+
+    let version = conn.query_row(
+        "SELECT id, template_id, version_no, html, css, label, note,
+                created_at, created_by
+         FROM template_versions WHERE id = ?1",
+        [version_id],
+        |row| {
+            Ok(TemplateVersion {
+                id: row.get(0)?,
+                template_id: row.get(1)?,
+                version_no: row.get(2)?,
+                html: row.get(3)?,
+                css: row.get(4)?,
+                label: row.get(5)?,
+                note: row.get(6)?,
+                created_at: row.get(7)?,
+                created_by: row.get(8)?,
+            })
+        },
+    )?;
+
+    Ok(version)
+}
+
+/// Restore must never overwrite history (PLANNING.md 7.3):
+/// it creates a NEW version whose content matches the old one.
+#[tauri::command]
+pub fn restore_version(db: State<DbState>, id: i64) -> AppResult<TemplateVersion> {
+    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let mut conn = guard.connection()?;
+    let tx = conn.transaction()?;
+
+    let (template_id, html, css): (i64, String, String) = tx.query_row(
+        "SELECT template_id, html, css FROM template_versions WHERE id = ?1",
+        [id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+
+    let next_no: i64 = tx.query_row(
+        "SELECT COALESCE(MAX(version_no), 0) + 1 FROM template_versions WHERE template_id = ?1",
+        [template_id],
+        |r| r.get(0),
+    )?;
+
+    tx.execute(
+        "INSERT INTO template_versions
+           (template_id, version_no, html, css, label, note, created_by)
+         VALUES (?1, ?2, ?3, ?4, 'Restored', ?5, 'restore')",
+        rusqlite::params![template_id, next_no, html, css, format!("restored from version id {}", id)],
+    )?;
+    let new_id = tx.last_insert_rowid();
+
+    tx.execute(
+        "UPDATE templates SET current_version_id = ?1, updated_at = datetime('now')
+         WHERE id = ?2",
+        rusqlite::params![new_id, template_id],
+    )?;
+
+    tx.commit()?;
+
+    let version = conn.query_row(
+        "SELECT id, template_id, version_no, html, css, label, note,
+                created_at, created_by
+         FROM template_versions WHERE id = ?1",
+        [new_id],
+        |row| {
+            Ok(TemplateVersion {
+                id: row.get(0)?,
+                template_id: row.get(1)?,
+                version_no: row.get(2)?,
+                html: row.get(3)?,
+                css: row.get(4)?,
+                label: row.get(5)?,
+                note: row.get(6)?,
+                created_at: row.get(7)?,
+                created_by: row.get(8)?,
+            })
+        },
+    )?;
+
+    Ok(version)
 }
 
 #[tauri::command]
-pub fn delete_version(id: i64) -> AppResult<()> {
-    // TODO: Delete from database
+pub fn delete_version(db: State<DbState>, id: i64) -> AppResult<()> {
+    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let conn = guard.connection()?;
+
+    let affected = conn.execute("DELETE FROM template_versions WHERE id = ?1", [id])?;
+    if affected == 0 {
+        return Err(AppError::NotFound(format!("Version {} not found", id)));
+    }
     Ok(())
 }
