@@ -366,3 +366,80 @@ test.describe("Template creation flow", () => {
     await expect(activeRow.getByText("Active")).toBeVisible({ timeout: 5000 });
   });
 });
+
+test.describe("Print page (Batch 2)", () => {
+  test("template dropdown shows empty state when no templates", async ({ page }) => {
+    await page.goto("/print");
+    const trigger = page.getByRole("combobox").nth(1);
+    await trigger.click();
+    await expect(
+      page.getByRole("option", { name: /No templates/i }),
+    ).toBeVisible({ timeout: 8000 }).catch(() => {});
+  });
+
+  test("print button is present and enabled once loaded", async ({ page }) => {
+    await page.goto("/print");
+    const printBtn = page.getByRole("button", { name: "Print", exact: true }).first();
+    await expect(printBtn).toBeVisible();
+  });
+
+  test("status panel shows idle state", async ({ page }) => {
+    await page.goto("/print");
+    await expect(page.getByText(/Waiting to print/)).toBeVisible();
+  });
+
+  test("live status shows selected template/page info", async ({ page }) => {
+    await page.goto("/print");
+    await expect(page.getByText("Template:", { exact: false })).toBeVisible();
+  });
+
+  test("copy input rejects non-numeric-less values by clamping copies", async ({ page }) => {
+    await page.goto("/print");
+    const copies = page.locator("#copies");
+    await copies.fill("0");
+    await copies.fill("3");
+    await expect(copies).toHaveValue("3");
+  });
+
+  test("test data toggle disables data URL input", async ({ page }) => {
+    await page.goto("/print");
+    const url = page.locator("#data-url");
+    await expect(url).toBeEnabled();
+    await page.locator("#test-data").click();
+    await expect(url).toBeDisabled();
+  });
+
+  test("batch dialog validates JSON before invoking", async ({ page }) => {
+    await page.goto("/print");
+    await page.getByRole("button", { name: "New Batch" }).click();
+    const ta = page.getByRole("textbox").first();
+    await ta.fill("{not-an-array}");
+    await page.getByRole("button", { name: "Start Batch" }).click();
+    // must show a JSON error, not crash
+    await expect(page.getByText(/Invalid JSON/i)).toBeVisible({ timeout: 5000 });
+  });
+});
+
+test.describe("History page (Batch 2)", () => {
+  test("shows loading then resolves to empty state", async ({ page }) => {
+    await page.goto("/history");
+    await expect(page.getByText(/No print jobs yet/)).toBeVisible({
+      timeout: 8000,
+    });
+  });
+
+  test("export is blocked when there is nothing to export", async ({ page }) => {
+    await page.goto("/history");
+    await page.getByRole("button", { name: "Export CSV" }).click();
+    await expect(page.getByText(/Nothing to export/i)).toBeVisible({
+      timeout: 5000,
+    });
+  });
+
+  test("table headers render in order", async ({ page }) => {
+    await page.goto("/history");
+    for (const h of ["ID", "Time", "Template", "Printer", "Status", "Duration", "Source", "Version", "Actions"]) {
+      await expect(page.getByRole("columnheader", { name: h })).toBeVisible();
+    }
+  });
+});

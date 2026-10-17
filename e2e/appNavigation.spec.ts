@@ -83,7 +83,7 @@ test.describe("Print Page", () => {
 
   test("shows spike test card", async ({ page }) => {
     await page.goto("/print");
-    await expect(page.locator("text=Phase 1 Spike").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send Test Page" })).toBeVisible();
   });
 
   test("shows test data toggle", async ({ page }) => {

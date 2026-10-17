@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batch 1 (P0 + core DB wiring) shipped** — items marked ☑ below.
+**Batch 1 (P0 + core DB wiring)** and **Batch 2 (print pipeline + history UI)** shipped — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -29,7 +29,7 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 13 | `src-tauri/src/db/mod.rs:10` | `Connection::open(&self.url)` where `url` is `"sqlite:/path/printninja.db"` — `rusqlite` expects a filesystem path, not `sqlite:` URI. Strip prefix or use `tauri-plugin-sql` exclusively. | P0 | ☑ done |
 | 14 | `src-tauri/src/db/mod.rs:14` | `DbState = Arc<Mutex<Database>>` defined but never `manage()`d as `DbState` nor injected via `State<DbState>` in commands. All commands ignore DB. | P1 | ☑ done |
 | 15 | `src-tauri/src/lib.rs:setup` | `app.manage(Database{url})` stores `Database` directly, not `DbState`; type mismatch with future `State` usage. Also `migrations` vec created but never passed to `Builder::add_migrations` for `printninja.db`? Check double-registration. | P2 | ☐ |
-| 16 | `src-tauri/src/commands/print.rs` | `print_html` inserts `print_jobs`? No — does not log job to history, so successful prints never appear there. PLANNING.md requires every job logged. | P1 | ☐ |
+| 16 | `src-tauri/src/commands/print.rs` | `print_html` inserts `print_jobs`? No — does not log job to history, so successful prints never appear there. PLANNING.md requires every job logged. | P1 | ☑ done |
 | 17 | `src-tauri/src/queue.rs` | `PrintQueue::get_semaphore` takes `&mut self` — cannot be called concurrently from async tasks. Should be `Arc<Mutex<HashMap>>`. | P2 | ☐ |
 | 18 | `src-tauri/src/queue.rs:1` | Unused imports `Mutex`, `HashMap` in `print.rs` context; queue never wired to `commands::print` nor `api::routes`. Jobs bypass queue. | P1 | ☐ |
 | 19 | `src-tauri/src/transport/mod.rs` | `PrinterTransport::discover()` is `async fn discover() -> Vec<PrinterInfo>` without `&self` — trait object unsafe, cannot be dyn-dispatched per-printer. Should be `async fn discover(&self)`. | P2 | ☐ |
@@ -71,16 +71,16 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
-| 44 | `handlePrint` sends `JSON.stringify(data)` as raw HTML `<pre>` — ignores selected template, orientation, margins, fit mode, page size. PLANNING.md requires `template + data → Handlebars → Layout → PDF`. | P1 | ☐ |
-| 45 | `handlePrint` hard-codes `page_width_mm: 210, page_height_mm: 297` — ignores form margins/orientation. | P1 | ☐ |
-| 46 | Preview dialog uses dummy `"<div class=\"p-4\">Mock data loaded.</div>"` — does not use selected template + data, so preview ≠ actual print. | P1 | ☐ |
+| 44 | `handlePrint` sends `JSON.stringify(data)` as raw HTML `<pre>` — ignores selected template, orientation, margins, fit mode, page size. PLANNING.md requires `template + data → Handlebars → Layout → PDF`. | P1 | ☑ done |
+| 45 | `handlePrint` hard-codes `page_width_mm: 210, page_height_mm: 297` — ignores form margins/orientation. | P1 | ☑ done |
+| 46 | Preview dialog uses dummy `"<div class=\"p-4\">Mock data loaded.</div>"` — does not use selected template + data, so preview ≠ actual print. | P1 | ☑ done |
 | 47 | `useEffect` auto-load printers disables `react-hooks/exhaustive-deps` globally — masks stale closure of `store.printerId`. Should list `store` in deps or use `useRef`. | P2 | ☐ |
 | 48 | Template `<Select>` options are hard-coded strings (`receipt-80`, `label-4x6`, `invoice-a4`) not fetched from `list_templates`. | P1 | ☐ |
 | 49 | `copies` Input allows `0` or negative — should clamp to `>=1` via `zod` validation. | P2 | ☐ |
 | 50 | Batch dialog: no CSV upload, no column mapping (PLANNING.md 7.8). Only JSON array textarea. | P1 | ☐ |
-| 51 | Batch `Start Batch` sends `template_id: 1, printer_id: 1` hard-coded — not using form selection. | P1 | ☐ |
+| 51 | Batch `Start Batch` sends `template_id: 1, printer_id: 1` hard-coded — not using form selection. | P1 | ☑ done |
 | 52 | No progress UI for batch (pause/resume/cancel/retry per record) per PLANNING.md 7.8. | P1 | ☐ |
-| 53 | “Spike Test” card still visible — should be removed or feature-flagged after Phase 1 proven. | P3 | ☐ |
+| 53 | “Spike Test” card still visible — should be removed or feature-flagged after Phase 1 proven. | P3 | ☑ done |
 
 ---
 
@@ -100,11 +100,11 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
-| 59 | `store.jobs` starts empty and never fetched — `list_jobs` never called on mount, so history always empty in production. | P1 | ☐ |
-| 60 | `handleReprint`/`handleRetry` only toast — never call `invoke("reprint_job"/"retry_job")`. PLANNING.md requires reprint uses stored `template_version_id`. | P1 | ☐ |
-| 61 | Export CSV does not URL-revoke after click — `URL.revokeObjectURL(url)` missing, leaks blob URLs. | P2 | ☐ |
-| 62 | Export CSV does not escape commas/quotes — `r.join(",")` breaks on fields containing `,`. Need CSV escaping. | P2 | ☐ |
-| 63 | History detail `JSON.parse(settings_json)` will throw if `settings_json` is `""` or invalid — unhandled, crashes dialog. | P1 | ☐ |
+| 59 | `store.jobs` starts empty and never fetched — `list_jobs` never called on mount, so history always empty in production. | P1 | ☑ done |
+| 60 | `handleReprint`/`handleRetry` only toast — never call `invoke("reprint_job"/"retry_job")`. PLANNING.md requires reprint uses stored `template_version_id`. | P1 | ☑ done |
+| 61 | Export CSV does not URL-revoke after click — `URL.revokeObjectURL(url)` missing, leaks blob URLs. | P2 | ☑ done |
+| 62 | Export CSV does not escape commas/quotes — `r.join(",")` breaks on fields containing `,`. Need CSV escaping. | P2 | ☑ done |
+| 63 | History detail `JSON.parse(settings_json)` will throw if `settings_json` is `""` or invalid — unhandled, crashes dialog. | P1 | ☑ done |
 | 64 | No date-range filter UI despite `historyStore.filter.dateFrom/dateTo` fields and PLANNING.md requirement. | P2 | ☐ |
 | 65 | No batch grouping (expandable row per PLANNING.md 8) — `batch_id` exists but not grouped. | P2 | ☐ |
 

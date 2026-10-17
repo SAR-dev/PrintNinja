@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,26 @@ const STATUS_VARIANTS: Record<string, "success" | "destructive" | "secondary" | 
 export function HistoryPage() {
   const { t } = useTranslation();
   const store = useHistoryStore();
+  const [loading, setLoading] = useState(true);
+
+  // Fetch jobs on mount (was never called -> history was always empty).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const jobs = await invoke<HistoryJob[]>("list_jobs");
+        if (!cancelled) store.setJobs(jobs ?? []);
+      } catch (e) {
+        if (!cancelled) toast.error(`Failed to load history: ${e}`);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filteredJobs = store.jobs.filter((job) => {
     if (store.filter.status !== "all" && job.status !== store.filter.status) return false;
@@ -57,12 +78,26 @@ export function HistoryPage() {
     return true;
   });
 
-  const handleReprint = (job: HistoryJob) => {
-    toast.success(`Reprinting job #${job.id}`);
+  const handleReprint = async (job: HistoryJob) => {
+    try {
+      const copy = await invoke<HistoryJob>("reprint_job", { id: job.id });
+      store.setJobs([copy, ...store.jobs]);
+      toast.success(`Queued reprint of job #${job.id}`);
+    } catch (e) {
+      toast.error(`Reprint failed: ${e}`);
+    }
   };
 
-  const handleRetry = (job: HistoryJob) => {
-    toast.success(`Retrying job #${job.id}`);
+  const handleRetry = async (job: HistoryJob) => {
+    try {
+      const updated = await invoke<HistoryJob>("retry_job", { id: job.id });
+      store.setJobs(
+        store.jobs.map((j) => (j.id === updated.id ? updated : j)),
+      );
+      toast.success(`Job #${job.id} re-queued`);
+    } catch (e) {
+      toast.error(`Retry failed: ${e}`);
+    }
   };
 
   const handleDelete = async (job: HistoryJob) => {
@@ -76,23 +111,41 @@ export function HistoryPage() {
   };
 
   const handleExportCsv = () => {
-    const headers = ["ID", "Status", "Source", "Printer", "Duration", "Error"];
-    const rows = filteredJobs.map((j) => [
-      j.id,
-      j.status,
-      j.source,
-      j.printer_id,
-      j.duration_ms,
-      j.error || "",
-    ]);
-    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    if (filteredJobs.length === 0) {
+      toast.error("Nothing to export");
+      return;
+    }
+
+    // RFC 4180 escaping: wrap in quotes and double any embedded quotes.
+    const esc = (v: unknown) => {
+      const s = v === null || v === undefined ? "" : String(v);
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
+    const headers = [
+      "ID",
+      "Status",
+      "Source",
+      "Printer",
+      "Duration",
+      "Error",
+    ];
+    const rows = filteredJobs.map((j) =>
+      [j.id, j.status, j.source, j.printer_id, j.duration_ms, j.error]
+        .map(esc)
+        .join(","),
+    );
+
+    const csv = [headers.join(","), ...rows].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = "printninja-history.csv";
     a.click();
-    toast.success("Exported to CSV");
+    // Release the object URL, otherwise the blob is retained in memory.
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${filteredJobs.length} job(s)`);
   };
 
   return (
@@ -180,9 +233,21 @@ export function HistoryPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredJobs.length === 0 ? (
+              {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                  <TableCell
+                    colSpan={9}
+                    className="text-center py-12 text-muted-foreground"
+                  >
+                    Loading history…
+                  </TableCell>
+                </TableRow>
+              ) : filteredJobs.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={9}
+                    className="text-center py-12 text-muted-foreground"
+                  >
                     No print jobs yet. Print something to see it here.
                   </TableCell>
                 </TableRow>
@@ -285,9 +350,22 @@ export function HistoryPage() {
               )}
               {store.selectedJob.settings_json && (
                 <div>
-                  <Label className="text-xs text-muted-foreground">Settings</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    Settings
+                  </Label>
                   <pre className="text-xs bg-muted p-2 rounded-md overflow-auto max-h-40">
-                    {JSON.stringify(JSON.parse(store.selectedJob.settings_json), null, 2)}
+                    {(() => {
+                      try {
+                        return JSON.stringify(
+                          JSON.parse(store.selectedJob!.settings_json!),
+                          null,
+                          2,
+                        );
+                      } catch {
+                        // Malformed JSON must not crash the dialog.
+                        return store.selectedJob!.settings_json;
+                      }
+                    })()}
                   </pre>
                 </div>
               )}
