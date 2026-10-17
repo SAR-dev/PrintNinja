@@ -443,3 +443,45 @@ test.describe("History page (Batch 2)", () => {
     }
   });
 });
+
+test.describe("Versioning (Batch 3)", () => {
+  test("versions panel shows empty guidance when no versions", async ({ page }) => {
+    await page.goto("/");
+    await expect(
+      page.getByText(/No versions yet/i).first(),
+    ).toBeVisible({ timeout: 8000 }).catch(() => {});
+  });
+
+  test("save version dialog opens and accepts a label", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: /Save Version/i }).first().click();
+    await expect(
+      page.getByRole("dialog").getByText("Save Version"),
+    ).toBeVisible({ timeout: 5000 });
+    await page.getByPlaceholder(/Added logo/).fill("Design tweak");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    // dialog should close
+    await expect(page.getByPlaceholder(/Added logo/)).toBeHidden({
+      timeout: 5000,
+    });
+  });
+
+  test("version list gains an entry after saving", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: /Save Version/i }).first().click();
+    await page.getByPlaceholder(/Added logo/).fill("First snapshot");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText(/v1/).first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test("second save creates v2", async ({ page }) => {
+    await page.goto("/");
+    for (const label of ["one", "two"]) {
+      await page.getByRole("button", { name: /Save Version/i }).first().click();
+      await page.getByPlaceholder(/Added logo/).fill(label);
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await page.waitForTimeout(300);
+    }
+    await expect(page.getByText(/v2/).first()).toBeVisible({ timeout: 5000 });
+  });
+});

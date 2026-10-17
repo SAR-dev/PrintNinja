@@ -60,7 +60,9 @@ CREATE TABLE IF NOT EXISTS printer_profiles (
     template_id INTEGER NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
     settings_json TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    -- One profile per printer+template pair (PLANNING.md 7.7)
+    UNIQUE (printer_id, template_id)
 );
 
 CREATE TABLE IF NOT EXISTS presets (

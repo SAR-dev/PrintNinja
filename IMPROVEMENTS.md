@@ -3,7 +3,7 @@
 > Generated: 2026-10-17 · Dev server shut down for audit.
 > This file tracks every known bug, stub, and improvement — one item per row — so work can be picked up incrementally. Fix → test → check the box.
 
-**Batch 1 (P0 + core DB wiring)** and **Batch 2 (print pipeline + history UI)** shipped — items marked ☑ below.
+**Batches 1–3 shipped** (P0 + core DB wiring, print pipeline + history UI, fonts/profiles/batch + version diff) — items marked ☑ below.
 
 Legend: **P0** crash/data-loss · **P1** broken feature · **P2** latent/incorrect · **P3** polish/tech-debt
 Status: `☐ todo` · `☐ in-progress` · `☑ done`
@@ -22,9 +22,9 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 | 6 | `src-tauri/src/commands/history.rs:27` | `list_jobs()` returns empty; History page always empty. | P1 | ☑ done |
 | 7 | `history.rs:33,39,45` | `get_job/reprint_job/retry_job` always `NotFound`. History reprint/retry toasts lie. | P1 | ☑ done |
 | 8 | `src-tauri/src/commands/settings.rs` | `get_setting/set_setting` are no-ops. Settings retention/API port/LAN never persisted. | P1 | ☑ done |
-| 9 | `src-tauri/src/commands/font.rs` | `list_fonts` stub; `upload_font` writes file but never inserts DB row; `delete_font` stub. | P1 | ☐ |
-| 10 | `src-tauri/src/commands/profile.rs` | `list_profiles/save_profile/delete_profile` stubs — Printer Profiles feature non-functional. | P1 | ☐ |
-| 11 | `src-tauri/src/commands/batch.rs` | `create_batch` does not create `print_jobs` rows, does not enqueue. `list/get/cancel/retry` stubs. | P1 | ☐ |
+| 9 | `src-tauri/src/commands/font.rs` | `list_fonts` stub; `upload_font` writes file but never inserts DB row; `delete_font` stub. | P1 | ☑ done |
+| 10 | `src-tauri/src/commands/profile.rs` | `list_profiles/save_profile/delete_profile` stubs — Printer Profiles feature non-functional. | P1 | ☑ done |
+| 11 | `src-tauri/src/commands/batch.rs` | `create_batch` does not create `print_jobs` rows, does not enqueue. `list/get/cancel/retry` stubs. | P1 | ☑ done |
 | 12 | `src-tauri/src/commands/api.rs:6,14` | `start_api_server/stop_api_server/get_api_status` stubs; `regenerate_api_key` generates but never stores hash. | P1 | ☐ |
 | 13 | `src-tauri/src/db/mod.rs:10` | `Connection::open(&self.url)` where `url` is `"sqlite:/path/printninja.db"` — `rusqlite` expects a filesystem path, not `sqlite:` URI. Strip prefix or use `tauri-plugin-sql` exclusively. | P0 | ☑ done |
 | 14 | `src-tauri/src/db/mod.rs:14` | `DbState = Arc<Mutex<Database>>` defined but never `manage()`d as `DbState` nor injected via `State<DbState>` in commands. All commands ignore DB. | P1 | ☑ done |
@@ -53,8 +53,8 @@ Status: `☐ todo` · `☐ in-progress` · `☑ done`
 |---|-------|----------|--------|
 | 31 | Templates list was hard-coded, no `onClick` (fixed in `a7d7475` but now in-memory only — lost on reload). Needs SQLite persistence via `list_templates`/`create_template`. | P1 | ☐ |
 | 32 | `fileInputRef` is `any`-typed via `useRef<HTMLInputElement>(null)`? Check `ref` is correctly typed. Previously unused, now wired — but `<input>` is hidden via `className="hidden"` not `display:none` — Playwright `input.first()` matched it; now fixed to `input[type="number"]` but still fragile. | P3 | ☐ |
-| 33 | Versions panel: both buttons call `handleRestoreVersion(v)` — second should open diff view, not restore again. | P1 | ☐ |
-| 34 | `showDiffDialog`/`diffVersion` were declared then removed, but diff view feature from PLANNING.md 7.3 still missing (side-by-side HTML/CSS diff with Monaco/`diff` lib). | P1 | ☐ |
+| 33 | Versions panel: both buttons call `handleRestoreVersion(v)` — second should open diff view, not restore again. | P1 | ☑ done |
+| 34 | `showDiffDialog`/`diffVersion` were declared then removed, but diff view feature from PLANNING.md 7.3 still missing (side-by-side HTML/CSS diff with Monaco/`diff` lib). | P1 | ☑ done |
 | 35 | `VisualDesigner.tsx` GrapesJS loaded via CDN `unpkg.com` — breaks offline, no CSP, no error fallback when network fails. Should bundle via `grapesjs` npm or show “Visual mode unavailable offline”. | P2 | ☐ |
 | 36 | GrapesJS → CodeMirror sync uses `syncDirection` state toggle inside `useEffect` deps — causes stale closure and double-render loop. | P2 | ☐ |
 | 37 | Canvas preview iframe `srcDoc` re-renders on every keystroke without debounce — causes typing lag on large templates. Debounce `htmlCode`/`cssCode` → 300ms. | P2 | ☐ |

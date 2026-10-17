@@ -31,13 +31,14 @@ import {
   ZoomIn,
   ZoomOut,
   Save,
-  History,
+  GitCompare,
   Type,
   QrCode,
   Check,
 } from "lucide-react";
 import { useTemplateStore, type Template, type TemplateVersion } from "@/lib/store/templateStore";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import CodeMirror from "@uiw/react-codemirror";
 import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
@@ -104,6 +105,20 @@ export function DesignerPage() {
     if (tpl.page_w_mm) setPageWidth(tpl.page_w_mm);
     if (tpl.page_h_mm) setPageHeight(tpl.page_h_mm);
     if (tpl.orientation) setOrientation(tpl.orientation as "portrait" | "landscape");
+    setCurrentTemplateDbId(tpl.id);
+    setDiff(null);
+    setShowDiff(false);
+    // Load the persisted versions for the newly selected template.
+    (async () => {
+      try {
+        const list = await invoke<TemplateVersion[]>("list_versions", {
+          templateId: tpl.id,
+        });
+        setVersions(list ?? []);
+      } catch {
+        setVersions([]);
+      }
+    })();
     toast.success(`Loaded "${tpl.name}"`);
   };
 
@@ -129,6 +144,8 @@ export function DesignerPage() {
     };
     setTemplates((prev) => [...prev, tpl]);
     loadTemplate(tpl);
+    setVersions([]);
+    setCurrentTemplateDbId(tpl.id);
     setNewTemplateName("");
     setShowNewTemplateDialog(false);
   };
@@ -140,7 +157,27 @@ export function DesignerPage() {
   const [editJson, setEditJson] = useState("");
   const [showEditDataset, setShowEditDataset] = useState(false);
 
+  // The active template's DB row id (created on first save / on load).
+  const [currentTemplateDbId, setCurrentTemplateDbId] = useState(1);
+  const [diff, setDiff] = useState<{
+    from_version_no: number;
+    to_version_no: number;
+    html_from: string;
+    html_to: string;
+    css_from: string;
+    css_to: string;
+    html_changed: boolean;
+    css_changed: boolean;
+  } | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
+
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Load persisted versions for the active template on mount.
+    refreshVersions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTemplateDbId]);
 
   useEffect(() => {
     const template: Template = {
@@ -160,7 +197,7 @@ export function DesignerPage() {
     try {
       const version = await invoke<TemplateVersion>("create_version", {
         req: {
-          template_id: 1,
+          template_id: currentTemplateDbId,
           html: htmlCode,
           css: cssCode,
           label: versionLabel || null,
@@ -168,13 +205,29 @@ export function DesignerPage() {
           created_by: "manual",
         },
       });
-      setVersions((prev) => [...prev, version]);
+      setVersions((prev) => [version, ...prev]);
       setShowVersionDialog(false);
       setVersionLabel("");
       setVersionNote("");
       toast.success(`Version ${version.version_no} saved`);
     } catch (e) {
-      toast.error(`Failed to save version: ${e}`);
+      // Web mode / no backend: keep a local snapshot so the UI stays usable.
+      const local: TemplateVersion = {
+        id: Date.now(),
+        template_id: currentTemplateDbId,
+        version_no: versions.length + 1,
+        html: htmlCode,
+        css: cssCode,
+        label: versionLabel || null,
+        note: versionNote || null,
+        created_at: new Date().toISOString(),
+        created_by: "manual",
+      };
+      setVersions((prev) => [local, ...prev]);
+      setShowVersionDialog(false);
+      setVersionLabel("");
+      setVersionNote("");
+      toast.success(`Version ${local.version_no} saved locally`);
     }
   };
 
@@ -194,10 +247,64 @@ export function DesignerPage() {
     }
   };
 
-  const handleRestoreVersion = (version: TemplateVersion) => {
-    setHtmlCode(version.html);
-    setCssCode(version.css);
-    toast.success(`Restored version ${version.version_no}`);
+  const refreshVersions = async () => {
+    try {
+      const list = await invoke<TemplateVersion[]>("list_versions", {
+        templateId: currentTemplateDbId,
+      });
+      setVersions(list ?? []);
+      const latest = list?.[0];
+      if (latest) {
+        setHtmlCode(latest.html);
+        setCssCode(latest.css);
+      }
+    } catch {
+      // Backend not available (web mode) — keep the in-editor content.
+    }
+  };
+
+  const handleRestoreVersion = async (version: TemplateVersion) => {
+    try {
+      // Restore creates a NEW version server-side; nothing is overwritten.
+      const created = await invoke<TemplateVersion>("restore_version", {
+        id: version.id,
+      });
+      setVersions((prev) => [created, ...prev]);
+      setHtmlCode(created.html);
+      setCssCode(created.css);
+      toast.success(`Restored v${version.version_no} as v${created.version_no}`);
+    } catch {
+      setHtmlCode(version.html);
+      setCssCode(version.css);
+      toast.success(`Restored version ${version.version_no}`);
+    }
+  };
+
+  const openDiff = async (from: TemplateVersion, to: TemplateVersion) => {
+    try {
+      const d = await invoke<{
+        from_version_no: number;
+        to_version_no: number;
+        html_from: string;
+        html_to: string;
+        css_from: string;
+        css_to: string;
+        html_changed: boolean;
+        css_changed: boolean;
+      }>("diff_versions", { fromId: from.id, toId: to.id });
+      setDiff(d);
+    } catch {
+      setDiff({
+        from_version_no: from.version_no,
+        to_version_no: to.version_no,
+        html_from: from.html,
+        html_to: to.html,
+        css_from: from.css,
+        css_to: to.css,
+        html_changed: from.html !== to.html,
+        css_changed: from.css !== to.css,
+      });
+    }
   };
 
   const canvasWidth = pageWidth * MM_TO_PX * zoom;
@@ -348,24 +455,62 @@ export function DesignerPage() {
             </CardHeader>
             <CardContent className="space-y-1 max-h-48 overflow-y-auto">
               {versions.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No versions yet</p>
+                <p className="text-xs text-muted-foreground">
+                  No versions yet — use “Save Version” to snapshot.
+                </p>
               ) : (
-                versions.map((v) => (
-                  <div key={v.id} className="flex items-center justify-between p-2 rounded-md border">
-                    <div>
-                      <p className="text-xs font-medium">v{v.version_no}</p>
-                      {v.label && <p className="text-xs text-muted-foreground">{v.label}</p>}
+                versions.map((v, i) => {
+                  const isCurrent = i === 0;
+                  const older = versions[i + 1];
+                  return (
+                    <div
+                      key={v.id}
+                      className={cn(
+                        "flex items-center justify-between p-2 rounded-md border",
+                        isCurrent && "bg-secondary",
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium">
+                          v{v.version_no}
+                          {isCurrent && (
+                            <span className="ml-1 text-[10px] text-primary">
+                              current
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {v.label || v.note || v.created_at.slice(0, 16)}
+                        </p>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        {older && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            title={`Diff v${older.version_no} → v${v.version_no}`}
+                            aria-label={`Diff v${older.version_no} to v${v.version_no}`}
+                            onClick={() => openDiff(older, v)}
+                          >
+                            <GitCompare className="h-3 w-3" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          title="Restore this version"
+                          aria-label={`Restore version ${v.version_no}`}
+                          disabled={isCurrent}
+                          onClick={() => handleRestoreVersion(v)}
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" className="h-6" onClick={() => handleRestoreVersion(v)}>
-                        <RotateCcw className="h-3 w-3" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-6" onClick={() => handleRestoreVersion(v)}>
-                        <History className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </CardContent>
           </Card>
@@ -684,6 +829,74 @@ export function DesignerPage() {
           </Card>
         </div>
       </div>
+
+      {/* Diff Dialog */}
+      <Dialog open={showDiff} onOpenChange={setShowDiff}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>
+              Compare v{diff?.from_version_no} → v{diff?.to_version_no}
+            </DialogTitle>
+          </DialogHeader>
+          {diff && (
+            <div className="space-y-4 max-h-[70vh] overflow-auto">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant={diff.html_changed ? "warning" : "secondary"}>
+                    {diff.html_changed ? "HTML changed" : "HTML identical"}
+                  </Badge>
+                  <Badge variant={diff.css_changed ? "warning" : "secondary"}>
+                    {diff.css_changed ? "CSS changed" : "CSS identical"}
+                  </Badge>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs font-semibold mb-1">
+                    v{diff.from_version_no} (before)
+                  </p>
+                  <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-72 whitespace-pre-wrap">
+                    {diff.html_from || "(empty)"}
+                  </pre>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold mb-1">
+                    v{diff.to_version_no} (after)
+                  </p>
+                  <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-72 whitespace-pre-wrap">
+                    {diff.html_to || "(empty)"}
+                  </pre>
+                </div>
+              </div>
+              {(diff.html_changed || diff.css_changed) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs font-semibold mb-1">
+                      CSS v{diff.from_version_no}
+                    </p>
+                    <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-48 whitespace-pre-wrap">
+                      {diff.css_from || "(empty)"}
+                    </pre>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold mb-1">
+                      CSS v{diff.to_version_no}
+                    </p>
+                    <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-48 whitespace-pre-wrap">
+                      {diff.css_to || "(empty)"}
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDiff(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Save Version Dialog */}
       <Dialog open={showVersionDialog} onOpenChange={setShowVersionDialog}>

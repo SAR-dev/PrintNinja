@@ -209,3 +209,61 @@ pub fn delete_version(db: State<DbState>, id: i64) -> AppResult<()> {
     }
     Ok(())
 }
+
+#[derive(Debug, Serialize)]
+pub struct VersionDiff {
+    pub from_id: i64,
+    pub to_id: i64,
+    pub from_version_no: i64,
+    pub to_version_no: i64,
+    pub html_from: String,
+    pub html_to: String,
+    pub css_from: String,
+    pub css_to: String,
+    pub html_changed: bool,
+    pub css_changed: bool,
+}
+
+/// Line-level diff of any two versions of the same template (PLANNING.md 7.3).
+#[tauri::command]
+pub fn diff_versions(
+    db: State<DbState>,
+    from_id: i64,
+    to_id: i64,
+) -> AppResult<VersionDiff> {
+    let guard = db.lock().map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let conn = guard.connection()?;
+
+    let load = |id: i64| -> rusqlite::Result<(i64, i64, String, String)> {
+        conn.query_row(
+            "SELECT template_id, version_no, html, css
+             FROM template_versions WHERE id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+    };
+
+    let (t_from, n_from, html_from, css_from) = load(from_id)
+        .map_err(|_| AppError::NotFound(format!("Version {} not found", from_id)))?;
+    let (t_to, n_to, html_to, css_to) = load(to_id)
+        .map_err(|_| AppError::NotFound(format!("Version {} not found", to_id)))?;
+
+    if t_from != t_to {
+        return Err(AppError::Validation(
+            "Cannot diff versions from different templates".into(),
+        ));
+    }
+
+    Ok(VersionDiff {
+        from_id,
+        to_id,
+        from_version_no: n_from,
+        to_version_no: n_to,
+        html_changed: html_from != html_to,
+        css_changed: css_from != css_to,
+        html_from,
+        html_to,
+        css_from,
+        css_to,
+    })
+}
