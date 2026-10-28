@@ -37,6 +37,7 @@ import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -100,6 +101,58 @@ class BluetoothWriteArgs {
     var dataBase64: String? = null
 }
 
+/**
+ * Stateful-connection commands (one connect per print instead of one per
+ * operation): `open*` mints a handle for an open device/socket, the
+ * `*On` calls reuse it, and `close*` releases it. Handles idle past
+ * [ConnectionHandles.DEFAULT_MAX_IDLE_MS] are reaped on the next open.
+ */
+@InvokeArg
+class UsbOpenArgs {
+    var deviceName: String? = null
+}
+
+@InvokeArg
+class UsbQueryOnArgs {
+    var handle: String? = null
+    var requestBase64: String? = null
+    var replyTimeoutMs: Int? = null
+}
+
+@InvokeArg
+class UsbWriteOnArgs {
+    var handle: String? = null
+    var dataBase64: String? = null
+}
+
+@InvokeArg
+class UsbCloseArgs {
+    var handle: String? = null
+}
+
+@InvokeArg
+class BluetoothOpenArgs {
+    var address: String? = null
+}
+
+@InvokeArg
+class BluetoothQueryOnArgs {
+    var handle: String? = null
+    var requestBase64: String? = null
+    var replyTimeoutMs: Int? = null
+}
+
+@InvokeArg
+class BluetoothWriteOnArgs {
+    var handle: String? = null
+    var dataBase64: String? = null
+}
+
+@InvokeArg
+class BluetoothCloseArgs {
+    var handle: String? = null
+}
+
 /** Rust reports the local API server's state so the pinned
  *  notification can show the live address (see PrintNinjaService). */
 @InvokeArg
@@ -120,6 +173,17 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
 
     /** Blocking I/O (USB, Bluetooth sockets) runs here, never on the main thread. */
     private val ioPool = Executors.newCachedThreadPool()
+
+    /**
+     * Connections held across the query+write of one print, so a job pays
+     * one connect instead of one per operation. Handles are minted per
+     * open and always closed by the matching close call; the idle sweep
+     * on every open only reaps orphans from a caller that died mid-print.
+     */
+    /** An open USB device held across one print's query+write. */
+    private data class UsbSession(val device: UsbDevice, val connection: UsbDeviceConnection)
+    private val usbConnections = ConnectionHandles<UsbSession>()
+    private val bluetoothSockets = ConnectionHandles<BluetoothSocket>()
 
     /** Settles an invoke back on the main thread, wherever the work ran. */
     private fun answer(invoke: Invoke, block: () -> Unit) {
@@ -712,6 +776,147 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    /**
+     * Opens the device and holds the connection under a minted handle for
+     * the query+write of one print — one connect instead of one per
+     * operation. Reaps idle-orphaned handles first. The caller must
+     * [closeUsbConnection] on every path after this resolves.
+     */
+    @Command
+    fun openUsbConnection(invoke: Invoke) {
+        val deviceName =
+            invoke.parseArgs(UsbOpenArgs::class.java).deviceName
+                ?: return invoke.reject("deviceName is required")
+        ioPool.execute {
+            val settle: (String?, String?) -> Unit = { handle, error ->
+                answer(invoke) {
+                    if (handle != null) invoke.resolve(JSObject().put("handle", handle))
+                    else invoke.reject(error ?: "USB open failed")
+                }
+            }
+            val device = findUsbDevice(deviceName)
+            if (device == null) {
+                settle(null, "USB device not found: $deviceName — check it is plugged in")
+                return@execute
+            }
+            if (!ensureUsbPermission(device)) {
+                settle(
+                    null,
+                    "USB permission was not granted for $deviceName — allow access and try again",
+                )
+                return@execute
+            }
+            val connection = openUsb(device)
+            if (connection == null) {
+                settle(null, "Could not open USB device $deviceName")
+                return@execute
+            }
+            for (orphan in usbConnections.sweepIdle()) {
+                runCatching { orphan.connection.close() }
+            }
+            val handle = UUID.randomUUID().toString()
+            val previous = usbConnections.put(handle, UsbSession(device, connection))
+            if (previous != null) runCatching { previous.connection.close() }
+            settle(handle, null)
+        }
+    }
+
+    /** Status query on a held USB connection. The connection stays open. */
+    @Command
+    fun queryUsbOn(invoke: Invoke) {
+        val args = invoke.parseArgs(UsbQueryOnArgs::class.java)
+        val handle = args.handle ?: return invoke.reject("handle is required")
+        val encoded = args.requestBase64 ?: return invoke.reject("requestBase64 is required")
+        val replyTimeoutMs = (args.replyTimeoutMs ?: 3000).toLong().coerceIn(500, 10_000)
+        ioPool.execute {
+            val request =
+                try {
+                    Base64.decode(encoded, Base64.DEFAULT)
+                } catch (e: IllegalArgumentException) {
+                    answer(invoke) {
+                        invoke.reject("request is not valid base64: ${e.message}")
+                    }
+                    return@execute
+                }
+            val session = usbConnections.get(handle)
+            if (session == null) {
+                answer(invoke) {
+                    invoke.reject("unknown or expired USB connection — open a new one")
+                }
+                return@execute
+            }
+            try {
+                val reply = bulkQuery(session.device, session.connection, request, replyTimeoutMs)
+                answer(invoke) {
+                    invoke.resolve(
+                        JSObject().put(
+                            "replyBase64",
+                            Base64.encodeToString(reply, Base64.NO_WRAP),
+                        ),
+                    )
+                }
+            } catch (e: Exception) {
+                answer(invoke) {
+                    invoke.reject("USB status query failed: ${e.message}")
+                }
+            }
+        }
+    }
+
+    /** Write on a held USB connection. The connection stays open. */
+    @Command
+    fun writeUsbOn(invoke: Invoke) {
+        val args = invoke.parseArgs(UsbWriteOnArgs::class.java)
+        val handle = args.handle ?: return invoke.reject("handle is required")
+        val encoded = args.dataBase64 ?: return invoke.reject("dataBase64 is required")
+        ioPool.execute {
+            val settle: (Int?, String?) -> Unit = { written, error ->
+                answer(invoke) {
+                    if (written != null) {
+                        invoke.resolve(JSObject().put("bytesWritten", written))
+                    } else {
+                        invoke.reject(error ?: "USB write failed")
+                    }
+                }
+            }
+            val data =
+                try {
+                    Base64.decode(encoded, Base64.DEFAULT)
+                } catch (e: IllegalArgumentException) {
+                    settle(null, "request is not valid base64: ${e.message}")
+                    return@execute
+                }
+            val session = usbConnections.get(handle)
+            if (session == null) {
+                settle(null, "unknown or expired USB connection — open a new one")
+                return@execute
+            }
+            try {
+                val written = bulkWriteOut(session.device, session.connection, data)
+                if (written < 0) settle(null, "USB write failed")
+                else settle(written, null)
+            } catch (e: Exception) {
+                settle(null, "USB write failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Releases a held USB connection. Idempotent: an unknown handle
+     * still resolves, so double-close races are harmless.
+     */
+    @Command
+    fun closeUsbConnection(invoke: Invoke) {
+        val handle =
+            invoke.parseArgs(UsbCloseArgs::class.java).handle
+                ?: return invoke.reject("handle is required")
+        ioPool.execute {
+            val session = usbConnections.remove(handle)
+            if (session != null) runCatching { session.connection.close() }
+            answer(invoke) { invoke.resolve(JSObject().put("closed", session != null)) }
+        }
+    }
+
     // ── Bluetooth printing ─────────────────────────────────────────
 
     /** Serial-port profile: what receipt/label printers speak over RFCOMM. */
@@ -765,6 +970,49 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
 
     private fun bluetoothDenied(): String =
         "Bluetooth permission was not granted — allow “Nearby devices” for PrintNinja in Settings and try again"
+
+    /**
+     * Reads a status reply off an open RFCOMM socket: until a short read
+     * (the reply arrived whole) or `replyTimeoutMs` passes, with a
+     * 250 ms-silence break. Shared by the one-shot and held-connection
+     * queries so both agree on what "silent" means.
+     */
+    private fun readBluetoothReply(input: InputStream, replyTimeoutMs: Long): ByteArray {
+        val reply = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(1024)
+        val deadline = android.os.SystemClock.elapsedRealtime() + replyTimeoutMs
+        var lastDataAt = -1L
+        while (android.os.SystemClock.elapsedRealtime() < deadline) {
+            val available =
+                try {
+                    input.available()
+                } catch (_: Exception) {
+                    0
+                }
+            if (available > 0) {
+                val n = input.read(buf, 0, minOf(available, buf.size))
+                if (n > 0) {
+                    reply.write(buf, 0, n)
+                    lastDataAt = android.os.SystemClock.elapsedRealtime()
+                    // A short read means the reply arrived whole.
+                    if (n < minOf(available, buf.size)) break
+                }
+            } else {
+                if (reply.size() > 0 &&
+                    android.os.SystemClock.elapsedRealtime() - lastDataAt > 250
+                ) {
+                    break
+                }
+                try {
+                    Thread.sleep(50)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
+                }
+            }
+        }
+        return reply.toByteArray()
+    }
 
     @Command
     fun listBluetoothDevices(invoke: Invoke) {
@@ -921,47 +1169,15 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
             try {
                 val socket = openBluetoothSocket(address)
                 try {
-                    socket.outputStream.write(request)
-                    socket.outputStream.flush()
-                    val input = socket.inputStream
-                    val reply = java.io.ByteArrayOutputStream()
-                    val buf = ByteArray(1024)
-                    val deadline = android.os.SystemClock.elapsedRealtime() + replyTimeoutMs
-                    var lastDataAt = -1L
-                    while (android.os.SystemClock.elapsedRealtime() < deadline) {
-                        val available =
-                            try {
-                                input.available()
-                            } catch (_: Exception) {
-                                0
-                            }
-                        if (available > 0) {
-                            val n = input.read(buf, 0, minOf(available, buf.size))
-                            if (n > 0) {
-                                reply.write(buf, 0, n)
-                                lastDataAt = android.os.SystemClock.elapsedRealtime()
-                                // A short read means the reply arrived whole.
-                                if (n < minOf(available, buf.size)) break
-                            }
-                        } else {
-                            if (reply.size() > 0 &&
-                                android.os.SystemClock.elapsedRealtime() - lastDataAt > 250
-                            ) {
-                                break
-                            }
-                            try {
-                                Thread.sleep(50)
-                            } catch (_: InterruptedException) {
-                                Thread.currentThread().interrupt()
-                                break
-                            }
-                        }
-                    }
+                    val out = socket.outputStream
+                    out.write(request)
+                    out.flush()
+                    val reply = readBluetoothReply(socket.inputStream, replyTimeoutMs)
                     answer(invoke) {
                         invoke.resolve(
                             JSObject().put(
                                 "replyBase64",
-                                Base64.encodeToString(reply.toByteArray(), Base64.NO_WRAP),
+                                Base64.encodeToString(reply, Base64.NO_WRAP),
                             ),
                         )
                     }
@@ -977,6 +1193,153 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                     invoke.reject("Bluetooth status query to $address failed: ${e.message}")
                 }
             }
+        }
+    }
+
+    /**
+     * Opens an RFCOMM socket and holds it under a minted handle for the
+     * query+write of one print. Reaps idle-orphaned sockets first. The
+     * caller must [closeBluetoothConnection] on every path after this
+     * resolves.
+     */
+    @Command
+    fun openBluetoothConnection(invoke: Invoke) {
+        val address =
+            invoke.parseArgs(BluetoothOpenArgs::class.java).address
+                ?: return invoke.reject("address is required")
+        ioPool.execute {
+            if (!awaitBluetoothConnect()) {
+                answer(invoke) { invoke.reject(bluetoothDenied()) }
+                return@execute
+            }
+            try {
+                for (orphan in bluetoothSockets.sweepIdle()) {
+                    runCatching { orphan.close() }
+                }
+                val socket = openBluetoothSocket(address)
+                val handle = UUID.randomUUID().toString()
+                val previous = bluetoothSockets.put(handle, socket)
+                if (previous != null) runCatching { previous.close() }
+                answer(invoke) { invoke.resolve(JSObject().put("handle", handle)) }
+            } catch (e: IllegalArgumentException) {
+                answer(invoke) { invoke.reject(e.message ?: "bad Bluetooth address") }
+            } catch (e: SecurityException) {
+                answer(invoke) { invoke.reject(bluetoothDenied()) }
+            } catch (e: Exception) {
+                answer(invoke) {
+                    invoke.reject("Could not open Bluetooth printer $address: ${e.message}")
+                }
+            }
+        }
+    }
+
+    /** Status query on a held RFCOMM socket. The socket stays open. */
+    @Command
+    fun queryBluetoothOn(invoke: Invoke) {
+        val args = invoke.parseArgs(BluetoothQueryOnArgs::class.java)
+        val handle = args.handle ?: return invoke.reject("handle is required")
+        val encoded = args.requestBase64 ?: return invoke.reject("requestBase64 is required")
+        val replyTimeoutMs = (args.replyTimeoutMs ?: 3000).toLong().coerceIn(500, 10_000)
+        ioPool.execute {
+            if (!awaitBluetoothConnect()) {
+                answer(invoke) { invoke.reject(bluetoothDenied()) }
+                return@execute
+            }
+            val request =
+                try {
+                    Base64.decode(encoded, Base64.DEFAULT)
+                } catch (e: IllegalArgumentException) {
+                    answer(invoke) {
+                        invoke.reject("request is not valid base64: ${e.message}")
+                    }
+                    return@execute
+                }
+            val socket = bluetoothSockets.get(handle)
+            if (socket == null) {
+                answer(invoke) {
+                    invoke.reject("unknown or expired Bluetooth connection — open a new one")
+                }
+                return@execute
+            }
+            try {
+                socket.outputStream.write(request)
+                socket.outputStream.flush()
+                val reply = readBluetoothReply(socket.inputStream, replyTimeoutMs)
+                answer(invoke) {
+                    invoke.resolve(
+                        JSObject().put(
+                            "replyBase64",
+                            Base64.encodeToString(reply, Base64.NO_WRAP),
+                        ),
+                    )
+                }
+            } catch (e: SecurityException) {
+                answer(invoke) { invoke.reject(bluetoothDenied()) }
+            } catch (e: Exception) {
+                answer(invoke) {
+                    invoke.reject("Bluetooth status query failed: ${e.message}")
+                }
+            }
+        }
+    }
+
+    /** Write on a held RFCOMM socket. The socket stays open. */
+    @Command
+    fun writeBluetoothOn(invoke: Invoke) {
+        val args = invoke.parseArgs(BluetoothWriteOnArgs::class.java)
+        val handle = args.handle ?: return invoke.reject("handle is required")
+        val encoded = args.dataBase64 ?: return invoke.reject("dataBase64 is required")
+        ioPool.execute {
+            if (!awaitBluetoothConnect()) {
+                answer(invoke) { invoke.reject(bluetoothDenied()) }
+                return@execute
+            }
+            val data =
+                try {
+                    Base64.decode(encoded, Base64.DEFAULT)
+                } catch (e: IllegalArgumentException) {
+                    answer(invoke) {
+                        invoke.reject("request is not valid base64: ${e.message}")
+                    }
+                    return@execute
+                }
+            val socket = bluetoothSockets.get(handle)
+            if (socket == null) {
+                answer(invoke) {
+                    invoke.reject("unknown or expired Bluetooth connection — open a new one")
+                }
+                return@execute
+            }
+            try {
+                val out = socket.outputStream
+                out.write(data)
+                out.flush()
+                answer(invoke) {
+                    invoke.resolve(JSObject().put("bytesWritten", data.size))
+                }
+            } catch (e: SecurityException) {
+                answer(invoke) { invoke.reject(bluetoothDenied()) }
+            } catch (e: Exception) {
+                answer(invoke) {
+                    invoke.reject("Bluetooth write failed: ${e.message}")
+                }
+            }
+        }
+    }
+
+    /**
+     * Releases a held RFCOMM socket. Idempotent: an unknown handle still
+     * resolves, so double-close races are harmless.
+     */
+    @Command
+    fun closeBluetoothConnection(invoke: Invoke) {
+        val handle =
+            invoke.parseArgs(BluetoothCloseArgs::class.java).handle
+                ?: return invoke.reject("handle is required")
+        ioPool.execute {
+            val socket = bluetoothSockets.remove(handle)
+            if (socket != null) runCatching { socket.close() }
+            answer(invoke) { invoke.resolve(JSObject().put("closed", socket != null)) }
         }
     }
 
