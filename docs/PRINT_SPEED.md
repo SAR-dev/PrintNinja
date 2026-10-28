@@ -171,9 +171,10 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   > as backstop. Rust `send()` restructured around the held handle
   > with identical fault semantics; `reach()`/probe path untouched.
   > Rust verified (`cargo check`, `clippy -D warnings`, `fmt`, full
-  > suite green incl. new models serde tests); Kotlin helper verified
-  > locally (compiles + 7 JUnit tests pass); full module needs CI's
-  > `android-check` (no `:tauri-android` project on this machine).
+  > suite green incl. new models serde tests); CI `android-check`
+  > green on PR #4 (full module compiles, Kotlin unit tests pass,
+  > debug APK builds). Device prints still need HARDWARE_TODO
+  > confirmation.
 - **A4-fix — file-path handoff for large payloads only.** The Tauri
   bridge is JSON, so per-call base64 is mandatory for small jobs (keep
   it — receipts are KBs). For large raster/PDF payloads crossing to
@@ -184,11 +185,9 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   > `PLUGIN_FILE_HANDOFF_BYTES` (256 KiB, `transport/mod.rs`) are
   > staged via `stage_plugin_payload` (unit-tested) and passed as
   > `dataPath` on both `*WriteOn` requests (serde-tested); Kotlin
-  > reads + deletes via `Handoff.kt:readHandoffFile` (unit-tested,
-  > `HandoffTest`), Rust deletes after the call on every exit.
-  > Verified: Rust suite green; Kotlin helper + tests compile and pass
-  > (10/10 with `ConnectionHandlesTest`) via the cached embeddable
-  > compiler; full module needs CI `android-check`.
+  > reads + deletes via `Handoff.kt:readHandoffFile` (unit-tested).
+  > CI `android-check` green on PR #4 (device confirmation of large
+  > raster jobs still open).
 - **A5-fix — offset-based `bulkTransfer`, trivially safe.** Replace the
   `copyOfRange` 16 KiB loop (`AndroidPrintPlugin.kt:471-475`) with the
   5-arg `bulkTransfer(endpoint, data, offset, length, ioTimeoutMs)`
@@ -199,9 +198,8 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   chunk to 64 KiB to cut JNI crossings — measure first.
   > ✅ **Done** (`perf/print-speed`): `bulkWriteOut` now uses the
   > offset overload with the same 16 KiB chunking (the query path
-  > already did). Chunk size left alone pending measurement. Needs
-  > CI `android-check`/device to confirm (no full-module compile
-  > on this machine).
+  > already did). Chunk size left alone pending measurement. CI
+  > `android-check` green on PR #4; device confirmation still open.
 - **A6-fix — short "answered OK" cache (REVISED after testing).**
   Original plan: skip the status query within 30–60 s of a healthy
   answer. **Rejected for the query**: `virtual_printer ::
@@ -228,7 +226,7 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   > timed-out `get()` leaks the reader thread until the socket closes,
   > all for ≤50 ms per query. Shipped instead: poll tightened 50→10 ms
   > (bounds the silence-break overshoot at ~10 ms), with the reasoning
-  > in a code comment. Needs CI/device to confirm.
+  > in a code comment. CI `android-check` green on PR #4.
 - **A9-fix — shared peer HTTP client, one line of real work.**
   `peer_consume::client()` → `static CLIENT: OnceLock<reqwest::Client>`,
   built once with `connect_timeout(PEER_CONNECT_TIMEOUT_MS)` and
