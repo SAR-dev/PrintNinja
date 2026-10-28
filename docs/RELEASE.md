@@ -107,7 +107,7 @@ git push --atomic origin main v4.0.2
 ```
 
 Pushing a `v*` tag runs the release jobs (`windows-build`,
-`linux-build`, `android-build`, then `gitea-release`). Pushes to `main`
+`linux-build`, `android-build`, then `github-release`). Pushes to `main`
 and pull requests into `main`/`develop` run the checks only; `develop`
 never releases.
 
@@ -124,7 +124,7 @@ Release jobs (tags only):
 - **linux-build**: deb + AppImage only
 - **android-build**: `aarch64` APK + AAB, signed with the shared
   keystore from secrets
-- **gitea-release**: creates a **draft** forge Release with the MSI,
+- **github-release**: creates a **draft** GitHub Release with the MSI,
   deb, AppImage, APK and AAB attached (reuses the release on re-runs)
 
 `server-check`, `server-image`, `server-e2e` and `app-e2e` never block
@@ -136,9 +136,9 @@ It is deployed by hand, see section 7.
 
 ## 5. Publish
 
-Open the draft release on the forge. If you sign locally, replace the unsigned files with your signed builds, then publish.
+Open the draft release on GitHub. If you sign locally, replace the unsigned files with your signed builds, then publish.
 
-The app surfaces new releases itself: on boot it compares its version with the latest forge Release and shows an "Update vX.Y.Z" badge in the top bar linking to the release page, where users download and update by hand. There is no auto-update path to maintain. (The badge follows `VITE_UPDATE_API` / `VITE_UPDATE_REPO`; see `docs/GITEA.md`.)
+The app surfaces new releases itself: on boot it compares its version with the latest GitHub Release and shows an "Update vX.Y.Z" badge in the top bar linking to the release page, where users download and update by hand. There is no auto-update path to maintain. (The badge follows `VITE_UPDATE_API` / `VITE_UPDATE_REPO`; see `docs/CI.md`.)
 
 ## 6. Architecture targets summary
 

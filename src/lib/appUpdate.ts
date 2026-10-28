@@ -7,19 +7,18 @@ import { useEffect, useState } from "react";
  */
 
 /**
- * Where releases live. Both shapes answer `{tag_name, html_url}` on
- * `GET {api}/repos/{repo}/releases/latest`, so only the base changes:
- * `VITE_UPDATE_API=https://gitea.example.com/api/v1` plus
- * `VITE_UPDATE_REPO=owner/PrintNinja` moves the badge off GitHub. The
- * GitHub defaults keep existing installs and tests working untouched.
+ * Where releases live. Any host answering `{tag_name, html_url}` on
+ * `GET {api}/repos/{repo}/releases/latest` works, so only the base
+ * changes, e.g. `VITE_UPDATE_API=https://ghe.example.com/api/v3` plus
+ * `VITE_UPDATE_REPO=owner/PrintNinja` moves the badge off github.com.
+ * The GitHub defaults keep existing installs and tests working untouched.
  */
 export function buildUpdateCheckUrl(apiBase: string, repo: string): string {
   return `${apiBase.replace(/\/+$/, "")}/repos/${repo}/releases/latest`;
 }
 
 /** GitHub repo whose releases are the update source. */
-const UPDATE_REPO =
-  import.meta.env.VITE_UPDATE_REPO ?? "sayed-rafi-bd/PrintNinja";
+const UPDATE_REPO = import.meta.env.VITE_UPDATE_REPO ?? "SAR-dev/PrintNinja";
 const UPDATE_API = import.meta.env.VITE_UPDATE_API ?? "https://api.github.com";
 const CHECK_URL = buildUpdateCheckUrl(UPDATE_API, UPDATE_REPO);
 const CACHE_KEY = "printninja-update-check";

@@ -59,8 +59,7 @@ test.beforeEach(async ({ context }) => {
       contentType: "application/json",
       body: JSON.stringify({
         tag_name: "v9.9.9",
-        html_url:
-          "https://github.com/sayed-rafi-bd/PrintNinja/releases/tag/v9.9.9",
+        html_url: "https://github.com/SAR-dev/PrintNinja/releases/tag/v9.9.9",
       }),
     }),
   );
@@ -99,7 +98,7 @@ async function checkRoute(
   await expect(badge).toBeVisible({ timeout: 15_000 });
   await expect(badge).toHaveAttribute(
     "href",
-    "https://github.com/sayed-rafi-bd/PrintNinja/releases/tag/v9.9.9",
+    "https://github.com/SAR-dev/PrintNinja/releases/tag/v9.9.9",
   );
   // Let debounced previews and share polling settle before measuring.
   await page.waitForTimeout(1000);

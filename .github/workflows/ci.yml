@@ -615,49 +615,37 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  gitea-release:
+  github-release:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     needs: [windows-build, linux-build, android-build]
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: dist-artifacts
           merge-multiple: true
-      # softprops/action-gh-release speaks only the GitHub API, so the
-      # draft release is created through the forge API instead.
-      # github.server_url keeps this working wherever the repo is hosted.
+      # `gh` is preinstalled on GitHub-hosted runners and authenticates
+      # with the automatic GITHUB_TOKEN, so no PAT secret is needed.
+      # Re-runs reuse the draft release and overwrite same-name assets
+      # instead of duplicating them.
       - name: Create draft release and upload artifacts
         env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          [ -n "$RELEASE_TOKEN" ] || { echo "::error::RELEASE_TOKEN secret is not set."; exit 1; }
-          API="${{ github.server_url }}/api/v1/repos/${{ github.repository }}"
-          AUTH="Authorization: token $RELEASE_TOKEN"
           TAG="${{ github.ref_name }}"
-          # Reuse the release when it exists (re-runs must not duplicate it).
-          CODE=$(curl -sS -o /tmp/rel.json -w "%{http_code}" -H "$AUTH" "$API/releases/tags/$TAG")
-          if [ "$CODE" = "200" ]; then
-            ID=$(python3 -c "import json;print(json.load(open('/tmp/rel.json'))['id'])")
-          elif [ "$CODE" = "404" ]; then
-            CODE=$(curl -sS -o /tmp/rel.json -w "%{http_code}" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
-              -d "{\"tag_name\":\"$TAG\",\"name\":\"PrintNinja $TAG\",\"draft\":true}" "$API/releases")
-            [ "$CODE" = "201" ] || { echo "::error::release create answered $CODE"; cat /tmp/rel.json; exit 1; }
-            ID=$(python3 -c "import json;print(json.load(open('/tmp/rel.json'))['id'])")
-          else
-            echo "::error::release lookup answered $CODE"; cat /tmp/rel.json; exit 1
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --title "PrintNinja $TAG"
           fi
-          echo "release id: $ID"
           shopt -s globstar nullglob
           fail=0
           for pattern in "dist-artifacts/*.msi" "dist-artifacts/**/*.deb" "dist-artifacts/**/*.AppImage" "dist-artifacts/**/*.apk" "dist-artifacts/**/*.aab"; do
             files=($pattern)
-            [ "${#files[@]}" -gt 0 ] || { echo "::error::no artifacts match $pattern"; fail=1; continue; }
+            if [ "${#files[@]}" -eq 0 ]; then echo "::error::no artifacts match $pattern"; fail=1; continue; fi
             for f in "${files[@]}"; do
               echo "uploading $(basename "$f")…"
-              CODE=$(curl -sS -o /tmp/up.json -w "%{http_code}" -X POST -H "$AUTH" -H 'Content-Type: application/octet-stream' \
-                --data-binary "@$f" "$API/releases/$ID/assets?name=$(basename "$f")")
-              [ "$CODE" = "201" ] || { echo "::error::upload of $(basename "$f") answered $CODE"; cat /tmp/up.json; fail=1; }
+              gh release upload "$TAG" "$f" --clobber || fail=1
             done
           done
           exit $fail

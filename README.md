@@ -67,11 +67,11 @@ Silent printing for Windows, Android and Linux. Design a template in HTML and CS
 | Share service | Node, Fastify 5, Zod 4, Prisma 7 on Turso/libSQL (local SQLite file in development), Argon2id, Swagger UI. Runs in Docker or on Vercel |
 | Security | HTML sanitizing, sandboxed preview iframes with a strict CSP, secrets redacted from stored jobs, rate limits |
 | Quality | Vitest and Testing Library, `cargo test`, Playwright with axe-core (desktop and phone projects), Biome, Clippy |
-| CI and release | Gitea Actions on self-hosted runners; unsigned MSI, deb, AppImage and APK attached to a draft release on `v*` tags |
+| CI and release | GitHub Actions on GitHub-hosted runners; unsigned MSI, deb, AppImage and APK attached to a draft release on `v*` tags |
 
 ## Getting Started
 
-Prerequisites: Node 22 or newer (`engines` pins 24.x), pnpm 10 and Rust 1.90 (pinned in `rust-toolchain.toml`). For Android you also need Java 17 and the Android SDK and NDK.
+Prerequisites: Node 22 or newer (`engines` pins 22.x), pnpm 10 and Rust 1.90 (pinned in `rust-toolchain.toml`). For Android you also need Java 17 and the Android SDK and NDK.
 
 ```bash
 pnpm install
