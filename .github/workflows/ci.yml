@@ -1,15 +1,15 @@
 name: CI
 
 on:
-  # Pull requests into develop run the basic checks (web-check, rust-lint,
-  # rust-test, rust-test-windows, chromium-render, android-check,
-  # server-check). Pull requests into main run those AND the heavy checks
-  # (server-image, server-e2e, app-e2e), so everything except building the
-  # installers is proven before the merge. Plain pushes to other branches run
-  # nothing. The refactoring branch's PR is muted via the head_ref guard on
-  # each job.
+  # CI runs on main only. Pull requests into main run the basic checks
+  # (web-check, rust-lint, rust-test, rust-test-windows, chromium-render,
+  # android-check, server-check) AND the heavy checks (server-image,
+  # server-e2e, app-e2e), so everything except building the installers is
+  # proven before the merge. Plain pushes to develop (and to any other
+  # branch) run nothing. The refactoring branch's PR is muted via the
+  # head_ref guard on each job.
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   # Pushes to main run the same basic checks, for one reason: a tag run
   # can only restore caches made on the default branch, and pull-request
   # caches are private to their PR. Without a run on main there is no
@@ -635,6 +635,16 @@ jobs:
           merge-multiple: true
       # `gh` is preinstalled on GitHub-hosted runners and authenticates
       # with the automatic GITHUB_TOKEN, so no PAT secret is needed.
+      # Self-hosted runners do not ship it: install it when missing.
+      - name: Ensure GitHub CLI is available
+        run: |
+          if command -v gh >/dev/null 2>&1; then
+            echo "gh already present: $(gh --version | head -n 1)"
+            exit 0
+          fi
+          echo "gh not found; installing…"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gh
       # Re-runs reuse the draft release and overwrite same-name assets
       # instead of duplicating them.
       - name: Create draft release and upload artifacts

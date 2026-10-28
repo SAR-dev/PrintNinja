@@ -1,6 +1,6 @@
 # Contributing to PrintNinja
 
-Thanks for helping. This page covers how to set up, what to run before you push, and the project rules that CI and reviewers expect. For an overview of the app, see the [README](README.md).
+Thanks for helping. This page covers how to set up, what to run before you push, and the project rules that reviewers expect. For an overview of the app, see the [README](README.md).
 
 ## Workflow
 
@@ -8,7 +8,7 @@ Thanks for helping. This page covers how to set up, what to run before you push,
 - `main` is the release branch. Release tags must point at a commit on `main`.
 - Keep commits small and focused: one change per commit, with a regression test for every bug fix.
 - Use conventional commit messages: `feat(print): …`, `fix(designer): …`, `docs: …`, `chore: …`.
-- CI runs on pushes and pull requests to `develop` and `main`. Release jobs run only on `v*` tags.
+- There is no hosted CI. Run `pnpm check` before you push (add `--rust` when Rust changed, `pnpm check:full` before a release). See [`docs/CI.md`](docs/CI.md).
 
 ## Setup
 
@@ -26,7 +26,7 @@ For the share service, copy `server/env.example` to `server/.env` and run `pnpm 
 
 ## Before you push
 
-CI runs these checks. Run the ones that match what you changed.
+`pnpm check` runs these checks (`--rust` adds the Rust ones, `--e2e` Playwright). You can also run the ones that match what you changed.
 
 | Area | Commands |
 |---|---|
@@ -42,7 +42,7 @@ On a machine with little disk space, `target/` can grow to several GB. Run `carg
 ## Code style
 
 - **TypeScript:** Biome handles formatting (2 spaces) and a small set of lint rules. Run `pnpm lint:fix` and `pnpm format`. Do not make the rules stricter. `tsc` must be clean.
-- **Rust:** `cargo fmt` and `cargo clippy -- -D warnings` must pass. Warnings fail CI.
+- **Rust:** `cargo fmt` and `cargo clippy -- -D warnings` must pass. Warnings fail `pnpm check --rust`.
 - Keep comments for the "why". No emojis in code or commit messages.
 
 ## Project rules
@@ -68,7 +68,7 @@ On a machine with little disk space, `target/` can grow to several GB. Run `carg
 ### Share service (`server/`)
 
 - Layers are enforced by `pnpm --filter server arch`: `domain` imports neither `http` nor `infra`, `http` imports only `domain`, and Prisma stays inside `infra`.
-- Every error uses the `{ error: { code, message, details?, request_id } }` envelope. `server/openapi/openapi.json` is the contract, and CI fails if it drifts.
+- Every error uses the `{ error: { code, message, details?, request_id } }` envelope. `server/openapi/openapi.json` is the contract, and `pnpm check` fails if it drifts.
 - Change the schema with `pnpm --filter server db:migrate` (Prisma migrate dev). Migrations are applied at boot by `db:apply`.
 
 ## Testing
@@ -86,7 +86,7 @@ Add a regression test for every fix.
 pnpm release patch       # or minor, major, or X.Y.Z; add --push to push the tag
 ```
 
-This bumps the version in every manifest CI compares (`pnpm version:set` does only that), commits and tags. Pushing a `v*` tag from `main` builds the Windows MSI, Linux packages and Android APK and attaches them to a draft GitHub Release. Signing is done locally. See [`docs/RELEASE.md`](docs/RELEASE.md) and [`docs/SIGNING.md`](docs/SIGNING.md).
+This bumps the version in every manifest (`pnpm version:set` does only that), commits and tags. To build the Windows MSI, Linux packages and Android APK and attach them to a draft GitHub Release, run `node scripts/release-local.mjs X.Y.Z --push` on each machine. Signing is done locally. See [`docs/RELEASE.md`](docs/RELEASE.md) and [`docs/SIGNING.md`](docs/SIGNING.md).
 
 ## Pull request checklist
 

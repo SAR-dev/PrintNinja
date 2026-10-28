@@ -88,6 +88,7 @@ export function ProfileCard() {
       variant="outline"
       onClick={() => void signOut()}
       disabled={busy}
+      id="profile-sign-out"
       data-testid="profile-sign-out"
       className="w-full sm:w-auto"
     >

@@ -256,4 +256,17 @@ describe("Settings database reset", () => {
       false,
     );
   });
+
+  it("flashes the control for a palette deep-link (?section=&field=)", async () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/settings?section=background&field=start-minimized"]}
+      >
+        <SettingsPage />
+      </MemoryRouter>,
+    );
+    const target = await screen.findByTestId("settings-start-minimized");
+    expect(document.getElementById("start-minimized")).not.toBeNull();
+    await waitFor(() => expect(target).toHaveClass("ring-2"));
+  });
 });
