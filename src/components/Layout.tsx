@@ -407,7 +407,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               still matches its accessible name (axe
               label-content-name-mismatch). */}
           <span className="shrink-0 text-xs text-muted-foreground">
-            {appVersion ? `v${appVersion}` : "v0.0.1"}
+            {appVersion ? `v${appVersion}` : "v0.0.2"}
           </span>
         </span>
         {!shortLandscape && (
