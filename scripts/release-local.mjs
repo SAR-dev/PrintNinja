@@ -18,7 +18,7 @@
 // (see docs/SIGNING.md and /root/secrets.txt on the release machine).
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, renameSync, statSync, mkdirSync, copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -65,6 +65,17 @@ function have(cmd) {
     return true;
   } catch {
     return false;
+  }
+}
+
+/** Recursive copy (used for the Android launcher icons). */
+function copyDir(src, dest) {
+  mkdirSync(dest, { recursive: true });
+  for (const name of readdirSync(src)) {
+    const s = join(src, name);
+    const d = join(dest, name);
+    if (statSync(s).isDirectory()) copyDir(s, d);
+    else copyFileSync(s, d);
   }
 }
 
@@ -218,6 +229,10 @@ const sdkManager =
 if (sdkManager && process.env.ANDROID_KEYSTORE_BASE64 && process.env.ANDROID_KEYSTORE_PASSWORD) {
   const genDir = join(ROOT, "src-tauri/gen/android");
   if (!existsSync(genDir)) sh(PNPM, ["exec", "tauri", "android", "init", "--ci"], { env: buildEnv });
+  // `tauri android init` regenerates res/mipmap-* from tauri.conf; copy the
+  // launchers `tauri icon` actually generated over them, otherwise the APK
+  // ships placeholder art (mirrors CI's android-build).
+  copyDir(join(ROOT, "src-tauri/icons/android"), join(genDir, "app/src/main/res"));
   sh("node", ["scripts/patch-android-theme.mjs"]);
   sh("node", ["scripts/patch-android-signing.mjs"], {
     env: {
