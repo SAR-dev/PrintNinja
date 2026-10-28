@@ -1,0 +1,1090 @@
+import { describeError } from "@/lib/errors";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams, Link } from "react-router-dom";
+import { AppearanceSettings } from "@/components/AppearanceSettings";
+import { SyncStatusCard } from "@/components/SyncStatusCard";
+import { PageHeader } from "@/components/PageHeader";
+import { SetupChecklist } from "@/components/SetupChecklist";
+import {
+  AndroidBackgroundControls,
+  isAndroidBackground,
+} from "@/components/BackgroundAndroid";
+import { parseSection, type SettingsSection } from "@/lib/setup/checklist";
+import { agent } from "@/lib/agent/commands";
+import { readSetting, writeSetting } from "@/lib/settings";
+import type { FontRow } from "@/lib/agent/types";
+import { useTranslation } from "react-i18next";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Type,
+  UserRound,
+  Archive,
+  Activity,
+  AppWindow,
+  Globe,
+  Shield,
+  Download,
+  Trash2,
+  Upload,
+  ListChecks,
+  ArrowLeft,
+  ChevronRight,
+  type LucideIcon,
+} from "lucide-react";
+import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import { ProfileCard } from "@/components/ProfileCard";
+import { toast } from "sonner";
+import { diagnostics } from "@/lib/diagnostics";
+import * as share from "@/lib/share/client";
+import { defaultServiceUrl, normalizeServiceUrl } from "@/lib/share/session";
+
+/** Phone list → detail navigation: icon, label and a
+    one-line summary per section. Labels match the desktop tab strip. */
+const SECTION_META: Array<{
+  key: SettingsSection;
+  icon: LucideIcon;
+  labelKey: string;
+  summaryKey: string;
+}> = [
+  {
+    key: "setup",
+    icon: ListChecks,
+    labelKey: "section_setup",
+    summaryKey: "hint_setup",
+  },
+  {
+    key: "profile",
+    icon: UserRound,
+    labelKey: "section_profile",
+    summaryKey: "hint_profile",
+  },
+  {
+    key: "general",
+    icon: Type,
+    labelKey: "section_general",
+    summaryKey: "hint_general",
+  },
+  {
+    key: "background",
+    icon: AppWindow,
+    labelKey: "section_background",
+    summaryKey: "hint_background",
+  },
+  {
+    key: "share",
+    icon: Globe,
+    labelKey: "section_share",
+    summaryKey: "hint_share",
+  },
+  {
+    key: "data",
+    icon: Shield,
+    labelKey: "section_data",
+    summaryKey: "hint_data",
+  },
+  {
+    key: "retention",
+    icon: Archive,
+    labelKey: "section_retention",
+    summaryKey: "hint_retention",
+  },
+  {
+    key: "diagnostics",
+    icon: Activity,
+    labelKey: "section_diagnostics",
+    summaryKey: "hint_diagnostics",
+  },
+];
+
+export function SettingsPage() {
+  const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const section = parseSection(searchParams.get("section"));
+  const isPhone = useMediaQuery(PHONE_QUERY);
+  // Phone list → detail: the list shows when no section is selected.
+  const hasSection = searchParams.has("section");
+  const openSection = (next: SettingsSection) => {
+    const params = new URLSearchParams(searchParams);
+    // "general" is the default, so desktop drops the param; phones always
+    // set it, or tapping General would land back on the section list.
+    if (next === "general" && !isPhone) params.delete("section");
+    else params.set("section", next);
+    setSearchParams(params, { replace: true });
+  };
+  const closeSection = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("section");
+    setSearchParams(params, { replace: true });
+  };
+
+  const [retentionError, setRetentionError] = useState("");
+  const [maxError, setMaxError] = useState("");
+  const [retentionDays, setRetentionDays] = useState("30");
+  const [maxRecords, setMaxRecords] = useState("10000");
+
+  const [allowedDomains, setAllowedDomains] = useState("");
+  const [blockPrivate, setBlockPrivate] = useState(true);
+  const [domainsError, setDomainsError] = useState("");
+  const [allowAllOpen, setAllowAllOpen] = useState(false);
+  // Last persisted value: clearing a non-empty allowlist is allow-all,
+  // which needs an explicit confirm.
+  const lastSavedDomains = useRef<string | null>(null);
+
+  const [launchAtStartup, setLaunchAtStartup] = useState(false);
+  const [startMinimized, setStartMinimized] = useState(false);
+  const [minimizeToTray, setMinimizeToTray] = useState(false);
+  const [closeToTray, setCloseToTray] = useState(true);
+  const [bgServiceRunning, setBgServiceRunning] = useState<boolean | null>(
+    null,
+  );
+  const [batteryExempt, setBatteryExempt] = useState<boolean | null>(null);
+  const [bgBusy, setBgBusy] = useState(false);
+
+  const [fonts, setFonts] = useState<FontRow[]>([]);
+  const [fontUploadError, setFontUploadError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+
+  const [shareUrl, setShareUrl] = useState("");
+  const [shareHandle, setShareHandle] = useState("");
+  const [sharePassword, setSharePassword] = useState("");
+  const [shareUser, setShareUser] = useState<{ handle: string } | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+
+  const loadFonts = useCallback(async () => {
+    try {
+      setFonts((await agent("list_fonts", {})) ?? []);
+    } catch {
+      /* backend unavailable */
+    }
+  }, []);
+
+  // Load persisted settings on mount.
+  useEffect(() => {
+    (async () => {
+      const [
+        days,
+        max,
+        domains,
+        block,
+        startup,
+        minimized,
+        minTray,
+        closeTray,
+      ] = await Promise.all([
+        readSetting("retention_days"),
+        readSetting("max_records"),
+        readSetting("allowed_domains"),
+        readSetting("block_private_ips"),
+        readSetting("launch_at_startup"),
+        readSetting("start_minimized"),
+        readSetting("minimize_to_tray"),
+        readSetting("close_to_tray"),
+      ]);
+      if (days) setRetentionDays(days);
+      if (max) setMaxRecords(max);
+      if (domains) setAllowedDomains(domains);
+      lastSavedDomains.current = domains ?? "";
+      if (block !== null) setBlockPrivate(block === "true");
+      if (startup !== null)
+        setLaunchAtStartup(startup === "true" || startup === "1");
+      if (minimized !== null)
+        setStartMinimized(minimized === "true" || minimized === "1");
+      if (minTray !== null)
+        setMinimizeToTray(minTray === "true" || minTray === "1");
+      if (closeTray !== null)
+        setCloseToTray(closeTray === "true" || closeTray === "1");
+
+      // Share service
+      try {
+        // A saved address wins; the build-time default only pre-fills
+        // the field on a first run before anything was saved.
+        const url = (await share.getServiceUrl()) ?? defaultServiceUrl();
+        if (url) setShareUrl(url);
+        const token = await share.getSessionToken();
+        if (token && url) {
+          try {
+            const me = await share.fetchMe();
+            setShareUser({ handle: me.handle });
+          } catch {}
+        }
+      } catch {}
+    })();
+    loadFonts();
+  }, [loadFonts]);
+
+  // Same behaviour for every numeric setting: validate, save, and say so.
+  const saveNumber = async (
+    key: string,
+    value: string,
+    min: number,
+    label: string,
+    setErr: (m: string) => void,
+  ) => {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < min) {
+      setErr(t("settings_page.number_error", { label, min }));
+      return;
+    }
+    setErr("");
+    await writeSetting(key, String(n));
+    toast.success(t("settings_page.toast_saved"));
+  };
+
+  // One behavior for every background toggle: persist the key, ask the
+  // backend to re-apply autostart/tray without a restart, and say so.
+  const setBackgroundPref = async (
+    key: string,
+    value: boolean,
+    set: (v: boolean) => void,
+  ) => {
+    set(value);
+    await writeSetting(key, value ? "1" : "0");
+    try {
+      await agent("refresh_background", {});
+    } catch {
+      // Web preview or an old backend: the stored value still applies
+      // at the next launch.
+    }
+    toast.success(t("settings_page.toast_bg_saved"));
+  };
+
+  // A completed pull may bring another PC's fonts (or confirm a
+  // delete); reload so the list shows it with no manual step (F10).
+  useEffect(() => {
+    const onPulled = () => {
+      void loadFonts();
+    };
+    window.addEventListener("sync:pulled", onPulled);
+    return () => window.removeEventListener("sync:pulled", onPulled);
+  }, [loadFonts]);
+
+  const uploadFont = async (file: File) => {
+    setFontUploadError("");
+    try {
+      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+      await agent("upload_font", {
+        file_name: file.name,
+        file_data: bytes,
+        family: null,
+      });
+      toast.success(
+        t("settings_page.toast_font_uploaded", { name: file.name }),
+      );
+      await loadFonts();
+      // Stored locally for now; sending fonts to the server gets its own
+      // explicit action in phase 2.
+    } catch (e) {
+      // The wrong content (a non-font with a font extension) must read
+      // inline, not just in a toast (F10).
+      setFontUploadError(
+        t("designer.custom_font_failed", { error: describeError(e) }),
+      );
+    }
+  };
+
+  // Hostnames only: no scheme, path, port-range or spaces. An empty
+  // field means allow-all, so clearing a non-empty list asks first.
+  const saveAllowedDomains = async (raw: string) => {
+    const entries = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const bad = entries.find(
+      (e) =>
+        !/^(?=.{1,253}$)[a-z0-9]([a-z0-9.-]*[a-z0-9])?(?::\d{1,5})?$/i.test(
+          e,
+        ) || e.includes(".."),
+    );
+    if (bad) {
+      setDomainsError(
+        `“${bad}” is not a domain — use hostnames like api.example.com, comma-separated`,
+      );
+      return;
+    }
+    setDomainsError("");
+    const normalized = entries.join(", ");
+    if (normalized === "") {
+      if (lastSavedDomains.current) {
+        setAllowAllOpen(true);
+        return;
+      }
+      return;
+    }
+    await writeSetting("allowed_domains", normalized);
+    if (normalized !== raw) setAllowedDomains(normalized);
+    lastSavedDomains.current = normalized;
+    toast.success(t("settings_page.toast_domains_updated"));
+  };
+
+  const saveShareUrl = async () => {
+    const typed = shareUrl.trim();
+    const next = typed ? normalizeServiceUrl(typed) : null;
+    if (typed && !next) {
+      toast.error(t("settings_page.toast_bad_url"));
+      return;
+    }
+    const current = await share.getServiceUrl();
+    if (next === current) {
+      toast.success(t("settings_page.toast_url_unchanged"));
+      return;
+    }
+    const hadSession = !!(await share.getSessionToken());
+    await share.setServiceUrl(next);
+    setShareUrl(next ?? "");
+    if (hadSession) {
+      // The session token belongs to the old server. Drop it and return to the
+      // sign-in screen, which is prefilled with the new address.
+      setShareUser(null);
+      await share.endSession("signed_out");
+    }
+    toast.success(t("settings_page.toast_url_saved"));
+  };
+
+  const doRegister = async () => {
+    if (!shareUrl.trim() || !shareHandle.trim() || !sharePassword) {
+      toast.error(t("settings_page.toast_signin_required"));
+      return;
+    }
+    setShareBusy(true);
+    try {
+      const res = await share.register(shareHandle.trim(), sharePassword);
+      setShareUser({ handle: res.user.handle });
+      setSharePassword("");
+      toast.success(
+        t("settings_page.toast_registered", { handle: res.user.handle }),
+      );
+    } catch (e) {
+      toast.error(describeError(e));
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const doLogin = async () => {
+    if (!shareUrl.trim() || !shareHandle.trim() || !sharePassword) {
+      toast.error(t("settings_page.toast_signin_required"));
+      return;
+    }
+    setShareBusy(true);
+    try {
+      const res = await share.login(shareHandle.trim(), sharePassword);
+      setShareUser({ handle: res.user.handle });
+      setSharePassword("");
+      toast.success(
+        t("settings_page.toast_signed_in", { handle: res.user.handle }),
+      );
+    } catch (e) {
+      toast.error(describeError(e));
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title={t("settings_page.title")}
+        description={t("pages.settings")}
+      />
+
+      {isPhone && !hasSection ? (
+        /* Phone section list: tapping one opens it with a back arrow. */
+        <ul className="space-y-2">
+          {SECTION_META.map((s) => (
+            <li key={s.key}>
+              <button
+                type="button"
+                onClick={() => openSection(s.key)}
+                className="flex min-h-16 w-full items-center gap-3.5 rounded-lg border bg-card p-3 text-left"
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground"
+                >
+                  <s.icon className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[0.9375rem] font-semibold">
+                    {t(`settings_page.${s.labelKey}`)}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {t(`settings_page.${s.summaryKey}`)}
+                  </span>
+                </span>
+                <ChevronRight
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Tabs
+          value={section}
+          onValueChange={(v) => openSection(v as SettingsSection)}
+          orientation="vertical"
+          className="flex flex-col gap-4 md:flex-row md:items-start md:gap-8"
+        >
+          {isPhone ? (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={closeSection}
+                aria-label={t("common.back")}
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                {t("common.back")}
+              </Button>
+              <span className="truncate text-sm font-medium">
+                {t(`settings_page.section_${section}`, section)}
+              </span>
+            </div>
+          ) : (
+            <TabsList
+              aria-label={t("settings_page.sections_aria")}
+              className="h-auto w-full shrink-0 flex-row items-stretch justify-start gap-1 overflow-x-auto bg-transparent p-0 md:w-56 md:flex-col md:overflow-visible"
+            >
+              {SECTION_META.map((s) => (
+                <TabsTrigger
+                  key={s.key}
+                  value={s.key}
+                  className="justify-start gap-2 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none"
+                >
+                  <s.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  {t(`settings_page.${s.labelKey}`)}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          )}
+
+          <div className="min-w-0 max-w-3xl flex-1">
+            <TabsContent value="setup" className="mt-0 space-y-4">
+              <SetupChecklist onOpenSection={openSection} />
+            </TabsContent>
+
+            <TabsContent value="profile" className="mt-0 space-y-4">
+              <ProfileCard />
+            </TabsContent>
+
+            <TabsContent value="general" className="mt-0 space-y-4">
+              <AppearanceSettings />
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {t("settings_page.fonts_installed")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {fonts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      {t("settings_page.fonts_empty")}
+                    </p>
+                  ) : (
+                    fonts.map((f) => (
+                      <div
+                        key={f.id}
+                        data-testid={`font-row-${f.id}`}
+                        className="flex items-center justify-between p-3 rounded-md border"
+                      >
+                        <div>
+                          <p className="text-sm font-medium">{f.family}</p>
+                          <p className="text-xs text-muted-foreground uppercase">
+                            {f.format}
+                          </p>
+                          <p
+                            data-testid={`font-state-${f.id}`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            {f.state === "ready"
+                              ? t("settings_page.font_ready")
+                              : f.state === "error"
+                                ? "Download failed — will retry"
+                                : "Downloading…"}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={t("settings_page.font_remove", {
+                            name: f.family,
+                          })}
+                          data-testid={`font-delete-${f.id}`}
+                          onClick={async () => {
+                            try {
+                              await agent("delete_font", { id: f.id });
+                              await loadFonts();
+                              toast.success(
+                                t("settings_page.toast_font_removed", {
+                                  name: f.family,
+                                }),
+                              );
+                            } catch (e) {
+                              toast.error(
+                                t("settings_page.toast_failed", {
+                                  error: describeError(e),
+                                }),
+                              );
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))
+                  )}
+
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    aria-label={t("settings_page.font_upload_label")}
+                    tabIndex={-1}
+                    accept=".ttf,.otf,.woff,.woff2"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) uploadFont(f);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    data-testid="settings-font-upload"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload className="h-4 w-4" />
+                    {t("settings_page.font_upload")}
+                  </Button>
+                  {fontUploadError && (
+                    <p role="alert" className="text-sm text-danger">
+                      {fontUploadError}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="background" className="mt-0 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {t("settings_page.background_title")}
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings_page.background_hint")}
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <AndroidBackgroundControls
+                    running={bgServiceRunning}
+                    exempt={batteryExempt}
+                    busy={bgBusy}
+                    onRefresh={async () => {
+                      const bg = await import("@/lib/android/background");
+                      if (!bg.isAndroid()) return;
+                      setBgBusy(true);
+                      try {
+                        setBgServiceRunning(
+                          await bg.isBackgroundServiceRunning(),
+                        );
+                        setBatteryExempt(await bg.isBatteryExemptionGranted());
+                      } finally {
+                        setBgBusy(false);
+                      }
+                    }}
+                    onRequestExemption={async () => {
+                      const bg = await import("@/lib/android/background");
+                      setBgBusy(true);
+                      try {
+                        await bg.requestBatteryExemption();
+                        setBatteryExempt(await bg.isBatteryExemptionGranted());
+                        toast.success(
+                          t("settings_page.background_toast_updated"),
+                        );
+                      } finally {
+                        setBgBusy(false);
+                      }
+                    }}
+                  />
+                  {!isAndroidBackground() && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id="launch-at-startup"
+                          data-testid="settings-launch-at-startup"
+                          checked={launchAtStartup}
+                          onCheckedChange={(v) =>
+                            setBackgroundPref(
+                              "launch_at_startup",
+                              v,
+                              setLaunchAtStartup,
+                            )
+                          }
+                        />
+                        <Label htmlFor="launch-at-startup">
+                          {t("settings_page.background_launch")}
+                        </Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id="start-minimized"
+                          data-testid="settings-start-minimized"
+                          checked={startMinimized}
+                          disabled={!launchAtStartup}
+                          onCheckedChange={(v) =>
+                            setBackgroundPref(
+                              "start_minimized",
+                              v,
+                              setStartMinimized,
+                            )
+                          }
+                        />
+                        <Label htmlFor="start-minimized">
+                          {t("settings_page.background_minimized")}
+                        </Label>
+                      </div>
+                      {!launchAtStartup && (
+                        <p className="text-xs text-muted-foreground">
+                          {t("settings_page.background_minimized_hint")}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id="minimize-to-tray"
+                          data-testid="settings-minimize-to-tray"
+                          checked={minimizeToTray}
+                          onCheckedChange={(v) =>
+                            setBackgroundPref(
+                              "minimize_to_tray",
+                              v,
+                              setMinimizeToTray,
+                            )
+                          }
+                        />
+                        <Label htmlFor="minimize-to-tray">
+                          {t("settings_page.background_minimize_tray")}
+                        </Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id="close-to-tray"
+                          data-testid="settings-close-to-tray"
+                          checked={closeToTray}
+                          onCheckedChange={(v) =>
+                            setBackgroundPref(
+                              "close_to_tray",
+                              v,
+                              setCloseToTray,
+                            )
+                          }
+                        />
+                        <Label htmlFor="close-to-tray">
+                          {t("settings_page.background_close_tray")}
+                        </Label>
+                      </div>
+                      {!closeToTray && (
+                        <p className="text-xs text-warning">
+                          {t("settings_page.background_close_warning")}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="share" className="mt-0 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {t("settings_page.share_title")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="share-url">
+                      {t("settings_page.share_url")}
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="share-url"
+                        placeholder={t("settings_page.share_url_example")}
+                        value={shareUrl}
+                        onChange={(e) => setShareUrl(e.target.value)}
+                      />
+                      <Button variant="outline" onClick={saveShareUrl}>
+                        {t("common.save")}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Leave empty to hide sharing features (V1 behaviour). No
+                      database credentials are bundled in the app — the service
+                      keeps its own database.
+                    </p>
+                  </div>
+
+                  {!shareUser ? (
+                    <div className="space-y-3 border-t pt-4">
+                      <p className="text-sm font-medium">
+                        {t("settings_page.share_signin_title")}
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="share-handle">
+                            {t("auth.handle")}
+                          </Label>
+                          <Input
+                            id="share-handle"
+                            placeholder={t(
+                              "settings_page.share_handle_example",
+                            )}
+                            value={shareHandle}
+                            onChange={(e) => setShareHandle(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="share-password">
+                            {t("auth.password")}
+                          </Label>
+                          <Input
+                            id="share-password"
+                            type="password"
+                            value={sharePassword}
+                            onChange={(e) => setSharePassword(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button onClick={doLogin} disabled={shareBusy}>
+                          {shareBusy ? "…" : t("auth.sign_in")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={doRegister}
+                          disabled={shareBusy}
+                        >
+                          {shareBusy ? "…" : t("settings_page.share_register")}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings_page.share_rules")}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-4">
+                      <p className="text-sm">
+                        {t("settings_page.share_signed_in")}{" "}
+                        <span className="font-medium">{shareUser.handle}</span>
+                      </p>
+                      <Button asChild variant="outline" size="sm">
+                        <Link to="/settings?section=profile">
+                          {t("settings_page.share_manage_account")}
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              <SyncStatusCard />
+            </TabsContent>
+
+            <TabsContent value="data" className="mt-0 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {t("settings_page.data_title")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="allowed-domains">
+                      {t("settings_page.allowed_domains")}
+                    </Label>
+                    <Input
+                      id="allowed-domains"
+                      placeholder={t("settings_page.domains_example")}
+                      value={allowedDomains}
+                      aria-invalid={!!domainsError}
+                      aria-describedby={
+                        domainsError ? "allowed-domains-error" : undefined
+                      }
+                      onChange={(e) => {
+                        setAllowedDomains(e.target.value);
+                        setDomainsError("");
+                      }}
+                      onBlur={() => void saveAllowedDomains(allowedDomains)}
+                    />
+                    {domainsError && (
+                      <p
+                        id="allowed-domains-error"
+                        role="alert"
+                        className="text-xs text-danger"
+                      >
+                        {domainsError}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings_page.domains_hint")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="block-private"
+                      checked={blockPrivate}
+                      onCheckedChange={(v) => {
+                        setBlockPrivate(v);
+                        writeSetting("block_private_ips", String(v));
+                      }}
+                    />
+                    <Label htmlFor="block-private">
+                      {t("settings_page.block_private")}
+                    </Label>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="retention" className="mt-0 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {t("settings_page.retention")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="retention-days">
+                      {t("settings_page.retention_days")}
+                    </Label>
+                    <Input
+                      id="retention-days"
+                      type="number"
+                      min="1"
+                      value={retentionDays}
+                      aria-invalid={!!retentionError}
+                      aria-describedby={
+                        retentionError ? "retention-days-error" : undefined
+                      }
+                      onChange={(e) => {
+                        setRetentionDays(e.target.value);
+                        setRetentionError("");
+                      }}
+                      onBlur={() =>
+                        saveNumber(
+                          "retention_days",
+                          retentionDays,
+                          1,
+                          t("settings_page.retention_days"),
+                          setRetentionError,
+                        )
+                      }
+                    />
+                    {retentionError && (
+                      <p
+                        id="retention-days-error"
+                        role="alert"
+                        className="text-xs text-danger"
+                      >
+                        {retentionError}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="max-records">
+                      {t("settings_page.max_records")}
+                    </Label>
+                    <Input
+                      id="max-records"
+                      type="number"
+                      min="100"
+                      value={maxRecords}
+                      aria-invalid={!!maxError}
+                      aria-describedby={
+                        maxError ? "max-records-error" : undefined
+                      }
+                      onChange={(e) => {
+                        setMaxRecords(e.target.value);
+                        setMaxError("");
+                      }}
+                      onBlur={() =>
+                        saveNumber(
+                          "max_records",
+                          maxRecords,
+                          100,
+                          t("settings_page.max_records"),
+                          setMaxError,
+                        )
+                      }
+                    />
+                    {maxError && (
+                      <p
+                        id="max-records-error"
+                        role="alert"
+                        className="text-xs text-danger"
+                      >
+                        {maxError}
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {t("settings_page.reset_title")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Erases everything the app owns on this PC: templates and
+                    versions, print history, printers, fonts and their files,
+                    datasets, profiles, the sync state and every setting —
+                    including the sign-in, so the app returns to the welcome
+                    screen. The server keeps the account; signing back in pulls
+                    it down again.
+                  </p>
+                  <Button
+                    variant="destructive"
+                    data-testid="settings-reset-database"
+                    onClick={() => setShowResetDialog(true)}
+                  >
+                    <Trash2 className="h-3 w-3 mr-2" />
+                    Reset this PC…
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="diagnostics" className="mt-0 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {t("settings_page.diag_title")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {t("settings_page.diag_hint")}
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      diagnostics.download();
+                      toast.success(t("settings_page.toast_diag_exported"));
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    {t("settings_page.diag_export")}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings_page.diag_note")}
+                  </p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </div>
+        </Tabs>
+      )}
+
+      {/* Clearing the allowlist means any domain can feed data URLs. */}
+      <Dialog open={allowAllOpen} onOpenChange={setAllowAllOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("settings_page.allow_title")}</DialogTitle>
+            <DialogDescription>
+              {t("settings_page.allow_hint")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAllowAllOpen(false)}>
+              {t("settings_page.allow_keep")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                void (async () => {
+                  await writeSetting("allowed_domains", "");
+                  lastSavedDomains.current = "";
+                  setAllowAllOpen(false);
+                  toast.success(t("settings_page.toast_allow_all"));
+                })();
+              }}
+            >
+              {t("settings_page.allow_all")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Full-reset confirmation: the wipe cannot be undone. */}
+      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("settings_page.reset_confirm_title")}</DialogTitle>
+            <DialogDescription>
+              {t("settings_page.reset_body")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowResetDialog(false)}
+              disabled={resetBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={resetBusy}
+              onClick={() => {
+                void (async () => {
+                  setResetBusy(true);
+                  try {
+                    const report = await agent("reset_database", {});
+                    toast.success(
+                      t("settings_page.toast_reset_done", {
+                        templates: report.templates,
+                        jobs: report.print_jobs,
+                        fonts: report.fonts,
+                      }),
+                    );
+                    window.location.reload();
+                  } catch (e) {
+                    toast.error(
+                      t("settings_page.toast_reset_failed", {
+                        error: describeError(e),
+                      }),
+                    );
+                  } finally {
+                    setResetBusy(false);
+                    setShowResetDialog(false);
+                  }
+                })();
+              }}
+            >
+              {resetBusy
+                ? t("settings_page.reset_erasing")
+                : t("settings_page.reset_confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

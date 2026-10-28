@@ -1,0 +1,663 @@
+name: CI
+
+on:
+  # Pull requests into develop run the basic checks (web-check, rust-lint,
+  # rust-test, rust-test-windows, chromium-render, android-check,
+  # server-check). Pull requests into main run those AND the heavy checks
+  # (server-image, server-e2e, app-e2e), so everything except building the
+  # installers is proven before the merge. Plain pushes to other branches run
+  # nothing. The refactoring branch's PR is muted via the head_ref guard on
+  # each job.
+  pull_request:
+    branches: [main, develop]
+  # Pushes to main run the same basic checks, for one reason: a tag run
+  # can only restore caches made on the default branch, and pull-request
+  # caches are private to their PR. Without a run on main there is no
+  # cache for the release tag to restore, so every release rebuilt the
+  # whole Tauri tree cold. The merge to main warms it just before the tag.
+  #
+  # Release tags: everything above, plus the installer builds and the
+  # release (windows-build, linux-build, android-build, github-release),
+  # which run on `v*` tags only. version-check rejects any tag that is not on
+  # main. `create` events do not support tag filters, so tag builds must
+  # use `push`.
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+# Debug info makes every Rust build, link and cache several times larger and
+# is never read in CI: failures print panics and assertion messages, not
+# debugger frames. Only the dev and test profiles are touched; release
+# builds (the shipped installers) are unchanged.
+env:
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+
+# Rust toolchain is pinned (dtolnay/rust-toolchain@1.90.0 below and
+# rust-toolchain.toml). Bump all of them together.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  web-check:
+    if: github.head_ref != 'refactoring'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm check:tauri-args
+      - run: pnpm build
+      # Reused by the Rust jobs (tauri::generate_context! embeds ../dist),
+      # so the frontend is only built once per run.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+      - run: pnpm test
+      # The app's typed API client is generated from the committed
+      # OpenAPI document; a stale schema.d.ts fails the job, and the
+      # build above already type-checked the app against the fresh one.
+      - name: Client type drift check
+        run: |
+          pnpm gen:api
+          git diff --exit-code -- src/lib/api/schema.d.ts
+
+  # rust-check used to run fmt, clippy (a full "check" build) and the tests
+  # (a second full build) one after the other in one job. Lint and test now
+  # run in parallel, so the wall-clock time is the longer of the two, and
+  # `rust-check` below is kept as the single name the release jobs and any
+  # branch protection rule already depend on.
+  rust-lint:
+    if: github.head_ref != 'refactoring'
+    runs-on: ubuntu-latest
+    needs: [web-check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.90.0
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libsoup-3.0-dev patchelf
+      # tauri::generate_context! embeds ../dist, so the frontend must exist.
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+      # Rust failures block: no continue-on-error.
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+  rust-test:
+    if: github.head_ref != 'refactoring'
+    runs-on: ubuntu-latest
+    needs: [web-check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libsoup-3.0-dev patchelf
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  # Gate with the old job name. Passes only when both Rust jobs passed.
+  # `always()` so that a failed or cancelled job reports a failure here
+  # instead of leaving this job skipped (a skipped required check can let
+  # a merge through).
+  rust-check:
+    if: ${{ always() && github.head_ref != 'refactoring' }}
+    runs-on: ubuntu-latest
+    needs: [rust-lint, rust-test]
+    steps:
+      - name: Both Rust jobs must have passed
+        run: |
+          echo "rust-lint:  ${{ needs.rust-lint.result }}"
+          echo "rust-test:  ${{ needs.rust-test.result }}"
+          [ "${{ needs.rust-lint.result }}" = "success" ] && [ "${{ needs.rust-test.result }}" = "success" ]
+
+  # Phase 1: the TypeScript service. Integration tests run against local
+  # SQLite files (no Docker needed). The drift check regenerates
+  # the OpenAPI document and fails on any difference, so the committed
+  # file cannot go stale.
+  server-check:
+    if: github.head_ref != 'refactoring'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The generated client is gitignored, so a fresh clone builds it
+      # first. Generate connects to nothing; the dummy URL only satisfies
+      # config loading (same trick as the Dockerfile).
+      - name: Generate the Prisma client
+        run: |
+          DATABASE_URL=file:/tmp/printninja_ci_dummy.db \
+          pnpm --filter server db:generate
+      - run: pnpm --filter server typecheck
+      - run: pnpm --filter server arch
+      - run: pnpm --filter server test
+      - run: pnpm --filter server test:coverage
+      - name: OpenAPI drift check
+        run: |
+          DATABASE_URL=file:/tmp/printninja_openapi_dummy.db \
+          CORS_ORIGINS=http://localhost:1420 \
+          pnpm --filter server openapi:generate
+          git diff --exit-code -- server/openapi/openapi.json
+
+  # The Dockerfile must stay green independently of the compose stack.
+  # Runs on release tags and on pull requests into main.
+  server-image:
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'pull_request' && github.base_ref == 'main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the service image
+        run: docker build -f server/Dockerfile -t printninja-server:ci .
+
+  # E1 and E8 over HTTP against the composed stack (built image, database
+  # file in the named volume, real network port). Release tags and pull requests
+  # into main only; pull requests into develop run the basic checks.
+  server-e2e:
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'pull_request' && github.base_ref == 'main')) && github.head_ref != 'refactoring'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start the stack
+        run: |
+          printf 'CORS_ORIGINS=http://localhost:1420\n' > server/.env
+          # The container suite shares one client address, so the global
+          # limiter runs relaxed here (the auth limiter stays production:
+          # E8 asserts the real 429). See RATE_LIMIT_* in server/env.example.
+          RATE_LIMIT_MAX=10000 docker compose -f server/docker-compose.yml up -d --build --wait --wait-timeout 180
+      - name: E1 and E8 against the running stack
+        run: E2E_BASE_URL=http://localhost:3001 pnpm --filter server test:e2e
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f server/docker-compose.yml logs
+      - name: Tear the stack down
+        if: always()
+        run: docker compose -f server/docker-compose.yml down -v
+
+  # The Playwright smoke spec: the app in Chromium against the harness
+  # stack (own SQLite file per worker, built service, fake desktop agent).
+  app-e2e:
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'pull_request' && github.base_ref == 'main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate the Prisma client and build the service
+        run: |
+          DATABASE_URL=file:/tmp/printninja_ci_dummy.db \
+          pnpm --filter server db:generate
+          pnpm --filter server build
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Chromium with system dependencies
+        run: pnpm --filter e2e exec playwright install --with-deps chromium
+      - run: pnpm e2e
+      - name: Upload the HTML report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          retention-days: 7
+
+  # 5. Windows is the shipped desktop target, so the Rust tests run there
+  # on every pull request too (Linux rust-check does not compile the
+  # cfg(windows) spooler code) and again before the Windows build starts.
+  rust-test-windows:
+    if: github.head_ref != 'refactoring'
+    runs-on: windows-latest
+    needs: [web-check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  # Android compiles Rust and Kotlin only here and in android-build, so a
+  # break (the v4.1.6 duplicate `testPrinter`) used to surface on the
+  # release tag. A debug build on every pull request catches it earlier,
+  # and the plugin's Kotlin unit tests, which no other job runs, execute
+  # against the generated Gradle project.
+  android-check:
+    # Pull requests only. A tag run builds Android once, in android-build, so
+    # this debug build would compile the same Rust and Kotlin a second time;
+    # a push to main has nothing to warm here (android-build keeps its own
+    # cache, keyed by job), so it would be 45 minutes of cost for no gain.
+    if: github.event_name == 'pull_request' && github.head_ref != 'refactoring'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [web-check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@1.90.0
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      # Self-hosted runners do not ship an Android SDK (unlike
+      # GitHub-hosted ones). Download the cmdline-tools when sdkmanager
+      # is missing and point ANDROID_HOME at them for the steps below.
+      - name: Bootstrap Android cmdline-tools if the runner has none
+        run: |
+          if [ -n "${ANDROID_HOME:-}" ] && SDK=$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' 2>/dev/null | head -n 1) && [ -n "$SDK" ]; then
+            echo "sdkmanager already present at $SDK"
+            exit 0
+          fi
+          echo "No sdkmanager found; downloading cmdline-tools…"
+          export ANDROID_HOME="$RUNNER_TEMP/Android/Sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -fsSL -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q /tmp/cmdtools.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          rm /tmp/cmdtools.zip
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+      - name: Install Android SDK + NDK
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' | head -n 1)
+          if [ -z "$SDKMANAGER" ]; then echo "::error::sdkmanager not found at \$ANDROID_HOME=$ANDROID_HOME"; exit 1; fi
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "ndk;27.0.12077973" "platforms;android-34" "platforms;android-36" "build-tools;34.0.0"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Android project if not committed
+        run: |
+          if [ ! -d src-tauri/gen/android ]; then pnpm exec tauri android init --ci; fi
+      - name: Make gradlew executable
+        run: chmod +x src-tauri/gen/android/gradlew || true
+      # Debug variant: compiles the Rust crate for aarch64 and every Kotlin
+      # source (including the plugin) without needing the release keystore.
+      - run: pnpm exec tauri android build --debug --target aarch64 --apk
+      - name: Kotlin unit tests (android-print plugin)
+        working-directory: src-tauri/gen/android
+        run: ./gradlew :tauri-plugin-android-print:testDebugUnitTest
+
+  # A real Chromium must turn HTML into a PDF through the shipping
+  # PdfRenderer. The fake-browser unit test in `render::tests` cannot
+  # catch a broken `--print-to-pdf` invocation or a missing @page
+  # handling, so this opt-in test (`PRINTNINJA_TEST_REAL_CHROMIUM`)
+  # runs on every PR with a system Chrome installed.
+  chromium-render:
+    if: github.head_ref != 'refactoring'
+    runs-on: ubuntu-latest
+    needs: [web-check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libsoup-3.0-dev patchelf
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+      - name: Install system Chromium (Chrome)
+        uses: browser-actions/setup-chrome@latest
+      - name: Prove a real Chromium renders a PDF
+        env:
+          PRINTNINJA_TEST_REAL_CHROMIUM: "1"
+        run: cargo test --manifest-path src-tauri/Cargo.toml --test chromium_render -- --nocapture
+
+  # Tag builds must match the version in every manifest, otherwise the
+  # artifacts get published under the wrong version. Runs for every
+  # release tag (push tags v*), blocking windows/android/github-release.
+  version-check:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag must be strict semver (vX.Y.Z)
+        run: |
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' is not vX.Y.Z. Pre-release suffixes are not supported by the release pipeline."
+            exit 1
+          fi
+      - name: Tagged commit must be on main
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME points at $GITHUB_SHA which is not reachable from main. Merge to main first, then tag."
+            exit 1
+          fi
+          echo "[ok] $GITHUB_SHA is on main"
+      - name: Compare tag with all manifests
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG=$(jq -r .version package.json)
+          TAURI=$(jq -r .version src-tauri/tauri.conf.json)
+          CARGO=$(awk '/^\[package\]/{p=1;next} /^\[/{p=0} p && /^version *=/{gsub(/[" ]/,"",$3); print $3; exit}' src-tauri/Cargo.toml)
+          # Cargo.lock stores the same version for the crate
+          LOCK=$(awk '/^\[\[package\]\]/{p=0} /name = "printninja"/{p=1;next} p && /^version =/{gsub(/"/,"",$3); print $3; exit}' src-tauri/Cargo.lock)
+          # Layout.tsx topbar fallback literal "vX.Y.Z"
+          LAYOUT=$(grep -o '"v[0-9]\+\.[0-9]\+\.[0-9]\+"' src/components/Layout.tsx | head -n1 | tr -d '"' | sed 's/^v//')
+          echo "tag=$TAG_VERSION package.json=$PKG tauri.conf.json=$TAURI Cargo.toml=$CARGO Cargo.lock=$LOCK Layout.tsx=$LAYOUT"
+          for v in "$PKG" "$TAURI" "$CARGO" "$LOCK" "$LAYOUT"; do
+            if [ -z "$v" ]; then
+              echo "::error::Could not read a version (empty). Check manifests."
+              exit 1
+            fi
+            if [ "$v" != "$TAG_VERSION" ]; then
+              echo "::error::Version mismatch: tag is v$TAG_VERSION but a manifest says $v. Run pnpm version:set $TAG_VERSION, commit the fix, move the tag onto it (git tag -f) and re-push."
+              exit 1
+            fi
+          done
+          echo "[ok] all versions match v$TAG_VERSION"
+
+  windows-build:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    needs: [web-check, rust-check, rust-test-windows, version-check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      # Icon changed via `tauri icon` — Rust cache would restore old
+      # target/release/build/printninja-*/out/resource.rc with stale ICO.
+      # Windows runners default to pwsh, where `rm -rf` is `Remove-Item -rf`
+      # and fails with "A parameter cannot be found that matches parameter
+      # name 'rf'". Use bash explicitly.
+      - name: Clear stale icon build cache
+        shell: bash
+        run: rm -rf src-tauri/target/release/build/printninja-* src-tauri/target/release/bundle || true
+      - run: pnpm install --frozen-lockfile
+      # MSI only. Without --target, output lands in target/release/bundle.
+      - run: pnpm exec tauri build --bundles msi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi
+          path: src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+          retention-days: 30
+
+  linux-build:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    needs: [web-check, rust-check, version-check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - run: pnpm install --frozen-lockfile
+      # deb + AppImage only (no rpm/Flatpak — see docs/IMPROVEMENTS.md §5).
+      # Without --target, output lands in target/release/bundle.
+      - run: pnpm exec tauri build --bundles deb appimage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+          retention-days: 30
+
+  android-build:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: [web-check, rust-check, version-check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@1.90.0
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      - name: Clear stale launcher icon cache
+        run: rm -rf src-tauri/target/aarch64-linux-android src-tauri/gen/android/app/build || true
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      # Self-hosted runners do not ship an Android SDK (unlike
+      # GitHub-hosted ones). Download the cmdline-tools when sdkmanager
+      # is missing and point ANDROID_HOME at them for the steps below.
+      - name: Bootstrap Android cmdline-tools if the runner has none
+        run: |
+          if [ -n "${ANDROID_HOME:-}" ] && SDK=$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' 2>/dev/null | head -n 1) && [ -n "$SDK" ]; then
+            echo "sdkmanager already present at $SDK"
+            exit 0
+          fi
+          echo "No sdkmanager found; downloading cmdline-tools…"
+          export ANDROID_HOME="$RUNNER_TEMP/Android/Sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -fsSL -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q /tmp/cmdtools.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          rm /tmp/cmdtools.zip
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+      - name: Install Android SDK + NDK
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' | head -n 1)
+          if [ -z "$SDKMANAGER" ]; then echo "::error::sdkmanager not found at \$ANDROID_HOME=$ANDROID_HOME"; ls -R "$ANDROID_HOME" | head -n 30; exit 1; fi
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "ndk;27.0.12077973" "platforms;android-34" "platforms;android-36" "build-tools;34.0.0"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Android project if not committed
+        run: |
+          if [ ! -d src-tauri/gen/android ]; then pnpm exec tauri android init --ci; fi
+      # `tauri android init` regenerates res/mipmap-* from tauri.conf bundle.icon.
+      # Copy the launchers that `tauri icon` actually generated (432px adaptive
+      # foreground, anydpi-v26 xml + background colour) over them, otherwise the
+      # APK ships Tauri placeholder art instead of the app icon.
+      - name: Apply generated launcher icons
+        run: |
+          RES=src-tauri/gen/android/app/src/main/res
+          cp -r src-tauri/icons/android/. "$RES"/
+          find "$RES" -name 'ic_launcher*.png' -printf '%p %s\n' | sort
+      # Light status and navigation bars, to match the app's single light theme.
+      - name: Apply light Android theme
+        run: node scripts/patch-android-theme.mjs
+      - name: Make gradlew executable
+        run: chmod +x src-tauri/gen/android/gradlew || true
+      # Pin both variants to the shared keystore so every release APK
+      # carries the same signer and installs as an upgrade. Fails the job
+      # when the secrets are missing rather than shipping a throwaway key.
+      - name: Configure Android signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: node scripts/patch-android-signing.mjs
+      # arm64-v8a only (new mobiles). Production build (no --debug flag):
+      # R8-optimized, non-debuggable, signed with the shared keystore above.
+      # Cleartext stays allowed (patched in) so WebView fetch to http:// LAN
+      # servers and data URLs keeps working exactly like the debug builds.
+      - run: pnpm exec tauri android build --target aarch64 --apk --aab
+      # `tauri android build` names its outputs after the Gradle module
+      # (app-<abi>-release.apk/.aab, currently app-universal-*); rename them to
+      # the product name and version so the release attachments match the
+      # MSI/deb/AppImage set.
+      - name: Name the Android artifacts
+        run: |
+          OUT=src-tauri/gen/android/app/build/outputs
+          VER="${GITHUB_REF_NAME#v}"
+          mapfile -t APKS < <(find "$OUT/apk" -name '*.apk')
+          mapfile -t AABS < <(find "$OUT/bundle" -name '*.aab')
+          [ "${#APKS[@]}" -eq 1 ] || { echo "::error::expected exactly 1 APK, found ${#APKS[@]}: ${APKS[*]}"; exit 1; }
+          [ "${#AABS[@]}" -eq 1 ] || { echo "::error::expected exactly 1 AAB, found ${#AABS[@]}: ${AABS[*]}"; exit 1; }
+          mv "${APKS[0]}" "$OUT/PrintNinja_${VER}_aarch64.apk"
+          mv "${AABS[0]}" "$OUT/PrintNinja_${VER}_aarch64.aab"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: |
+            src-tauri/gen/android/app/build/outputs/**/*.apk
+            src-tauri/gen/android/app/build/outputs/**/*.aab
+          if-no-files-found: error
+          retention-days: 30
+
+  gitea-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: [windows-build, linux-build, android-build]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+          merge-multiple: true
+      # softprops/action-gh-release speaks only the GitHub API, so the
+      # draft release is created through the forge API instead.
+      # github.server_url keeps this working wherever the repo is hosted.
+      - name: Create draft release and upload artifacts
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          [ -n "$RELEASE_TOKEN" ] || { echo "::error::RELEASE_TOKEN secret is not set."; exit 1; }
+          API="${{ github.server_url }}/api/v1/repos/${{ github.repository }}"
+          AUTH="Authorization: token $RELEASE_TOKEN"
+          TAG="${{ github.ref_name }}"
+          # Reuse the release when it exists (re-runs must not duplicate it).
+          CODE=$(curl -sS -o /tmp/rel.json -w "%{http_code}" -H "$AUTH" "$API/releases/tags/$TAG")
+          if [ "$CODE" = "200" ]; then
+            ID=$(python3 -c "import json;print(json.load(open('/tmp/rel.json'))['id'])")
+          elif [ "$CODE" = "404" ]; then
+            CODE=$(curl -sS -o /tmp/rel.json -w "%{http_code}" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+              -d "{\"tag_name\":\"$TAG\",\"name\":\"PrintNinja $TAG\",\"draft\":true}" "$API/releases")
+            [ "$CODE" = "201" ] || { echo "::error::release create answered $CODE"; cat /tmp/rel.json; exit 1; }
+            ID=$(python3 -c "import json;print(json.load(open('/tmp/rel.json'))['id'])")
+          else
+            echo "::error::release lookup answered $CODE"; cat /tmp/rel.json; exit 1
+          fi
+          echo "release id: $ID"
+          shopt -s globstar nullglob
+          fail=0
+          for pattern in "dist-artifacts/*.msi" "dist-artifacts/**/*.deb" "dist-artifacts/**/*.AppImage" "dist-artifacts/**/*.apk" "dist-artifacts/**/*.aab"; do
+            files=($pattern)
+            [ "${#files[@]}" -gt 0 ] || { echo "::error::no artifacts match $pattern"; fail=1; continue; }
+            for f in "${files[@]}"; do
+              echo "uploading $(basename "$f")…"
+              CODE=$(curl -sS -o /tmp/up.json -w "%{http_code}" -X POST -H "$AUTH" -H 'Content-Type: application/octet-stream' \
+                --data-binary "@$f" "$API/releases/$ID/assets?name=$(basename "$f")")
+              [ "$CODE" = "201" ] || { echo "::error::upload of $(basename "$f") answered $CODE"; cat /tmp/up.json; fail=1; }
+            done
+          done
+          exit $fail

@@ -1,0 +1,7 @@
+{
+  "identifier": "mobile",
+  "description": "Mobile-only capabilities. Pairing is a typed 8-character code; no camera permission ships.",
+  "windows": ["main"],
+  "platforms": ["android", "iOS"],
+  "permissions": []
+}

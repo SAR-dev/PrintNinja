@@ -1,0 +1,56 @@
+/**
+ * Small settings helpers shared outside the Settings page.
+ * Settings live in SQLite through Tauri; in the browser preview (and when the
+ * backend is unavailable) they fall back to localStorage so the UI keeps working.
+ */
+import { agent } from "@/lib/agent/commands";
+
+const lsKey = (key: string) => `printninja-setting:${key}`;
+
+/** True in the browser preview/CI, where no Tauri backend answers. */
+export function isWebMode(): boolean {
+  return typeof window !== "undefined" && !(window as any).__TAURI_INTERNALS__;
+}
+
+/** localStorage key backing one setting in web mode. */
+export function settingsLsKey(key: string): string {
+  return lsKey(key);
+}
+
+export async function readSetting(key: string): Promise<string | null> {
+  try {
+    const v = await agent("get_setting", { key });
+    if (v != null && v !== "") return v;
+  } catch {
+    /* web mode or backend unavailable */
+  }
+  try {
+    const v = localStorage.getItem(lsKey(key));
+    return v === "" ? null : v;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeSetting(key: string, value: string): Promise<void> {
+  try {
+    localStorage.setItem(lsKey(key), value);
+  } catch {
+    /* storage unavailable */
+  }
+  try {
+    await agent("set_setting", { key, value });
+  } catch {
+    /* kept in localStorage */
+  }
+}
+
+/** Synchronous read of the local cache, used to avoid a flash before the DB answers. */
+export function readCachedSetting(key: string): string | null {
+  try {
+    const v = localStorage.getItem(lsKey(key));
+    return v === "" ? null : v;
+  } catch {
+    return null;
+  }
+}

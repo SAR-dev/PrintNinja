@@ -1,0 +1,122 @@
+import { randomUUID } from "node:crypto";
+import { buildApp } from "./app.js";
+import { loadConfig } from "./config.js";
+import { purgeExpiredSessions } from "./domain/auth/index.js";
+import { purgeOldTombstones } from "./domain/sync/index.js";
+import type { AppDeps } from "./domain/ports.js";
+import { createDbClient } from "./infra/db/client.js";
+import { describeDatabaseUrl } from "./infra/db/describe-url.js";
+import { createDatasetRepository } from "./infra/db/datasets.js";
+import { createSettingRepository } from "./infra/db/settings.js";
+import { createFontRepository } from "./infra/db/fonts.js";
+import { createProfileRepository } from "./infra/db/profiles.js";
+import { createSavedRepository } from "./infra/db/saved.js";
+import { createSessionRepository } from "./infra/db/sessions.js";
+import { createSyncRepository } from "./infra/db/sync.js";
+import { createTemplateRepository } from "./infra/db/templates.js";
+import { createUserRepository } from "./infra/db/users.js";
+import { createPasswordHasher } from "./infra/security/passwordHasher.js";
+import { createTokenService } from "./infra/security/tokens.js";
+
+// Process entry (REFACTORING.md section 5): load config, build app,
+// listen, and shut down cleanly — stop accepting, let in-flight
+// requests finish, close the database, then exit. Fail-fast: a bad
+// environment aborts here with the offending field named.
+const config = loadConfig();
+const db = createDbClient(config.databaseUrl, config.databaseAuthToken);
+
+const deps: AppDeps = {
+  users: createUserRepository(db),
+  sessions: createSessionRepository(db),
+  hasher: createPasswordHasher({
+    memoryKib: config.argon2MemoryKib,
+    timeCost: config.argon2TimeCost,
+    parallelism: config.argon2Parallelism,
+  }),
+  tokens: createTokenService(),
+  clock: { now: () => new Date() },
+  ids: { newId: () => randomUUID() },
+  sessionTtlDays: config.sessionTtlDays,
+  templates: createTemplateRepository(db),
+  datasets: createDatasetRepository(db),
+  profiles: createProfileRepository(db),
+  settings: createSettingRepository(db),
+  fonts: createFontRepository(db),
+  saved: createSavedRepository(db),
+  sync: createSyncRepository(db),
+  ping: () => db.$queryRaw`SELECT 1`.then(() => undefined),
+};
+
+const app = await buildApp({ config, deps });
+app.log.info(
+  { databaseUrl: describeDatabaseUrl(config.databaseUrl) },
+  "database",
+);
+app.addHook("onClose", async () => {
+  await db.$disconnect();
+});
+
+// Cleanup: once at startup, then hourly. Sessions past their TTL go, and
+// tombstones older than the retention window go (their absence is what
+// lets a stale cursor answer reset instead of silently missing deletes).
+// No job queue — a timer in the process entry is the whole mechanism.
+// buildApp stays schedule-free so tests never inherit timers. Serverless
+// deployments run this from a scheduled job against /v2/internal/cleanup
+// instead (see docs/RELEASE.md).
+const purgedSessionsAtStartup = await purgeExpiredSessions(deps);
+const purgedTombstonesAtStartup = await purgeOldTombstones(
+  deps,
+  new Date(),
+  config.syncTombstoneDays,
+);
+app.log.info(
+  { purgedSessionsAtStartup, purgedTombstonesAtStartup },
+  "purged at startup",
+);
+const cleanupTimer = setInterval(() => {
+  void runCleanup();
+}, config.sessionCleanupMinutes * 60_000);
+// The listener socket owns the process lifetime, not this timer: a
+// wedged event loop should not be held open by cleanup alone, and a
+// slow purge must not overlap the next tick.
+cleanupTimer.unref?.();
+let cleanupRunning = false;
+async function runCleanup(): Promise<void> {
+  if (cleanupRunning) {
+    app.log.warn("cleanup still running; skipping this tick");
+    return;
+  }
+  cleanupRunning = true;
+  try {
+    const [purgedSessions, purgedTombstones] = await Promise.all([
+      purgeExpiredSessions(deps),
+      purgeOldTombstones(deps, new Date(), config.syncTombstoneDays),
+    ]);
+    app.log.info(
+      { purgedSessions, purgedTombstones },
+      "periodic cleanup finished",
+    );
+  } catch (error: unknown) {
+    app.log.error({ err: error }, "periodic cleanup failed");
+  } finally {
+    cleanupRunning = false;
+  }
+}
+app.addHook("onClose", async () => {
+  clearInterval(cleanupTimer);
+});
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    app.log.info({ signal }, "shutting down");
+    app
+      .close()
+      .then(() => process.exit(0))
+      .catch((error: unknown) => {
+        app.log.error({ err: error }, "error during shutdown");
+        process.exit(1);
+      });
+  });
+}
+
+await app.listen({ port: config.port, host: config.host });

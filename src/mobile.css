@@ -1,0 +1,454 @@
+/* Phone design layer.
+ *
+ * Below the `md` breakpoint (the same 767px the app's own PHONE_QUERY uses)
+ * the app should feel like a phone app, not a squeezed desktop page:
+ * rounder and larger controls, borderless cards lifted by soft shadows, a
+ * large page title, pill action chips, a tonal bottom tab bar, sheets that
+ * rise from the bottom edge, and press feedback on everything tappable.
+ *
+ * Rules:
+ *  - Desktop is untouched: every rule is inside the phone media query.
+ *  - Colour comes from the existing semantic tokens only (no new palette),
+ *    so the contrast pairs asserted in src/test/tokens.test.ts still hold.
+ *  - Form controls keep their visible 1px `--input` border. It is the 3:1
+ *    boundary WCAG 1.4.11 asks for, so controls get bigger and rounder,
+ *    not borderless.
+ *  - Hooks are `data-slot` attributes on the shared primitives and layout,
+ *    so these rules do not depend on Tailwind class chains.
+ *
+ * This file loads after index.css, so equal-specificity rules here win over
+ * Tailwind utilities.
+ */
+
+@media (max-width: 767px) {
+  /* ---------- Tokens: shape, size, elevation ---------- */
+  :root,
+  :root[data-density="compact"] {
+    /* --radius drives rounded-lg/md/sm, so every button, field and card
+       re-rounds from this one value. */
+    --radius: 0.875rem;
+    /* Phones always use the roomy sizes, whatever the density setting. */
+    --control-h: 3rem;
+    --head-h: 2.75rem;
+    --cell-py: 0.75rem;
+
+    --shadow-card:
+      0 1px 2px hsl(var(--foreground) / 0.05),
+      0 6px 20px -6px hsl(var(--foreground) / 0.1);
+    --shadow-bar:
+      0 -1px 0 hsl(var(--border)),
+      0 -12px 32px -14px hsl(var(--foreground) / 0.14);
+    --ease-out: cubic-bezier(0.22, 0.8, 0.24, 1);
+  }
+
+  body {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+
+  /* Nothing tappable should select text or flash a callout on long-press. */
+  [data-slot="button"],
+  [data-slot="tabs-trigger"],
+  [data-slot="mobile-nav"] a,
+  [data-slot="mobile-nav"] button,
+  [role="switch"],
+  [role="tab"] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
+  }
+
+  /* ---------- App bar ---------- */
+  [data-slot="app-header"] {
+    height: calc(3.5rem + env(safe-area-inset-top, 0px));
+    padding-inline: max(1rem, env(safe-area-inset-left, 0px))
+      max(1rem, env(safe-area-inset-right, 0px));
+    border-bottom: 0;
+    background-color: hsl(var(--background));
+    position: relative;
+    z-index: 20;
+  }
+  [data-slot="app-header"] a > span.truncate {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  /* The shortcuts sheet lists keyboard keys; a phone has none. */
+  [data-slot="header-help"] {
+    display: none;
+  }
+  [data-slot="app-header"] [data-slot="button"] {
+    border-radius: 9999px;
+  }
+
+  /* ---------- Content area ---------- */
+  [data-slot="app-main"] {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  [data-slot="app-content"] {
+    padding: 1.5rem max(1rem, env(safe-area-inset-left, 0px)) 2.5rem
+      max(1rem, env(safe-area-inset-right, 0px));
+  }
+
+  /* ---------- Large page title + chip actions ---------- */
+  [data-slot="page-header"] {
+    gap: 0.875rem;
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+  [data-slot="page-header"] h1 {
+    font-size: 1.75rem;
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+  [data-slot="page-header"] p {
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+  /* Actions become pills. They wrap rather than scroll: a sideways row
+     would hide the primary action (the last one) off the screen edge. */
+  [data-slot="page-actions"] {
+    gap: 0.5rem;
+  }
+  [data-slot="page-actions"] [data-slot="button"] {
+    height: 2.75rem;
+    min-height: 2.75rem;
+    padding-inline: 1.125rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+  }
+
+  /* ---------- Cards: borderless, lifted by shadow ---------- */
+  [data-slot="card"],
+  [data-slot="app-main"] .rounded-lg.border.bg-card {
+    border-color: transparent;
+    border-radius: 1.25rem;
+    box-shadow: var(--shadow-card);
+  }
+  /* Rows that are tappable get a press state. */
+  [data-slot="app-main"] a.rounded-lg.border.bg-card,
+  [data-slot="app-main"] button.rounded-lg.border.bg-card {
+    transition:
+      transform 120ms var(--ease-out),
+      box-shadow 120ms var(--ease-out);
+  }
+  [data-slot="app-main"] a.rounded-lg.border.bg-card:active,
+  [data-slot="app-main"] button.rounded-lg.border.bg-card:active {
+    transform: scale(0.985);
+    box-shadow: none;
+  }
+
+  /* ---------- Buttons ---------- */
+  [data-slot="button"] {
+    font-weight: 600;
+    transition:
+      transform 120ms var(--ease-out),
+      background-color 150ms,
+      opacity 150ms;
+  }
+  [data-slot="button"]:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  [data-slot="button"].h-8 {
+    /* size="sm": still a 44px target on phones (the e2e phone spec
+       asserts every visible button is at least 44x44). */
+    height: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  /* ---------- Fields ---------- */
+  /* Horizontal padding is left to the utilities: inputs with a leading icon
+     (search) rely on their own pl-* to clear it. */
+  [data-slot="input"],
+  [data-slot="select-trigger"] {
+    height: 3rem;
+    min-height: 3rem;
+    border-radius: 0.875rem;
+  }
+  [data-slot="select-trigger"] {
+    padding-inline: 1rem;
+  }
+  [data-slot="textarea"] {
+    border-radius: 0.875rem;
+  }
+  [data-slot="input"]:focus-visible,
+  [data-slot="textarea"]:focus-visible,
+  [data-slot="select-trigger"]:focus {
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.2);
+    --tw-ring-offset-width: 0px;
+  }
+  label {
+    font-weight: 600;
+  }
+  [data-slot="switch"] {
+    /* Native switches are about 51x31; scale from the trailing edge so the
+       row layout does not shift. */
+    transform: scale(1.2);
+    transform-origin: right center;
+  }
+
+  /* ---------- Segmented tabs ---------- */
+  [data-slot="tabs-list"] {
+    display: flex;
+    width: 100%;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    min-height: 3rem;
+    border-radius: 1rem;
+    scrollbar-width: none;
+  }
+  [data-slot="tabs-list"]::-webkit-scrollbar {
+    display: none;
+  }
+  [data-slot="tabs-trigger"] {
+    flex: 1 0 auto;
+    /* 44px: the e2e phone spec asserts every visible tab is at least
+       44x44, same as buttons. */
+    min-height: 2.75rem;
+    padding-inline: 0.5rem;
+    border-radius: 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+  [data-slot="tabs-trigger"][data-state="active"] {
+    box-shadow:
+      0 1px 2px hsl(var(--foreground) / 0.1),
+      0 2px 8px -2px hsl(var(--foreground) / 0.12);
+  }
+
+  /* ---------- Bottom tab bar ---------- */
+  /* A detached, rounded island that floats above the page surface rather
+     than a bar bolted to the screen edge. The page background shows around
+     it, so content never slides underneath. */
+  [data-slot="mobile-nav"] {
+    border: 0;
+    border-radius: 2rem;
+    margin: 0.25rem max(0.75rem, env(safe-area-inset-left, 0px))
+      calc(0.625rem + env(safe-area-inset-bottom, 0px))
+      max(0.75rem, env(safe-area-inset-right, 0px));
+    padding-bottom: 0;
+    box-shadow:
+      0 1px 2px hsl(var(--foreground) / 0.06),
+      0 10px 32px -8px hsl(var(--foreground) / 0.28);
+    position: relative;
+    z-index: 20;
+  }
+  [data-slot="mobile-nav"] ul {
+    padding: 0.25rem 0.375rem;
+  }
+  [data-slot="mobile-nav"] a,
+  [data-slot="mobile-nav"] button {
+    min-height: 3.75rem;
+    gap: 0.3125rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    justify-content: flex-start;
+    padding-top: 0.25rem;
+    transition: color 150ms;
+  }
+  /* The icon sits on a pill; the active tab's pill is filled. */
+  [data-slot="mobile-nav"] svg {
+    box-sizing: content-box;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0.25rem 1.25rem;
+    border-radius: 9999px;
+    background-color: transparent;
+    transition:
+      background-color 200ms var(--ease-out),
+      transform 150ms var(--ease-out);
+  }
+  [data-slot="mobile-nav"] a[aria-current="page"] svg,
+  [data-slot="mobile-nav"] button[aria-expanded="true"] svg {
+    background-color: hsl(var(--accent));
+  }
+  [data-slot="mobile-nav"] a:active svg,
+  [data-slot="mobile-nav"] button:active svg {
+    transform: scale(0.88);
+  }
+  [data-slot="mobile-nav"] a[aria-current="page"] {
+    font-weight: 700;
+  }
+
+  /* ---------- Status banners (Print result, offline, errors) ---------- */
+  [data-slot="app-main"] [role="status"][class*="-soft"] {
+    border-color: transparent;
+    border-radius: 1.25rem;
+    padding: 0.875rem 1rem;
+  }
+
+  /* ---------- List cards ---------- */
+  [data-card] {
+    padding: 1rem;
+    gap: 0.75rem;
+    transition:
+      transform 120ms var(--ease-out),
+      box-shadow 120ms var(--ease-out);
+  }
+  [data-card]:active {
+    transform: scale(0.985);
+    box-shadow: none;
+  }
+  /* The row's selection checkbox: a bigger, rounder target. */
+  [data-card] input[type="checkbox"] {
+    width: 1.375rem;
+    height: 1.375rem;
+    border-radius: 0.5rem;
+  }
+  [data-card] [data-slot="button"][class*="w-control"],
+  [data-card] button[aria-label^="Actions for"] {
+    border-radius: 9999px;
+  }
+
+  /* ---------- Search field: a pill on the page surface, not a boxed form ---------- */
+  [data-slot="app-main"] [role="search"] {
+    margin-inline: 0;
+    padding: 0;
+    border-color: transparent;
+    background-color: transparent;
+    box-shadow: none;
+  }
+  [role="search"] [data-slot="input"] {
+    border-radius: 9999px;
+  }
+  [role="search"] [data-slot="button"] {
+    border-radius: 9999px;
+    height: 3rem;
+  }
+
+  /* ---------- Sticky action bar (Print) ---------- */
+  [data-slot="action-bar"] {
+    border-top: 0;
+    padding-top: 0.75rem;
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    background-color: hsl(var(--card) / 0.92);
+    box-shadow: var(--shadow-bar);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    backdrop-filter: blur(14px) saturate(1.4);
+  }
+  [data-slot="action-bar"] [data-slot="button"] {
+    height: 3.25rem;
+    border-radius: 9999px;
+    font-size: 0.9375rem;
+    box-shadow: 0 6px 16px -6px hsl(var(--primary) / 0.55);
+  }
+  [data-slot="action-bar"] [data-slot="button"]:disabled {
+    box-shadow: none;
+  }
+
+  /* ---------- Sheets and dialogs rise from the bottom ---------- */
+  [data-slot="overlay"] {
+    background-color: hsl(var(--foreground) / 0.45);
+  }
+  [data-slot="sheet-content"][data-side="bottom"] {
+    border-top: 0;
+    border-radius: 1.75rem 1.75rem 0 0;
+    box-shadow: 0 -12px 40px -12px hsl(var(--foreground) / 0.3);
+  }
+  /* Grab handle. */
+  [data-slot="sheet-content"][data-side="bottom"]::before,
+  [data-slot="dialog-content"]::before {
+    content: "";
+    position: absolute;
+    top: 0.5rem;
+    left: 50%;
+    width: 2.5rem;
+    height: 0.3125rem;
+    transform: translateX(-50%);
+    border-radius: 9999px;
+    background-color: hsl(var(--foreground) / 0.18);
+  }
+  [data-slot="sheet-content"][data-side="bottom"] > header,
+  [data-slot="sheet-content"][data-side="bottom"] > div:first-child {
+    padding-top: 1.75rem;
+  }
+  [data-slot="dialog-content"] {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: 100%;
+    max-width: none;
+    max-height: 92dvh;
+    overflow-y: auto;
+    transform: none;
+    border: 0;
+    border-radius: 1.75rem 1.75rem 0 0;
+    padding: 2rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -12px 40px -12px hsl(var(--foreground) / 0.3);
+  }
+  [data-slot="dialog-content"][data-state="open"] {
+    animation: phone-sheet-up 320ms var(--ease-out);
+  }
+  [data-slot="dialog-content"][data-state="closed"] {
+    animation: phone-sheet-down 200ms ease-in forwards;
+  }
+  /* Bottom-sheet link lists (the "More" sheet): roomy rows, icons on tonal
+     tiles. */
+  [data-slot="sheet-content"][data-side="bottom"] li > a {
+    min-height: 3.5rem;
+    gap: 0.875rem;
+    padding-inline: 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.9375rem;
+    transition: background-color 120ms;
+  }
+  [data-slot="sheet-content"][data-side="bottom"] li > a:active {
+    background-color: hsl(var(--muted));
+  }
+  [data-slot="sheet-content"][data-side="bottom"] li > a svg {
+    box-sizing: content-box;
+    width: 1.25rem;
+    height: 1.25rem;
+    padding: 0.5rem;
+    border-radius: 0.75rem;
+    background-color: hsl(var(--secondary));
+  }
+  [data-slot="sheet-content"][data-side="bottom"] li > a[aria-current="page"] svg {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+
+  /* Primary action first and full width, like a native action sheet. */
+  [data-slot="dialog-content"] [data-slot="button"] {
+    width: 100%;
+  }
+
+  /* ---------- Toasts ---------- */
+  [data-sonner-toast] {
+    border-radius: 1.125rem !important;
+    border-color: transparent !important;
+    box-shadow:
+      0 2px 4px hsl(var(--foreground) / 0.06),
+      0 12px 32px -8px hsl(var(--foreground) / 0.25) !important;
+  }
+}
+
+@keyframes phone-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes phone-sheet-down {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+/* Motion off means no slide either (index.css already zeroes durations for
+   most things; these keyframes are named animations, so cover them too). */
+@media (max-width: 767px) and (prefers-reduced-motion: reduce) {
+  [data-slot="dialog-content"][data-state] {
+    animation: none;
+  }
+}
