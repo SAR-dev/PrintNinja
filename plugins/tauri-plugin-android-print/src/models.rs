@@ -136,6 +136,61 @@ pub struct UsbWriteResponse {
     pub bytes_written: usize,
 }
 
+/// Open a USB device and hold the connection under a minted handle, so
+/// one print's status query and write share a single connect instead of
+/// opening twice. The caller must close the handle on every path.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsbOpenRequest {
+    pub device_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsbOpenResponse {
+    pub handle: String,
+}
+
+/// Status query on a held USB connection (`openUsbConnection` handle).
+/// Same base64 convention as [`UsbQueryRequest`]; the connection stays
+/// open.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsbQueryOnRequest {
+    pub handle: String,
+    pub request_base64: String,
+    /// How long the Kotlin side waits for the reply. Defaults to 3000.
+    pub reply_timeout_ms: Option<u64>,
+}
+
+/// Write on a held USB connection. Same convention as
+/// [`UsbWriteRequest`]; the connection stays open.
+///
+/// Large payloads travel by file instead of base64 (A4): exactly one of
+/// `data_base64` / `data_path` is set. The Kotlin side reads and deletes
+/// the file.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsbWriteOnRequest {
+    pub handle: String,
+    pub data_base64: Option<String>,
+    pub data_path: Option<String>,
+}
+
+/// Release a held USB connection. Idempotent: unknown handles resolve
+/// `closed: false` rather than erroring.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsbCloseRequest {
+    pub handle: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsbCloseResponse {
+    pub closed: bool,
+}
+
 /// One paired Bluetooth device, as listed by the Kotlin plugin.
 /// `id` is the MAC address — the stable handle a stored printer row keeps.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -192,6 +247,61 @@ pub struct BluetoothQueryResponse {
 #[serde(rename_all = "camelCase")]
 pub struct BluetoothWriteResponse {
     pub bytes_written: usize,
+}
+
+/// Open an RFCOMM socket and hold it under a minted handle, so one
+/// print's status query and write share a single connect instead of
+/// opening twice. The caller must close the handle on every path.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BluetoothOpenRequest {
+    pub address: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BluetoothOpenResponse {
+    pub handle: String,
+}
+
+/// Status query on a held RFCOMM socket (`openBluetoothConnection`
+/// handle). Same convention as [`BluetoothQueryRequest`]; the socket
+/// stays open.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BluetoothQueryOnRequest {
+    pub handle: String,
+    pub request_base64: String,
+    /// How long the Kotlin side waits for the reply. Defaults to 3000.
+    pub reply_timeout_ms: Option<u64>,
+}
+
+/// Write on a held RFCOMM socket. Same convention as
+/// [`BluetoothWriteRequest`]; the socket stays open.
+///
+/// Large payloads travel by file instead of base64 (A4): exactly one of
+/// `data_base64` / `data_path` is set. The Kotlin side reads and deletes
+/// the file.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BluetoothWriteOnRequest {
+    pub handle: String,
+    pub data_base64: Option<String>,
+    pub data_path: Option<String>,
+}
+
+/// Release a held RFCOMM socket. Idempotent: unknown handles resolve
+/// `closed: false` rather than erroring.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BluetoothCloseRequest {
+    pub handle: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BluetoothCloseResponse {
+    pub closed: bool,
 }
 
 /// The local API server's state, mirrored into the Android foreground
@@ -251,6 +361,66 @@ mod tests {
         assert!(serde_json::from_str::<BluetoothDeviceList>(json).is_err());
         let wrapped = r#"{"devices":[{"id":"AA:BB:CC:DD:EE:FF","name":"x"}]}"#;
         assert!(serde_json::from_str::<Vec<BluetoothDeviceInfo>>(wrapped).is_err());
+    }
+
+    // Held-connection responses: exactly what the *On Kotlin commands
+    // resolve with (`{"handle": ...}` / `{"closed": ...}`).
+
+    #[test]
+    fn usb_open_response_carries_the_handle() {
+        let res: UsbOpenResponse =
+            serde_json::from_str(r#"{"handle":"550e8400-e29b-41d4-a716-446655440000"}"#).unwrap();
+        assert_eq!(res.handle, "550e8400-e29b-41d4-a716-446655440000");
+    }
+
+    #[test]
+    fn usb_close_response_carries_closed() {
+        let res: UsbCloseResponse = serde_json::from_str(r#"{"closed":true}"#).unwrap();
+        assert!(res.closed);
+        let res: UsbCloseResponse = serde_json::from_str(r#"{"closed":false}"#).unwrap();
+        assert!(!res.closed);
+    }
+
+    #[test]
+    fn bluetooth_open_response_carries_the_handle() {
+        let res: BluetoothOpenResponse =
+            serde_json::from_str(r#"{"handle":"abc123"}"#).unwrap();
+        assert_eq!(res.handle, "abc123");
+    }
+
+    #[test]
+    fn bluetooth_close_response_carries_closed() {
+        let res: BluetoothCloseResponse = serde_json::from_str(r#"{"closed":true}"#).unwrap();
+        assert!(res.closed);
+    }
+
+    #[test]
+    fn handle_requests_serialize_camel_case() {
+        let req = UsbQueryOnRequest {
+            handle: "h".into(),
+            request_base64: "AA==".into(),
+            reply_timeout_ms: Some(3000),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"requestBase64\""), "{json}");
+        assert!(json.contains("\"replyTimeoutMs\""), "{json}");
+        let req = BluetoothWriteOnRequest {
+            handle: "h".into(),
+            data_base64: Some("AA==".into()),
+            data_path: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"dataBase64\""), "{json}");
+        let req = BluetoothWriteOnRequest {
+            handle: "h".into(),
+            data_base64: None,
+            data_path: Some("/cache/payload.bin".into()),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"dataPath\""), "{json}");
+        // Absent side serializes as null, like the existing Option fields
+        // (reply_timeout_ms) the Kotlin side already defaults.
+        assert!(json.contains("\"dataBase64\":null"), "{json}");
     }
 
     fn printer(kind: &str, host: &str, rp: Option<&str>) -> DiscoveredPrinter {

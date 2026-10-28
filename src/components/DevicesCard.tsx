@@ -51,7 +51,11 @@ type TestState =
  * shows an 8-character code; the phone types that code and is done. When
  * the PC is off or away the phone prints on its own exactly as before.
  */
-export function DevicesCard() {
+/** `onPaired` is supplied only by the Android PairingGate: it lets a
+ * pair made on that screen leave immediately instead of waiting for the
+ * gate's 2s poll (which briefly shows the paired device on the welcome
+ * screen). Settings/Automation omit it and keep normal behaviour. */
+export function DevicesCard({ onPaired }: { onPaired?: () => void } = {}) {
   const { t } = useTranslation();
   const phone = isAndroid();
 
@@ -85,7 +89,7 @@ export function DevicesCard() {
             ? t("settings_page.devices_phone_hint")
             : t("settings_page.devices_pc_hint")}
         </p>
-        {phone ? <PhoneSection /> : <PcSection />}
+        {phone ? <PhoneSection onPaired={onPaired} /> : <PcSection />}
       </CardContent>
     </Card>
   );
@@ -647,7 +651,7 @@ function PcSection() {
 }
 
 /** Phone: type the PC's code. Renders always go to the paired PC. */
-function PhoneSection() {
+function PhoneSection({ onPaired }: { onPaired?: () => void }) {
   const { t } = useTranslation();
   const [pairs, setPairs] = useState<RenderPair[]>([]);
   const [tests, setTests] = useState<Record<string, TestState>>({});
@@ -731,6 +735,12 @@ function PhoneSection() {
       toast.success(t("settings_page.devices_paired_ok", { name: pair.name }));
       setCode("");
       setAddress("");
+      // The pairing gate used to notice this only on its next 2s poll,
+      // which left the freshly-paired device sitting on the welcome
+      // screen for up to two seconds before /print replaced it. Leave as
+      // soon as the pair (and its test) is done; undefined outside the
+      // gate, so Settings/Automation are unaffected.
+      onPaired?.();
     } catch (e) {
       setFormError(describeError(e));
     } finally {

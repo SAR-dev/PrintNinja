@@ -142,6 +142,7 @@ impl PdfRenderer {
             let cfg = cdp::Config::new(std::path::Path::new(edge_path), &self.cache_dir);
             match cdp::shared().print_pdf(&cfg, &html_url).await {
                 Ok(bytes) => {
+                    crate::metrics::count_browser_render(true);
                     tracing::info!(
                         html = %html_url,
                         bytes = bytes.len(),
@@ -157,10 +158,13 @@ impl PdfRenderer {
                     });
                     return Ok(bytes);
                 }
-                Err(e) => tracing::warn!(
-                    error = %e,
-                    "persistent Edge could not render; using one-shot Edge"
-                ),
+                Err(e) => {
+                    crate::metrics::count_browser_render(false);
+                    tracing::warn!(
+                        error = %e,
+                        "persistent Edge could not render; using one-shot Edge"
+                    )
+                }
             }
         }
 
@@ -290,15 +294,19 @@ impl PdfRenderer {
                 Ok(bytes) => {
                     let edge_ms = started.elapsed().as_millis() as u64;
                     tokio::fs::write(&png_path, &bytes).await?;
+                    crate::metrics::count_browser_render(true);
                     tracing::info!(edge_ms, persistent = true, "rendered screenshot with Edge");
                     let decoded = png_to_raster(&png_path);
                     debug_copy(png_path, self.cache_dir.join("last-render.png"), true);
                     return decoded.map_err(|e| anyhow!("screenshot decode: {e}"));
                 }
-                Err(e) => tracing::warn!(
-                    error = %e,
-                    "persistent Edge could not render; using one-shot Edge"
-                ),
+                Err(e) => {
+                    crate::metrics::count_browser_render(false);
+                    tracing::warn!(
+                        error = %e,
+                        "persistent Edge could not render; using one-shot Edge"
+                    )
+                }
             }
         }
 
@@ -431,6 +439,7 @@ impl PdfRenderer {
             let cfg = persistent_chromium_config(&chromium, &self.cache_dir);
             match cdp::shared().print_pdf(&cfg, &html_url).await {
                 Ok(bytes) => {
+                    crate::metrics::count_browser_render(true);
                     tracing::info!(
                         html = %html_url,
                         bytes = bytes.len(),
@@ -446,10 +455,13 @@ impl PdfRenderer {
                     });
                     return Ok(bytes);
                 }
-                Err(e) => tracing::warn!(
-                    error = %e,
-                    "persistent Chromium could not render; using one-shot Chromium"
-                ),
+                Err(e) => {
+                    crate::metrics::count_browser_render(false);
+                    tracing::warn!(
+                        error = %e,
+                        "persistent Chromium could not render; using one-shot Chromium"
+                    )
+                }
             }
         }
 
@@ -516,6 +528,7 @@ impl PdfRenderer {
                     let job = uuid::Uuid::new_v4();
                     let png_path = self.cache_dir.join(format!("shot-{job}.png"));
                     tokio::fs::write(&png_path, &bytes).await?;
+                    crate::metrics::count_browser_render(true);
                     tracing::info!(
                         chromium_ms,
                         persistent = true,
@@ -525,10 +538,13 @@ impl PdfRenderer {
                     debug_copy(png_path, self.cache_dir.join("last-render.png"), true);
                     return decoded.map_err(|e| anyhow!("screenshot decode: {e}"));
                 }
-                Err(e) => tracing::warn!(
-                    error = %e,
-                    "persistent Chromium could not render; using one-shot Chromium"
-                ),
+                Err(e) => {
+                    crate::metrics::count_browser_render(false);
+                    tracing::warn!(
+                        error = %e,
+                        "persistent Chromium could not render; using one-shot Chromium"
+                    )
+                }
             }
         }
 
