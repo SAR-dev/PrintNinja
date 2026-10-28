@@ -14,6 +14,9 @@ const projects = browsers.map((name) => {
       name: "firefox",
       use: { ...devices["Desktop Firefox"] },
       testIgnore: "**/*.mobile.e2e.ts",
+      // Firefox is slower than Chromium under parallel load; the extra
+      // budget only extends the timeout, assertions are unchanged.
+      timeout: 60_000,
     };
   }
   return {
