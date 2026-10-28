@@ -86,6 +86,19 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   `peer_consume::inline_fonts` with a fingerprinted cache), so
   `Page.loadEventFired` + `document.fonts.ready` (`render/cdp.rs:358,391`)
   never wait on the network per job.
+  > ✅ **Done without code changes** (`perf/followups`, verified):
+  > inlining is unnecessary — remote refs are *rejected* at every write
+  > path, so an uninlinable template cannot exist. Client create
+  > (`commands/template.rs:150`) and update (`:346`) refuse via
+  > `find_remote_refs`; the server create/update throws
+  > `RemoteReferenceError` (`server/.../templates/put.ts:67`) with a
+  > strictly stronger checker (attribute parsing on top of the client's
+  > needles, `shared.ts:117+`); sync ingestion therefore cannot deliver
+  > one either (and rejecting there would poison the whole sync page,
+  > so server-side enforcement is the correct layer). Covered by
+  > `print_path_offline` (renderer-refusal test), server
+  > `template-shared` + `template-domain` suites (46 tests green).
+  > Remaining: the 2-minute UI wording check in `TODO.md` item 6.
 - **W3-fix — cache `offered_datatypes()` per printer with a TTL.**
   `WindowsSpooler::send` (`transport/windows_spooler.rs:534`) calls it on
   every PDF job (OpenPrinter + GetPrinter + EnumPrintProcessorDatatypes +
@@ -307,8 +320,8 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
 - Done when transport p50 drops and the e2e print tests pass.
 
 ### Phase 2: Render path (about 1-2 days, biggest expected gain)
-- Windows/Linux: find out why the persistent browser fails (launch timeout, profile lock, stale port file — and check the failed-start cooldown in `render/cdp.rs` first, which mimics "persistent never works"), start it at app launch (already done: `lib.rs:265-267`), and restart it in the background if it dies (W1, L1; see §2b fixes).
-- All platforms: make templates self-contained, with bundled fonts and images and no network fetches (W2; see §2b fix).
+- Windows/Linux: find out why the persistent browser fails (launch timeout, profile lock, stale port file — and check the failed-start cooldown in `render/cdp.rs` first, which mimics "persistent never works"), start it at app launch (already done: `lib.rs:265-267`), and restart it in the background if it dies (W1, L1; see §2b fixes). **Open — needs the fallback-counter data from TODO.md item 5.**
+- All platforms: make templates self-contained ✅ **done without code** (W2 verified enforced at all write paths; see §2b).
 - Android: no WebView work — A1 was rejected. The Android render cost is the peer round trip: the phone-side share is the A9 client fix (Phase 1), the rest is PC render speed, i.e. W1/L1 above.
 - Done when fallbacks no longer appear in normal use and render p50 meets the Phase 0 target.
 
@@ -340,7 +353,7 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
 
 ### Phase 5: Throughput and regression guard (about 1 day)
 - Test bursts across several printers and tune the global in-flight limit (`MAX_IN_FLIGHT_SENDS` in `queue.rs:41`, not `worker.rs`) if render is the bottleneck. (Not started — needs printers.)
-- Add a benchmark using `virtual-printer` that fails when p95 for N jobs regresses beyond a threshold. (Not started.)
+- Add a benchmark using `virtual-printer` that fails when p95 for N jobs regresses beyond a threshold. ✅ **Done** (`perf/followups`): `twenty_raw_prints_stay_within_budget` + `twenty_ipp_prints_stay_within_budget` in `src-tauri/tests/virtual_printer.rs` (20 timed pipeline prints each, pipeline `duration_ms`, generous `BENCH_P50_MS`/`BENCH_P95_MS` placeholders marked CALIBRATE), plus `one/three_copies_print_in_a_single_send` pinning the A11 batching semantics (stored-file count + marker repeats). Calibrate thresholds from TODO.md item 3 baselines.
 - Document the timing logs and env switches in `docs/ARCHITECTURE.md`. ✅ **Done** (`perf/print-speed`): "Timing logs and counters" subsection under §8, plus the stale "every copy is sent individually" line corrected for A11 batching.
 
 ---

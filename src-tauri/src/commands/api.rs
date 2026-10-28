@@ -892,11 +892,11 @@ fn phone_device_id(conn: &rusqlite::Connection) -> rusqlite::Result<String> {
 pub fn phone_name() -> String {
     #[cfg(target_os = "android")]
     {
-        return "Android phone".into();
+        "Android phone".into()
     }
     #[cfg(target_os = "ios")]
     {
-        return "iPhone".into();
+        "iPhone".into()
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
