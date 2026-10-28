@@ -1235,3 +1235,166 @@ async fn pdf_over_raw_tcp_prints_without_a_status_query() {
         "not the rendered document: {bytes:?}"
     );
 }
+
+// ───────────────────────────────────────────────────────────────
+// copies batching (A11) and the Phase 5 burst guard
+// ───────────────────────────────────────────────────────────────
+
+/// Non-overlapping occurrences of `needle` in `haystack`.
+fn count_occurrences(haystack: &[u8], needle: &[u8]) -> usize {
+    if needle.is_empty() {
+        return 0;
+    }
+    let mut count = 0;
+    let mut i = 0;
+    while i + needle.len() <= haystack.len() {
+        if &haystack[i..i + needle.len()] == needle {
+            count += 1;
+            i += needle.len();
+        } else {
+            i += 1;
+        }
+    }
+    count
+}
+
+/// Marker bytes every PDF render carries in these tests.
+const TINY_MARKER: &[u8] = b"%PDF-1.4 virtual-printer-test";
+
+/// One full pipeline print with `copies`, on a fresh printer.
+/// Returns (stored files, marker repeats in everything stored).
+/// Raw TCP + PDF has no probe and no status query, so every stored file
+/// is one write — and the marker makes repeats countable without knowing
+/// any framing.
+async fn print_copies(copies: u32) -> Option<(usize, usize)> {
+    let printer = VirtualPrinter::start("ok")?;
+    let db = test_db();
+    seed_printer(
+        &db,
+        "Copies",
+        "raw_tcp",
+        &format!("127.0.0.1:{}", printer.raw_port()),
+        "pdf",
+    );
+    let queue = PrintQueue::new();
+    let mut req = print_request("Copies");
+    req.copies = Some(copies);
+    let response = run_print_with(&cache_dir(), &db, &queue, req, &FakeRenderer::tiny())
+        .await
+        .expect("the pipeline answers");
+    assert!(response.success, "copies must print: {:?}", response.error);
+    Some((
+        stored_jobs(&printer),
+        count_occurrences(&printer.received(), TINY_MARKER),
+    ))
+}
+
+#[tokio::test]
+async fn one_copy_prints_once_in_one_send() {
+    let Some((files, repeats)) = print_copies(1).await else {
+        return;
+    };
+    assert_eq!(files, 1, "one write connection");
+    assert_eq!(repeats, 1, "one copy");
+}
+
+/// A11: N copies go out in a single send, not N connects. Three separate
+/// sends would store three files; batching stores one file with three
+/// back-to-back markers.
+#[tokio::test]
+async fn three_copies_print_in_a_single_send() {
+    let Some((files, repeats)) = print_copies(3).await else {
+        return;
+    };
+    assert_eq!(
+        files, 1,
+        "copies must batch into one send, not one connect each"
+    );
+    assert_eq!(repeats, 3, "all three copies must reach the printer");
+}
+
+/// Budgets are deliberately generous placeholders (CALIBRATE from
+/// Phase-0 baselines): they catch hangs, serial pileups and timeout
+/// regressions, not 10% drift. A local virtual-printer job is
+/// milliseconds; seconds of headroom keep loaded CI runners green.
+/// Measured with the pipeline's own duration_ms, so harness overhead
+/// never counts. Render itself is excluded on purpose — FakeRenderer
+/// stands in for Edge/Chromium, whose speed is the machine's business.
+const BENCH_JOBS: usize = 20;
+const BENCH_P50_MS: u128 = 2_000;
+const BENCH_P95_MS: u128 = 5_000;
+
+fn percentile(sorted_ms: &mut [u128], pct: usize) -> u128 {
+    assert!(!sorted_ms.is_empty(), "no timings to guard");
+    sorted_ms.sort_unstable();
+    let rank = (pct * sorted_ms.len()).div_ceil(100);
+    sorted_ms[rank.saturating_sub(1).min(sorted_ms.len() - 1)]
+}
+
+/// Twenty timed pipeline prints against one seeded printer.
+async fn time_prints(
+    cache: &std::path::Path,
+    db: &Db,
+    printer_name: &str,
+    jobs: usize,
+) -> Vec<u128> {
+    let queue = PrintQueue::new();
+    let renderer = FakeRenderer::tiny();
+    let mut durations = Vec::with_capacity(jobs);
+    for _ in 0..jobs {
+        let response = run_print_with(cache, db, &queue, print_request(printer_name), &renderer)
+            .await
+            .expect("the pipeline answers");
+        assert!(
+            response.success,
+            "bench print must succeed: {:?}",
+            response.error
+        );
+        durations.push(response.duration_ms);
+    }
+    durations
+}
+
+fn assert_within_budget(durations: &mut [u128], what: &str) {
+    assert_eq!(durations.len(), BENCH_JOBS, "bench ran short");
+    let p50 = percentile(durations, 50);
+    let p95 = percentile(durations, 95);
+    assert!(
+        p50 <= BENCH_P50_MS,
+        "{what}: p50 {p50}ms over the {BENCH_P50_MS}ms budget"
+    );
+    assert!(
+        p95 <= BENCH_P95_MS,
+        "{what}: p95 {p95}ms over the {BENCH_P95_MS}ms budget"
+    );
+}
+
+#[tokio::test]
+async fn twenty_raw_prints_stay_within_budget() {
+    let Some(printer) = VirtualPrinter::start("ok") else {
+        return;
+    };
+    let db = test_db();
+    seed_printer(
+        &db,
+        "BenchRaw",
+        "raw_tcp",
+        &format!("127.0.0.1:{}", printer.raw_port()),
+        "pdf",
+    );
+    let mut durations = time_prints(&cache_dir(), &db, "BenchRaw", BENCH_JOBS).await;
+    assert_within_budget(&mut durations, "raw_tcp burst");
+}
+
+/// Same burst over IPP: exercises the shared HTTP client (L2) across
+/// twenty sequential sends.
+#[tokio::test]
+async fn twenty_ipp_prints_stay_within_budget() {
+    let Some(printer) = VirtualPrinter::start("ok") else {
+        return;
+    };
+    let db = test_db();
+    seed_printer(&db, "BenchIpp", "ipp", &printer.ipp_url(), "pdf");
+    let mut durations = time_prints(&cache_dir(), &db, "BenchIpp", BENCH_JOBS).await;
+    assert_within_budget(&mut durations, "ipp burst");
+}
