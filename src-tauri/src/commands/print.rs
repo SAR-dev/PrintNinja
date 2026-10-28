@@ -981,6 +981,28 @@ async fn run_stages(
         .as_ref()
         .map_or("", |p| p.address.as_str())
         .to_string();
+    // Phase 4 (config check): PDF bytes sent raw over a USB bulk
+    // endpoint or Bluetooth SPP can only print garbage — those wires
+    // carry command bytes and there is no driver in between to rasterize
+    // (unlike a JetDirect laser, which does take PDF). A USB/Bluetooth
+    // row with language=PDF is a misconfigured thermal printer; say so
+    // instead of feeding it %PDF-. Warn-only: the job still goes out, so
+    // an exotic printer that really takes PDF over these wires keeps
+    // working.
+    if matches!(language, crate::transport::PrinterLanguage::Pdf)
+        && matches!(
+            printer_type_for_probe,
+            crate::transport::PrinterType::Usb | crate::transport::PrinterType::Bluetooth
+        )
+    {
+        tracing::warn!(
+            job_id,
+            printer = %req.printer_name,
+            "printer language is PDF on a raw USB/Bluetooth transport: \
+             if this is a label or receipt printer, set its language to the \
+             native command language (ESC/POS, ZPL, TSPL, CPCL) or it prints garbage"
+        );
+    }
     let needs_preflight = matches!(
         printer_type_for_probe,
         crate::transport::PrinterType::System

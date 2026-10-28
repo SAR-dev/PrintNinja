@@ -123,6 +123,7 @@ class UsbQueryOnArgs {
 class UsbWriteOnArgs {
     var handle: String? = null
     var dataBase64: String? = null
+    var dataPath: String? = null
 }
 
 @InvokeArg
@@ -146,6 +147,7 @@ class BluetoothQueryOnArgs {
 class BluetoothWriteOnArgs {
     var handle: String? = null
     var dataBase64: String? = null
+    var dataPath: String? = null
 }
 
 @InvokeArg
@@ -521,6 +523,7 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
     /**
      * Writes the whole buffer to the device's first bulk-OUT endpoint.
      * Returns bytes written, or a negative value when the transfer failed.
+     * Offset-based `bulkTransfer` (API 18+, minSdk 24): no per-chunk copy.
      */
     private fun bulkWriteOut(
         device: UsbDevice,
@@ -532,16 +535,12 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
         try {
             var written = 0
             while (written < data.size) {
-                val chunk =
-                    data.copyOfRange(
-                        written,
-                        minOf(written + 16384, data.size),
-                    )
                 val n =
                     connection.bulkTransfer(
                         endpoints.out,
-                        chunk,
-                        chunk.size,
+                        data,
+                        written,
+                        minOf(16384, data.size - written),
                         ioTimeoutMs,
                     )
                 if (n < 0) return n
@@ -868,7 +867,6 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
     fun writeUsbOn(invoke: Invoke) {
         val args = invoke.parseArgs(UsbWriteOnArgs::class.java)
         val handle = args.handle ?: return invoke.reject("handle is required")
-        val encoded = args.dataBase64 ?: return invoke.reject("dataBase64 is required")
         ioPool.execute {
             val settle: (Int?, String?) -> Unit = { written, error ->
                 answer(invoke) {
@@ -879,11 +877,26 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                     }
                 }
             }
-            val data =
-                try {
-                    Base64.decode(encoded, Base64.DEFAULT)
-                } catch (e: IllegalArgumentException) {
-                    settle(null, "request is not valid base64: ${e.message}")
+            // File handoff for large payloads (A4): the Rust side stages
+            // the bytes and deletes after the call; this deletes after
+            // reading, so either side's cleanup suffices.
+            val data: ByteArray =
+                if (!args.dataPath.isNullOrEmpty()) {
+                    try {
+                        readHandoffFile(args.dataPath!!)
+                    } catch (e: Exception) {
+                        settle(null, "could not read handed-off payload: ${e.message}")
+                        return@execute
+                    }
+                } else if (args.dataBase64 != null) {
+                    try {
+                        Base64.decode(args.dataBase64, Base64.DEFAULT)
+                    } catch (e: IllegalArgumentException) {
+                        settle(null, "request is not valid base64: ${e.message}")
+                        return@execute
+                    }
+                } else {
+                    answer(invoke) { invoke.reject("dataBase64 or dataPath is required") }
                     return@execute
                 }
             val session = usbConnections.get(handle)
@@ -1003,8 +1016,14 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 ) {
                     break
                 }
+                // Tight poll: the silence break above is only re-checked
+                // here, so this bounds its overshoot at ~10 ms per query.
+                // A Future-based blocking read was considered and rejected:
+                // RFCOMM reads are not interruptible, so a timed-out get()
+                // would leak the reader thread until the socket closes —
+                // all for ≤50 ms per query.
                 try {
-                    Thread.sleep(50)
+                    Thread.sleep(10)
                 } catch (_: InterruptedException) {
                     Thread.currentThread().interrupt()
                     break
@@ -1288,19 +1307,33 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
     fun writeBluetoothOn(invoke: Invoke) {
         val args = invoke.parseArgs(BluetoothWriteOnArgs::class.java)
         val handle = args.handle ?: return invoke.reject("handle is required")
-        val encoded = args.dataBase64 ?: return invoke.reject("dataBase64 is required")
         ioPool.execute {
             if (!awaitBluetoothConnect()) {
                 answer(invoke) { invoke.reject(bluetoothDenied()) }
                 return@execute
             }
-            val data =
-                try {
-                    Base64.decode(encoded, Base64.DEFAULT)
-                } catch (e: IllegalArgumentException) {
-                    answer(invoke) {
-                        invoke.reject("request is not valid base64: ${e.message}")
+            // File handoff for large payloads (A4): see writeUsbOn.
+            val data: ByteArray =
+                if (!args.dataPath.isNullOrEmpty()) {
+                    try {
+                        readHandoffFile(args.dataPath!!)
+                    } catch (e: Exception) {
+                        answer(invoke) {
+                            invoke.reject("could not read handed-off payload: ${e.message}")
+                        }
+                        return@execute
                     }
+                } else if (args.dataBase64 != null) {
+                    try {
+                        Base64.decode(args.dataBase64, Base64.DEFAULT)
+                    } catch (e: IllegalArgumentException) {
+                        answer(invoke) {
+                            invoke.reject("request is not valid base64: ${e.message}")
+                        }
+                        return@execute
+                    }
+                } else {
+                    answer(invoke) { invoke.reject("dataBase64 or dataPath is required") }
                     return@execute
                 }
             val socket = bluetoothSockets.get(handle)

@@ -68,6 +68,33 @@ pub(crate) fn shared_http_client() -> reqwest::Client {
         .clone()
 }
 
+/// Payloads larger than this cross the Rust→Kotlin bridge by file
+/// instead of base64 (A4). Receipts are kilobytes and stay on the fast
+/// base64 path; a 256 KiB raster would otherwise inflate by a third and
+/// travel as one giant JSON string through JNI. The Kotlin side reads
+/// and deletes the file; Rust deletes it too after the call, so a crash
+/// on either side leaves at most one orphaned file per print.
+///
+/// Android-only at runtime (the USB/Bluetooth send tree is unreachable
+/// off-device), so the dead-code lint is relaxed elsewhere: on Android
+/// it still fires.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) const PLUGIN_FILE_HANDOFF_BYTES: usize = 256 * 1024;
+
+/// Write `data` to a uniquely-named file under `dir` for the plugin
+/// file handoff. The caller deletes the file after the plugin call
+/// (best-effort); the Kotlin side deletes it after reading.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) fn stage_plugin_payload(
+    dir: &std::path::Path,
+    data: &[u8],
+) -> Result<std::path::PathBuf, String> {
+    let path = dir.join(format!("printninja-payload-{}.bin", uuid::Uuid::new_v4()));
+    std::fs::write(&path, data)
+        .map_err(|e| format!("could not stage {} bytes for handoff: {e}", data.len()))?;
+    Ok(path)
+}
+
 fn parse_send_timeout(raw: Option<&str>, default: Duration) -> Duration {
     match raw.map(str::trim).and_then(|v| v.parse::<u64>().ok()) {
         Some(secs) if secs > 0 => Duration::from_secs(secs),
@@ -499,6 +526,30 @@ mod tests {
             parse_printer_type("telepathy"),
             PrinterType::System
         ));
+    }
+
+    #[test]
+    fn staged_payload_round_trips_and_cleans_up() {
+        // Unique subdir per run: parallel tests must not share filenames.
+        let dir = std::env::temp_dir().join(format!("pn-handoff-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let data = vec![0xABu8; 300_000];
+        let path = stage_plugin_payload(&dir, &data).unwrap();
+        assert!(path.starts_with(&dir));
+        assert_eq!(std::fs::read(&path).unwrap(), data);
+        std::fs::remove_file(&path).unwrap();
+        assert!(!path.exists());
+        std::fs::remove_dir(&dir).unwrap();
+    }
+
+    #[test]
+    fn staging_names_are_unique() {
+        let dir = std::env::temp_dir();
+        let a = stage_plugin_payload(&dir, b"one").unwrap();
+        let b = stage_plugin_payload(&dir, b"two").unwrap();
+        assert_ne!(a, b, "a reused filename would interleave two prints");
+        std::fs::remove_file(&a).unwrap();
+        std::fs::remove_file(&b).unwrap();
     }
 
     #[test]

@@ -298,7 +298,9 @@ bytes and which transports exist.
 ## 8. Queue, memory, and history
 
 Printers print one thing at a time, so each printer has its own turn-taking
-lock and every copy is sent individually — jobs to the same machine never
+lock and every job goes out in a single send — one `send_to` per job, with
+a hardware copies count where the transport takes one (IPP/CUPS) and the
+payload repeated back-to-back otherwise — so jobs to the same machine never
 interleave. A background worker drains queued jobs a few at a time; if the
 app crashes mid-print, rows stuck in *printing* are marked failed on the next
 start, then queued rows resume. Cancelling a job is terminal: the close-out
@@ -311,6 +313,26 @@ exported as a spreadsheet. The stored job keeps the design pages as rendered
 — before any paper is involved — so a reprint is placed on sheets again from
 those same pages using the job's saved settings. Reprinting
 clones an old row and wakes the worker; retrying re-queues only jobs that ended in failure or cancellation.
+
+### Timing logs and counters
+
+Every job carries its own breakdown: `StageTimings` (fetch, template,
+layout, render, send, history, total) is saved on the history row
+(`timings_json`) and logged as `print job timing` at `info` level, with
+`queued job claimed` (queue wait) alongside it. Sub-stages log at
+`debug` level so production logs stay quiet — run baselines with
+`RUST_LOG=debug`: spooler datatype lookup vs send, Android USB/Bluetooth
+probe vs status query vs write (with byte counts and a `via_file` flag
+for the large-payload file handoff), and the peer caps-probe collect
+(`peer_probe_ms`; the POST-vs-download split is `waited_ms` vs
+`render_ms` in `peer render succeeded`).
+
+Process-lifetime counters live on `/v1/metrics` (JSON) and
+`/v1/metrics/prometheus`: job outcomes, peer renders (bought vs locally
+fallen back), and browser renders (`persistent` vs `oneshot` fallback
+launches). Environment seams: `PRINTNINJA_SEND_TIMEOUT_SECS` (per-send
+deadline, read fresh on every send), `PRINTNINJA_PERSISTENT_BROWSER=0`
+(force one-shot rendering), `PRINTNINJA_CUPS_URL` (cupsd address).
 
 ## 9. Borrowing a faster device
 
