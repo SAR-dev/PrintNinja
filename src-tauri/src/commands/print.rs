@@ -967,6 +967,13 @@ async fn run_stages(
     // TCP-connect probe, but failing them before render breaks the
     // correctness tests that still expect a render attempt even when the
     // network printer is unreachable (see `print_correctness.rs`).
+    //
+    // A10: the probe flies concurrently with the render below instead of
+    // serially ahead of it. The success path hides the whole probe
+    // latency (a Bluetooth connect); a dead printer still fails before
+    // any byte is written — it just also paid the render first, which on
+    // Android costs the phone nothing (the PC renders). The deferred
+    // failure after the render section fills `render_ms` too.
     let printer_type_for_probe = crate::transport::parse_printer_type(
         printer.as_ref().map_or("", |p| p.printer_type.as_str()),
     );
@@ -980,46 +987,14 @@ async fn run_stages(
             | crate::transport::PrinterType::Usb
             | crate::transport::PrinterType::Bluetooth
     );
-    if needs_preflight {
-        if let Err(probe_err) = crate::transport::TransportRegistry::probe(
-            &printer_type_for_probe,
-            &req.printer_name,
-            &address_for_probe,
-        )
-        .await
-        {
-            let msg = probe_err;
-            tracing::warn!(
-                job_id,
-                printer = %req.printer_name,
-                %msg,
-                fetch_ms,
-                template_ms,
-                layout_ms,
-                "print preflight probe failed"
-            );
-            finish_job(
-                db,
-                job_id,
-                "failed",
-                Some(msg.clone()),
-                &html,
-                &req,
-                start.elapsed().as_millis() as i64,
-            )?;
-            // No render happened, so render_ms stays 0.
-            timings.total_ms = ms(start);
-            save_timings(db, job_id, &timings);
-            return Ok(PrintResponse {
-                success: false,
-                job_id: job_id.to_string(),
-                duration_ms: start.elapsed().as_millis(),
-                error: Some(msg),
-                timings: Some(timings),
-                rendered_by: None,
-            });
-        }
-    }
+    let preflight = needs_preflight.then(|| {
+        let printer_type = printer_type_for_probe.clone();
+        let name = req.printer_name.clone();
+        let address = address_for_probe.clone();
+        tokio::spawn(async move {
+            crate::transport::TransportRegistry::probe(&printer_type, &name, &address).await
+        })
+    });
 
     let t_render = Instant::now();
     // A paired provider renders first when the auto policy is on: same
@@ -1158,6 +1133,47 @@ async fn run_stages(
         }
     };
 
+    // Await the preflight probe (A10): it flew during the render above,
+    // so the success path paid no serial probe latency. A dead printer
+    // still fails here, before any byte is written.
+    if let Some(task) = preflight {
+        let probe_outcome = task
+            .await
+            .unwrap_or_else(|e| Err(format!("preflight probe task failed: {e}")));
+        if let Err(probe_err) = probe_outcome {
+            let msg = probe_err;
+            tracing::warn!(
+                job_id,
+                printer = %req.printer_name,
+                %msg,
+                fetch_ms,
+                template_ms,
+                layout_ms,
+                render_ms,
+                "print preflight probe failed"
+            );
+            finish_job(
+                db,
+                job_id,
+                "failed",
+                Some(msg.clone()),
+                &html,
+                &req,
+                start.elapsed().as_millis() as i64,
+            )?;
+            timings.total_ms = ms(start);
+            save_timings(db, job_id, &timings);
+            return Ok(PrintResponse {
+                success: false,
+                job_id: job_id.to_string(),
+                duration_ms: start.elapsed().as_millis(),
+                error: Some(msg),
+                timings: Some(timings),
+                rendered_by: None,
+            });
+        }
+    }
+
     // ── 5. Send ─────────────────────────────────────────────────────
     // The row resolved above also picks the transport and the queue key.
     let printer_type = crate::transport::parse_printer_type(
@@ -1179,35 +1195,47 @@ async fn run_stages(
     // same physical printer must never overlap, or their bytes interleave
     // and the label comes out garbled. Jobs for *different* printers are
     // unaffected — the semaphore is keyed per printer id.
+    //
+    // A11: one `send_to` per job, not per copy. The old loop re-ran a
+    // full send per copy — each with its own precheck and connection —
+    // so 3 copies over Bluetooth paid ~6 extra RFCOMM connects.
+    // Transports with a hardware copies count (IPP, and CUPS on Linux
+    // which speaks IPP underneath) get the count; raw transports (USB,
+    // Bluetooth, raw TCP, spooler) ignore `copies`, so they get the
+    // payload repeated N times in a single write. Either way the printer
+    // sees N back-to-back copies through one precheck and one
+    // connection.
+    let honors_copies = matches!(printer_type, crate::transport::PrinterType::Ipp)
+        || (cfg!(target_os = "linux")
+            && matches!(printer_type, crate::transport::PrinterType::System));
+    let (send_data, send_copies) = if honors_copies {
+        (payload.clone(), copies)
+    } else if copies == 1 {
+        (payload.clone(), 1)
+    } else {
+        let mut batched = Vec::with_capacity(payload.len() * copies as usize);
+        for _ in 0..copies {
+            batched.extend_from_slice(&payload);
+        }
+        (batched, 1)
+    };
     let t_send = Instant::now();
     let result = queue
         .with_permit(&req.printer_name, async {
-            // `copies` used to be ignored entirely: exactly one copy reached
-            // the printer no matter what the operator selected.
-            for copy in 0..copies {
-                crate::transport::TransportRegistry::send_to(
-                    &printer_type,
-                    &req.printer_name,
-                    address,
-                    crate::transport::RenderedJob {
-                        job_id: format!("{}-{}", req.printer_name, copy + 1),
-                        printer_id: req.printer_name.clone(),
-                        data: payload.clone(),
-                        mime_type: mime_type.to_string(),
-                        copies: 1,
-                        language: language.clone(),
-                    },
-                )
-                .await
-                .map_err(|e| {
-                    if copy > 0 {
-                        format!("copy {}/{copies}: {e}", copy + 1)
-                    } else {
-                        e
-                    }
-                })?;
-            }
-            Ok(())
+            crate::transport::TransportRegistry::send_to(
+                &printer_type,
+                &req.printer_name,
+                address,
+                crate::transport::RenderedJob {
+                    job_id: req.printer_name.clone(),
+                    printer_id: req.printer_name.clone(),
+                    data: send_data,
+                    mime_type: mime_type.to_string(),
+                    copies: send_copies,
+                    language: language.clone(),
+                },
+            )
+            .await
         })
         .await;
     // Includes any wait for this printer's turn, not just the transport.

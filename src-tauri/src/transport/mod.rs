@@ -50,6 +50,24 @@ pub(crate) fn send_timeout(default: Duration) -> Duration {
     parse_send_timeout(std::env::var(SEND_TIMEOUT_ENV).ok().as_deref(), default)
 }
 
+/// One HTTP client for all IPP/CUPS traffic (L2). Building a client per
+/// send threw away TCP keep-alive, so every job paid a fresh handshake.
+/// Deliberately no client-level timeouts: per-send deadlines
+/// (`send_timeout`, `CUPS_TIMEOUT`, `DIAGNOSE_TIMEOUT`) are applied per
+/// request with `RequestBuilder::timeout`, which keeps the env-var test
+/// seam above (read on every send) working exactly as before.
+pub(crate) fn shared_http_client() -> reqwest::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .pool_idle_timeout(Duration::from_secs(60))
+                .build()
+                .expect("shared IPP/CUPS HTTP client builds with plain timeouts")
+        })
+        .clone()
+}
+
 fn parse_send_timeout(raw: Option<&str>, default: Duration) -> Duration {
     match raw.map(str::trim).and_then(|v| v.parse::<u64>().ok()) {
         Some(secs) if secs > 0 => Duration::from_secs(secs),

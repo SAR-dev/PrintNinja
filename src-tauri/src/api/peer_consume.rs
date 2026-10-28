@@ -74,6 +74,18 @@ static CAPS_CACHE: LazyLock<Mutex<HashMap<String, (Instant, Capabilities)>>> =
 static FAIL_CACHE: LazyLock<Mutex<HashMap<String, (Instant, String)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+/// One client for every probe and render (A9). A fresh client per request
+/// threw away TCP keep-alive, so each print paid a new handshake plus
+/// slow-start on top of the render POST. `Client::clone` is an `Arc`
+/// bump; idle pooled connections are reused across prints.
+static SHARED_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_millis(PEER_CONNECT_TIMEOUT_MS))
+        .pool_idle_timeout(Duration::from_secs(60))
+        .build()
+        .expect("peer HTTP client builds with plain timeouts")
+});
+
 /// Cache key: address plus a hash of the secret, so rotating the secret
 /// re-probes instead of trusting a stale acceptance.
 fn caps_key(pair: &RenderPair) -> String {
@@ -417,10 +429,7 @@ fn pair_base(pair: &RenderPair) -> Result<String, String> {
 }
 
 fn client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .connect_timeout(Duration::from_millis(PEER_CONNECT_TIMEOUT_MS))
-        .build()
-        .map_err(|e| format!("http client failed: {e}"))
+    Ok(SHARED_CLIENT.clone())
 }
 
 /// Why a request to the PC never got an answer. The three cases need

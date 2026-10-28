@@ -93,6 +93,11 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   Cache the offered list per printer name for ~1 h (datatypes only change
   on driver reinstall); a `StartDocPrinter` 1804 failure invalidates the
   entry early. Saves one full spooler open-cycle per PDF job.
+  > ✅ **Done** (`perf/print-speed`): `OFFERED_DATATYPES` static +
+  > 1 h `DATATYPES_TTL` in `transport/windows_spooler.rs`; successes
+  > cached, `None` never cached (transient denials recover next job).
+  > `cargo check` / `clippy -D warnings` / `fmt` clean; unit tests pass
+  > (Windows-only code path, verified by compile + existing tests).
 - **W4-fix — `spawn_blocking` around the Win32 spooler calls.**
   `windows_spooler.rs` has zero `spawn_blocking`: `OpenPrinterA` /
   `StartDocPrinterA` / `WritePrinter` run on tokio workers. Wrap
@@ -111,6 +116,12 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   build a client per send. Hoist to a `OnceLock<Client>` with
   `pool_idle_timeout` (keep the per-call `.timeout(...)`), shared by both
   modules. Saves a TCP handshake + TLS-less slow-start per job.
+  > ✅ **Done** (`perf/print-speed`): `transport::shared_http_client()`
+  > (`transport/mod.rs`, `OnceLock` + 60 s pool idle); all three call
+  > sites (`ipp.rs` send + diagnose, `cups.rs` `post_ipp`) use it with
+  > per-request `.timeout(...)`, so the `PRINTNINJA_SEND_TIMEOUT_SECS`
+  > per-send test seam is preserved. Verified by `virtual_printer`
+  > (25), `cups_discovery` (7) and lib (275) tests.
 - **L3 — no code change.** `cups.rs:375-382` already sends non-PDF as
   `application/octet-stream` to raw queues. This is operator guidance:
   point label printers at a raw CUPS queue and set the printer row's
@@ -167,18 +178,36 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   built once with `connect_timeout(PEER_CONNECT_TIMEOUT_MS)` and
   `pool_idle_timeout`. Both call sites (`:589` probe, `:768` render)
   use it. Saves a TCP handshake on every Android print.
+  > ✅ **Done** (`perf/print-speed`): `SHARED_CLIENT` static in
+  > `api/peer_consume.rs` (same connect timeout, +60 s pool idle);
+  > `client()` now clones it, call sites untouched. Verified by
+  > `peer_consume` (8), `peer_render_priority` (8),
+  > `print_correctness` (15) tests.
 - **A10-fix — spawn the preflight probe concurrently with the peer
   render.** In `run_stages`, start the `TransportRegistry::probe`
   future alongside the render POST and `.await` it just before the
   send stage: the success path hides the full probe latency, and a dead
   printer still fails before any byte is written (it just also paid the
   PC-side render, which costs the phone nothing). ~10 lines.
+  > ✅ **Done** (`perf/print-speed`): probe spawned via
+  > `tokio::spawn` before the render in `run_stages`
+  > (`commands/print.rs`), awaited just before the send stage with the
+  > same fail-before-any-byte-is-written path (now also recording
+  > `render_ms`). Verified by `print_correctness` (15, incl. the
+  > render-attempt-despite-unreachable-printer tests),
+  > `print_path_offline`, `worker_queue`, `language_dispatch` (18).
 - **A11-fix — batch copies into a single write.** In the copies loop,
   repeat the payload buffer N times (or pass `copies` through to
   transports that support a hardware copies count, e.g. IPP
   `send_bytes(data, copies, …)` already takes one) and call `send_to`
   once. Removes (N−1) precheck+write cycles and (N−1) full-payload
   clones per multi-copy job.
+  > ✅ **Done** (`perf/print-speed`): single `send_to` in `run_stages`
+  > (`commands/print.rs`) — IPP (and System-on-Linux → CUPS) get the
+  > hardware `copies` count (`ipp.rs:385` already honored `job.copies`;
+  > the caller just forced it to 1), all other transports get the
+  > payload repeated N× in one write. Verified by `language_dispatch`
+  > (18), `virtual_printer` (25), `history_jobs` (8).
 
 ---
 
@@ -204,9 +233,9 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
 > - Done when a table of p50/p95 per stage exists.
 
 ### Phase 1: Transport quick wins (about 1-1.5 days, low risk)
-- Windows: cache `offered_datatypes()` per printer with a TTL, run the spooler send in `spawn_blocking`, drop the unneeded page calls (W3-W5; see §2b fixes).
-- Linux: one shared `reqwest::Client` (L2; see §2b fix).
-- Android: skip the preflight probe when the printer answered recently, overlap it with the peer render, share the peer HTTP client, batch copies into one write (A2/A3/A6/A9-A11; see §2b fixes). Keep the Bluetooth socket/USB-connection reuse across query+write as a follow-up — it saves the most but changes the plugin API.
+- Windows: cache `offered_datatypes()` per printer with a TTL ✅ **done** (`perf/print-speed`), run the spooler send in `spawn_blocking` (W4, todo), drop the unneeded page calls (W5, todo).
+- Linux: one shared `reqwest::Client` ✅ **done** (`perf/print-speed`).
+- Android: skip the preflight probe when the printer answered recently (todo — needs the recent-OK cache), overlap it with the peer render ✅ **done**, share the peer HTTP client ✅ **done**, batch copies into one write ✅ **done**. Keep the Bluetooth socket/USB-connection reuse across query+write as a follow-up — it saves the most but changes the plugin API.
 - Done when transport p50 drops and the e2e print tests pass.
 
 ### Phase 2: Render path (about 1-2 days, biggest expected gain)
