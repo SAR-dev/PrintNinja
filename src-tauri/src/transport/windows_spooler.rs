@@ -232,6 +232,18 @@ pub struct WindowsSpooler {
     printer_name: String,
 }
 
+/// Offered-datatype lists change only on driver/processor reinstall, so
+/// successful listings are cached per queue for an hour (W3). Failures
+/// (`None`) are never cached: a transient denial must recover on the next
+/// job, not stick for the TTL.
+#[cfg(windows)]
+static OFFERED_DATATYPES: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, Vec<String>)>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+#[cfg(windows)]
+const DATATYPES_TTL: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+
 #[cfg(windows)]
 impl WindowsSpooler {
     pub fn new(printer_name: String) -> Self {
@@ -321,8 +333,30 @@ impl WindowsSpooler {
 
     /// The datatypes this queue's print processor offers, or `None` when
     /// they cannot be listed (the queue is remote, access is denied, or
-    /// the call failed). An empty list counts as unknown.
+    /// the call failed). An empty list counts as unknown. Results are
+    /// cached per queue (see `OFFERED_DATATYPES`); only the live query
+    /// below touches the spooler.
     fn offered_datatypes(&self) -> Option<Vec<String>> {
+        if let Ok(guard) = OFFERED_DATATYPES.lock() {
+            if let Some((at, names)) = guard.get(&self.printer_name) {
+                if at.elapsed() < DATATYPES_TTL {
+                    return Some(names.clone());
+                }
+            }
+        }
+        let found = self.query_offered_datatypes();
+        if let Some(names) = &found {
+            if let Ok(mut guard) = OFFERED_DATATYPES.lock() {
+                guard.insert(
+                    self.printer_name.clone(),
+                    (std::time::Instant::now(), names.clone()),
+                );
+            }
+        }
+        found
+    }
+
+    fn query_offered_datatypes(&self) -> Option<Vec<String>> {
         use std::ffi::CStr;
         use winapi::*;
 
@@ -444,13 +478,9 @@ impl WindowsSpooler {
                 ));
             }
 
-            let result = StartPagePrinter(h_printer);
-            if result == 0 {
-                EndDocPrinter(h_printer);
-                ClosePrinter(h_printer);
-                return Err(format!("StartPagePrinter failed: {}", GetLastError()));
-            }
-
+            // W5: no StartPagePrinter/EndPagePrinter. They bracket EMF
+            // pages; for RAW and PDF spooling they are no-ops on the
+            // success path — two fewer spooler round trips per job.
             let mut written: DWORD = 0;
             let result = WritePrinter(
                 h_printer,
@@ -466,7 +496,6 @@ impl WindowsSpooler {
                 None
             };
 
-            EndPagePrinter(h_printer);
             EndDocPrinter(h_printer);
             ClosePrinter(h_printer);
 
@@ -522,30 +551,59 @@ impl WindowsSpooler {
 #[async_trait]
 impl PrinterTransport for WindowsSpooler {
     async fn discover(&self) -> Vec<PrinterInfo> {
-        Self::enumerate_printers()
+        // W4: enumeration opens every queue; a wedged one must not stall a
+        // tokio worker. Discovery must never fail the Setup page either,
+        // so a panicked task degrades to an empty list.
+        tokio::task::spawn_blocking(WindowsSpooler::enumerate_printers)
+            .await
+            .unwrap_or_default()
     }
 
     async fn test(&self) -> Result<(), String> {
         // Status only: the queue's language is unknown here, and ESC/POS
         // bytes sent to a laser or inkjet queue print as garbage.
-        self.check_ready()
+        // W4: check_ready blocks on the queue; keep it off tokio workers.
+        let spooler = WindowsSpooler::new(self.printer_name.clone());
+        tokio::task::spawn_blocking(move || spooler.check_ready())
+            .await
+            .unwrap_or_else(|e| Err(format!("spooler test task failed: {e}")))
     }
 
     async fn send(&self, job: RenderedJob) -> Result<(), String> {
-        let wanted = spool_datatype(&job.mime_type);
-        let offered = if wanted == "PDF" {
-            self.offered_datatypes()
-        } else {
-            None
-        };
-        let datatype = choose_datatype(&job.mime_type, offered.as_deref());
-        if datatype != wanted {
-            tracing::warn!(
-                "queue `{}` offers no {wanted} datatype; sending as {datatype}",
-                self.printer_name
+        // W4: the Win32 spooler calls below block (a wedged queue can stall
+        // them), so the whole send runs on the blocking pool instead of a
+        // tokio worker.
+        let spooler = WindowsSpooler::new(self.printer_name.clone());
+        tokio::task::spawn_blocking(move || {
+            // Phase 0 visibility: datatype lookup vs the send itself.
+            let t_datatype = std::time::Instant::now();
+            let wanted = spool_datatype(&job.mime_type);
+            let offered = if wanted == "PDF" {
+                spooler.offered_datatypes()
+            } else {
+                None
+            };
+            let datatype_ms = t_datatype.elapsed().as_millis() as u64;
+            let datatype = choose_datatype(&job.mime_type, offered.as_deref());
+            if datatype != wanted {
+                tracing::warn!(
+                    "queue `{}` offers no {wanted} datatype; sending as {datatype}",
+                    spooler.printer_name
+                );
+            }
+            let t_spool = std::time::Instant::now();
+            let out = spooler.send_raw_with_datatype(&job.data, datatype);
+            tracing::debug!(
+                printer = %spooler.printer_name,
+                datatype_ms,
+                spool_ms = t_spool.elapsed().as_millis() as u64,
+                success = out.is_ok(),
+                "spooler send stages"
             );
-        }
-        self.send_raw_with_datatype(&job.data, datatype)
+            out
+        })
+        .await
+        .unwrap_or_else(|e| Err(format!("spooler send task failed: {e}")))
     }
 }
 

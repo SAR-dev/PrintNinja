@@ -69,6 +69,49 @@ impl<R: Runtime> AndroidPrint<R> {
             .map_err(Into::into)
     }
 
+    /// Open the USB device and hold the connection under a minted handle,
+    /// so one print's query and write share a single connect. The caller
+    /// must close the handle on every path (`close_usb_connection`).
+    pub fn open_usb_connection(&self, device_name: &str) -> crate::Result<UsbOpenResponse> {
+        let payload = UsbOpenRequest {
+            device_name: device_name.to_string(),
+        };
+        self.0
+            .run_mobile_plugin("openUsbConnection", payload)
+            .map_err(Into::into)
+    }
+
+    /// Status query on a held USB connection. The connection stays open.
+    pub fn query_usb_on(
+        &self,
+        payload: UsbQueryOnRequest,
+    ) -> crate::Result<UsbQueryResponse> {
+        self.0
+            .run_mobile_plugin("queryUsbOn", payload)
+            .map_err(Into::into)
+    }
+
+    /// Write on a held USB connection. The connection stays open.
+    pub fn write_usb_on(
+        &self,
+        payload: UsbWriteOnRequest,
+    ) -> crate::Result<UsbWriteResponse> {
+        self.0
+            .run_mobile_plugin("writeUsbOn", payload)
+            .map_err(Into::into)
+    }
+
+    /// Release a held USB connection. Best-effort by contract: unknown
+    /// handles resolve rather than error.
+    pub fn close_usb_connection(&self, handle: &str) -> crate::Result<UsbCloseResponse> {
+        let payload = UsbCloseRequest {
+            handle: handle.to_string(),
+        };
+        self.0
+            .run_mobile_plugin("closeUsbConnection", payload)
+            .map_err(Into::into)
+    }
+
     /// Paired Bluetooth devices (name + MAC). Needs the OS Bluetooth
     /// permission; the Kotlin side asks for it and waits for the answer.
     ///
@@ -109,6 +152,55 @@ impl<R: Runtime> AndroidPrint<R> {
     ) -> crate::Result<BluetoothQueryResponse> {
         self.0
             .run_mobile_plugin("queryBluetooth", payload)
+            .map_err(Into::into)
+    }
+
+    /// Open an RFCOMM socket and hold it under a minted handle, so one
+    /// print's query and write share a single connect. The caller must
+    /// close the handle on every path (`close_bluetooth_connection`).
+    pub fn open_bluetooth_connection(
+        &self,
+        address: &str,
+    ) -> crate::Result<BluetoothOpenResponse> {
+        let payload = BluetoothOpenRequest {
+            address: address.to_string(),
+        };
+        self.0
+            .run_mobile_plugin("openBluetoothConnection", payload)
+            .map_err(Into::into)
+    }
+
+    /// Status query on a held RFCOMM socket. The socket stays open.
+    pub fn query_bluetooth_on(
+        &self,
+        payload: BluetoothQueryOnRequest,
+    ) -> crate::Result<BluetoothQueryResponse> {
+        self.0
+            .run_mobile_plugin("queryBluetoothOn", payload)
+            .map_err(Into::into)
+    }
+
+    /// Write on a held RFCOMM socket. The socket stays open.
+    pub fn write_bluetooth_on(
+        &self,
+        payload: BluetoothWriteOnRequest,
+    ) -> crate::Result<BluetoothWriteResponse> {
+        self.0
+            .run_mobile_plugin("writeBluetoothOn", payload)
+            .map_err(Into::into)
+    }
+
+    /// Release a held RFCOMM socket. Best-effort by contract: unknown
+    /// handles resolve rather than error.
+    pub fn close_bluetooth_connection(
+        &self,
+        handle: &str,
+    ) -> crate::Result<BluetoothCloseResponse> {
+        let payload = BluetoothCloseRequest {
+            handle: handle.to_string(),
+        };
+        self.0
+            .run_mobile_plugin("closeBluetoothConnection", payload)
             .map_err(Into::into)
     }
 

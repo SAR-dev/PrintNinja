@@ -541,6 +541,7 @@ async fn metrics(State(state): State<ApiState>) -> Result<Json<Value>, ApiReject
 
     let finished = crate::metrics::finished_counts();
     let peer_renders = crate::metrics::peer_render_counts();
+    let browser_renders = crate::metrics::browser_render_counts();
     Ok(Json(json!({
         "jobs": by_status,
         "batches": { "active": batches_active },
@@ -554,6 +555,10 @@ async fn metrics(State(state): State<ApiState>) -> Result<Json<Value>, ApiReject
             "rendered": peer_renders.0,
             "fallback": peer_renders.1,
         },
+        "browser_renders": {
+            "persistent": browser_renders.0,
+            "oneshot": browser_renders.1,
+        },
     })))
 }
 
@@ -565,12 +570,14 @@ async fn metrics_prometheus(State(state): State<ApiState>) -> impl IntoResponse 
     let tracked = state.queue.tracked_printers().await;
     let finished = crate::metrics::finished_counts();
     let peer_renders = crate::metrics::peer_render_counts();
+    let browser_renders = crate::metrics::browser_render_counts();
     let out = crate::metrics::render_prometheus(
         &by_status,
         batches_active,
         tracked,
         finished,
         peer_renders,
+        browser_renders,
     );
     Ok::<_, ApiRejection>((
         [(

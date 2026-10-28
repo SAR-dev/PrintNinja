@@ -7,7 +7,7 @@
 //! permission first; the plugin asks for it and waits for the answer, so
 //! the first attempt after granting just works.
 
-use crate::transport::{status, PrinterInfo, PrinterLanguage, PrinterTransport, RenderedJob};
+use crate::transport::{status, PrinterInfo, PrinterTransport, RenderedJob};
 use async_trait::async_trait;
 use std::time::{Duration, Instant};
 
@@ -48,7 +48,9 @@ impl AndroidBluetoothPrinter {
         let app = self.app()?;
         let address = self.address.clone();
         let what = self.what();
-        tokio::time::timeout(
+        // Phase 0 visibility: probe vs query vs write per print.
+        let t = Instant::now();
+        let result = tokio::time::timeout(
             BT_TIMEOUT,
             tokio::task::spawn_blocking(move || app.android_print().probe_bluetooth(&address)),
         )
@@ -60,7 +62,14 @@ impl AndroidBluetoothPrinter {
             )
         })?
         .map_err(|e| format!("Bluetooth probe task failed: {e}"))?
-        .map_err(|e| format!("Could not reach {what}: {e}"))?;
+        .map_err(|e| format!("Could not reach {what}: {e}"));
+        tracing::debug!(
+            address = %self.address,
+            probe_ms = t.elapsed().as_millis() as u64,
+            success = result.is_ok(),
+            "Bluetooth probe"
+        );
+        result?;
         Ok(())
     }
 
@@ -72,47 +81,109 @@ impl AndroidBluetoothPrinter {
     /// (`status::dialect_for`); a language with no query we can stand
     /// behind sends nothing and behaves exactly as it did. An unanswered
     /// query is only a fault once the printer has answered before.
-    async fn precheck(&self, language: &PrinterLanguage) -> Result<(), String> {
-        let Some(dialect) = status::dialect_for(language) else {
-            return Ok(());
-        };
-        let addr = self.address.clone();
-        if !status::should_probe(&addr, Instant::now()) {
-            return Ok(());
+    ///
+    /// Runs on the send's held socket (`handle`): the query and the write
+    /// below share one RFCOMM connect instead of two (A2/A3).
+    async fn send_on(&self, handle: &str, job: &RenderedJob) -> Result<(), String> {
+        if let Some(dialect) = status::dialect_for(&job.language) {
+            let addr = self.address.clone();
+            if status::should_probe(&addr, Instant::now()) {
+                let reply = self.query_remote(handle, &dialect.query()).await?;
+                let what = self.what();
+                if reply.is_empty() {
+                    let was_answering = status::had_answered(&addr);
+                    status::note_silent(&addr, Instant::now());
+                    if was_answering {
+                        return Err(status::silence_message(&what, STATUS_REPLY_TIMEOUT));
+                    }
+                    // Never answered: may not implement status — job goes out.
+                } else {
+                    status::note_answered(&addr);
+                    match status::decode(dialect, &reply) {
+                        Some(fault) => return Err(fault.message(&what)),
+                        None => status::note_healthy(&addr, Instant::now()),
+                    }
+                }
+            }
         }
-
-        let reply = self.query(&dialect.query()).await?;
-        let what = self.what();
-        if reply.is_empty() {
-            let was_answering = status::had_answered(&addr);
-            status::note_silent(&addr, Instant::now());
-            return if was_answering {
-                Err(status::silence_message(&what, STATUS_REPLY_TIMEOUT))
-            } else {
-                Ok(())
-            };
-        }
-
-        status::note_answered(&addr);
-        match status::decode(dialect, &reply) {
-            Some(fault) => Err(fault.message(&what)),
-            None => Ok(()),
-        }
+        self.write_remote(handle, &job.data).await
     }
 
-    /// Write the job bytes over an RFCOMM (SPP) socket.
-    async fn write(&self, data: &[u8]) -> Result<(), String> {
-        use tauri_plugin_android_print::{AndroidPrintExt, BluetoothWriteRequest};
+    /// Open and hold an RFCOMM socket for one send.
+    async fn open_remote(&self) -> Result<String, String> {
+        use tauri_plugin_android_print::AndroidPrintExt;
+
+        let app = self.app()?;
+        let address = self.address.clone();
+        let what = self.what();
+        let t = Instant::now();
+        let opened = tokio::time::timeout(
+            BT_TIMEOUT,
+            tokio::task::spawn_blocking(move || {
+                app.android_print().open_bluetooth_connection(&address)
+            }),
+        )
+        .await
+        .map_err(|_| format!("{what} stopped responding while opening"))?
+        .map_err(|e| format!("Bluetooth open task failed: {e}"))?
+        .map_err(|e| format!("Could not open {what}: {e}"))?;
+        tracing::debug!(
+            address = %self.address,
+            open_ms = t.elapsed().as_millis() as u64,
+            "Bluetooth open"
+        );
+        Ok(opened.handle)
+    }
+
+    /// Best-effort release of a held socket. Close errors never fail a
+    /// print — the Kotlin side also reaps idle sockets.
+    async fn close_remote(&self, handle: &str) {
+        use tauri_plugin_android_print::AndroidPrintExt;
+
+        let Ok(app) = self.app() else { return };
+        let handle = handle.to_string();
+        let _ = tokio::task::spawn_blocking(move || {
+            app.android_print().close_bluetooth_connection(&handle)
+        })
+        .await;
+    }
+
+    /// Write the job bytes over an RFCOMM (SPP) socket, on the send's
+    /// held socket.
+    async fn write_remote(&self, handle: &str, data: &[u8]) -> Result<(), String> {
+        use tauri::Manager;
+        use tauri_plugin_android_print::{AndroidPrintExt, BluetoothWriteOnRequest};
 
         let app = self.app()?;
         let what = self.what();
-        let req = BluetoothWriteRequest {
-            address: self.address.clone(),
-            data_base64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data),
+        // A4: payloads past the handoff size travel by file so a large
+        // raster does not inflate by a third into one giant JSON string.
+        let via_file = data.len() > crate::transport::PLUGIN_FILE_HANDOFF_BYTES;
+        let staged = if via_file {
+            let dir = app
+                .path()
+                .app_cache_dir()
+                .map_err(|e| format!("no app cache dir for payload handoff: {e}"))?;
+            Some(crate::transport::stage_plugin_payload(&dir, data)?)
+        } else {
+            None
         };
-        let bytes = tokio::time::timeout(
+        let req = BluetoothWriteOnRequest {
+            handle: handle.to_string(),
+            data_base64: if staged.is_some() {
+                None
+            } else {
+                Some(base64::Engine::encode(
+                    &base64::engine::general_purpose::STANDARD,
+                    data,
+                ))
+            },
+            data_path: staged.as_ref().map(|p| p.to_string_lossy().into_owned()),
+        };
+        let t = Instant::now();
+        let result = tokio::time::timeout(
             BT_TIMEOUT,
-            tokio::task::spawn_blocking(move || app.android_print().write_bluetooth(req)),
+            tokio::task::spawn_blocking(move || app.android_print().write_bluetooth_on(req)),
         )
         .await
         .map_err(|_| {
@@ -122,7 +193,20 @@ impl AndroidBluetoothPrinter {
             )
         })?
         .map_err(|e| format!("Bluetooth write task failed: {e}"))?
-        .map_err(|e| format!("{what} did not print the job: {e}"))?;
+        .map_err(|e| format!("{what} did not print the job: {e}"));
+        // Our side of the handoff cleanup runs on every exit; the Kotlin
+        // side deletes after reading.
+        if let Some(path) = staged {
+            let _ = std::fs::remove_file(path);
+        }
+        let bytes = result?;
+        tracing::debug!(
+            address = %self.address,
+            bytes = data.len(),
+            via_file,
+            write_ms = t.elapsed().as_millis() as u64,
+            "Bluetooth write"
+        );
         if bytes.bytes_written == 0 && !data.is_empty() {
             return Err(format!("{what} accepted no bytes"));
         }
@@ -130,30 +214,37 @@ impl AndroidBluetoothPrinter {
     }
 
     /// Ask a status question over RFCOMM and return the reply bytes
-    /// (empty when the printer stays silent). The Kotlin side bounds the
-    /// wait, so a printer that never answers still resolves.
-    async fn query(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+    /// (empty when the printer stays silent), on the send's held socket.
+    /// The Kotlin side bounds the wait, so a printer that never answers
+    /// still resolves.
+    async fn query_remote(&self, handle: &str, request: &[u8]) -> Result<Vec<u8>, String> {
         use base64::Engine as _;
-        use tauri_plugin_android_print::{AndroidPrintExt, BluetoothQueryRequest};
+        use tauri_plugin_android_print::{AndroidPrintExt, BluetoothQueryOnRequest};
 
         let app = self.app()?;
         let what = self.what();
-        let req = BluetoothQueryRequest {
-            address: self.address.clone(),
+        let req = BluetoothQueryOnRequest {
+            handle: handle.to_string(),
             request_base64: base64::Engine::encode(
                 &base64::engine::general_purpose::STANDARD,
                 request,
             ),
             reply_timeout_ms: Some(STATUS_REPLY_TIMEOUT.as_millis() as u64),
         };
+        let t = Instant::now();
         let reply = tokio::time::timeout(
             BT_TIMEOUT,
-            tokio::task::spawn_blocking(move || app.android_print().query_bluetooth(req)),
+            tokio::task::spawn_blocking(move || app.android_print().query_bluetooth_on(req)),
         )
         .await
         .map_err(|_| format!("{what} stopped responding while the status was asked"))?
         .map_err(|e| format!("Bluetooth status query task failed: {e}"))?
         .map_err(|e| format!("Bluetooth status query to {what} failed: {e}"))?;
+        tracing::debug!(
+            address = %self.address,
+            query_ms = t.elapsed().as_millis() as u64,
+            "Bluetooth status query"
+        );
         base64::engine::general_purpose::STANDARD
             .decode(&reply.reply_base64)
             .map_err(|e| format!("Bluetooth status reply from {what} is not base64: {e}"))
@@ -194,8 +285,13 @@ impl PrinterTransport for AndroidBluetoothPrinter {
     }
 
     async fn send(&self, job: RenderedJob) -> Result<(), String> {
-        self.precheck(&job.language).await?;
-        self.write(&job.data).await
+        // One socket for the whole send (A2/A3): open, status query,
+        // write, close. The held socket is always released below —
+        // success, fault refusal, or transport error.
+        let handle = self.open_remote().await?;
+        let outcome = self.send_on(&handle, &job).await;
+        self.close_remote(&handle).await;
+        outcome
     }
 }
 

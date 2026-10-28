@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import "@/lib/i18n";
 import { PairingGate } from "@/components/PairingGate";
 
@@ -54,5 +54,61 @@ describe("PairingGate", () => {
     await new Promise((r) => setTimeout(r, 2500));
     expect(onPaired).not.toHaveBeenCalled();
     view.unmount();
+  });
+
+  // Regression: pairing used to be noticed only by the gate's 2s poll, so
+  // after a successful pair the freshly-paired device sat on the welcome
+  // screen for up to two seconds before /print replaced it. Pairing now
+  // signals onPaired directly, so it must fire well before any poll tick.
+  it("leaves immediately when a pair is made, not on the next poll", async () => {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    (window as any).__TAURI_INTERNALS__ = {}; // leave web mode: real pairing form
+    const settings: Record<string, string> = {};
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      switch (cmd) {
+        case "get_setting":
+          return settings[String(args?.key)] ?? null;
+        case "set_setting":
+          settings[String(args?.key)] = String(args?.value);
+          return null;
+        case "pair_with_code":
+          return {
+            id: "provider-1",
+            name: "Shop PC",
+            host: "192.168.1.9",
+            port: 17717,
+            secret: "tokentokentokentokentokentoken01",
+            fingerprint: "f".repeat(64),
+            provider_id: "provider-1",
+          };
+        case "peer_capabilities":
+          return { protocol: 1, can_render: true, score: 800, cores: 8 };
+        default:
+          return null;
+      }
+    });
+
+    try {
+      const onPaired = vi.fn();
+      const view = render(<PairingGate onPaired={onPaired} />);
+      const input = await screen.findByTestId("devices-code-input");
+      expect(onPaired).not.toHaveBeenCalled();
+
+      const t0 = Date.now();
+      fireEvent.change(input, { target: { value: "k7qm-4xpd" } });
+      fireEvent.click(screen.getByTestId("devices-code-submit"));
+
+      // Direct signal, not the 2000ms poll: well inside one tick.
+      await waitFor(() => expect(onPaired).toHaveBeenCalled(), {
+        timeout: 1500,
+      });
+      expect(Date.now() - t0).toBeLessThan(2000);
+      view.unmount();
+    } finally {
+      (window as any).__TAURI_INTERNALS__ = undefined;
+      ua.mockRestore();
+    }
   });
 });

@@ -258,13 +258,12 @@ pub(crate) fn check_probe_reply(name: &str, body: &[u8]) -> Result<(), String> {
 
 async fn post_ipp(path: &str, body: Vec<u8>) -> Result<Vec<u8>, String> {
     let url = format!("{}{path}", cups_base_url());
-    let client = reqwest::Client::builder()
-        .timeout(CUPS_TIMEOUT)
-        .build()
-        .map_err(|e| format!("CUPS client failed: {e}"))?;
+    // Shared client (L2): keep-alive across jobs; deadline stays per request.
+    let client = super::shared_http_client();
     let response = client
         .post(&url)
         .header("Content-Type", "application/ipp")
+        .timeout(CUPS_TIMEOUT)
         .body(body)
         .send()
         .await

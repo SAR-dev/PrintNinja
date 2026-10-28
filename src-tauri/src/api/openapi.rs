@@ -61,7 +61,7 @@ impl Default for OpenApiSpec {
                 "/v1/metrics": {
                     "get": {
                         "summary": "Operational counters",
-                        "description": "Jobs by status, active batches, queue-tracked printers, completed totals since boot, and shared-render attempts (bought vs locally fallen back). Same shape every call; poll it.",
+                        "description": "Jobs by status, active batches, queue-tracked printers, completed totals since boot, shared-render attempts (bought vs locally fallen back), and browser renders (persistent vs one-shot fallback). Same shape every call; poll it.",
                         "responses": {
                             "200": { "description": "Counters" },                        }
                     }

@@ -7,7 +7,7 @@
 //! no permission yet the plugin shows the system dialog and waits for the
 //! answer, so the first send may take as long as the user takes.
 
-use crate::transport::{status, PrinterInfo, PrinterLanguage, PrinterTransport, RenderedJob};
+use crate::transport::{status, PrinterInfo, PrinterTransport, RenderedJob};
 use async_trait::async_trait;
 use std::time::{Duration, Instant};
 
@@ -51,7 +51,9 @@ impl AndroidUsbPrinter {
         let app = self.app()?;
         let device = self.device.clone();
         let what = self.what();
-        tokio::time::timeout(USB_TIMEOUT, tokio::task::spawn_blocking(move || {
+        // Phase 0 visibility: probe vs query vs write per print.
+        let t = Instant::now();
+        let result = tokio::time::timeout(USB_TIMEOUT, tokio::task::spawn_blocking(move || {
             app.android_print().probe_usb(&device)
         }))
         .await
@@ -62,7 +64,14 @@ impl AndroidUsbPrinter {
             )
         })?
         .map_err(|e| format!("USB probe task failed: {e}"))?
-        .map_err(|e| format!("Could not reach {what}: {e}"))?;
+        .map_err(|e| format!("Could not reach {what}: {e}"));
+        tracing::debug!(
+            device = %self.device,
+            probe_ms = t.elapsed().as_millis() as u64,
+            success = result.is_ok(),
+            "USB probe"
+        );
+        result?;
         Ok(())
     }
 
@@ -77,47 +86,106 @@ impl AndroidUsbPrinter {
     /// before — a printer that never replies may simply not implement the
     /// query, and refusing every job over a mis-set language column would
     /// stop printing outright.
-    async fn precheck(&self, language: &PrinterLanguage) -> Result<(), String> {
-        let Some(dialect) = status::dialect_for(language) else {
-            return Ok(());
-        };
-        let addr = self.device.clone();
-        if !status::should_probe(&addr, Instant::now()) {
-            return Ok(());
+    ///
+    /// Runs on the send's held connection (`handle`): the query and the
+    /// write below share one connect instead of two (A2/A3).
+    async fn send_on(&self, handle: &str, job: &RenderedJob) -> Result<(), String> {
+        if let Some(dialect) = status::dialect_for(&job.language) {
+            let addr = self.device.clone();
+            if status::should_probe(&addr, Instant::now()) {
+                let reply = self.query_remote(handle, &dialect.query()).await?;
+                let what = self.what();
+                if reply.is_empty() {
+                    let was_answering = status::had_answered(&addr);
+                    status::note_silent(&addr, Instant::now());
+                    if was_answering {
+                        return Err(status::silence_message(&what, STATUS_REPLY_TIMEOUT));
+                    }
+                    // Never answered: may not implement status — job goes out.
+                } else {
+                    status::note_answered(&addr);
+                    match status::decode(dialect, &reply) {
+                        Some(fault) => return Err(fault.message(&what)),
+                        None => status::note_healthy(&addr, Instant::now()),
+                    }
+                }
+            }
         }
-
-        let reply = self.query(&dialect.query()).await?;
-        let what = self.what();
-        if reply.is_empty() {
-            let was_answering = status::had_answered(&addr);
-            status::note_silent(&addr, Instant::now());
-            return if was_answering {
-                Err(status::silence_message(&what, STATUS_REPLY_TIMEOUT))
-            } else {
-                Ok(())
-            };
-        }
-
-        status::note_answered(&addr);
-        match status::decode(dialect, &reply) {
-            Some(fault) => Err(fault.message(&what)),
-            None => Ok(()),
-        }
+        self.write_remote(handle, &job.data).await
     }
 
-    /// Write the job bytes over a bulk-OUT endpoint.
-    async fn write(&self, data: &[u8]) -> Result<(), String> {
-        use tauri_plugin_android_print::{AndroidPrintExt, UsbWriteRequest};
+    /// Open and hold a USB connection for one send.
+    async fn open_remote(&self) -> Result<String, String> {
+        use tauri_plugin_android_print::AndroidPrintExt;
+
+        let app = self.app()?;
+        let device = self.device.clone();
+        let what = self.what();
+        let t = Instant::now();
+        let opened = tokio::time::timeout(
+            USB_TIMEOUT,
+            tokio::task::spawn_blocking(move || app.android_print().open_usb_connection(&device)),
+        )
+        .await
+        .map_err(|_| format!("{what} stopped responding while opening"))?
+        .map_err(|e| format!("USB open task failed: {e}"))?
+        .map_err(|e| format!("Could not open {what}: {e}"))?;
+        tracing::debug!(
+            device = %self.device,
+            open_ms = t.elapsed().as_millis() as u64,
+            "USB open"
+        );
+        Ok(opened.handle)
+    }
+
+    /// Best-effort release of a held connection. Close errors never fail
+    /// a print — the Kotlin side also reaps idle handles.
+    async fn close_remote(&self, handle: &str) {
+        use tauri_plugin_android_print::AndroidPrintExt;
+
+        let Ok(app) = self.app() else { return };
+        let handle = handle.to_string();
+        let _ =
+            tokio::task::spawn_blocking(move || app.android_print().close_usb_connection(&handle))
+                .await;
+    }
+
+    /// Write the job bytes over a bulk-OUT endpoint, on the send's held
+    /// connection.
+    async fn write_remote(&self, handle: &str, data: &[u8]) -> Result<(), String> {
+        use tauri::Manager;
+        use tauri_plugin_android_print::{AndroidPrintExt, UsbWriteOnRequest};
 
         let app = self.app()?;
         let what = self.what();
-        let req = UsbWriteRequest {
-            device_name: self.device.clone(),
-            data_base64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data),
+        // A4: payloads past the handoff size travel by file so a large
+        // raster does not inflate by a third into one giant JSON string.
+        let via_file = data.len() > crate::transport::PLUGIN_FILE_HANDOFF_BYTES;
+        let staged = if via_file {
+            let dir = app
+                .path()
+                .app_cache_dir()
+                .map_err(|e| format!("no app cache dir for payload handoff: {e}"))?;
+            Some(crate::transport::stage_plugin_payload(&dir, data)?)
+        } else {
+            None
         };
-        let bytes = tokio::time::timeout(
+        let req = UsbWriteOnRequest {
+            handle: handle.to_string(),
+            data_base64: if staged.is_some() {
+                None
+            } else {
+                Some(base64::Engine::encode(
+                    &base64::engine::general_purpose::STANDARD,
+                    data,
+                ))
+            },
+            data_path: staged.as_ref().map(|p| p.to_string_lossy().into_owned()),
+        };
+        let t = Instant::now();
+        let result = tokio::time::timeout(
             USB_TIMEOUT,
-            tokio::task::spawn_blocking(move || app.android_print().write_usb(req)),
+            tokio::task::spawn_blocking(move || app.android_print().write_usb_on(req)),
         )
         .await
         .map_err(|_| {
@@ -127,7 +195,20 @@ impl AndroidUsbPrinter {
             )
         })?
         .map_err(|e| format!("USB write task failed: {e}"))?
-        .map_err(|e| format!("{what} did not print the job: {e}"))?;
+        .map_err(|e| format!("{what} did not print the job: {e}"));
+        // Our side of the handoff cleanup runs on every exit; the Kotlin
+        // side deletes after reading.
+        if let Some(path) = staged {
+            let _ = std::fs::remove_file(path);
+        }
+        let bytes = result?;
+        tracing::debug!(
+            device = %self.device,
+            bytes = data.len(),
+            via_file,
+            write_ms = t.elapsed().as_millis() as u64,
+            "USB write"
+        );
         if bytes.bytes_written == 0 && !data.is_empty() {
             return Err(format!("{what} accepted no bytes"));
         }
@@ -135,30 +216,37 @@ impl AndroidUsbPrinter {
     }
 
     /// Ask a status question and return the reply bytes (empty when the
-    /// device stays silent). The Kotlin side bounds the wait, so a
-    /// printer that never answers still resolves.
-    async fn query(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+    /// device stays silent), on the send's held connection. The Kotlin
+    /// side bounds the wait, so a printer that never answers still
+    /// resolves.
+    async fn query_remote(&self, handle: &str, request: &[u8]) -> Result<Vec<u8>, String> {
         use base64::Engine as _;
-        use tauri_plugin_android_print::{AndroidPrintExt, UsbQueryRequest};
+        use tauri_plugin_android_print::{AndroidPrintExt, UsbQueryOnRequest};
 
         let app = self.app()?;
         let what = self.what();
-        let req = UsbQueryRequest {
-            device_name: self.device.clone(),
+        let req = UsbQueryOnRequest {
+            handle: handle.to_string(),
             request_base64: base64::Engine::encode(
                 &base64::engine::general_purpose::STANDARD,
                 request,
             ),
             reply_timeout_ms: Some(STATUS_REPLY_TIMEOUT.as_millis() as u64),
         };
+        let t = Instant::now();
         let reply = tokio::time::timeout(
             USB_TIMEOUT,
-            tokio::task::spawn_blocking(move || app.android_print().query_usb(req)),
+            tokio::task::spawn_blocking(move || app.android_print().query_usb_on(req)),
         )
         .await
         .map_err(|_| format!("{what} stopped responding while the status was asked"))?
         .map_err(|e| format!("USB status query task failed: {e}"))?
         .map_err(|e| format!("USB status query to {what} failed: {e}"))?;
+        tracing::debug!(
+            device = %self.device,
+            query_ms = t.elapsed().as_millis() as u64,
+            "USB status query"
+        );
         base64::engine::general_purpose::STANDARD
             .decode(&reply.reply_base64)
             .map_err(|e| format!("USB status reply from {what} is not base64: {e}"))
@@ -199,8 +287,13 @@ impl PrinterTransport for AndroidUsbPrinter {
     }
 
     async fn send(&self, job: RenderedJob) -> Result<(), String> {
-        self.precheck(&job.language).await?;
-        self.write(&job.data).await
+        // One connection for the whole send (A2/A3): open, status query,
+        // write, close. The held connection is always released below —
+        // success, fault refusal, or transport error.
+        let handle = self.open_remote().await?;
+        let outcome = self.send_on(&handle, &job).await;
+        self.close_remote(&handle).await;
+        outcome
     }
 }
 
