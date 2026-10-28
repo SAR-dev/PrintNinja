@@ -17,8 +17,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      # Production parity: real rate limits, real hashing cost, docs on.
-      E2E_RATE_LIMIT_MAX: "120"
+      # Production parity: real auth limits, real hashing cost, docs on.
+      # The global limiter stays relaxed (1000/min): it is keyed per IP
+      # and one Playwright worker drives several full-speed browser
+      # contexts from a single address, so the production value (120)
+      # measures the suite's pace, not the app — the suite sustains
+      # ~200 req/min per worker in bursts. The auth limiter is the
+      # brute-force control and stays pinned at production values.
+      E2E_RATE_LIMIT_MAX: "1000"
       E2E_RATE_LIMIT_AUTH_MAX: "10"
       E2E_RATE_LIMIT_AUTH_WINDOW_SECONDS: "300"
       E2E_ARGON2_MEMORY_KIB: "19456"
