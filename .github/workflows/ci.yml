@@ -35,6 +35,10 @@ permissions:
 env:
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
+  # Build-time pre-fill for the sign-in screen and Settings -> Share.
+  # Set in the repo's Actions variables (Settings -> Secrets and
+  # variables -> Actions -> Variables); empty in forks means no pre-fill.
+  VITE_DEFAULT_SHARE_URL: ${{ vars.VITE_DEFAULT_SHARE_URL }}
 
 # Rust toolchain is pinned (dtolnay/rust-toolchain@1.90.0 below and
 # rust-toolchain.toml). Bump all of them together.
