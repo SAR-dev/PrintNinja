@@ -205,7 +205,10 @@ impl RawTcpPrinter {
         status::note_answered(&addr);
         match status::decode(dialect, &reply) {
             Some(fault) => Err(fault.message(&at)),
-            None => Ok(()),
+            None => {
+                status::note_healthy(&addr, Instant::now());
+                Ok(())
+            }
         }
     }
 }

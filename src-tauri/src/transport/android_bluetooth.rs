@@ -77,7 +77,8 @@ impl AndroidBluetoothPrinter {
             return Ok(());
         };
         let addr = self.address.clone();
-        if !status::should_probe(&addr, Instant::now()) {
+        let now = Instant::now();
+        if !status::should_probe(&addr, now) {
             return Ok(());
         }
 
@@ -96,7 +97,10 @@ impl AndroidBluetoothPrinter {
         status::note_answered(&addr);
         match status::decode(dialect, &reply) {
             Some(fault) => Err(fault.message(&what)),
-            None => Ok(()),
+            None => {
+                status::note_healthy(&addr, Instant::now());
+                Ok(())
+            }
         }
     }
 

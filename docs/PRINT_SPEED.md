@@ -104,11 +104,20 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   `send_raw_with_datatype`, `check_ready` and `offered_datatypes` bodies
   in `spawn_blocking` (same pattern the Android transports already use).
   Prevents one wedged queue from stalling the worker pool.
+  > ✅ **Done** (`perf/print-speed`): `send`, `test`, `discover` and
+  > the `System` probe arm in `transport/mod.rs` all run on the
+  > blocking pool. Windows-only code path; `cargo check` / `clippy
+  > -D warnings` / `fmt` clean, existing unit tests pass (Win32 calls
+  > need real hardware to exercise).
 - **W5-fix — drop `StartPagePrinter`/`EndPagePrinter` for RAW and PDF.**
   They bracket EMF pages; for RAW spooling they are no-ops on the success
   path (`windows_spooler.rs:447,469`). Remove and verify against the
   `virtual-printer` e2e target — two fewer round trips per job, near-zero
   risk.
+  > ✅ **Done** (`perf/print-speed`): both calls removed from
+  > `send_raw_with_datatype` (which only ever sends RAW or PDF).
+  > Compile + clippy + unit tests clean; needs a real Windows queue to
+  > confirm (no Win32 coverage in CI).
 
 ### Linux
 
@@ -162,13 +171,23 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   Genuinely Low impact (a 16 KiB memcpy is microseconds); do it while
   touching the function, not as its own task. Optionally raise the
   chunk to 64 KiB to cut JNI crossings — measure first.
-- **A6-fix — short "answered OK" cache (follows from the correction).**
-  Since the precheck runs on every print, cache a healthy answer per
-  address for 30–60 s and skip the query within the window. Keep the
-  semantics: any *fault* answer still fails the job immediately, and
-  the window stays short so out-of-paper/jam is caught within a minute.
-  This is the same mechanism as option (1) in the A2/A3 fix — implement
-  once, apply to both probe and precheck.
+- **A6-fix — short "answered OK" cache (REVISED after testing).**
+  Original plan: skip the status query within 30–60 s of a healthy
+  answer. **Rejected for the query**: `virtual_printer ::
+  once_a_printer_has_answered_its_silence_fails_the_job` pins that
+  silence-after-answer fails the job at once — that is how out-of-paper
+  and jam are detected, and no per-print saving is worth printing into
+  a faulted printer for up to a minute. What shipped instead: the
+  healthy answer (recorded in the three prechecks via
+  `status::note_healthy`) excuses only the **preflight probe** — a bare
+  connect/disconnect with no fault information — while the status query
+  still runs on every print. Rapid reprints save one connect; fault
+  detection is byte-for-byte the old behavior.
+  > ✅ **Done, revised** (`perf/print-speed`): `HEALTHY` map +
+  > `note_healthy`/`healthy_recently` in `transport/status.rs` (60 s
+  > TTL, unit-tested); preflight probe gated in `run_stages`;
+  > prechecks in `android_usb.rs`, `android_bluetooth.rs`,
+  > `raw_tcp.rs` record health but never skip the query.
 - **A7-fix — only if queries still dominate after A6.** Replace the
   50 ms poll loop with `inputStream.read()` inside a `Future` on
   `ioPool` bounded by the existing reply timeout. Saves ≤50 ms per
@@ -233,9 +252,9 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
 > - Done when a table of p50/p95 per stage exists.
 
 ### Phase 1: Transport quick wins (about 1-1.5 days, low risk)
-- Windows: cache `offered_datatypes()` per printer with a TTL ✅ **done** (`perf/print-speed`), run the spooler send in `spawn_blocking` (W4, todo), drop the unneeded page calls (W5, todo).
+- Windows: cache `offered_datatypes()` per printer with a TTL ✅ **done**, run the spooler send in `spawn_blocking` ✅ **done**, drop the unneeded page calls ✅ **done** (all `perf/print-speed`; Win32 paths need hardware confirmation).
 - Linux: one shared `reqwest::Client` ✅ **done** (`perf/print-speed`).
-- Android: skip the preflight probe when the printer answered recently (todo — needs the recent-OK cache), overlap it with the peer render ✅ **done**, share the peer HTTP client ✅ **done**, batch copies into one write ✅ **done**. Keep the Bluetooth socket/USB-connection reuse across query+write as a follow-up — it saves the most but changes the plugin API.
+- Android: skip the preflight probe when the printer answered recently ✅ **done** (probe only — skipping the status query was tried and **rejected**: it broke the pinned silence-after-answer fault detection, see A6); overlap the probe with the peer render ✅ **done**, share the peer HTTP client ✅ **done**, batch copies into one write ✅ **done**. Keep the Bluetooth socket/USB-connection reuse across query+write as a follow-up — it saves the most but changes the plugin API.
 - Done when transport p50 drops and the e2e print tests pass.
 
 ### Phase 2: Render path (about 1-2 days, biggest expected gain)

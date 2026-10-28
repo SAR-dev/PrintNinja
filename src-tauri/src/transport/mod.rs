@@ -400,8 +400,17 @@ impl TransportRegistry {
                     .await
             }
             PrinterType::System => {
+                // W4: check_ready blocks on the queue; keep it off tokio
+                // workers like every other spooler call.
                 #[cfg(windows)]
-                let res = windows_spooler::WindowsSpooler::new(name.to_string()).check_ready();
+                let res = {
+                    let owned = name.to_string();
+                    tokio::task::spawn_blocking(move || {
+                        windows_spooler::WindowsSpooler::new(owned).check_ready()
+                    })
+                    .await
+                    .unwrap_or_else(|e| Err(format!("spooler probe task failed: {e}")))
+                };
                 #[cfg(target_os = "linux")]
                 let res = cups::CupsPrinter::new(name.to_string(), address.to_string())
                     .test()

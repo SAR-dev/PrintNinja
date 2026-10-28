@@ -478,13 +478,9 @@ impl WindowsSpooler {
                 ));
             }
 
-            let result = StartPagePrinter(h_printer);
-            if result == 0 {
-                EndDocPrinter(h_printer);
-                ClosePrinter(h_printer);
-                return Err(format!("StartPagePrinter failed: {}", GetLastError()));
-            }
-
+            // W5: no StartPagePrinter/EndPagePrinter. They bracket EMF
+            // pages; for RAW and PDF spooling they are no-ops on the
+            // success path — two fewer spooler round trips per job.
             let mut written: DWORD = 0;
             let result = WritePrinter(
                 h_printer,
@@ -500,7 +496,6 @@ impl WindowsSpooler {
                 None
             };
 
-            EndPagePrinter(h_printer);
             EndDocPrinter(h_printer);
             ClosePrinter(h_printer);
 
@@ -556,30 +551,47 @@ impl WindowsSpooler {
 #[async_trait]
 impl PrinterTransport for WindowsSpooler {
     async fn discover(&self) -> Vec<PrinterInfo> {
-        Self::enumerate_printers()
+        // W4: enumeration opens every queue; a wedged one must not stall a
+        // tokio worker. Discovery must never fail the Setup page either,
+        // so a panicked task degrades to an empty list.
+        tokio::task::spawn_blocking(WindowsSpooler::enumerate_printers)
+            .await
+            .unwrap_or_default()
     }
 
     async fn test(&self) -> Result<(), String> {
         // Status only: the queue's language is unknown here, and ESC/POS
         // bytes sent to a laser or inkjet queue print as garbage.
-        self.check_ready()
+        // W4: check_ready blocks on the queue; keep it off tokio workers.
+        let spooler = WindowsSpooler::new(self.printer_name.clone());
+        tokio::task::spawn_blocking(move || spooler.check_ready())
+            .await
+            .unwrap_or_else(|e| Err(format!("spooler test task failed: {e}")))
     }
 
     async fn send(&self, job: RenderedJob) -> Result<(), String> {
-        let wanted = spool_datatype(&job.mime_type);
-        let offered = if wanted == "PDF" {
-            self.offered_datatypes()
-        } else {
-            None
-        };
-        let datatype = choose_datatype(&job.mime_type, offered.as_deref());
-        if datatype != wanted {
-            tracing::warn!(
-                "queue `{}` offers no {wanted} datatype; sending as {datatype}",
-                self.printer_name
-            );
-        }
-        self.send_raw_with_datatype(&job.data, datatype)
+        // W4: the Win32 spooler calls below block (a wedged queue can stall
+        // them), so the whole send runs on the blocking pool instead of a
+        // tokio worker.
+        let spooler = WindowsSpooler::new(self.printer_name.clone());
+        tokio::task::spawn_blocking(move || {
+            let wanted = spool_datatype(&job.mime_type);
+            let offered = if wanted == "PDF" {
+                spooler.offered_datatypes()
+            } else {
+                None
+            };
+            let datatype = choose_datatype(&job.mime_type, offered.as_deref());
+            if datatype != wanted {
+                tracing::warn!(
+                    "queue `{}` offers no {wanted} datatype; sending as {datatype}",
+                    spooler.printer_name
+                );
+            }
+            spooler.send_raw_with_datatype(&job.data, datatype)
+        })
+        .await
+        .unwrap_or_else(|e| Err(format!("spooler send task failed: {e}")))
     }
 }
 
