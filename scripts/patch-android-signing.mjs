@@ -4,7 +4,7 @@
 //
 // Why: `tauri android init` regenerates gen/android per machine/run and the
 // default signers are per-machine keystores (~/.android/debug.keystore,
-// plus a throwaway for release). Without this, each CI release carries a
+// plus a throwaway for release). Without this, each release carries a
 // different signer and Android refuses the update ("App installation
 // failed", INSTALL_FAILED_UPDATE_INCOMPATIBLE).
 //

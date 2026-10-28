@@ -67,7 +67,7 @@ Silent printing for Windows, Android and Linux. Design a template in HTML and CS
 | Share service | Node, Fastify 5, Zod 4, Prisma 7 on Turso/libSQL (local SQLite file in development), Argon2id, Swagger UI. Runs in Docker or on Vercel |
 | Security | HTML sanitizing, sandboxed preview iframes with a strict CSP, secrets redacted from stored jobs, rate limits |
 | Quality | Vitest and Testing Library, `cargo test`, Playwright with axe-core (desktop and phone projects), Biome, Clippy |
-| CI and release | GitHub Actions on GitHub-hosted runners; unsigned MSI, deb, AppImage and APK attached to a draft release on `v*` tags |
+| Checks and release | `pnpm check` runs the checks locally; `scripts/release-local.mjs` builds the unsigned MSI, deb, AppImage and APK and attaches them to a draft GitHub release. No hosted CI |
 
 ## Getting Started
 
@@ -121,10 +121,10 @@ scripts/         Release and versioning helper scripts
 ## Releasing
 
 ```bash
-pnpm release:patch       # or release:minor / release:major
+pnpm release:patch       # bump + commit + tag (or release:minor / release:major)
 ```
 
-Pushing a `v*` tag builds the installers in CI. See [`docs/RELEASE.md`](docs/RELEASE.md) and [`docs/SIGNING.md`](docs/SIGNING.md).
+Installers are built on your own machines with `node scripts/release-local.mjs X.Y.Z --push`. See [`docs/RELEASE.md`](docs/RELEASE.md) and [`docs/SIGNING.md`](docs/SIGNING.md).
 
 ## More Documentation
 

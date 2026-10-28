@@ -120,8 +120,8 @@ backing it up.
 
 ### 2. Build a release and sign it
 
-CI builds a **debug** APK/AAB (see `.github/workflows/ci.yml`). For distribution, build a
-release locally:
+For distribution, build a release APK/AAB locally (`scripts/release-local.mjs` does this and
+handles the keystore for you; the manual command is):
 
 ```bash
 pnpm tauri android build --target aarch64 --apk
@@ -169,5 +169,5 @@ the updater. Do not reuse the Windows `.pfx` or the Android keystore for it.
 - [ ] `scripts/certs/` files exist and are not tracked by git
 - [ ] MSI signed, `signtool verify` passes on a machine with the `.cer` installed
 - [ ] APK signed with the same keystore as the previous release, `apksigner verify` passes
-- [ ] Signed files replace the unsigned CI files in the draft GitHub Release
+- [ ] Signed files replace the unsigned files in the draft GitHub Release
 - [ ] Install the MSI and the APK on one clean device each and open the app

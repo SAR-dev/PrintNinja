@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Manual release: the full CI release pipeline as one local script, for
-// when hosted runners are unavailable. Each machine builds what its OS
+// Release script: the whole release pipeline as one local script (there is
+// no hosted CI). Each machine builds what its OS
 // allows (Windows -> MSI, Linux -> deb/AppImage, any OS with an Android
 // SDK -> APK/AAB); the draft release collects whatever was produced.
 //
@@ -10,7 +10,7 @@
 // Without --push nothing leaves the machine: it bumps, checks, builds
 // locally and prints the remaining commands. With --push it also pushes
 // main + the tag and creates/updates the draft GitHub release.
-// e2e (Playwright) is intentionally not run here — CI covers it on PRs.
+// e2e (Playwright) is intentionally not run here: run `pnpm check --e2e` first.
 //
 // Requirements per machine: Node 22, pnpm 10, Rust 1.90, `gh` authed
 // with repo scope. Android additionally needs ANDROID_HOME with SDK +
@@ -158,11 +158,11 @@ try {
 }
 console.log(`=== release-local ${current} -> ${version} (${tag}) on ${process.platform} ===`);
 
-// ---- version bump (same files CI's version-check reads) -----------------
+// ---- version bump (same files release.mjs updates) -----------------
 
 sh("node", ["scripts/set-version.mjs", version]);
 
-// ---- checks (the blocking CI subset) ------------------------------------
+// ---- checks (the same set as `pnpm check --rust`, minus e2e) ------------------------------------
 
 const buildEnv = {
   ...process.env,
@@ -208,11 +208,11 @@ try {
 
 const artifacts = [];
 if (process.platform === "win32") {
-  // MSI only (mirrors CI's windows-build).
+  // MSI only.
   sh(PNPM, ["exec", "tauri", "build", "--bundles", "msi"], { env: buildEnv });
   artifacts.push(...findFiles(join(ROOT, "src-tauri/target/release/bundle/msi"), [".msi"]));
 } else if (process.platform === "linux") {
-  // deb + AppImage only (mirrors CI's linux-build).
+  // deb + AppImage only.
   sh(PNPM, ["exec", "tauri", "build", "--bundles", "deb", "appimage"], { env: buildEnv });
   artifacts.push(...findFiles(join(ROOT, "src-tauri/target/release/bundle/deb"), [".deb"]));
   artifacts.push(...findFiles(join(ROOT, "src-tauri/target/release/bundle/appimage"), [".AppImage"]));
@@ -220,7 +220,7 @@ if (process.platform === "win32") {
   console.log(`(no desktop bundles configured for ${process.platform}; skipping)`);
 }
 
-// Android: any OS with an SDK, same keystore contract as CI.
+// Android: any OS with an SDK, needs the keystore env vars.
 const androidHome = process.env.ANDROID_HOME ?? "";
 const sdkManager =
   androidHome && existsSync(androidHome)
@@ -231,7 +231,7 @@ if (sdkManager && process.env.ANDROID_KEYSTORE_BASE64 && process.env.ANDROID_KEY
   if (!existsSync(genDir)) sh(PNPM, ["exec", "tauri", "android", "init", "--ci"], { env: buildEnv });
   // `tauri android init` regenerates res/mipmap-* from tauri.conf; copy the
   // launchers `tauri icon` actually generated over them, otherwise the APK
-  // ships placeholder art (mirrors CI's android-build).
+  // ships placeholder art (placeholder icons otherwise).
   copyDir(join(ROOT, "src-tauri/icons/android"), join(genDir, "app/src/main/res"));
   sh("node", ["scripts/patch-android-theme.mjs"]);
   sh("node", ["scripts/patch-android-signing.mjs"], {

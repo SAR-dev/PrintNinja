@@ -138,24 +138,13 @@ The code for these is in; none has run on a device.
       behind CUPS, open the tray: expect a refusal naming paper. With
       only a low-toner warning, expect the probe to pass.
 
-## CI timings
-
-- [ ] **Release run is warm.** After this lands on `main`, merge once,
-      then tag. In the tag run open `rust-lint` and `rust-test` and
-      look at the rust-cache step: it must say a cache was restored,
-      not "No cache found". Record the `rust-check` wall time before
-      and after in the results log below.
-- [ ] **Branch protection.** Require the `web-check`, `rust-check`,
-      `rust-test-windows`, `server-check` and `android-check` statuses
-      in the branch rules instead of merging on green alone.
-
 ## Gradle and Android Gradle plugin 10
 
-The log lives in the Actions run for the tag, so this one is yours.
+The log comes from your own Android build, so this one is yours.
 
-- [ ] **Search the latest `android-build` log.** In the Actions UI,
-      filter the tag run's logs for the android build section and
-      grep it for `newDsl|builtInKotlin`.
+- [ ] **Search the latest Android build log.** Save the output of
+      `node scripts/release-local.mjs X.Y.Z` (or `tauri android build`)
+      and grep it for `newDsl|builtInKotlin`.
       No output: tick the box. Output: patch
       `src-tauri/gen/android/build.gradle` (or the `tauri android
       init` template) before AGP 10, and note the line here.

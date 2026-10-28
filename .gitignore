@@ -28,7 +28,7 @@ Thumbs.db
 *.db
 *.db-journal
 
-# act (local GitHub Actions runs): real secret values, never committed.
+# Local secret values (copied from .secrets.example), never committed.
 .secrets
 
 # Logs
