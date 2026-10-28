@@ -157,6 +157,23 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   kept in a Kotlin map, with `write_*_on(handle)` / `close(handle)`,
   so probe→query→write share one connect. (3) saves ~2 RFCOMM connects
   (~1–6 s) per BT print but changes the plugin API; do (1)/(2) first.
+  > ✅ **Done** (`perf/print-speed`): (1) and (2) shipped earlier
+  > (A6 probe gate, A10 overlap). (3) shipped now in reduced form —
+  > **per-send sharing, not cross-job caching**: the handle lives only
+  > inside one `send()` (open → query → write → close on every path),
+  > deliberately. Handing the probe's connection across to `send()`
+  > was rejected: job N+1's probe can overlap job N's send on the same
+  > printer (the permit serializes sends, not probes), so a handoff
+  > could evict a live handle mid-write. Result: 3→2 connects cold,
+  > 3→1 warm (probe already skipped when healthy). New plugin commands
+  > `open/query/write/close … Connection` × USB/BT, pure-JVM
+  > `ConnectionHandles` store (unit-tested) with a 120 s idle sweeper
+  > as backstop. Rust `send()` restructured around the held handle
+  > with identical fault semantics; `reach()`/probe path untouched.
+  > Rust verified (`cargo check`, `clippy -D warnings`, `fmt`, full
+  > suite green incl. new models serde tests); Kotlin helper verified
+  > locally (compiles + 7 JUnit tests pass); full module needs CI's
+  > `android-check` (no `:tauri-android` project on this machine).
 - **A4-fix — file-path handoff for large payloads only.** The Tauri
   bridge is JSON, so per-call base64 is mandatory for small jobs (keep
   it — receipts are KBs). For large raster/PDF payloads crossing to
@@ -268,7 +285,7 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
 ### Phase 1: Transport quick wins (about 1-1.5 days, low risk)
 - Windows: cache `offered_datatypes()` per printer with a TTL ✅ **done**, run the spooler send in `spawn_blocking` ✅ **done**, drop the unneeded page calls ✅ **done** (all `perf/print-speed`; Win32 paths need hardware confirmation).
 - Linux: one shared `reqwest::Client` ✅ **done** (`perf/print-speed`).
-- Android: skip the preflight probe when the printer answered recently ✅ **done** (probe only — skipping the status query was tried and **rejected**: it broke the pinned silence-after-answer fault detection, see A6); overlap the probe with the peer render ✅ **done**, share the peer HTTP client ✅ **done**, batch copies into one write ✅ **done**. Keep the Bluetooth socket/USB-connection reuse across query+write as a follow-up — it saves the most but changes the plugin API.
+- Android: skip the preflight probe when the printer answered recently ✅ **done** (probe only — skipping the status query was tried and **rejected**: it broke the pinned silence-after-answer fault detection, see A6); overlap the probe with the peer render ✅ **done**, share the peer HTTP client ✅ **done**, batch copies into one write ✅ **done**, share one connection across query+write within a send ✅ **done** (`perf/print-speed`; full cross-job handle handoff deliberately rejected — probe/send overlap on one printer could evict a live handle, see A2/A3).
 - Done when transport p50 drops and the e2e print tests pass.
 
 ### Phase 2: Render path (about 1-2 days, biggest expected gain)
