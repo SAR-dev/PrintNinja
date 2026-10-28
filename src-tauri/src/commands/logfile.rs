@@ -11,7 +11,7 @@ use crate::error::{AppError, AppResult};
 /// Recent backend log text, oldest first, up to `max_kb` kilobytes
 /// (default 256, clamped to 1 MiB). Empty when file logging never
 /// started (stdout-only fallback) or nothing was recorded yet.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn read_app_logs(app: AppHandle, max_kb: Option<u64>) -> AppResult<String> {
     use tauri::Manager;
 
