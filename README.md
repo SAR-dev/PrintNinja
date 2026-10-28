@@ -129,7 +129,7 @@ Installers are built on your own machines with `node scripts/release-local.mjs X
 ## More Documentation
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): how data becomes dots on paper, from template to printer, including borrowing a faster device
-- [`docs/PEER_RENDERING.md`](docs/PEER_RENDERING.md): the paired-PC render protocol, limits, pairing and the two-device field test
+- [`docs/ARCHITECTURE.md` §9](docs/ARCHITECTURE.md#9-borrowing-a-faster-device): borrowing a faster PC — the paired-PC render protocol, limits and pairing (two-device field test: `docs/HARDWARE_TODO.md`)
 - [`docs/UI_GUIDE.md`](docs/UI_GUIDE.md): design principles, components and status vocabulary
 - [`docs/ENV.md`](docs/ENV.md): share service environment variables
 - [`docs/RELEASE.md`](docs/RELEASE.md) and [`docs/SIGNING.md`](docs/SIGNING.md): releasing and signing

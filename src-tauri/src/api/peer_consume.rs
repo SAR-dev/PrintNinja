@@ -7,7 +7,7 @@
 //! locally. Sharing can only speed a print up, never fail it.
 //!
 //! The trust root is the pairing secret the operator typed from device
-//! B's screen (see docs/PEER_RENDERING.md). Hosts are restricted to
+//! B's screen (see docs/ARCHITECTURE.md §9 Pairing). Hosts are restricted to
 //! LAN names and private addresses, so a pasted secret cannot turn the
 //! command into a proxy for the public internet.
 

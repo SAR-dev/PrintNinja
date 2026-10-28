@@ -99,7 +99,7 @@ pub fn init(conn: &Connection) -> rusqlite::Result<()> {
     ensure_pairing_schema(conn)
 }
 
-/// Pairing-code device registry (docs/PEER_RENDERING.md §Trust and pairing).
+/// Pairing-code device registry (docs/ARCHITECTURE.md §9 Pairing).
 /// Idempotent: `CREATE TABLE IF NOT EXISTS` plus a minted-once
 /// `provider_id` setting so re-pairing the same PC replaces the phone's
 /// old entry instead of adding a duplicate.

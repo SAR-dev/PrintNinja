@@ -1,4 +1,4 @@
-//! Pairing-code flow (docs/PEER_RENDERING.md §Protocol): hello + claim,
+//! Pairing-code flow (docs/ARCHITECTURE.md §9 Pairing): hello + claim,
 //! the window state machine, the per-device token gate, and the device
 //! registry. Driven through the real router with `oneshot`, so
 //! routing/middleware bugs surface here. Time is injected by opening

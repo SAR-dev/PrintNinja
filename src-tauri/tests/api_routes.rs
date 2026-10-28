@@ -884,7 +884,7 @@ async fn the_openapi_document_matches_the_router() {
     // keys, scopes, or allowlists, so 401/403 must not appear anywhere —
     // except the shared-rendering peer pair (per-device token gate) and
     // the pairing introduction (window gate), which are explicitly gated
-    // (see docs/PEER_RENDERING.md).
+    // (see docs/ARCHITECTURE.md §9).
     for (path, operations) in paths.as_object().expect("paths object") {
         if path == "/v1/render"
             || path == "/v1/capabilities"

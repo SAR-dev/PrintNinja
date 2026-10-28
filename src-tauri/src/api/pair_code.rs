@@ -1,4 +1,4 @@
-//! One-time 8-character pairing codes (see docs/PEER_RENDERING.md §Trust and pairing).
+//! One-time 8-character pairing codes (see docs/ARCHITECTURE.md §9 Pairing).
 //!
 //! The PC mints a code, shows it for 90 s by default
 //! ([`PAIRING_TTL_ENV`] overrides), and holds it in memory only —

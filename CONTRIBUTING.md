@@ -61,7 +61,7 @@ On a machine with little disk space, `target/` can grow to several GB. Run `carg
 - Printing always goes through the real pipeline: data fetch, Handlebars, layout, render, per-printer queue, transport, history. `POST /v1/print`, deep links and the UI share it. Never return a fake "queued" response.
 - `PrintQueue` is `Clone + Send + Sync`, and each printer has its own semaphore so jobs never interleave. `PrinterTransport` must stay usable as `dyn` through `TransportRegistry`.
 - `DbState` is `Arc<Mutex<Database>>`, managed as Tauri state.
-- **Pipeline changes touch the docs.** `docs/ARCHITECTURE.md` explains the pipeline in prose and `docs/PEER_RENDERING.md` holds the shared-rendering protocol and limits. Update them in the same change when stages, timeouts, caps or status codes move.
+- **Pipeline changes touch the docs.** `docs/ARCHITECTURE.md` explains the pipeline in prose, including the shared-rendering protocol and limits (§9). Update it in the same change when stages, timeouts, caps or status codes move.
 - **This device's own prints come first.** Any new code path that renders a print locally must hold `LocalRenderGuard` (see `run_stages`), so that shared-rendering requests from phones get a 429 and the phone renders for itself. In the other direction, asking a PC must never be able to fail a print: every failure falls back to local rendering.
 - **Pairing links are LAN-only.** `parse_link` refuses public hosts before any socket opens. Keep that check in front of anything that accepts a scanned or pasted address.
 

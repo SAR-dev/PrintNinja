@@ -1,5 +1,5 @@
 //! Consumer tests for shared rendering: device A buying renders from
-//! device B (see docs/PEER_RENDERING.md).
+//! device B (see docs/ARCHITECTURE.md §9).
 //!
 //! A mock peer stands in for B — a tiny axum server speaking the same
 //! `/v1/capabilities` + `/v1/render` contract — so no browser is needed:
