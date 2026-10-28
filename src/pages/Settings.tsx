@@ -130,6 +130,29 @@ export function SettingsPage() {
     setSearchParams(params, { replace: true });
   };
 
+  // Palette deep-link (`?section=&field=`): scroll the control into view
+  // and flash it. The ring is temporary — it only orients, the control
+  // itself is unchanged.
+  const field = searchParams.get("field");
+  useEffect(() => {
+    if (!field || !hasSection) return;
+    const el = document.getElementById(field);
+    if (!el) return;
+    if (typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ block: "center" });
+    }
+    const flash = [
+      "ring-2",
+      "ring-primary",
+      "ring-offset-2",
+      "ring-offset-background",
+      "rounded-md",
+    ];
+    el.classList.add(...flash);
+    const timer = window.setTimeout(() => el.classList.remove(...flash), 2400);
+    return () => window.clearTimeout(timer);
+  }, [field, hasSection, section]);
+
   const [retentionError, setRetentionError] = useState("");
   const [maxError, setMaxError] = useState("");
   const [retentionDays, setRetentionDays] = useState("30");
@@ -565,6 +588,7 @@ export function SettingsPage() {
                   />
                   <Button
                     variant="outline"
+                    id="settings-font-upload"
                     data-testid="settings-font-upload"
                     onClick={() => fileRef.current?.click()}
                   >
@@ -961,6 +985,7 @@ export function SettingsPage() {
                   </p>
                   <Button
                     variant="destructive"
+                    id="settings-reset-database"
                     data-testid="settings-reset-database"
                     onClick={() => setShowResetDialog(true)}
                   >
@@ -984,6 +1009,7 @@ export function SettingsPage() {
                   </p>
                   <Button
                     variant="outline"
+                    id="settings-diag-export"
                     onClick={() => {
                       diagnostics.download();
                       toast.success(t("settings_page.toast_diag_exported"));

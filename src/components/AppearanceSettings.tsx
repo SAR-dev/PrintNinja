@@ -85,6 +85,7 @@ export function AppearanceSettings() {
           <div
             role="radiogroup"
             aria-label={t("settings_page.appearance_language")}
+            id="settings-language"
             data-testid="settings-language"
             className="grid gap-2 sm:grid-cols-2"
           >
@@ -127,6 +128,7 @@ export function AppearanceSettings() {
           <div
             role="radiogroup"
             aria-label={t("settings_page.appearance_density")}
+            id="settings-density"
             data-testid="settings-density"
             className="grid gap-2 sm:grid-cols-2"
           >
@@ -207,6 +209,7 @@ export function AppearanceSettings() {
               />
               <Button
                 variant="outline"
+                id="settings-logo-upload"
                 data-testid="settings-logo-upload"
                 onClick={() => fileRef.current?.click()}
               >
