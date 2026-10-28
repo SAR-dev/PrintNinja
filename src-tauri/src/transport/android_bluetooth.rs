@@ -48,7 +48,9 @@ impl AndroidBluetoothPrinter {
         let app = self.app()?;
         let address = self.address.clone();
         let what = self.what();
-        tokio::time::timeout(
+        // Phase 0 visibility: probe vs query vs write per print.
+        let t = Instant::now();
+        let result = tokio::time::timeout(
             BT_TIMEOUT,
             tokio::task::spawn_blocking(move || app.android_print().probe_bluetooth(&address)),
         )
@@ -60,7 +62,14 @@ impl AndroidBluetoothPrinter {
             )
         })?
         .map_err(|e| format!("Bluetooth probe task failed: {e}"))?
-        .map_err(|e| format!("Could not reach {what}: {e}"))?;
+        .map_err(|e| format!("Could not reach {what}: {e}"));
+        tracing::debug!(
+            address = %self.address,
+            probe_ms = t.elapsed().as_millis() as u64,
+            success = result.is_ok(),
+            "Bluetooth probe"
+        );
+        result?;
         Ok(())
     }
 
@@ -114,6 +123,7 @@ impl AndroidBluetoothPrinter {
             address: self.address.clone(),
             data_base64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data),
         };
+        let t = Instant::now();
         let bytes = tokio::time::timeout(
             BT_TIMEOUT,
             tokio::task::spawn_blocking(move || app.android_print().write_bluetooth(req)),
@@ -127,6 +137,12 @@ impl AndroidBluetoothPrinter {
         })?
         .map_err(|e| format!("Bluetooth write task failed: {e}"))?
         .map_err(|e| format!("{what} did not print the job: {e}"))?;
+        tracing::debug!(
+            address = %self.address,
+            bytes = data.len(),
+            write_ms = t.elapsed().as_millis() as u64,
+            "Bluetooth write"
+        );
         if bytes.bytes_written == 0 && !data.is_empty() {
             return Err(format!("{what} accepted no bytes"));
         }
@@ -150,6 +166,7 @@ impl AndroidBluetoothPrinter {
             ),
             reply_timeout_ms: Some(STATUS_REPLY_TIMEOUT.as_millis() as u64),
         };
+        let t = Instant::now();
         let reply = tokio::time::timeout(
             BT_TIMEOUT,
             tokio::task::spawn_blocking(move || app.android_print().query_bluetooth(req)),
@@ -158,6 +175,11 @@ impl AndroidBluetoothPrinter {
         .map_err(|_| format!("{what} stopped responding while the status was asked"))?
         .map_err(|e| format!("Bluetooth status query task failed: {e}"))?
         .map_err(|e| format!("Bluetooth status query to {what} failed: {e}"))?;
+        tracing::debug!(
+            address = %self.address,
+            query_ms = t.elapsed().as_millis() as u64,
+            "Bluetooth status query"
+        );
         base64::engine::general_purpose::STANDARD
             .decode(&reply.reply_base64)
             .map_err(|e| format!("Bluetooth status reply from {what} is not base64: {e}"))

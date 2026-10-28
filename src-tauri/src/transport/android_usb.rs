@@ -51,7 +51,9 @@ impl AndroidUsbPrinter {
         let app = self.app()?;
         let device = self.device.clone();
         let what = self.what();
-        tokio::time::timeout(USB_TIMEOUT, tokio::task::spawn_blocking(move || {
+        // Phase 0 visibility: probe vs query vs write per print.
+        let t = Instant::now();
+        let result = tokio::time::timeout(USB_TIMEOUT, tokio::task::spawn_blocking(move || {
             app.android_print().probe_usb(&device)
         }))
         .await
@@ -62,7 +64,14 @@ impl AndroidUsbPrinter {
             )
         })?
         .map_err(|e| format!("USB probe task failed: {e}"))?
-        .map_err(|e| format!("Could not reach {what}: {e}"))?;
+        .map_err(|e| format!("Could not reach {what}: {e}"));
+        tracing::debug!(
+            device = %self.device,
+            probe_ms = t.elapsed().as_millis() as u64,
+            success = result.is_ok(),
+            "USB probe"
+        );
+        result?;
         Ok(())
     }
 
@@ -119,6 +128,7 @@ impl AndroidUsbPrinter {
             device_name: self.device.clone(),
             data_base64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data),
         };
+        let t = Instant::now();
         let bytes = tokio::time::timeout(
             USB_TIMEOUT,
             tokio::task::spawn_blocking(move || app.android_print().write_usb(req)),
@@ -132,6 +142,12 @@ impl AndroidUsbPrinter {
         })?
         .map_err(|e| format!("USB write task failed: {e}"))?
         .map_err(|e| format!("{what} did not print the job: {e}"))?;
+        tracing::debug!(
+            device = %self.device,
+            bytes = data.len(),
+            write_ms = t.elapsed().as_millis() as u64,
+            "USB write"
+        );
         if bytes.bytes_written == 0 && !data.is_empty() {
             return Err(format!("{what} accepted no bytes"));
         }
@@ -155,6 +171,7 @@ impl AndroidUsbPrinter {
             ),
             reply_timeout_ms: Some(STATUS_REPLY_TIMEOUT.as_millis() as u64),
         };
+        let t = Instant::now();
         let reply = tokio::time::timeout(
             USB_TIMEOUT,
             tokio::task::spawn_blocking(move || app.android_print().query_usb(req)),
@@ -163,6 +180,11 @@ impl AndroidUsbPrinter {
         .map_err(|_| format!("{what} stopped responding while the status was asked"))?
         .map_err(|e| format!("USB status query task failed: {e}"))?
         .map_err(|e| format!("USB status query to {what} failed: {e}"))?;
+        tracing::debug!(
+            device = %self.device,
+            query_ms = t.elapsed().as_millis() as u64,
+            "USB status query"
+        );
         base64::engine::general_purpose::STANDARD
             .decode(&reply.reply_base64)
             .map_err(|e| format!("USB status reply from {what} is not base64: {e}"))

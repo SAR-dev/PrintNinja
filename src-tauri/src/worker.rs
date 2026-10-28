@@ -160,14 +160,17 @@ pub fn spawn(db: DbState, queue: PrintQueue, cache_dir: PathBuf) {
 /// soon as one of its jobs starts.
 fn claim_next(db: &DbState) -> Option<i64> {
     loop {
-        let id = {
+        // created_at travels along so the claim can log how long the job
+        // waited in the queue (Phase 0 visibility). Best-effort: an
+        // unparsable timestamp skips the log, never the claim.
+        let (id, created_at): (i64, String) = {
             let guard = db.lock().ok()?;
             guard
                 .connection()
                 .query_row(
-                    "SELECT id FROM print_jobs WHERE status = 'queued' ORDER BY id LIMIT 1",
+                    "SELECT id, created_at FROM print_jobs WHERE status = 'queued' ORDER BY id LIMIT 1",
                     [],
-                    |r| r.get(0),
+                    |r| Ok((r.get(0)?, r.get(1)?)),
                 )
                 .ok()?
         };
@@ -195,6 +198,16 @@ fn claim_next(db: &DbState) -> Option<i64> {
         };
 
         if claimed == 1 {
+            if let Ok(queued_at) =
+                chrono::NaiveDateTime::parse_from_str(created_at.trim(), "%Y-%m-%d %H:%M:%S")
+            {
+                let wait_ms = chrono::Utc::now()
+                    .naive_utc()
+                    .signed_duration_since(queued_at)
+                    .num_milliseconds()
+                    .max(0) as u64;
+                tracing::info!(id, wait_ms, "queued job claimed");
+            }
             return Some(id);
         }
         // The row vanished under us (cancelled, or already claimed): next.

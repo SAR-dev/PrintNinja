@@ -66,6 +66,29 @@ pub fn peer_render_counts() -> (u64, u64) {
     )
 }
 
+static BROWSER_PERSISTENT: AtomicU64 = AtomicU64::new(0);
+static BROWSER_ONESHOT: AtomicU64 = AtomicU64::new(0);
+
+/// One browser render resolved: `true` used the persistent CDP browser
+/// (no process start), `false` fell back to a one-shot browser launch
+/// (Phase 0 visibility: how often the persistent browser fails).
+/// Covers PDF and raster paths on Edge and Chromium alike.
+pub fn count_browser_render(persistent: bool) {
+    if persistent {
+        BROWSER_PERSISTENT.fetch_add(1, Ordering::Relaxed);
+    } else {
+        BROWSER_ONESHOT.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// (persistent, one-shot) browser renders since boot, in that order.
+pub fn browser_render_counts() -> (u64, u64) {
+    (
+        BROWSER_PERSISTENT.load(Ordering::Relaxed),
+        BROWSER_ONESHOT.load(Ordering::Relaxed),
+    )
+}
+
 /// Prometheus text exposition 0.0.4: the monotonic counters above plus
 /// the live gauges read at scrape time. Statuses sort so scrapes diff
 /// cleanly; names and label values are static, so no escaping is needed.
@@ -75,6 +98,7 @@ pub fn render_prometheus(
     tracked: usize,
     finished: (u64, u64, u64),
     peer_renders: (u64, u64),
+    browser_renders: (u64, u64),
 ) -> String {
     let mut out = String::from(
         "# HELP printninja_jobs Print jobs by status.\n# TYPE printninja_jobs gauge\n",
@@ -112,6 +136,17 @@ pub fn render_prometheus(
             "printninja_peer_renders{{outcome=\"{outcome}\"}} {count}\n"
         ));
     }
+    out.push_str(
+        "# HELP printninja_browser_renders Browser renders since boot: persistent CDP browser vs one-shot fallback launches.\n# TYPE printninja_browser_renders counter\n",
+    );
+    for (outcome, count) in [
+        ("persistent", browser_renders.0),
+        ("oneshot", browser_renders.1),
+    ] {
+        out.push_str(&format!(
+            "printninja_browser_renders{{outcome=\"{outcome}\"}} {count}\n"
+        ));
+    }
     out
 }
 
@@ -138,6 +173,14 @@ mod tests {
         let peer_after = peer_render_counts();
         assert_eq!(peer_after.0 - peer_before.0, 1);
         assert_eq!(peer_after.1 - peer_before.1, 2);
+
+        let browser_before = browser_render_counts();
+        count_browser_render(true);
+        count_browser_render(false);
+        count_browser_render(false);
+        let browser_after = browser_render_counts();
+        assert_eq!(browser_after.0 - browser_before.0, 1);
+        assert_eq!(browser_after.1 - browser_before.1, 2);
     }
 
     #[test]
@@ -149,7 +192,7 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        let text = render_prometheus(&by_status, 2, 1, (10, 4, 1), (3, 2));
+        let text = render_prometheus(&by_status, 2, 1, (10, 4, 1), (3, 2), (7, 1));
         assert!(text.contains("# TYPE printninja_jobs gauge\n"));
         assert!(text.contains("# TYPE printninja_jobs_completed_total counter\n"));
         assert!(text.contains("printninja_jobs{status=\"success\"} 3\n"));
@@ -159,6 +202,9 @@ mod tests {
         assert!(text.contains("# TYPE printninja_peer_renders counter\n"));
         assert!(text.contains("printninja_peer_renders{outcome=\"rendered\"} 3\n"));
         assert!(text.contains("printninja_peer_renders{outcome=\"fallback\"} 2\n"));
+        assert!(text.contains("# TYPE printninja_browser_renders counter\n"));
+        assert!(text.contains("printninja_browser_renders{outcome=\"persistent\"} 7\n"));
+        assert!(text.contains("printninja_browser_renders{outcome=\"oneshot\"} 1\n"));
         // Sorted label values: failed < queued < success.
         let failed = text.find("status=\"failed\"").unwrap();
         let queued = text.find("status=\"queued\"").unwrap();
