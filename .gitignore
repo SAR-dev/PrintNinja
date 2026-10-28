@@ -28,6 +28,9 @@ Thumbs.db
 *.db
 *.db-journal
 
+# act (local GitHub Actions runs): real secret values, never committed.
+.secrets
+
 # Logs
 *.log
 npm-debug.log*

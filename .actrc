@@ -1,0 +1,5 @@
+# Local runs mirror the GitHub-hosted images as closely as act allows.
+# Windows jobs (`windows-latest`) cannot run on Linux: select jobs with
+# `-j` instead (see docs/ACT.md).
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+-P ubuntu-24.04=catthehacker/ubuntu:act-24.04
