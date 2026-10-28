@@ -43,6 +43,10 @@ let calls: Array<{ url: string; method: string }>;
 beforeEach(() => {
   localStorage.clear();
   calls = [];
+  // Tests assume "nothing configured" unless they stub their own value:
+  // the ambient environment may carry a real build-time default (CI
+  // bakes the production share URL into every build).
+  vi.stubEnv("VITE_DEFAULT_SHARE_URL", "");
   handler = () => json({ error: "unexpected request" }, 500);
   // The local agent: settings persist to the same localStorage keys the
   // client falls back to, and the template cache is empty unless a test
@@ -84,6 +88,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 function signedInServer(): Handler {
