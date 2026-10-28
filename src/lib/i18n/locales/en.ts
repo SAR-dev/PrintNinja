@@ -811,6 +811,8 @@ const en = {
     diag_hint: "Export application logs and diagnostics for troubleshooting.",
     diag_export: "Export Diagnostics",
     diag_app_log_export: "Download App Log",
+    diag_app_log_view: "View App Log",
+    diag_app_log_empty: "No app log recorded yet.",
     diag_app_log_hint:
       "Recent backend log (print pipeline), oldest first. Empty when file logging never started.",
     diag_note: "Secrets and API tokens are redacted from the export.",
