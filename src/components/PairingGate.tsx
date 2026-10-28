@@ -45,7 +45,11 @@ export function PairingGate({ onPaired }: { onPaired: () => void }) {
             </p>
           </CardHeader>
         </Card>
-        <DevicesCard />
+        {/* Pass onPaired so a pair made here leaves the gate in the same
+            tick. Without it the only exit is the 2s poll below, which
+            leaves the freshly-paired device on screen for up to two
+            seconds before /print replaces it. */}
+        <DevicesCard onPaired={onPaired} />
       </div>
     </main>
   );
