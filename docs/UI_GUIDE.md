@@ -432,7 +432,7 @@ than hardcoding the product name in new UI, and use `AppLogo` to show the logo.
 
 ## Tests that guard the UI
 
-All run with `pnpm test` (Vitest) and in CI (`web-check`). A failing one blocks the release.
+All run with `pnpm test` (Vitest) and in `pnpm check`. A failing one blocks the release.
 
 | Test | What it enforces |
 |---|---|
@@ -452,7 +452,7 @@ When you add a page, add it to `ROUTES` in the smoke test. When you add a status
   (`#F4F7F7`), so the title bar is light whatever the OS theme is. The window title follows the
   app name from branding.
 - **Android:** the project in `src-tauri/gen/android` is generated. After `tauri android init`,
-  run `node scripts/patch-android-theme.mjs` (CI does this) for light status and navigation
+  run `node scripts/patch-android-theme.mjs` (`scripts/release-local.mjs` does this) for light status and navigation
   bars.
 - **Scaling check (manual):** screens must stay usable at 125% and 150% Windows scaling.
   `scripts/capture-screens.mjs` takes screenshots of every route:

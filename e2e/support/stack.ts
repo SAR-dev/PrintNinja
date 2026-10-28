@@ -141,7 +141,7 @@ async function startWorkerApi(
       // limit applies per worker; the real limiter is pinned by E8
       // and the server rate-limit tests. Every knob honors the
       // environment so the nightly prod-like run can tighten them to
-      // production values (see .github/workflows/e2e-nightly.yml).
+      // production values (see docs/CI.md, "Production-parity e2e").
       RATE_LIMIT_MAX: process.env.E2E_RATE_LIMIT_MAX ?? "1000",
       RATE_LIMIT_AUTH_MAX: process.env.E2E_RATE_LIMIT_AUTH_MAX ?? "1000",
       RATE_LIMIT_AUTH_WINDOW_SECONDS:

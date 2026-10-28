@@ -18,13 +18,13 @@ pnpm release major          # 4.0.1 -> 5.0.0
 pnpm release 4.1.0          # exact version (must be higher than the current one)
 
 pnpm release patch --dry-run   # show what would happen, change nothing
-pnpm release patch --push      # also push main + the tag (starts the CI release)
+pnpm release patch --push      # also push main + the tag (tag only, no builds)
 ```
 
 (`pnpm release:patch`, `release:minor` and `release:major` are shortcuts.)
 
-The script (`scripts/release.mjs`, needs only Node and git) updates every place CI's
-`version-check` reads:
+The script (`scripts/release.mjs`, needs only Node and git) updates every place
+`release-local.mjs` checks:
 - `package.json`
 - `src-tauri/tauri.conf.json`
 - `src-tauri/Cargo.toml` (`[package]` version)
@@ -33,8 +33,7 @@ The script (`scripts/release.mjs`, needs only Node and git) updates every place 
 
 Then it commits `release: vX.Y.Z` and creates an annotated tag `vX.Y.Z`. It refuses to run
 if:
-- you are not on `main` (cut tags from `main`; the release workflow also
-  only answers `v*` tags),
+- you are not on `main` (cut tags from `main`),
 - the working tree is not clean,
 - local `main` is behind `origin/main`,
 - the new version is not higher than the current one, or the tag already exists
@@ -95,67 +94,38 @@ pnpm tauri android build --target aarch64
 pnpm tauri android build --target x86_64
 ```
 
-## 3. Local-only signing in CI
+## 3. Signing is local-only
 
-By default, **CI does not sign anything**. Code signing is intentionally local-only for now. The release workflow only *builds* unsigned artifacts and attaches them to the draft release. Distribute signed binaries from your local machine via the forge Releases page.
+Nothing signs automatically. `release-local.mjs` builds **unsigned** desktop installers and, when
+the keystore env vars are set, an APK/AAB signed with your shared Android keystore. Sign the
+MSI yourself if you want (section 2) and replace the file on the draft release.
 
-## 4. Trigger the release
+## 4. Build and publish the release
 
-```bash
-pnpm release patch --push        # or run without --push and push by hand:
-git push --atomic origin main v4.0.2
-```
-
-Pushing a `v*` tag runs the release jobs (`windows-build`,
-`linux-build`, `android-build`, then `github-release`). Pushes to `main`
-and pull requests into `main`/`develop` run the checks only; `develop`
-never releases.
-
-### Manual release (no hosted runners)
-
-When hosted runners are unavailable, `scripts/release-local.mjs` runs
-the same pipeline locally: checks, version bump, commit + tag, the
-builds the host OS allows, and the draft release. Each machine builds
-what it can (Windows: MSI; Linux: deb/AppImage; any OS with an Android
-SDK: APK/AAB); run it on each OS and the draft collects everything.
+There is no hosted CI. One script runs the checks, bumps the version, commits and tags, builds
+what the host OS allows and updates the draft GitHub release. Each machine builds what it can
+(Windows: MSI; Linux: deb/AppImage; any OS with an Android SDK: APK/AAB); run it on each OS and
+the draft collects everything.
 
 ```bash
-node scripts/release-local.mjs 0.2.0            # dry run: everything but push + release
-node scripts/release-local.mjs 0.2.0 --push     # + push main/tag, create/update the draft
-node scripts/release-local.mjs 0.2.0 --push --skip-checks   # iterating on build issues
+node scripts/release-local.mjs 4.1.0            # dry run: everything but push + release
+node scripts/release-local.mjs 4.1.0 --push     # + push main/tag, create/update the draft
+node scripts/release-local.mjs 4.1.0 --push --skip-checks   # iterating on build issues
 ```
 
-Requirements: Node 22, pnpm 10, Rust 1.90, `gh` authed with repo
-scope. Android additionally needs `ANDROID_HOME` (SDK + NDK 27) and the
-`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` secrets in the
-environment. The app is baked with `--share-url` (default
-`https://print-ninja.vercel.app`); e2e (Playwright) is intentionally
-not run here — CI covers it on PRs. Releases still ship from `main`,
-and pushing the tag still fires the CI release run, which reuses the
-manually created draft instead of duplicating it.
+Requirements: Node 22, pnpm 10, Rust 1.90, `gh` authed with repo scope. Android additionally
+needs `ANDROID_HOME` (SDK + NDK 27) and the `ANDROID_KEYSTORE_BASE64` /
+`ANDROID_KEYSTORE_PASSWORD` secrets in the environment. The app is baked with `--share-url`
+(default `https://print-ninja.vercel.app`). e2e (Playwright) is not run by the script: run
+`pnpm check:full` first. Releases ship from `main`.
 
-Checks (push to `main`, PRs into `main`/`develop`, `v*` tags):
-- **web-check**: Biome lint, `check:tauri-args`, `tsc` + vite build, vitest, and the generated API client drift check. Later checks depend on it.
-- **rust-lint / rust-test** (Linux): cargo fmt, clippy (`-D warnings`) and cargo test, side by side, gated by the `rust-check` alias. All blocking.
-- **server-check**: service typecheck, unit/integration/coverage suites and OpenAPI drift check. Does not gate anything else.
+What the script checks before building: you are on `main` with a clean tree, the new version is
+higher than the current one, the tag does not exist locally or on `origin`, and every manifest
+(`package.json`, `tauri.conf.json`, `Cargo.toml`, `Layout.tsx`) agrees on the current version.
+`pnpm release patch` (section 1) is only needed if you want to bump and tag without building.
 
-Release jobs (tags only):
-- **version-check**: the tag must be `vX.Y.Z`, the tagged commit must be
-  on `main`, and the tag must match `package.json`, `tauri.conf.json`,
-  `Cargo.toml`, `Cargo.lock` and `Layout.tsx`
-- **windows-build**: MSI only (needs a `windows-latest` runner)
-- **linux-build**: deb + AppImage only
-- **android-build**: `aarch64` APK + AAB, signed with the shared
-  keystore from secrets
-- **github-release**: creates a **draft** GitHub Release with the MSI,
-  deb, AppImage, APK and AAB attached (reuses the release on re-runs)
-
-`server-check`, `server-image`, `server-e2e` and `app-e2e` never block
-the release; the e2e pair runs on tags and PRs into `main`.
-
-The `server/` share service is built, tested and drift-checked
-(`server-check`, `server-image`) but **not** deployed by any workflow.
-It is deployed by hand, see section 7.
+The `server/` share service is tested and drift-checked by `pnpm check` but **not** deployed by
+any tool in this repo. It is deployed by hand, see section 7.
 
 ## 5. Publish
 
@@ -165,7 +135,7 @@ The app surfaces new releases itself: on boot it compares its version with the l
 
 ## 6. Architecture targets summary
 
-| Platform | CI bundle | Local signing | Architectures |
+| Platform | Bundle | Local signing | Architectures |
 |---|---|---|---|
 | Windows | MSI only | `signtool` with `.pfx` | `x86_64-pc-windows-msvc` |
 | Android | arm64-v8a | Android keystore | `aarch64-linux-android` (x86_64 optional for emulator) |
@@ -175,8 +145,8 @@ The app surfaces new releases itself: on boot it compares its version with the l
 The share service (accounts, publish, browse, save, sync for every PC) is the
 TypeScript service in `server/` backed by Turso Cloud (libSQL) in production
 and a local SQLite file everywhere else. It is **not** part of the
-tag release and no workflow deploys it; CI builds, tests and drift-checks it
-on every PR, and you deploy it by hand.
+release script and nothing automatic deploys it; `pnpm check` tests and drift-checks it,
+and you deploy it by hand.
 
 ### When to deploy
 - First time, before anyone can sign in.
@@ -268,13 +238,14 @@ no code changes to routes, domain or repositories.
    `openssl rand -hex 32`).
 3. Deploy. `vercel.json` already pins the build (`prisma generate`
    first — the generated client is gitignored) and `maxDuration: 30`.
-4. Run `server-migrate` from the Actions tab (manual run) once
-   to apply migrations to Turso — there is no boot-time migrate on
-   serverless. Re-run it whenever a release carries a migration.
-5. Add the `SERVICE_URL` and `CRON_SECRET` actions secrets so the
-   daily `server-cleanup` cron can call
-   `GET /v2/internal/cleanup` (expired sessions, old tombstones —
-   the in-process timer from `src/server.ts` does not exist here).
+4. Apply migrations to Turso once from your machine
+   (`DATABASE_URL=libsql://… DATABASE_AUTH_TOKEN=… pnpm --filter server db:apply`)
+   — there is no boot-time migrate on serverless. Re-run it whenever a release
+   carries a migration.
+5. The daily cleanup (`GET /v2/internal/cleanup`: expired sessions, old
+   tombstones — the in-process timer from `src/server.ts` does not exist here)
+   is a Vercel Cron declared in `server/vercel.json`. Vercel authenticates it
+   with the `CRON_SECRET` env var from step 2, so nothing else is needed.
 
 What Vercel changes, in one place: no `listen()` socket, no timers,
 no shutdown hooks (all stay in `src/server.ts` for Docker/local); the
@@ -349,11 +320,10 @@ database, not over the live one).
 3. Rollback: check out the previous release and rebuild, restoring the
    database backup first if the schema changed between the two.
 
-### What CI covers
-Every push/PR runs the service's unit, integration and coverage suites and fails on OpenAPI
-drift (`server-check`). Tag builds additionally build the service image (`server-image`) and run
-the container suite (`server-e2e`). Deploying remains a manual step: nothing pushes the image
-or runs migrations against the live database.
+### What the local checks cover
+`pnpm check` runs the service's typecheck, architecture and test suites and fails on OpenAPI
+drift. `pnpm check --docker` also builds the service image. Deploying remains a manual step:
+nothing pushes the image or runs migrations against the live database.
 
 ## Clean up cache
 
