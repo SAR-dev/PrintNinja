@@ -153,16 +153,37 @@ impl AndroidUsbPrinter {
     /// Write the job bytes over a bulk-OUT endpoint, on the send's held
     /// connection.
     async fn write_remote(&self, handle: &str, data: &[u8]) -> Result<(), String> {
+        use tauri::Manager;
         use tauri_plugin_android_print::{AndroidPrintExt, UsbWriteOnRequest};
 
         let app = self.app()?;
         let what = self.what();
+        // A4: payloads past the handoff size travel by file so a large
+        // raster does not inflate by a third into one giant JSON string.
+        let via_file = data.len() > crate::transport::PLUGIN_FILE_HANDOFF_BYTES;
+        let staged = if via_file {
+            let dir = app
+                .path()
+                .app_cache_dir()
+                .map_err(|e| format!("no app cache dir for payload handoff: {e}"))?;
+            Some(crate::transport::stage_plugin_payload(&dir, data)?)
+        } else {
+            None
+        };
         let req = UsbWriteOnRequest {
             handle: handle.to_string(),
-            data_base64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data),
+            data_base64: if staged.is_some() {
+                None
+            } else {
+                Some(base64::Engine::encode(
+                    &base64::engine::general_purpose::STANDARD,
+                    data,
+                ))
+            },
+            data_path: staged.as_ref().map(|p| p.to_string_lossy().into_owned()),
         };
         let t = Instant::now();
-        let bytes = tokio::time::timeout(
+        let result = tokio::time::timeout(
             USB_TIMEOUT,
             tokio::task::spawn_blocking(move || app.android_print().write_usb_on(req)),
         )
@@ -174,10 +195,17 @@ impl AndroidUsbPrinter {
             )
         })?
         .map_err(|e| format!("USB write task failed: {e}"))?
-        .map_err(|e| format!("{what} did not print the job: {e}"))?;
+        .map_err(|e| format!("{what} did not print the job: {e}"));
+        // Our side of the handoff cleanup runs on every exit; the Kotlin
+        // side deletes after reading.
+        if let Some(path) = staged {
+            let _ = std::fs::remove_file(path);
+        }
+        let bytes = result?;
         tracing::debug!(
             device = %self.device,
             bytes = data.len(),
+            via_file,
             write_ms = t.elapsed().as_millis() as u64,
             "USB write"
         );

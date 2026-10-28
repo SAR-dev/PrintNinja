@@ -165,11 +165,16 @@ pub struct UsbQueryOnRequest {
 
 /// Write on a held USB connection. Same convention as
 /// [`UsbWriteRequest`]; the connection stays open.
+///
+/// Large payloads travel by file instead of base64 (A4): exactly one of
+/// `data_base64` / `data_path` is set. The Kotlin side reads and deletes
+/// the file.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsbWriteOnRequest {
     pub handle: String,
-    pub data_base64: String,
+    pub data_base64: Option<String>,
+    pub data_path: Option<String>,
 }
 
 /// Release a held USB connection. Idempotent: unknown handles resolve
@@ -273,11 +278,16 @@ pub struct BluetoothQueryOnRequest {
 
 /// Write on a held RFCOMM socket. Same convention as
 /// [`BluetoothWriteRequest`]; the socket stays open.
+///
+/// Large payloads travel by file instead of base64 (A4): exactly one of
+/// `data_base64` / `data_path` is set. The Kotlin side reads and deletes
+/// the file.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BluetoothWriteOnRequest {
     pub handle: String,
-    pub data_base64: String,
+    pub data_base64: Option<String>,
+    pub data_path: Option<String>,
 }
 
 /// Release a held RFCOMM socket. Idempotent: unknown handles resolve
@@ -396,10 +406,21 @@ mod tests {
         assert!(json.contains("\"replyTimeoutMs\""), "{json}");
         let req = BluetoothWriteOnRequest {
             handle: "h".into(),
-            data_base64: "AA==".into(),
+            data_base64: Some("AA==".into()),
+            data_path: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"dataBase64\""), "{json}");
+        let req = BluetoothWriteOnRequest {
+            handle: "h".into(),
+            data_base64: None,
+            data_path: Some("/cache/payload.bin".into()),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"dataPath\""), "{json}");
+        // Absent side serializes as null, like the existing Option fields
+        // (reply_timeout_ms) the Kotlin side already defaults.
+        assert!(json.contains("\"dataBase64\":null"), "{json}");
     }
 
     fn printer(kind: &str, host: &str, rp: Option<&str>) -> DiscoveredPrinter {

@@ -180,6 +180,15 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   Kotlin, write the bytes to the app cache dir in Rust and pass the
   path, deleting after the write. Avoids the 33% inflation + 2 full
   copies where it actually matters.
+  > ✅ **Done** (`perf/print-speed`): payloads over
+  > `PLUGIN_FILE_HANDOFF_BYTES` (256 KiB, `transport/mod.rs`) are
+  > staged via `stage_plugin_payload` (unit-tested) and passed as
+  > `dataPath` on both `*WriteOn` requests (serde-tested); Kotlin
+  > reads + deletes via `Handoff.kt:readHandoffFile` (unit-tested,
+  > `HandoffTest`), Rust deletes after the call on every exit.
+  > Verified: Rust suite green; Kotlin helper + tests compile and pass
+  > (10/10 with `ConnectionHandlesTest`) via the cached embeddable
+  > compiler; full module needs CI `android-check`.
 - **A5-fix — offset-based `bulkTransfer`, trivially safe.** Replace the
   `copyOfRange` 16 KiB loop (`AndroidPrintPlugin.kt:471-475`) with the
   5-arg `bulkTransfer(endpoint, data, offset, length, ioTimeoutMs)`
@@ -188,6 +197,11 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   Genuinely Low impact (a 16 KiB memcpy is microseconds); do it while
   touching the function, not as its own task. Optionally raise the
   chunk to 64 KiB to cut JNI crossings — measure first.
+  > ✅ **Done** (`perf/print-speed`): `bulkWriteOut` now uses the
+  > offset overload with the same 16 KiB chunking (the query path
+  > already did). Chunk size left alone pending measurement. Needs
+  > CI `android-check`/device to confirm (no full-module compile
+  > on this machine).
 - **A6-fix — short "answered OK" cache (REVISED after testing).**
   Original plan: skip the status query within 30–60 s of a healthy
   answer. **Rejected for the query**: `virtual_printer ::
@@ -209,6 +223,12 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
   50 ms poll loop with `inputStream.read()` inside a `Future` on
   `ioPool` bounded by the existing reply timeout. Saves ≤50 ms per
   query; do last.
+  > ✅ **Done, reduced** (`perf/print-speed`): the Future rewrite was
+  > evaluated and rejected — RFCOMM reads are not interruptible, so a
+  > timed-out `get()` leaks the reader thread until the socket closes,
+  > all for ≤50 ms per query. Shipped instead: poll tightened 50→10 ms
+  > (bounds the silence-break overshoot at ~10 ms), with the reasoning
+  > in a code comment. Needs CI/device to confirm.
 - **A9-fix — shared peer HTTP client, one line of real work.**
   `peer_consume::client()` → `static CLIENT: OnceLock<reqwest::Client>`,
   built once with `connect_timeout(PEER_CONNECT_TIMEOUT_MS)` and
@@ -294,11 +314,11 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
 - Android: no WebView work — A1 was rejected. The Android render cost is the peer round trip: the phone-side share is the A9 client fix (Phase 1), the rest is PC render speed, i.e. W1/L1 above.
 - Done when fallbacks no longer appear in normal use and render p50 meets the Phase 0 target.
 
-### Phase 3: Android data path (about 1 day)
-- Pass job bytes without Base64 where the plugin API allows it, or at least avoid extra copies (A4).
-- Larger USB chunks and no per-chunk copy (A5).
-- Replace the 50 ms polling in the Bluetooth read with a blocking read with timeout (A7).
-- Done when large raster jobs show a measurable drop in send time.
+### Phase 3: Android data path ✅ **done** (`perf/print-speed`)
+- Pass job bytes without Base64 where the plugin API allows it ✅ **done** (A4: file handoff past 256 KiB; small jobs keep base64, which the JSON bridge requires).
+- Larger USB chunks and no per-chunk copy ✅ **done** (A5: offset overload, 16 KiB chunks kept pending measurement).
+- Replace the 50 ms polling in the Bluetooth read with a blocking read with timeout ✅ **done, reduced** (A7: Future rewrite rejected — thread-leak risk for ≤50 ms; poll tightened to 10 ms instead).
+- Done when large raster jobs show a measurable drop in send time. (Still needs device numbers — the code is in, the measurement is not.)
 
 ### Phase 4: Skip the heavy pipeline for label printers (about 2-3 days, optional, higher risk)
 
@@ -313,13 +333,17 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
 > - Verify every label-printer row actually has its native language set
 >   (a ZPL printer with language=PDF eats the CUPS-filter cost from L3).
 > - Optionally add a startup/config check warning when a raw-queue
->   printer is set to PDF.
+>   printer is set to PDF. ✅ **Done** (`perf/print-speed`): `run_stages`
+>   warns per job when language is PDF on a USB/Bluetooth raw transport
+>   (warn-only — an exotic printer that really takes PDF there keeps
+>   working). RawTcp excluded (JetDirect lasers legitimately take PDF);
+>   CUPS `System` excluded (raw vs filtered unknowable from the row).
 > - Only worth doing if Phase 0 shows the driver or filter is the bottleneck.
 
 ### Phase 5: Throughput and regression guard (about 1 day)
-- Test bursts across several printers and tune the global in-flight limit (`MAX_IN_FLIGHT_SENDS` in `queue.rs:41`, not `worker.rs`) if render is the bottleneck.
-- Add a benchmark using `virtual-printer` that fails when p95 for N jobs regresses beyond a threshold.
-- Document the timing logs and env switches in `docs/ARCHITECTURE.md`.
+- Test bursts across several printers and tune the global in-flight limit (`MAX_IN_FLIGHT_SENDS` in `queue.rs:41`, not `worker.rs`) if render is the bottleneck. (Not started — needs printers.)
+- Add a benchmark using `virtual-printer` that fails when p95 for N jobs regresses beyond a threshold. (Not started.)
+- Document the timing logs and env switches in `docs/ARCHITECTURE.md`. ✅ **Done** (`perf/print-speed`): "Timing logs and counters" subsection under §8, plus the stale "every copy is sent individually" line corrected for A11 batching.
 
 ---
 

@@ -151,16 +151,37 @@ impl AndroidBluetoothPrinter {
     /// Write the job bytes over an RFCOMM (SPP) socket, on the send's
     /// held socket.
     async fn write_remote(&self, handle: &str, data: &[u8]) -> Result<(), String> {
+        use tauri::Manager;
         use tauri_plugin_android_print::{AndroidPrintExt, BluetoothWriteOnRequest};
 
         let app = self.app()?;
         let what = self.what();
+        // A4: payloads past the handoff size travel by file so a large
+        // raster does not inflate by a third into one giant JSON string.
+        let via_file = data.len() > crate::transport::PLUGIN_FILE_HANDOFF_BYTES;
+        let staged = if via_file {
+            let dir = app
+                .path()
+                .app_cache_dir()
+                .map_err(|e| format!("no app cache dir for payload handoff: {e}"))?;
+            Some(crate::transport::stage_plugin_payload(&dir, data)?)
+        } else {
+            None
+        };
         let req = BluetoothWriteOnRequest {
             handle: handle.to_string(),
-            data_base64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data),
+            data_base64: if staged.is_some() {
+                None
+            } else {
+                Some(base64::Engine::encode(
+                    &base64::engine::general_purpose::STANDARD,
+                    data,
+                ))
+            },
+            data_path: staged.as_ref().map(|p| p.to_string_lossy().into_owned()),
         };
         let t = Instant::now();
-        let bytes = tokio::time::timeout(
+        let result = tokio::time::timeout(
             BT_TIMEOUT,
             tokio::task::spawn_blocking(move || app.android_print().write_bluetooth_on(req)),
         )
@@ -173,9 +194,16 @@ impl AndroidBluetoothPrinter {
         })?
         .map_err(|e| format!("Bluetooth write task failed: {e}"))?
         .map_err(|e| format!("{what} did not print the job: {e}"))?;
+        // Our side of the handoff cleanup runs on every exit; the Kotlin
+        // side deletes after reading.
+        if let Some(path) = staged {
+            let _ = std::fs::remove_file(path);
+        }
+        let bytes = result?;
         tracing::debug!(
             address = %self.address,
             bytes = data.len(),
+            via_file,
             write_ms = t.elapsed().as_millis() as u64,
             "Bluetooth write"
         );
