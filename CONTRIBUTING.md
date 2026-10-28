@@ -9,6 +9,7 @@ Thanks for helping. This page covers how to set up, what to run before you push,
 - Keep commits small and focused: one change per commit, with a regression test for every bug fix.
 - Use conventional commit messages: `feat(print): …`, `fix(designer): …`, `docs: …`, `chore: …`.
 - CI runs on pushes and pull requests to `develop` and `main`. Release jobs run only on `v*` tags.
+- To run the same CI jobs locally (Docker), see [`docs/ACT.md`](docs/ACT.md).
 
 ## Setup
 
