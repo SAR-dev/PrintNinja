@@ -18,9 +18,11 @@ Conventions used below:
 
 ## 0. Release hygiene (no hardware, decisions only)
 
-- [ ] Delete the stale drafts `v0.1.0` and `v0.0.2` (pre-release) from
+- [x] Delete the stale drafts `v0.1.0` and `v0.0.2` (pre-release) from
   the GitHub releases page, or keep them deliberately. They sit behind
   the published v0.10.0 and confuse the download list.
+  Done 2026-10-29: both deleted; releases list is now v0.10.0
+  (Latest, published) + v0.9.0 (published).
 
 ## 1. Held connections (A2/A3) — Bluetooth + USB
 
