@@ -334,6 +334,12 @@ launches). Environment seams: `PRINTNINJA_SEND_TIMEOUT_SECS` (per-send
 deadline, read fresh on every send), `PRINTNINJA_PERSISTENT_BROWSER=0`
 (force one-shot rendering), `PRINTNINJA_CUPS_URL` (cupsd address).
 
+The same events are also kept on disk: a size-rotated backend log
+(`printninja.log`, 512 KiB per file, five files max) under the
+platform log directory, readable from Settings → Diagnostics →
+Download App Log. A logging failure never fails a print — unwritable
+bytes are dropped.
+
 ## 9. Borrowing a faster device
 
 Producing the image or PDF (step 6 of §3) is by far the most expensive part

@@ -418,6 +418,22 @@ export function SettingsPage() {
     }
   };
 
+  const downloadAppLog = async () => {
+    try {
+      const text = await agent("read_app_logs", { max_kb: 256 });
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `printninja-app-${new Date().toISOString().slice(0, 10)}.log`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(t("settings_page.toast_diag_app_log_exported"));
+    } catch {
+      toast.error(t("settings_page.toast_diag_app_log_failed"));
+    }
+  };
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -1017,6 +1033,17 @@ export function SettingsPage() {
                   >
                     <Download className="h-4 w-4 mr-2" />
                     {t("settings_page.diag_export")}
+                  </Button>
+                  <p className="text-sm text-muted-foreground">
+                    {t("settings_page.diag_app_log_hint")}
+                  </p>
+                  <Button
+                    variant="outline"
+                    id="settings-diag-app-log"
+                    onClick={() => void downloadAppLog()}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    {t("settings_page.diag_app_log_export")}
                   </Button>
                   <p className="text-xs text-muted-foreground">
                     {t("settings_page.diag_note")}
