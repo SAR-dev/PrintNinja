@@ -110,21 +110,20 @@ impl IppPrinter {
         copies: u32,
         document_format: &str,
     ) -> Result<(), String> {
-        use reqwest::Client;
-
         // Build IPP request body
         let ipp_body = self.build_ipp_request_with_format(data, copies, document_format);
 
         let at = format!("the printer at {}", self.endpoint.url);
         let response_timeout = send_timeout(RESPONSE_TIMEOUT);
-        let client = Client::builder()
-            .timeout(response_timeout)
-            .build()
-            .map_err(|e| e.to_string())?;
+        // Shared client (L2): keep-alive across jobs. The deadline stays
+        // per request so PRINTNINJA_SEND_TIMEOUT_SECS is still read fresh
+        // on every send.
+        let client = crate::transport::shared_http_client();
 
         let response = client
             .post(&self.endpoint.url)
             .header("Content-Type", "application/ipp")
+            .timeout(response_timeout)
             .body(ipp_body)
             .send()
             .await
@@ -235,12 +234,11 @@ impl IppPrinter {
     async fn printer_state_reasons(&self) -> Vec<String> {
         let body = Self::build_get_printer_attributes(&self.endpoint.printer_uri);
         let mut reasons = Vec::new();
-        let Ok(client) = reqwest::Client::builder().timeout(DIAGNOSE_TIMEOUT).build() else {
-            return reasons;
-        };
+        let client = crate::transport::shared_http_client();
         let Ok(response) = client
             .post(&self.endpoint.url)
             .header("Content-Type", "application/ipp")
+            .timeout(DIAGNOSE_TIMEOUT)
             .body(body)
             .send()
             .await

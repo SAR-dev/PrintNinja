@@ -232,6 +232,18 @@ pub struct WindowsSpooler {
     printer_name: String,
 }
 
+/// Offered-datatype lists change only on driver/processor reinstall, so
+/// successful listings are cached per queue for an hour (W3). Failures
+/// (`None`) are never cached: a transient denial must recover on the next
+/// job, not stick for the TTL.
+#[cfg(windows)]
+static OFFERED_DATATYPES: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, Vec<String>)>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+#[cfg(windows)]
+const DATATYPES_TTL: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+
 #[cfg(windows)]
 impl WindowsSpooler {
     pub fn new(printer_name: String) -> Self {
@@ -321,8 +333,30 @@ impl WindowsSpooler {
 
     /// The datatypes this queue's print processor offers, or `None` when
     /// they cannot be listed (the queue is remote, access is denied, or
-    /// the call failed). An empty list counts as unknown.
+    /// the call failed). An empty list counts as unknown. Results are
+    /// cached per queue (see `OFFERED_DATATYPES`); only the live query
+    /// below touches the spooler.
     fn offered_datatypes(&self) -> Option<Vec<String>> {
+        if let Ok(guard) = OFFERED_DATATYPES.lock() {
+            if let Some((at, names)) = guard.get(&self.printer_name) {
+                if at.elapsed() < DATATYPES_TTL {
+                    return Some(names.clone());
+                }
+            }
+        }
+        let found = self.query_offered_datatypes();
+        if let Some(names) = &found {
+            if let Ok(mut guard) = OFFERED_DATATYPES.lock() {
+                guard.insert(
+                    self.printer_name.clone(),
+                    (std::time::Instant::now(), names.clone()),
+                );
+            }
+        }
+        found
+    }
+
+    fn query_offered_datatypes(&self) -> Option<Vec<String>> {
         use std::ffi::CStr;
         use winapi::*;
 
