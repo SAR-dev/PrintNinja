@@ -56,7 +56,10 @@ export function ChangePasswordForm({
   };
 
   return (
-    <div className="space-y-2 rounded-md border p-3">
+    <div
+      id="settings-change-password"
+      className="space-y-2 rounded-md border p-3"
+    >
       <p className="text-sm font-medium">
         {t("settings_page.change_password_title")}
       </p>

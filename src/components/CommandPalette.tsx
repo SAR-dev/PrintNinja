@@ -7,6 +7,7 @@ import {
   Printer,
   Search,
   Settings2,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -16,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { NAV_ITEMS } from "@/lib/shell/nav";
+import { SETTING_SEARCH_ENTRIES } from "@/lib/shell/settingsSearch";
 import { agent } from "@/lib/agent/commands";
 import type { HistoryJob, PrinterRow } from "@/lib/agent/types";
 import type { SettingsSection } from "@/lib/setup/checklist";
@@ -171,6 +173,34 @@ export function CommandPalette({
                   </span>
                 </Command.Item>
               ))}
+              {SETTING_SEARCH_ENTRIES.map((entry) => {
+                const label = t(entry.labelKey);
+                const sectionLabel = t(SECTION_LABEL_KEYS[entry.section]);
+                return (
+                  <Command.Item
+                    key={`${entry.section}:${entry.field}`}
+                    value={`settings ${sectionLabel} ${label}`}
+                    keywords={entry.keywords}
+                    onSelect={() =>
+                      run(() =>
+                        onNavigate(
+                          `/settings?section=${entry.section}&field=${entry.field}`,
+                        ),
+                      )
+                    }
+                    className={ITEM}
+                  >
+                    <SlidersHorizontal
+                      className="h-4 w-4 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="flex-1 truncate">{label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {sectionLabel}
+                    </span>
+                  </Command.Item>
+                );
+              })}
             </Command.Group>
             <Command.Group heading={t("shell.group_actions")} className={GROUP}>
               <Command.Item

@@ -28,6 +28,9 @@ Thumbs.db
 *.db
 *.db-journal
 
+# Local secret values (copied from .secrets.example), never committed.
+.secrets
+
 # Logs
 *.log
 npm-debug.log*

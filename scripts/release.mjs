@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// Release helper. Bumps the version everywhere CI's version-check looks,
+// Release helper. Bumps the version in every manifest (the same files release-local checks),
 // commits, and creates an annotated tag. Cross-platform: needs only Node + git.
 //
 //   pnpm release patch|minor|major|X.Y.Z [--push] [--dry-run]
 //
-// Without --push nothing leaves your machine. Pushing the tag is what starts
-// the CI release workflow (Windows MSI + Android + draft GitHub Release).
+// Without --push nothing leaves your machine. There is no hosted CI: pushing
+// the tag publishes the tag only. Build and attach installers with
+// `node scripts/release-local.mjs X.Y.Z --push`.
 //
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -43,7 +44,7 @@ function usage() {
 
   patch|minor|major   bump from the current version
   X.Y.Z               set an exact version (must be higher than the current one)
-  --push              also push ${RELEASE_BRANCH} and the tag (starts the CI release)
+  --push              also push ${RELEASE_BRANCH} and the tag (tag only, no builds)
   --dry-run           show what would happen, change nothing
   --help              show this help`);
 }
@@ -201,7 +202,7 @@ if (cmp(version, current) <= 0) problems.push(`${version} is not higher than the
 
 const branch = git("rev-parse", "--abbrev-ref", "HEAD");
 if (branch !== RELEASE_BRANCH) {
-	problems.push(`on branch "${branch}"; releases must be tagged from ${RELEASE_BRANCH} (CI rejects other tags)`);
+	problems.push(`on branch "${branch}"; releases must be tagged from ${RELEASE_BRANCH} (release-local requires main)`);
 }
 
 const dirty = git("status", "--porcelain");
@@ -231,7 +232,7 @@ if (problems.length) die(`cannot release:\n- ${problems.join("\n- ")}`);
 try {
 	applyVersion(version, crate);
 
-	// Same comparison CI's version-check makes, so a bad bump is caught here.
+	// Same comparison release-local makes, so a bad bump is caught here.
 	const after = readVersions(crate);
 	const bad = Object.entries(after).filter(([, v]) => v !== version);
 	if (bad.length) {
@@ -251,7 +252,7 @@ console.log(`\n[ok] committed "release: ${tag}" and tagged ${tag}`);
 
 if (push) {
 	git("push", "--atomic", "origin", RELEASE_BRANCH, tag);
-	console.log(`[ok] pushed ${RELEASE_BRANCH} and ${tag}; the CI release workflow is running.`);
+	console.log(`[ok] pushed ${RELEASE_BRANCH} and ${tag}. Build installers with: node scripts/release-local.mjs ${tag.slice(1)} --push`);
 } else {
-	console.log(`\nNext (this starts the CI release):\n  git push --atomic origin ${RELEASE_BRANCH} ${tag}`);
+	console.log(`\nNext (publishes the tag only):\n  git push --atomic origin ${RELEASE_BRANCH} ${tag}`);
 }

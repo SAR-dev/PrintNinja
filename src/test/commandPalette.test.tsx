@@ -88,10 +88,36 @@ describe("CommandPalette search coverage", () => {
   it("lists settings sections and deep-links to them", async () => {
     const onNavigate = vi.fn();
     show({ onNavigate });
-    await screen.findByText("Data sources");
+    await screen.findByRole("option", { name: "Data sources" });
     expect(headings()).toContain("Settings");
-    fireEvent.click(screen.getByText("Data sources"));
+    fireEvent.click(screen.getByRole("option", { name: "Data sources" }));
     expect(onNavigate).toHaveBeenCalledWith("/settings?section=data");
+  });
+
+  it("finds individual settings by their control text", async () => {
+    const onNavigate = vi.fn();
+    show({ onNavigate });
+    await screen.findByRole("option", { name: "Data sources" });
+    const input = document.querySelector("[cmdk-input]") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "density" } });
+    const item = await screen.findByText("Density");
+    fireEvent.click(item);
+    expect(onNavigate).toHaveBeenCalledWith(
+      "/settings?section=general&field=settings-density",
+    );
+  });
+
+  it("matches settings by English keywords regardless of locale", async () => {
+    const onNavigate = vi.fn();
+    show({ onNavigate });
+    await screen.findByRole("option", { name: "Data sources" });
+    const input = document.querySelector("[cmdk-input]") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "autostart" } });
+    const item = await screen.findByText("Launch at startup");
+    fireEvent.click(item);
+    expect(onNavigate).toHaveBeenCalledWith(
+      "/settings?section=background&field=launch-at-startup",
+    );
   });
 
   it("stays silent when a list call fails", async () => {

@@ -9,5 +9,6 @@
       "includeFiles": "src/infra/db/generated/**"
     }
   },
+  "crons": [{ "path": "/v2/internal/cleanup", "schedule": "17 3 * * *" }],
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
 }
