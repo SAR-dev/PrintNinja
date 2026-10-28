@@ -82,7 +82,8 @@ impl AndroidUsbPrinter {
             return Ok(());
         };
         let addr = self.device.clone();
-        if !status::should_probe(&addr, Instant::now()) {
+        let now = Instant::now();
+        if !status::should_probe(&addr, now) {
             return Ok(());
         }
 
@@ -101,7 +102,10 @@ impl AndroidUsbPrinter {
         status::note_answered(&addr);
         match status::decode(dialect, &reply) {
             Some(fault) => Err(fault.message(&what)),
-            None => Ok(()),
+            None => {
+                status::note_healthy(&addr, Instant::now());
+                Ok(())
+            }
         }
     }
 

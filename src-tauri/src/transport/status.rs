@@ -316,6 +316,23 @@ enum Support {
 static SUPPORT: LazyLock<Mutex<HashMap<String, Support>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+/// When this address last reported no fault, if ever. A printer that
+/// answered "all good" moments ago excuses the *preflight probe* (the
+/// bare connect/disconnect in `run_stages`), which carries no fault
+/// information — the send-stage status query still runs on every print
+/// and still fails a faulted printer immediately. Skipping the query
+/// itself was tried and rejected: `virtual_printer ::
+/// once_a_printer_has_answered_its_silence_fails_the_job` pins that
+/// silence-after-answer fails the job at once (that is how out-of-paper
+/// and jam are detected), and no speedup is worth printing into a
+/// faulted printer for up to a minute.
+static HEALTHY: LazyLock<Mutex<HashMap<String, Instant>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// How long a healthy answer excuses the preflight probe. Short on
+/// purpose: it only skips a redundant connect, never a fault report.
+const HEALTHY_TTL: Duration = Duration::from_secs(60);
+
 /// Whether to spend a probe on `addr` right now.
 pub fn should_probe(addr: &str, now: Instant) -> bool {
     match SUPPORT.lock().unwrap().get(addr).copied() {
@@ -351,6 +368,24 @@ pub fn note_silent(addr: &str, now: Instant) {
 /// silence from "does not support status" into "has stopped responding".
 pub fn had_answered(addr: &str) -> bool {
     SUPPORT.lock().unwrap().get(addr) == Some(&Support::Answers)
+}
+
+/// Record that `addr`'s status query reported no fault. The next job
+/// within [`HEALTHY_TTL`] skips the preflight probe; the status query
+/// itself always runs (see `HEALTHY`).
+pub fn note_healthy(addr: &str, now: Instant) {
+    HEALTHY.lock().unwrap().insert(addr.to_string(), now);
+}
+
+/// Whether `addr` reported healthy recently enough to skip the preflight
+/// probe. Only ever true after [`note_healthy`]; faults are never
+/// recorded here, and this never excuses the status query itself.
+pub fn healthy_recently(addr: &str, now: Instant) -> bool {
+    HEALTHY
+        .lock()
+        .unwrap()
+        .get(addr)
+        .is_some_and(|at| now.duration_since(*at) < HEALTHY_TTL)
 }
 
 /// What a printer that answers, then stops, has to be told.
@@ -611,5 +646,40 @@ mod tests {
         note_answered(addr);
         assert!(should_probe(addr, base + Duration::from_secs(61)));
         assert!(had_answered(addr));
+    }
+
+    // ── healthy answers excuse re-asking, briefly ────────────────────
+
+    #[test]
+    fn a_healthy_answer_skips_the_preflight_probe_but_expires() {
+        let addr = "healthy-window";
+        let base = Instant::now();
+        assert!(
+            !healthy_recently(addr, base),
+            "never asked: nothing excuses the first probe"
+        );
+        note_healthy(addr, base);
+        assert!(
+            healthy_recently(addr, base + Duration::from_secs(59)),
+            "within the window, do not re-probe a healthy printer"
+        );
+        assert!(
+            !healthy_recently(addr, base + Duration::from_secs(61)),
+            "past the window, probe again: the cable may be out by now"
+        );
+    }
+
+    #[test]
+    fn a_fault_never_counts_as_healthy() {
+        // Only note_healthy records health; the silence/fault paths below
+        // must not excuse anything. A printer that never reported healthy
+        // is always worth asking (subject to the silent cooldown).
+        let addr = "healthy-never-faulty";
+        let base = Instant::now();
+        note_silent(addr, base);
+        assert!(
+            !healthy_recently(addr, base + Duration::from_secs(1)),
+            "silence is not health"
+        );
     }
 }

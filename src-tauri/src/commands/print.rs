@@ -987,6 +987,18 @@ async fn run_stages(
             | crate::transport::PrinterType::Usb
             | crate::transport::PrinterType::Bluetooth
     );
+    // A6, second half: a printer whose status query reported healthy
+    // moments ago skips the preflight probe too — the probe is a bare
+    // connect/disconnect with no fault information, and the send-stage
+    // status query still runs on every print and still fails a faulted
+    // printer immediately (deliberately: skipping the query was tried
+    // and rejected, see `status::HEALTHY`). System rows never populate
+    // the healthy map, so desktop probing is unchanged.
+    let needs_preflight = needs_preflight
+        && !crate::transport::status::healthy_recently(
+            &address_for_probe,
+            std::time::Instant::now(),
+        );
     let preflight = needs_preflight.then(|| {
         let printer_type = printer_type_for_probe.clone();
         let name = req.printer_name.clone();
