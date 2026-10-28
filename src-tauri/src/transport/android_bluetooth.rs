@@ -193,7 +193,7 @@ impl AndroidBluetoothPrinter {
             )
         })?
         .map_err(|e| format!("Bluetooth write task failed: {e}"))?
-        .map_err(|e| format!("{what} did not print the job: {e}"))?;
+        .map_err(|e| format!("{what} did not print the job: {e}"));
         // Our side of the handoff cleanup runs on every exit; the Kotlin
         // side deletes after reading.
         if let Some(path) = staged {
