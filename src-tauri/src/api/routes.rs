@@ -27,7 +27,7 @@ pub struct ApiState {
     /// Tauri app.
     pub cache_dir: std::path::PathBuf,
     /// The open pairing-code window, if any. In memory only — never in the
-    /// DB or logs (docs/PEER_RENDERING.md §Trust and pairing).
+    /// DB or logs (docs/ARCHITECTURE.md §9 Pairing).
     pub window: std::sync::Arc<std::sync::Mutex<Option<crate::api::pair_code::PairingWindow>>>,
 }
 

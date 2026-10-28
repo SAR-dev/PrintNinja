@@ -68,7 +68,7 @@ tauri = { version = "2", features = ["test"] }
 
 # Mobile only: no extra pairing dependencies. Pairing is a typed
 # 8-character code now; the camera QR scanner is gone
-# (was QR scanner; now 8-char code — see docs/PEER_RENDERING.md).
+# (was QR scanner; now 8-char code — see docs/ARCHITECTURE.md §9 Pairing).
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 
 [target.'cfg(windows)'.dependencies]

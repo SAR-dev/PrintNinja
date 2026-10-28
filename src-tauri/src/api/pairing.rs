@@ -1,6 +1,6 @@
 //! Pairing helpers: what both devices use to recognise each other.
 //!
-//! QR link pairing is gone — pairing is now an 8-character code (docs/PEER_RENDERING.md §Trust and pairing): the
+//! QR link pairing is gone — pairing is now an 8-character code (docs/ARCHITECTURE.md §9 Pairing): the
 //! PC shows an 8-character code (`api::pair_code`), the phone types it,
 //! and the claim mints a per-device token. What remains here is the
 //! SHA-256 fingerprint helper — the hash stored in

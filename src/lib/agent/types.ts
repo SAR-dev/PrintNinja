@@ -303,7 +303,7 @@ export interface ApiHttpResponse {
   text: string;
 }
 
-/** Render-sharing provider state (see docs/PEER_RENDERING.md). */
+/** Render-sharing provider state (see docs/ARCHITECTURE.md §9). */
 export interface RenderShareStatus {
   enabled: boolean;
   secret_set: boolean;
