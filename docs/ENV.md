@@ -10,11 +10,9 @@ There is exactly one live env file: **`server/.env`** (next to
 `server/docker-compose.yml`), created from the one template,
 `server/env.example`. Compose reads it on its own; local server runs
 use `pnpm dev` from `server/`, which loads it. There is intentionally
-no root `.env` for the service. The desktop app reads exactly two
-variables outside it (see Desktop app below): one at runtime, one baked
-in at build time — dev scripts default `BASE_URL` to
-`http://localhost:1420` when unset (set it in a root `.env` you create
-yourself only to override that).
+no root `.env` for the service. The desktop app reads a few build-time
+variables outside it (see Desktop app below), baked in by vite — copy
+`env.example` (repo root) to `.env` only to override their defaults.
 
 | Run | Env source |
 | --- | --- |
@@ -202,6 +200,13 @@ environment the app launches with. Note a desktop launcher that starts
 the app directly will not see your shell's exports — use the launcher's
 own env support, a wrapper script, or (for fleet installs) bake the
 behaviour into `VITE_DEFAULT_SHARE_URL`-style build config instead.
+
+### `VITE_UPDATE_API` / `VITE_UPDATE_REPO`
+Where the top-bar update badge looks for releases:
+`GET {VITE_UPDATE_API}/repos/{VITE_UPDATE_REPO}/releases/latest`.
+Defaults are `https://api.github.com` and `SAR-dev/PrintNinja`.
+Like `VITE_DEFAULT_SHARE_URL`, both are baked into the bundle at build
+time — changing them requires a rebuild.
 
 ### `VITE_DEFAULT_SHARE_URL`
 Build-time default share-service address, e.g.
