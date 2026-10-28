@@ -4,6 +4,7 @@ mod data;
 pub mod db;
 mod deeplink;
 mod error;
+pub mod logfile;
 pub mod metrics;
 pub mod queue;
 pub mod readme;
@@ -87,13 +88,9 @@ fn build_tray(app: &tauri::AppHandle) -> AppResult<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("printninja_lib=info".parse().unwrap()),
-        )
-        .init();
-
+    // Set up logging as the first step of setup (below), not here: the
+    // file layer needs the app log directory, which only exists once the
+    // app handle does. Nothing logs before setup runs.
     let builder = tauri::Builder::default();
 
     // Android printing + background service (no-op stub on desktop).
@@ -129,6 +126,11 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            // Logging first: everything below (tray, DB, plugins) may log,
+            // and the file layer needs the app log directory, which only
+            // exists once the app handle does.
+            crate::logfile::init_logging(app.handle());
+
             // Android renders PDFs through the Kotlin plugin's WebView, which
             // the renderer reaches through this handle.
             #[cfg(target_os = "android")]
@@ -409,6 +411,7 @@ pub fn run() {
             commands::api::peer_capabilities,
             commands::api::peer_render_request,
             commands::deeplink_cmd::parse_deeplink,
+            commands::logfile::read_app_logs,
         ]))
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

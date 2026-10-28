@@ -230,6 +230,9 @@ export interface AgentCommands {
   // Misc
   ping: [{}, null];
   parse_deeplink: [{ url: string }, DeeplinkResult];
+  /** Recent backend log text (size-rotated file), oldest first. Empty
+   * when file logging never started. */
+  read_app_logs: [{ max_kb?: number }, string];
 }
 
 type Args<K extends keyof AgentCommands> = AgentCommands[K][0];
