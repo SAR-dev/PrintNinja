@@ -95,6 +95,9 @@ describe("PairingGate", () => {
       const view = render(<PairingGate onPaired={onPaired} />);
       const input = await screen.findByTestId("devices-code-input");
       expect(onPaired).not.toHaveBeenCalled();
+      // Example code in XYZ letters, dimmed so it reads as a hint.
+      expect(input).toHaveAttribute("placeholder", "XYZX-YZZY");
+      expect(input).toHaveClass("placeholder:opacity-50");
 
       const t0 = Date.now();
       fireEvent.change(input, { target: { value: "k7qm-4xpd" } });

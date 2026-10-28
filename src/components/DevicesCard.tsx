@@ -873,11 +873,11 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
             id="devices-code"
             ref={codeInputRef}
             data-testid="devices-code-input"
-            placeholder="K7QM-4XPD"
+            placeholder="XYZX-YZZY"
             autoComplete="off"
             autoCapitalize="characters"
             spellCheck={false}
-            className="font-mono uppercase"
+            className="font-mono uppercase placeholder:opacity-50"
             value={code}
             onChange={(e) => {
               setCode(filterPairingInput(e.target.value));

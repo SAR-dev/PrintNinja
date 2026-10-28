@@ -8,6 +8,8 @@ import {
   canOpenOffline,
   type SessionCheck,
 } from "@/lib/share/session";
+import { isAndroid } from "@/lib/platform";
+import { hasPairedProvider } from "@/lib/pairing";
 
 type Gate =
   | { kind: "checking" }
@@ -48,11 +50,25 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       // Offline start: a stored session plus cached templates opens the
       // app; the status chip shows offline and the scheduler retries.
       void canOpenOffline().then((offline) => {
-        setGate(
-          offline
-            ? { kind: "ready" }
-            : { kind: "unreachable", url: result.url, retrying: false },
-        );
+        if (offline) {
+          setGate({ kind: "ready" });
+          return;
+        }
+        // Pairing needs no share server (LAN phone to PC), so an unpaired
+        // Android phone must reach the pairing screen — not stall on this
+        // error. The pairing gate still blocks everything until a PC is
+        // paired, and a paired phone stays on the error like before.
+        if (isAndroid()) {
+          void hasPairedProvider().then((paired) => {
+            setGate(
+              paired
+                ? { kind: "unreachable", url: result.url, retrying: false }
+                : { kind: "ready" },
+            );
+          });
+          return;
+        }
+        setGate({ kind: "unreachable", url: result.url, retrying: false });
       });
       return;
     }

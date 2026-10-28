@@ -484,6 +484,61 @@ describe("cannot reach server screen", () => {
     );
     expect(await screen.findByLabelText("Server address")).toHaveValue(SERVER);
   });
+
+  // Pairing needs no share server (LAN phone to PC): an unpaired Android
+  // phone must reach the pairing screen, not stall on this error. The
+  // pairing gate still blocks everything until a PC is paired.
+  describe("unpaired Android phones", () => {
+    const ANDROID_UA = "Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile";
+    let uaSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+    afterEach(() => {
+      uaSpy?.mockRestore();
+      uaSpy = null;
+    });
+
+    function asAndroidPhone() {
+      uaSpy = vi
+        .spyOn(window.navigator, "userAgent", "get")
+        .mockReturnValue(ANDROID_UA);
+    }
+
+    it("lets an unpaired phone through to pairing when the server is unreachable", async () => {
+      asAndroidPhone();
+      handler = () => {
+        throw new TypeError("Failed to fetch");
+      };
+      renderGate();
+      // No pair stored, nothing cached — yet the app (and its pairing
+      // gate) mounts instead of the server error.
+      expect(await screen.findByText("The app")).toBeVisible();
+      expect(
+        screen.queryByRole("heading", {
+          level: 1,
+          name: "Cannot reach the server",
+        }),
+      ).toBeNull();
+    });
+
+    it("still blocks a paired phone with nothing cached", async () => {
+      asAndroidPhone();
+      localStorage.setItem(
+        "printninja-setting:render_pairs",
+        JSON.stringify([{ host: "192.168.1.9", secret: "x" }]),
+      );
+      handler = () => {
+        throw new TypeError("Failed to fetch");
+      };
+      renderGate();
+      expect(
+        await screen.findByRole("heading", {
+          level: 1,
+          name: "Cannot reach the server",
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("The app")).toBeNull();
+    });
+  });
 });
 
 describe("after sign-in", () => {
