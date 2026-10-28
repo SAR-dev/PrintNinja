@@ -1,15 +1,15 @@
 name: CI
 
 on:
-  # Pull requests into develop run the basic checks (web-check, rust-lint,
-  # rust-test, rust-test-windows, chromium-render, android-check,
-  # server-check). Pull requests into main run those AND the heavy checks
-  # (server-image, server-e2e, app-e2e), so everything except building the
-  # installers is proven before the merge. Plain pushes to other branches run
-  # nothing. The refactoring branch's PR is muted via the head_ref guard on
-  # each job.
+  # CI runs on main only. Pull requests into main run the basic checks
+  # (web-check, rust-lint, rust-test, rust-test-windows, chromium-render,
+  # android-check, server-check) AND the heavy checks (server-image,
+  # server-e2e, app-e2e), so everything except building the installers is
+  # proven before the merge. Plain pushes to develop (and to any other
+  # branch) run nothing. The refactoring branch's PR is muted via the
+  # head_ref guard on each job.
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   # Pushes to main run the same basic checks, for one reason: a tag run
   # can only restore caches made on the default branch, and pull-request
   # caches are private to their PR. Without a run on main there is no
