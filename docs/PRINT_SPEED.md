@@ -238,18 +238,32 @@ Per-printer semaphores serialize jobs for one printer. The worker wakes on a not
 > `StageTimings` (`commands/print.rs:95`: fetch/template/layout/render/
 > send/history/total) is saved on every job row (`timings_json`) and
 > logged as `print job timing`. The persistent-browser fallback already
-> warns (`render/mod.rs`). What is actually missing:
+> warns (`render/mod.rs`). What was actually missing:
 >
-> - queue wait (time from `queued` to worker claim — `start` begins at
->   `run_print`, so waiting is invisible today);
-> - transport sub-stages: datatype lookup vs connect vs write (Windows),
->   probe vs query vs write (Android USB/BT);
-> - peer-render split: caps-probe vs HTTP POST vs download (Android);
-> - a counted fallback metric (promote the Edge/Chromium fallback `warn!`
->   to a counter so "how often" is a dashboard query, not a log grep).
+> - queue wait ✅ **done** (`perf/print-speed`): `claim_next`
+>   (`worker.rs`) reads the row's `created_at` and logs
+>   `queued job claimed` with `wait_ms` (best-effort parse; a bad
+>   timestamp skips the log, never the claim);
+> - transport sub-stages ✅ **done**: spooler `send()` logs
+>   `datatype_ms` vs `spool_ms` (`windows_spooler.rs`, `debug!`);
+>   Android USB/BT `reach`/`query`/`write` each log `probe_ms` /
+>   `query_ms` / `write_ms` with byte counts (`android_usb.rs`,
+>   `android_bluetooth.rs`, `debug!`);
+> - peer-render split ✅ **done**: caps-probe collect logs
+>   `peer_probe_ms` (`commands/print.rs`, `debug!`); POST-vs-download
+>   was already covered by `waited_ms` vs `render_ms` in the
+>   `peer render succeeded` log (`peer_consume.rs`);
+> - fallback counter ✅ **done**: `count_browser_render(persistent)`
+>   in `metrics.rs`, exposed as `browser_renders: {persistent, oneshot}`
+>   on `/v1/metrics` JSON + `printninja_browser_renders` on Prometheus;
+>   counted at all 8 Edge/Chromium PDF+screenshot decision sites in
+>   `render/mod.rs` (unit-tested in `metrics.rs`, shape covered by
+>   `api_routes` tests).
 >
 > - Baseline 20 jobs on each platform, single and burst. Use `virtual-printer` (`e2e/support/`, exists) as the target.
-> - Done when a table of p50/p95 per stage exists.
+> - Done when a table of p50/p95 per stage exists. All stage data is
+>   now emitted — `info!` for job totals and queue wait, `debug!` for
+>   sub-stages (`RUST_LOG=debug` for baseline runs).
 
 ### Phase 1: Transport quick wins (about 1-1.5 days, low risk)
 - Windows: cache `offered_datatypes()` per printer with a TTL ✅ **done**, run the spooler send in `spawn_blocking` ✅ **done**, drop the unneeded page calls ✅ **done** (all `perf/print-speed`; Win32 paths need hardware confirmation).

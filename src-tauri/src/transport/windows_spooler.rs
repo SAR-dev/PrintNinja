@@ -575,12 +575,15 @@ impl PrinterTransport for WindowsSpooler {
         // tokio worker.
         let spooler = WindowsSpooler::new(self.printer_name.clone());
         tokio::task::spawn_blocking(move || {
+            // Phase 0 visibility: datatype lookup vs the send itself.
+            let t_datatype = std::time::Instant::now();
             let wanted = spool_datatype(&job.mime_type);
             let offered = if wanted == "PDF" {
                 spooler.offered_datatypes()
             } else {
                 None
             };
+            let datatype_ms = t_datatype.elapsed().as_millis() as u64;
             let datatype = choose_datatype(&job.mime_type, offered.as_deref());
             if datatype != wanted {
                 tracing::warn!(
@@ -588,7 +591,16 @@ impl PrinterTransport for WindowsSpooler {
                     spooler.printer_name
                 );
             }
-            spooler.send_raw_with_datatype(&job.data, datatype)
+            let t_spool = std::time::Instant::now();
+            let out = spooler.send_raw_with_datatype(&job.data, datatype);
+            tracing::debug!(
+                printer = %spooler.printer_name,
+                datatype_ms,
+                spool_ms = t_spool.elapsed().as_millis() as u64,
+                success = out.is_ok(),
+                "spooler send stages"
+            );
+            out
         })
         .await
         .unwrap_or_else(|e| Err(format!("spooler send task failed: {e}")))

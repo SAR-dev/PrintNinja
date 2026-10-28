@@ -1014,11 +1014,22 @@ async fn run_stages(
     // Any peer failure falls back to the local render below — sharing
     // can only speed a print up, never fail it.
     let mut rendered_by: Option<String> = None;
-    // Probes flew during template+layout; collect them now.
+    // Probes flew during template+layout; collect them now. Timed
+    // separately (Phase 0): the caps-probe wait is otherwise buried
+    // inside render_ms, and it is the part caching controls.
+    let t_peer_probe = Instant::now();
     let (candidates, probe_errors) = match peer_probe {
         Some(task) => task.await.unwrap_or_default(),
         None => (Vec::new(), Vec::new()),
     };
+    if peer_had_pairs {
+        tracing::debug!(
+            job_id,
+            peer_probe_ms = ms(t_peer_probe),
+            candidates = candidates.len(),
+            "peer probe collect"
+        );
+    }
     let attempted = peer_had_pairs;
     // A peer may lack this device's uploaded fonts: inline them as data
     // URIs so B renders what the template means — but only when a peer
