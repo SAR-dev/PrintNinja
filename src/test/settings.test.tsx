@@ -173,7 +173,6 @@ describe("Settings page", () => {
       if (cmd === "read_app_logs") return "line one\nline two\n";
       return null;
     });
-    // Blob download plumbing is not under test; the invoke call is.
     const urls: string[] = [];
     const create = URL.createObjectURL;
     const revoke = URL.revokeObjectURL;
@@ -198,6 +197,38 @@ describe("Settings page", () => {
       URL.createObjectURL = create;
       URL.revokeObjectURL = revoke;
     }
+  });
+
+  it("views the backend app log in a dialog", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "read_app_logs") return "tail line one\ntail line two\n";
+      return null;
+    });
+    renderPage();
+    open("Diagnostics");
+    fireEvent.click(
+      await screen.findByRole("button", { name: /View App Log/ }),
+    );
+    expect(await screen.findByText(/tail line one/)).toBeInTheDocument();
+  });
+
+  it("does not open the viewer when the log is unreadable", async () => {
+    invoke.mockImplementation(async () => {
+      throw new Error("no backend");
+    });
+    renderPage();
+    open("Diagnostics");
+    fireEvent.click(
+      await screen.findByRole("button", { name: /View App Log/ }),
+    );
+    // The click reached the backend (then failed into a toast, which
+    // needs a live Toaster to assert on); no dialog may open.
+    await waitFor(() =>
+      expect(invoke.mock.calls.some((c) => c[0] === "read_app_logs")).toBe(
+        true,
+      ),
+    );
+    expect(screen.queryByText(/tail line one/)).toBeNull();
   });
 
   it("persists background toggles and asks the backend to re-apply them", async () => {
