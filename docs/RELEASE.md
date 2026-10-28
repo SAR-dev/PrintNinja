@@ -111,6 +111,29 @@ Pushing a `v*` tag runs the release jobs (`windows-build`,
 and pull requests into `main`/`develop` run the checks only; `develop`
 never releases.
 
+### Manual release (no hosted runners)
+
+When hosted runners are unavailable, `scripts/release-local.mjs` runs
+the same pipeline locally: checks, version bump, commit + tag, the
+builds the host OS allows, and the draft release. Each machine builds
+what it can (Windows: MSI; Linux: deb/AppImage; any OS with an Android
+SDK: APK/AAB); run it on each OS and the draft collects everything.
+
+```bash
+node scripts/release-local.mjs 0.2.0            # dry run: everything but push + release
+node scripts/release-local.mjs 0.2.0 --push     # + push main/tag, create/update the draft
+node scripts/release-local.mjs 0.2.0 --push --skip-checks   # iterating on build issues
+```
+
+Requirements: Node 22, pnpm 10, Rust 1.90, `gh` authed with repo
+scope. Android additionally needs `ANDROID_HOME` (SDK + NDK 27) and the
+`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` secrets in the
+environment. The app is baked with `--share-url` (default
+`https://print-ninja.vercel.app`); e2e (Playwright) is intentionally
+not run here — CI covers it on PRs. Releases still ship from `main`,
+and pushing the tag still fires the CI release run, which reuses the
+manually created draft instead of duplicating it.
+
 Checks (push to `main`, PRs into `main`/`develop`, `v*` tags):
 - **web-check**: Biome lint, `check:tauri-args`, `tsc` + vite build, vitest, and the generated API client drift check. Later checks depend on it.
 - **rust-lint / rust-test** (Linux): cargo fmt, clippy (`-D warnings`) and cargo test, side by side, gated by the `rust-check` alias. All blocking.

@@ -635,6 +635,16 @@ jobs:
           merge-multiple: true
       # `gh` is preinstalled on GitHub-hosted runners and authenticates
       # with the automatic GITHUB_TOKEN, so no PAT secret is needed.
+      # Self-hosted runners do not ship it: install it when missing.
+      - name: Ensure GitHub CLI is available
+        run: |
+          if command -v gh >/dev/null 2>&1; then
+            echo "gh already present: $(gh --version | head -n 1)"
+            exit 0
+          fi
+          echo "gh not found; installing…"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gh
       # Re-runs reuse the draft release and overwrite same-name assets
       # instead of duplicating them.
       - name: Create draft release and upload artifacts
