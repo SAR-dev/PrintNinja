@@ -108,11 +108,12 @@ work order.
 
 ## 6. Template self-containment (W2) — 2-minute UI check
 
-Enforced at every write path (client create/update reject remote refs;
-the server rejects them too, strictly). Just confirm the operator
-wording once: in the Designer, save a template containing
-`<img src="https://…">` and confirm it is refused with the
-"use data: URIs" message.
+- [x] Enforced at every write path (client create/update reject remote refs;
+  the server rejects them too, strictly). Just confirm the operator
+  wording once: in the Designer, save a template containing
+  `<img src="https://…">` and confirm it is refused with the
+  "use data: URIs" message.
+  Done 2026-10-29: operator confirmed the refusal wording.
 
 ## 7. Phase-4 warning sighting
 
