@@ -27,6 +27,9 @@ pub struct PrintJob {
     /// prints and rows that predate it). History shows exactly which
     /// revision ran.
     pub template_revision: Option<i64>,
+    /// Which paired PC printed this job (`None` when printed locally).
+    /// The phone's history reads it as "printed by <PC name>".
+    pub printed_by: Option<String>,
     pub is_test: bool,
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
@@ -191,14 +194,16 @@ pub fn reprint_job_conn(conn: &Connection, id: i64) -> AppResult<PrintJob> {
     // Clone the row itself — including its stored input payload
     // (`data_json`), which the worker replays when it prints the clone
     // (P3). The fresh row is `queued`; nothing but the worker prints it.
+    // `template_revision` carries (same template prints); `printed_by`
+    // stays NULL — the clone prints locally, not through the PC.
     conn.execute(
         "INSERT INTO print_jobs
             (batch_id, record_index, template_id, printer_id,
              source, source_url, status, error, copies, settings_json, rendered_html,
-             idempotency_key, is_test, data_json, requested_by_device_id)
+             idempotency_key, is_test, data_json, requested_by_device_id, template_revision)
          SELECT NULL, NULL, template_id, printer_id,
                 source, source_url, 'queued', NULL, copies, settings_json, rendered_html,
-                NULL, is_test, data_json, requested_by_device_id
+                NULL, is_test, data_json, requested_by_device_id, template_revision
          FROM print_jobs WHERE id = ?1",
         [id],
     )?;
@@ -250,7 +255,7 @@ const SELECT_JOB_COLUMNS: &str = "SELECT id, batch_id, record_index, template_id
             printer_id, source, source_url, status, error,
             copies, settings_json, rendered_html, idempotency_key, is_test,
             started_at, finished_at, duration_ms, timings_json, requested_by_device_id,
-            template_revision
+            template_revision, printed_by
      FROM print_jobs";
 
 fn map_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
@@ -275,5 +280,6 @@ fn map_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
         timings_json: row.get(17)?,
         requested_by_device_id: row.get(18)?,
         template_revision: row.get(19)?,
+        printed_by: row.get(20)?,
     })
 }

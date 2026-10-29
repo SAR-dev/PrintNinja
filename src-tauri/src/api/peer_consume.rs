@@ -405,8 +405,9 @@ pub(crate) fn is_private_host(host: &str) -> bool {
 }
 
 /// Base URL for a pair, validated. HTTP only: the provider serves the
-/// same cleartext API as the local server.
-fn pair_base(pair: &RenderPair) -> Result<String, String> {
+/// same cleartext API as the local server. Shared with `remote_print`,
+/// which dials the same PCs for printing instead of rendering.
+pub(crate) fn pair_base(pair: &RenderPair) -> Result<String, String> {
     let host = pair.host.trim().trim_matches(|c| c == '[' || c == ']');
     if host.is_empty() || host.len() > 253 {
         return Err("empty pairing host".into());

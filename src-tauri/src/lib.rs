@@ -371,6 +371,8 @@ pub fn run() {
             commands::print::enumerate_system_printers,
             commands::print::discover_network_printers,
             commands::print::spike_test_print,
+            commands::remote_print::remote_print,
+            commands::remote_print::remote_printers,
             commands::font::list_fonts,
             commands::font::upload_font,
             commands::font::delete_font,

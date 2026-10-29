@@ -20,6 +20,15 @@ import { TimingBreakdown } from "@/components/TimingBreakdown";
 import { formatSeconds } from "@/lib/timings";
 import { cn } from "@/lib/utils";
 import { useSystemPrinters } from "@/lib/hooks/useSystemPrinters";
+import {
+  fetchPcPrinters,
+  getPrintViaPcDevice,
+  isPrintViaPc,
+  listPhonePairs,
+  resolvePhonePair,
+} from "@/lib/printViaPc";
+import type { PcPrinterInfo, RenderPair } from "@/lib/agent/types";
+import { cacheNow } from "@/lib/sync/useSyncStatus";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { toast } from "sonner";
 import { usePrintStore } from "@/lib/store/printStore";
@@ -63,6 +72,62 @@ export function PrintPage() {
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const showPreviewBody = !isPhone || previewOpen;
 
+  // Print via PC (§3.5): when the flag is on, the dialog talks to the
+  // chosen paired PC instead of the local pipeline — no local transport
+  // call happens while it is on.
+  const [viaPc, setViaPc] = useState(false);
+  const [pairs, setPairs] = useState<RenderPair[]>([]);
+  const [viaPcDevice, setViaPcDevice] = useState<string | null>(null);
+  const [pcPrinters, setPcPrinters] = useState<PcPrinterInfo[]>([]);
+  const [pcCached, setPcCached] = useState(false);
+  const [remoteCode, setRemoteCode] = useState<string | null>(null);
+  const [printedVia, setPrintedVia] = useState<string | null>(null);
+  const keyRef = useRef<string>("");
+  const viaPcPair = resolvePhonePair(pairs, viaPcDevice);
+
+  const refreshPcPrinters = async () => {
+    try {
+      const r = await fetchPcPrinters(viaPcDevice, true);
+      setPcPrinters(r.printers);
+      setPcCached(r.cached);
+    } catch (e) {
+      toast.error(describeError(e));
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [flag, list, chosen] = await Promise.all([
+          isPrintViaPc(),
+          listPhonePairs(),
+          getPrintViaPcDevice(),
+        ]);
+        if (cancelled) return;
+        setViaPc(flag);
+        setPairs(list);
+        setViaPcDevice(chosen);
+        if (flag) {
+          try {
+            const r = await fetchPcPrinters(chosen, false);
+            if (!cancelled) {
+              setPcPrinters(r.printers);
+              setPcCached(r.cached);
+            }
+          } catch (e) {
+            if (!cancelled) toast.error(describeError(e));
+          }
+        }
+      } catch {
+        /* settings unreadable: stay local */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Fetch printers + templates fresh every time (mount, sync pull,
   // window focus) so a height saved in Designer is visible here.
   useEffect(() => {
@@ -99,6 +164,28 @@ export function PrintPage() {
       window.removeEventListener("focus", onFocus);
     };
   }, []);
+
+  // The printer name belongs to one list or the other: flipping the
+  // mode clears the other side's choice, and a landed PC list snaps an
+  // empty choice to its first entry. The local list keeps its own
+  // mount-time preselect below, untouched.
+  const prevViaPc = useRef(viaPc);
+  useEffect(() => {
+    if (prevViaPc.current !== viaPc) {
+      prevViaPc.current = viaPc;
+      usePrintStore.getState().setPrinterId("");
+    }
+  }, [viaPc]);
+  useEffect(() => {
+    if (
+      viaPc &&
+      pcPrinters.length > 0 &&
+      !pcPrinters.some((p) => p.name === store.printerId)
+    ) {
+      usePrintStore.getState().setPrinterId(pcPrinters[0].name);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viaPc, pcPrinters]);
 
   const selectedTemplate = useMemo(
     () => templates.find((x) => String(x.id) === store.templateId),
@@ -241,9 +328,12 @@ export function PrintPage() {
     } catch (e) {
       toast.error(t("settings_page.toast_failed", { error: describeError(e) }));
     }
+    if (viaPc) {
+      await refreshPcPrinters();
+    }
   };
 
-  const handlePrint = async () => {
+  const handlePrint = async (retry = false) => {
     if (!store.printerId) {
       toast.error(t("print.blocker_printer"));
       return;
@@ -254,6 +344,11 @@ export function PrintPage() {
     }
     if (store.copies < 1) {
       toast.error(t("print.blocker_copies"));
+      return;
+    }
+    // Print via PC: no local pipeline or transport call from here on.
+    if (viaPc) {
+      await handleRemotePrint(retry);
       return;
     }
 
@@ -304,6 +399,71 @@ export function PrintPage() {
     }
   };
 
+  // One print through the paired PC. A fresh attempt mints the
+  // idempotency key; a retry reuses it, so a timeout never prints twice.
+  // Paper size and margins stay home: the API has no fields for them, so
+  // the PC prints at the template's design size.
+  const handleRemotePrint = async (retry: boolean) => {
+    const pair = resolvePhonePair(pairs, viaPcDevice);
+    if (!pair) {
+      toast.error(t("print.via_pc_no_pair"));
+      return;
+    }
+    store.setStatus("printing");
+    store.setError("");
+    store.setTimings(null);
+    store.setRenderedBy(null);
+    setRemoteCode(null);
+    setPrintedVia(null);
+    try {
+      if (!retry || !keyRef.current) {
+        keyRef.current =
+          globalThis.crypto?.randomUUID?.() ??
+          `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      }
+      const result = await agent("remote_print", {
+        args: {
+          template_id: Number(store.templateId),
+          printer_name: store.printerId,
+          copies: store.copies,
+          records: store.records,
+          orientation: store.orientation,
+          fit_mode: store.fitMode,
+          page_range: store.pageRange.trim() || undefined,
+          grayscale: store.grayscale,
+          test: store.useTestData,
+          data: store.useTestData ? DEFAULT_MOCK_DATA : undefined,
+          data_url: store.useTestData ? undefined : store.dataUrl || undefined,
+          http_method: store.useTestData ? undefined : store.httpMethod,
+          idempotency_key: keyRef.current,
+          pair_id: pair.provider_id || pair.id,
+        },
+      });
+      store.setDurationMs(result.duration_ms);
+      setPrintedVia(result.pc_name);
+      setRemoteCode(result.code);
+      if (result.success) {
+        store.setStatus("success");
+      } else {
+        store.setStatus("failed");
+        store.setError(result.error || "Unknown error");
+      }
+    } catch (e) {
+      store.setStatus("failed");
+      store.setError(describeError(e));
+    }
+  };
+
+  const handleSyncTemplates = async () => {
+    try {
+      await cacheNow();
+      setRemoteCode(null);
+      toast.success(t("print.synced_retry"));
+    } catch (e) {
+      toast.error(describeError(e));
+    }
+  };
+
   const handleSpikeTest = async () => {
     store.setStatus("printing");
     store.setError("");
@@ -331,7 +491,8 @@ export function PrintPage() {
     !!store.templateId &&
     store.copies >= 1 &&
     store.status !== "printing" &&
-    !loading;
+    !loading &&
+    (!viaPc || !!viaPcPair);
   const blocker = !store.printerId
     ? t("print.blocker_printer")
     : !store.templateId
@@ -340,9 +501,11 @@ export function PrintPage() {
         ? t("print.blocker_running")
         : store.copies < 1
           ? t("print.blocker_copies")
-          : loading
-            ? t("print.blocker_loading")
-            : "";
+          : viaPc && !viaPcPair
+            ? t("print.via_pc_no_pair")
+            : loading
+              ? t("print.blocker_loading")
+              : "";
   const field = "space-y-1.5";
 
   // Paper presets: physical sheets. "auto" means the template's design
@@ -444,6 +607,40 @@ export function PrintPage() {
         </Button>
       </PageHeader>
 
+      {/* Print via PC: the job runs on the paired PC's printers, never on
+          this phone's transports. */}
+      {viaPc &&
+        (viaPcPair ? (
+          <div
+            data-testid="print-via-pc-banner"
+            className="flex items-center gap-3 rounded-lg border border-info/30 bg-info-soft px-4 py-3 text-info"
+          >
+            <Printer className="h-5 w-5 shrink-0" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">
+                {t("print.via_pc_banner", {
+                  pc: viaPcPair.name || viaPcPair.host,
+                })}
+              </p>
+              {pcCached && (
+                <p className="text-xs">{t("print.via_pc_cached")}</p>
+              )}
+            </div>
+            <Button variant="outline" size="sm" onClick={refreshPcPrinters}>
+              {t("print.refresh")}
+            </Button>
+          </div>
+        ) : (
+          <div
+            data-testid="print-via-pc-banner"
+            role="alert"
+            className="flex items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-danger"
+          >
+            <XCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
+            <p className="text-sm font-medium">{t("print.via_pc_no_pair")}</p>
+          </div>
+        ))}
+
       {/* The one place a print's outcome is reported. It is always shown: ready
           before the first print, then printing, then the result with its timing. */}
       {(store.status === "idle" || store.status === "queued") && (
@@ -475,6 +672,11 @@ export function PrintPage() {
                 {t("print.rendered_on", { peer: store.renderedBy })}
               </p>
             )}
+            {printedVia && (
+              <p data-testid="print-printed-via" className="text-xs">
+                {t("print.printed_via", { pc: printedVia })}
+              </p>
+            )}
             {store.timings ? (
               <TimingBreakdown timings={store.timings} />
             ) : (
@@ -498,12 +700,24 @@ export function PrintPage() {
             <p className="break-words text-xs">
               {store.error || t("print.unknown_error")}
             </p>
+            {remoteCode &&
+              (remoteCode === "template_missing" ||
+                remoteCode === "template_stale") && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="print-sync-templates"
+                  onClick={handleSyncTemplates}
+                >
+                  {t("print.sync_templates")}
+                </Button>
+              )}
             {store.timings && <TimingBreakdown timings={store.timings} />}
           </div>
           <Button
             variant="outline"
             size="sm"
-            onClick={handlePrint}
+            onClick={() => void handlePrint(true)}
             disabled={!canPrint}
           >
             {t("print.retry")}
@@ -544,16 +758,33 @@ export function PrintPage() {
                     <SelectValue placeholder={t("print.printer_placeholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    {printers.length === 0 && (
-                      <SelectItem value="none" disabled>
-                        {t("print.no_printers")}
-                      </SelectItem>
+                    {viaPc ? (
+                      <>
+                        {pcPrinters.length === 0 && (
+                          <SelectItem value="none" disabled>
+                            {t("print.no_printers")}
+                          </SelectItem>
+                        )}
+                        {pcPrinters.map((p) => (
+                          <SelectItem key={p.name} value={p.name}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        {printers.length === 0 && (
+                          <SelectItem value="none" disabled>
+                            {t("print.no_printers")}
+                          </SelectItem>
+                        )}
+                        {printers.map((p) => (
+                          <SelectItem key={p.id} value={p.name}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </>
                     )}
-                    {printers.map((p) => (
-                      <SelectItem key={p.id} value={p.name}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -854,7 +1085,7 @@ export function PrintPage() {
                   <Button
                     size="lg"
                     className="w-full"
-                    onClick={handlePrint}
+                    onClick={() => void handlePrint(false)}
                     disabled={!canPrint}
                     title={blocker || undefined}
                     aria-describedby={blocker ? "print-blocker" : undefined}
@@ -1014,7 +1245,7 @@ export function PrintPage() {
           <Button
             size="lg"
             className="min-h-11 w-full"
-            onClick={handlePrint}
+            onClick={() => void handlePrint(false)}
             disabled={!canPrint}
             title={blocker || undefined}
             aria-describedby={blocker ? "print-blocker-phone" : undefined}

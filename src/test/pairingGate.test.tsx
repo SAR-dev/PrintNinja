@@ -56,6 +56,65 @@ describe("PairingGate", () => {
     view.unmount();
   });
 
+  it("shows who this phone pairs as, or that sign-in comes first", async () => {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    (window as any).__TAURI_INTERNALS__ = {}; // leave web mode: real pairing form
+    try {
+      const view = render(<PairingGate onPaired={() => {}} />);
+      await screen.findByTestId("devices-code-input");
+      // Nothing configured: no session, so the sign-in hint shows.
+      expect(
+        await screen.findByTestId("devices-account-line"),
+      ).toHaveTextContent(/Not signed in/);
+      view.unmount();
+    } finally {
+      (window as any).__TAURI_INTERNALS__ = undefined;
+      ua.mockRestore();
+    }
+  });
+
+  it("names the signed-in account on the pair form", async () => {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    (window as any).__TAURI_INTERNALS__ = {}; // leave web mode: real pairing form
+    localStorage.setItem(
+      "printninja-setting:share_service_url",
+      "https://share.test",
+    );
+    localStorage.setItem("printninja-setting:share_session_token", "tok");
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "get_setting")
+        return localStorage.getItem(`printninja-setting:${args?.key}`);
+      return null;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        const url = input instanceof Request ? input.url : String(input);
+        return url.endsWith("/v2/auth/me")
+          ? new Response(JSON.stringify({ id: "u1", handle: "sam" }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
+          : new Response("{}", { status: 404 });
+      }),
+    );
+    try {
+      render(<PairingGate onPaired={() => {}} />);
+      await screen.findByTestId("devices-code-input");
+      expect(
+        await screen.findByTestId("devices-account-line"),
+      ).toHaveTextContent("Signed in as sam");
+    } finally {
+      vi.unstubAllGlobals();
+      (window as any).__TAURI_INTERNALS__ = undefined;
+      ua.mockRestore();
+    }
+  });
+
   // Regression: pairing used to be noticed only by the gate's 2s poll, so
   // after a successful pair the freshly-paired device sat on the welcome
   // screen for up to two seconds before /print replaced it. Pairing now

@@ -96,6 +96,12 @@ export interface HistoryJob {
   duration_ms: number | null;
   /** JSON of `StageTimings`; null for a job that has not run or predates timings. */
   timings_json: string | null;
+  /** Paired phone that asked for this print; null for local prints. */
+  requested_by_device_id: string | null;
+  /** Template `server_revision` that printed; null for raw HTML or old rows. */
+  template_revision: number | null;
+  /** Paired PC that printed this job; null when printed locally. */
+  printed_by: string | null;
 }
 
 export interface ApplyReport {
@@ -179,6 +185,52 @@ export interface PrintResponse {
   timings?: StageTimings | null;
   /** Paired provider that rendered the document, if shared rendering was used. */
   rendered_by?: string | null;
+}
+
+/** One print through a paired PC (see `remote_print`). Field names mirror
+ * the local print request; `template_id` is this phone's local id. */
+export interface RemotePrintArgs {
+  template_id: number;
+  printer_name: string;
+  data?: unknown;
+  data_url?: string;
+  http_method?: string;
+  copies?: number;
+  records?: number;
+  orientation?: string;
+  fit_mode?: string;
+  page_range?: string;
+  grayscale?: boolean;
+  test?: boolean;
+  /** Caller-generated key; retries of one attempt reuse it. */
+  idempotency_key?: string;
+  /** Which PC by provider id; defaults to the stored choice or the only pair. */
+  pair_id?: string;
+}
+
+/** Outcome of one print through a paired PC. `code` carries a 409
+ * `template_missing`/`template_stale` for the Sync-templates action. */
+export interface RemotePrintResult {
+  success: boolean;
+  status: string;
+  pc_job_id: string | null;
+  duration_ms: number;
+  error: string | null;
+  code: string | null;
+  pc_name: string;
+}
+
+/** One PC printer, as its `GET /v1/printers` reports it. */
+export interface PcPrinterInfo {
+  name: string;
+  printer_type: string;
+  language: string;
+}
+
+export interface RemotePrintersResult {
+  printers: PcPrinterInfo[];
+  /** True when the PC did not answer and this is the last good list. */
+  cached: boolean;
 }
 
 export interface FontRow {

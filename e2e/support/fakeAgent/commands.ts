@@ -193,6 +193,22 @@ const implemented: Record<string, Handler> = {
     can_print: Boolean(args["can_print"] ?? true),
     account_id: "user-1",
   }),
+  // Print via PC: the dialog round-trips in the browser against this
+  // canned PC. The real POST/poll/history path is covered in Rust
+  // (remote_print round-trips against a live loopback PC).
+  remote_printers: () => ({
+    printers: [{ name: "PC Printer", printer_type: "ipp", language: "pdf" }],
+    cached: false,
+  }),
+  remote_print: () => ({
+    success: true,
+    status: "success",
+    pc_job_id: "7",
+    duration_ms: 12,
+    error: null,
+    code: null,
+    pc_name: "Studio PC",
+  }),
   // Canned provider for the Devices UI "test" button: proves the pairing
   // form round-trips in the browser. Real capability/render behavior is
   // covered by the Rust suites (api_routes.rs, peer_consume.rs).
