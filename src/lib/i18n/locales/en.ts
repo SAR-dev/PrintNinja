@@ -341,6 +341,8 @@ const en = {
     unknown_error: "Unknown error",
     via_pc_banner: "Printing on {{pc}} — the job runs on its printers.",
     via_pc_cached: "Printer list is cached: the PC is unreachable.",
+    via_pc_unreachable:
+      "The PC did not answer — check it is on and on the same Wi-Fi, then Refresh.",
     via_pc_no_pair: "Choose which PC to print on in Settings → Share.",
     printed_via: "Printed via {{pc}}",
     sync_templates: "Sync templates",
@@ -750,6 +752,7 @@ const en = {
     devices_test: "Test",
     devices_testing: "Testing…",
     devices_test_ok: "Score {{score}} · {{cores}} cores · {{platform}}",
+    devices_test_toast_ok: "{{name}} answered — ready to print.",
     devices_remove: "Remove {{name}}",
     devices_phone_hint:
       "Your phone prints through your PC: the PC prepares every job and the phone sends it to the printer. If the PC is off, asleep or blocked, prints fail until it answers; retry them from History.",
