@@ -149,6 +149,8 @@ const en = {
   },
   designer: {
     title: "Designer",
+    via_pc_note:
+      "Templates sync down from the server while Print via PC is on — they are not drawn here.",
     newTemplate: "New Template",
     settings: "Settings",
     settings_description:
@@ -345,6 +347,8 @@ const en = {
     via_pc_unreachable:
       "The PC did not answer — check it is on and on the same Wi-Fi, then Refresh.",
     via_pc_no_pair: "Choose which PC to print on in Automation → PC.",
+    via_pc_exit: "Use my printers",
+    via_pc_exited: "Print via PC is off — printing on this phone again.",
     printed_via: "Printed via {{pc}}",
     sync_templates: "Sync templates",
     synced_retry: "Templates synced — retry the print.",
@@ -401,6 +405,8 @@ const en = {
   },
   printers: {
     title: "Printer Setup",
+    via_pc_note:
+      "Local printers sit unused while Print via PC is on — jobs go to the PC's printers.",
     add_printer: "Add Printer",
     test_print: "Test Print",
     paper_width_mm: "Paper width (mm)",
