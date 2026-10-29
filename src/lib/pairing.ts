@@ -84,3 +84,14 @@ export function formatPairingCode(code: string): string {
   const n = normalizePairingCode(code);
   return n.length === 8 ? `${n.slice(0, 4)}-${n.slice(4)}` : code;
 }
+
+/**
+ * Live display form for the pairing input: the hyphen appears as soon
+ * as the first half is typed (`K7QM-4`), so the field always looks like
+ * the code on the PC's screen. The stored value stays dashless —
+ * `filterPairingInput` strips it on the way in.
+ */
+export function formatPairingCodeLive(raw: string): string {
+  const n = normalizePairingCode(raw);
+  return n.length <= 4 ? n : `${n.slice(0, 4)}-${n.slice(4, 8)}`;
+}
