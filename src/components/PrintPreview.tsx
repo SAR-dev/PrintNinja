@@ -6,6 +6,8 @@ import {
   pageWindow,
 } from "@/lib/render/paginate";
 import { useDesignPageCounts } from "@/lib/hooks/useDesignPageCounts";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useTranslation } from "react-i18next";
 
 /** Space around the sheets inside the scroll area (Tailwind p-4, both sides). */
 const PAD_X = 32;
@@ -81,7 +83,7 @@ export function PrintPreview({
   // on the sheet exactly as page one is.
   const designWpx = designW * MM_TO_PX;
   const designHpx = designH * MM_TO_PX;
-  const pageCounts = useDesignPageCounts(
+  const { counts: pageCounts, ready: pagesReady } = useDesignPageCounts(
     pages,
     designWpx,
     designHpx,
@@ -122,6 +124,23 @@ export function PrintPreview({
   // before the first measurement (and in jsdom): show the sheet at full size.
   const shown = hostWidth > 0 ? Math.min(1, (hostWidth - PAD_X) / paperWpx) : 1;
   const display = Math.max(0.05, shown);
+
+  // Measuring takes a beat: hold one skeleton sheet until every record's
+  // page count is known rather than flashing a premature single sheet.
+  // No data-testid here: it must not shadow the real preview's one.
+  const { t } = useTranslation();
+  if (!pagesReady) {
+    return (
+      <div ref={hostRef} className="flex flex-col items-center gap-4">
+        <Skeleton
+          data-testid="print-preview-loading"
+          role="status"
+          aria-label={t("designer.measuring_pages")}
+          style={{ width: paperWpx * display, height: paperHpx * display }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div

@@ -77,6 +77,17 @@ export function pageWindow(
 const cache = new Map<string, number>();
 const CACHE_LIMIT = 64;
 
+/** 32-bit FNV-1a: cache keys must not hold whole documents — a template
+ * with embedded images is megabytes, and every keystroke would pin one. */
+function hashDoc(doc: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < doc.length; i++) {
+    h ^= doc.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16);
+}
+
 function remember(key: string, value: number) {
   if (cache.size >= CACHE_LIMIT) {
     const oldest = cache.keys().next().value;
@@ -115,7 +126,7 @@ export function measureContentHeightPx(
   widthPx: number,
   heightPx: number,
 ): Promise<number> {
-  const key = `${Math.round(widthPx)}x${Math.round(heightPx)}\n${doc}`;
+  const key = `${Math.round(widthPx)}x${Math.round(heightPx)}\n${hashDoc(doc)}`;
   const hit = cache.get(key);
   if (hit !== undefined) return Promise.resolve(hit);
   if (typeof document === "undefined" || !document.body)
