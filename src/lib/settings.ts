@@ -7,6 +7,11 @@ import { agent } from "@/lib/agent/commands";
 
 const lsKey = (key: string) => `printninja-setting:${key}`;
 
+/** Fired on `window` after every `writeSetting`, with the key in `detail`.
+ * Screens that mirror a setting (topbar badges, the phone nav) listen to
+ * this instead of re-reading only when the route changes. */
+export const SETTING_CHANGED_EVENT = "setting:changed";
+
 /** True in the browser preview/CI, where no Tauri backend answers. */
 export function isWebMode(): boolean {
   return typeof window !== "undefined" && !(window as any).__TAURI_INTERNALS__;
@@ -42,6 +47,13 @@ export async function writeSetting(key: string, value: string): Promise<void> {
     await agent("set_setting", { key, value });
   } catch {
     /* kept in localStorage */
+  }
+  try {
+    window.dispatchEvent(
+      new CustomEvent(SETTING_CHANGED_EVENT, { detail: { key } }),
+    );
+  } catch {
+    /* no window (SSR/tests) */
   }
 }
 

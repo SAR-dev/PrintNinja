@@ -8,7 +8,10 @@ import {
   EyeOff,
   Globe,
   Loader2,
+  MonitorSmartphone,
   PencilLine,
+  Share2,
+  ShieldAlert,
   Wifi,
   WifiOff,
   XCircle,
@@ -42,6 +45,14 @@ export const STATUS = {
   // Local API server: loopback shows a green badge, LAN a red alert.
   api: { tone: "success", icon: Globe, label: "API" },
   lan: { tone: "danger", icon: Wifi, label: "LAN" },
+  // Other switches that change behaviour and stay visible in the top bar.
+  sharing: { tone: "info", icon: Share2, label: "Sharing" },
+  via_pc: { tone: "info", icon: MonitorSmartphone, label: "Via PC" },
+  exposed: {
+    tone: "warning",
+    icon: ShieldAlert,
+    label: "Private network open",
+  },
   // Sync cache (section 6.9)
   synced: { tone: "success", icon: CheckCircle2, label: "Synced" },
   syncing: { tone: "info", icon: Loader2, label: "Syncing", spin: true },

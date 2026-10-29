@@ -16,7 +16,6 @@ import { PcStatusBanner } from "@/components/PcStatusBanner";
 import { ShortcutsDialog } from "@/components/ShortcutsDialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import { UpdateBadge } from "@/components/UpdateBadge";
-import { isPrintViaPc } from "@/lib/printViaPc";
 import { Button } from "@/components/ui/button";
 import {
   DialogDescription,
@@ -35,10 +34,10 @@ import {
 import { useGlobalShortcuts } from "@/lib/shell/useGlobalShortcuts";
 import { LANDSCAPE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { useShareStatus } from "@/lib/shell/useShareStatus";
+import { useShellStatus, type ShellStatus } from "@/lib/shell/useShellStatus";
 import { cacheNow, useSyncStatus } from "@/lib/sync/useSyncStatus";
 import { usePrefs } from "@/lib/prefs/PrefsProvider";
 import { agent } from "@/lib/agent/commands";
-import { useApiStatusChanged } from "@/lib/apiServer";
 import { getAppVersion } from "@/lib/appUpdate";
 import { cn } from "@/lib/utils";
 
@@ -197,56 +196,89 @@ function ShareIndicator() {
   );
 }
 
-/** Topbar badge while the local API server runs. LAN exposure stays a
- * red alert; loopback serving shows a green badge with the bind address.
- * Both link to Automation, where the server stops and LAN turns off. */
-function ApiIndicator() {
+/** Phone-friendly link around a compact badge (icon only below `sm`). */
+const BADGE_LINK =
+  "flex items-center justify-center rounded-md [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11";
+
+/**
+ * Top-bar badges for the switches that change how the app behaves while
+ * they are on. One badge per switch, each linking to where it turns off:
+ *
+ * - LAN (red) / API (green): the local API server. LAN exposure stays an
+ *   alert; loopback serving shows the bind address.
+ * - Sharing: this PC is live as a renderer for phones.
+ * - Via PC: this phone prints through a paired PC.
+ * - Private network open: "Block private IPs" was switched off.
+ *
+ * Badges are compact (icon only) below `sm`; the link's accessible name
+ * carries the words.
+ */
+function ShellIndicators({ status }: { status: ShellStatus }) {
   const { t } = useTranslation();
-  const location = useLocation();
-  const [status, setStatus] = useState<{
-    running: boolean;
-    address: string;
-    port: number;
-    lan_access: boolean;
-  } | null>(null);
-  const check = useCallback(async () => {
-    try {
-      setStatus(await agent("get_api_status", {}));
-    } catch {
-      setStatus(null);
-    }
-  }, []);
-  useEffect(() => {
-    void check();
-  }, [check, location.pathname]);
-  // Start/stop from any screen (Automation, Phones) and
-  // changes made outside the UI refresh the badge without a page change.
-  useApiStatusChanged(check);
-  if (!status?.running) return null;
-  if (status.lan_access) {
-    return (
-      <Link
-        to="/automation"
-        title={`${t("shell.lan_on")} — ${t("shell.lan_on_detail")}`}
-        aria-label={`${t("shell.lan_on")}: ${t("shell.lan_on_detail")}`}
-        data-testid="lan-indicator"
-        className="flex items-center justify-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
-      >
-        <StatusBadge status="lan" label={t("shell.lan_on")} />
-      </Link>
-    );
-  }
-  const where = `${status.address}:${status.port}`;
+  const { api, sharing, viaPc, privateOpen } = status;
+  const where = api ? `${api.address}:${api.port}` : "";
   return (
-    <Link
-      to="/automation"
-      title={`API server listening on ${where}`}
-      aria-label={`API server listening on ${where}`}
-      data-testid="api-indicator"
-      className="flex items-center justify-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
-    >
-      <StatusBadge status="api" />
-    </Link>
+    <>
+      {api?.running &&
+        (api.lan_access ? (
+          <Link
+            to="/automation"
+            title={`${t("shell.lan_on")} — ${t("shell.lan_on_detail")}`}
+            aria-label={`${t("shell.lan_on")}: ${t("shell.lan_on_detail")}`}
+            data-testid="lan-indicator"
+            className={BADGE_LINK}
+          >
+            <StatusBadge status="lan" label={t("shell.lan_on")} compact />
+          </Link>
+        ) : (
+          <Link
+            to="/automation"
+            title={t("shell.api_listening", { where })}
+            aria-label={t("shell.api_listening", { where })}
+            data-testid="api-indicator"
+            className={BADGE_LINK}
+          >
+            <StatusBadge status="api" compact />
+          </Link>
+        ))}
+      {sharing && (
+        <Link
+          to="/automation?tab=phones"
+          title={t("shell.sharing_on")}
+          aria-label={t("shell.sharing_on")}
+          data-testid="sharing-indicator"
+          className={BADGE_LINK}
+        >
+          <StatusBadge status="sharing" compact />
+        </Link>
+      )}
+      {viaPc && (
+        <Link
+          to="/automation?tab=phones"
+          title={t("shell.via_pc_on")}
+          aria-label={t("shell.via_pc_on")}
+          data-testid="via-pc-indicator"
+          className={BADGE_LINK}
+        >
+          <StatusBadge status="via_pc" compact />
+        </Link>
+      )}
+      {privateOpen && (
+        <Link
+          to="/settings?section=data&field=block-private"
+          title={t("shell.private_open_detail")}
+          aria-label={`${t("shell.private_open")}: ${t("shell.private_open_detail")}`}
+          data-testid="private-open-indicator"
+          className={BADGE_LINK}
+        >
+          <StatusBadge
+            status="exposed"
+            label={t("shell.private_open")}
+            compact
+          />
+        </Link>
+      )}
+    </>
   );
 }
 
@@ -313,18 +345,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // printers and the designer (templates sync down; they are not drawn
   // here). Mobile bar and More sheet only — desktop keeps everything,
   // and the pages themselves explain when visited directly.
-  const [viaPc, setViaPc] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void isPrintViaPc()
-      .then((v) => {
-        if (!cancelled) setViaPc(v);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [location.pathname]);
+  // One status read feeds both the top-bar badges and this mode. It
+  // refreshes on route change, window focus, API start/stop and whenever
+  // the setting is written, so flipping Print via PC updates the bottom
+  // bar at once instead of after the next navigation.
+  const shellStatus = useShellStatus(location.pathname);
+  const viaPc = shellStatus.viaPc;
 
   // The version lives in the topbar only; Settings shows no footer.
   useEffect(() => {
@@ -464,7 +490,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </button>
         )}
         <div className="ml-auto flex shrink-0 items-center gap-1 md:gap-2">
-          <ApiIndicator />
+          <ShellIndicators status={shellStatus} />
           {/* Share/sync state stays visible on phones as a compact icon-only
               badge; the word returns from sm up (see StatusBadge compact). */}
           <ShareIndicator />

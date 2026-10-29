@@ -912,8 +912,8 @@ describe("phone Settings page", () => {
       "Setup",
       "General",
       "Background",
-      "Share",
-      "Data sources",
+      "Account & sync",
+      "Data & network",
       "Retention",
       "Diagnostics",
     ]) {
