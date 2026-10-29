@@ -400,7 +400,9 @@ const en = {
     preview_empty_template:
       "This template is empty. Open it in Designer and save it.",
     preview_data_failed:
-      "Could not load data from the URL ({{error}}); showing sample data.",
+      "Could not load data from the URL ({{error}}); showing sample data. The print itself loads the URL on the server, so it may still work.",
+    preview_data_timeout:
+      "The URL took too long to answer; showing sample data. The print itself loads the URL on the server, so it may still work.",
     preview_empty_data: "The data is an empty array: nothing to print.",
     preview_truncated:
       "Showing first {{shown}} of {{total}} pages — the print has them all.",
@@ -1216,6 +1218,15 @@ const en = {
     endpoint_print: "Render a template and print it",
     endpoint_print_desc:
       "Prints for real: template and printer are required, data is optional. Send Idempotency-Key on a retryable request to avoid a second copy.",
+    endpoint_hello: "Pairing introduction",
+    endpoint_hello_desc:
+      "Fully public: what this PC calls itself and whether it can render. No parameters, no token.",
+    endpoint_claim: "Claim a pairing code",
+    endpoint_claim_desc:
+      "Fully public but knowledge-gated: the 8-character owner code (open 90 s window) or a guest invite, plus this caller's identity. Returns the per-device token.",
+    claim_warning:
+      "This pairs a device with this PC — it appears in the Phones tab, where it can be removed again.",
+    example_claim: "Example: claim body",
   },
   errors: {
     kind_database: "Database error: {{detail}}",

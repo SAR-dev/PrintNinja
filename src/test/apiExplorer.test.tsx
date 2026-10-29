@@ -105,4 +105,50 @@ describe("API Explorer and the server", () => {
       await screen.findByTestId("api-explorer-response"),
     ).toHaveTextContent('"status": "ok"');
   });
+
+  it("lists the fully public pairing endpoints with their own guidance", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_api_status") return running;
+      if (cmd === "api_request")
+        return { status: 200, text: '{"token":"abc"}' };
+      return null;
+    });
+    renderPage();
+    await screen.findByText("127.0.0.1:17717");
+
+    // The introduction needs no token and no body.
+    fireEvent.click(screen.getByText("/v1/pair/hello"));
+    expect(screen.queryByTestId("api-explorer-body")).toBeNull();
+    fireEvent.click(await screen.findByTestId("api-explorer-send"));
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith(
+        "api_request",
+        expect.objectContaining({
+          method: "GET",
+          url: "http://127.0.0.1:17717/v1/pair/hello",
+        }),
+      );
+    });
+
+    // Claiming warns about the side effect and offers a claim example —
+    // never the print body or an idempotency key.
+    fireEvent.click(screen.getByText("/v1/pair/claim"));
+    expect(
+      await screen.findByText(/pairs a device with this PC/),
+    ).toBeInTheDocument();
+    expect(
+      (screen.getByTestId("api-explorer-body") as HTMLTextAreaElement).value,
+    ).toContain('"code": "K7QM4XPD"');
+    expect(screen.queryByTestId("api-explorer-idempotency")).toBeNull();
+    fireEvent.click(screen.getByTestId("api-explorer-send"));
+    await waitFor(() => {
+      const call = invoke.mock.calls.find(
+        (c) =>
+          c[0] === "api_request" &&
+          (c[1] as any)?.url?.endsWith("/v1/pair/claim"),
+      );
+      expect(call).toBeDefined();
+      expect((call?.[1] as any)?.headers?.["Idempotency-Key"]).toBeUndefined();
+    });
+  });
 });
