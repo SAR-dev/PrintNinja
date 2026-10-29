@@ -16,6 +16,12 @@ import i18n from "@/lib/i18n";
 type Params = Record<string, string | number>;
 
 /** [message regex, i18n key, names for each capture group in order] */
+/** The PC removed this phone: re-pair. Shared with `usePcStatus`,
+ * which classifies the same text to pick the banner. Keep the wording
+ * in sync with `describe_no_answer`'s removed branch in
+ * `src-tauri/src/api/peer_consume.rs`. */
+export const PEER_REMOVED_RE = /^(.+) removed this phone\. Pair again\.$/;
+
 const PATTERNS: Array<[RegExp, string, string[]]> = [
   [/^Template (\d+) not found$/, "errors.template_not_found", ["id"]],
   [/^Template '(.+)' not found$/, "errors.template_named_not_found", ["name"]],
@@ -84,7 +90,7 @@ const PATTERNS: Array<[RegExp, string, string[]]> = [
     ["name", "port"],
   ],
   // The PC removed this phone (per-device token unknown): pair again.
-  [/^(.+) removed this phone\. Pair again\.$/, "errors.peer_removed", ["name"]],
+  [PEER_REMOVED_RE, "errors.peer_removed", ["name"]],
   [/^CUPS returned HTTP (\d+)$/, "errors.cups_http", ["status"]],
   [/^IPP server returned HTTP (\d+)$/, "errors.ipp_http", ["status"]],
   [
@@ -105,6 +111,13 @@ const KIND_KEYS: Record<string, string> = {
 };
 
 type Normalized = { kind?: string; message: string; id?: number };
+
+/** The backend's message text before translation (the `message` half of
+ * `normalize`). Classification (removed vs unreachable) must use this:
+ * the translated string changes shape per language. */
+export function rawErrorMessage(e: unknown): string {
+  return normalize(e).message;
+}
 
 function normalize(e: unknown): Normalized {
   if (typeof e === "string") return { message: e };

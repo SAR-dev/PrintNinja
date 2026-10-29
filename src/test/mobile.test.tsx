@@ -23,6 +23,7 @@ import { useHistoryStore, type HistoryJob } from "@/lib/store/historyStore";
 const shareMock = vi.hoisted(() => ({
   getServiceUrl: vi.fn(async () => null as string | null),
   getSessionToken: vi.fn(async () => null as string | null),
+  onSessionStarted: () => () => {},
   hasUnpublishedChanges: (t: {
     remote_id: string | null;
     published_at: string | null;
@@ -526,7 +527,7 @@ describe("phone Templates page", () => {
       server_id: "r3",
       base_revision: 2,
       published_at: "2026-01-01T00:00:00Z",
-      updated_at: "2026-02-01T00:00:00Z",
+      updated_at: "2026-03-01T00:00:00Z",
     },
   ];
 
@@ -585,7 +586,12 @@ describe("phone Templates page", () => {
       within(list)
         .getAllByRole("listitem")
         .map((li) => li.querySelector("p")?.textContent);
-    expect(names()).toEqual(["Shipping label", "Receipt", "Pallet tag"]);
+    // The dropdown defaults to the active sort (last updated), not the
+    // placeholder — and the cards follow it.
+    expect(
+      screen.getByRole("combobox", { name: "Sort templates" }),
+    ).toHaveTextContent("Recently updated");
+    expect(names()).toEqual(["Pallet tag", "Shipping label", "Receipt"]);
     fireEvent.click(screen.getByRole("combobox", { name: "Sort templates" }));
     fireEvent.click(await screen.findByRole("option", { name: "Name (A–Z)" }));
     await waitFor(() =>
@@ -811,11 +817,11 @@ describe("phone Designer page", () => {
       name: "Designer views",
     });
     expect(tablist.closest("div.sticky")).not.toBeNull();
-    // Header toolbar Save keeps its test id; the sticky shortcut duplicates
-    // the action without one.
+    // Phones keep one Save: the sticky shortcut. The header toolbar
+    // (New, Save, visibility) lives behind the overflow menu instead.
     const saves = screen.getAllByRole("button", { name: "Save" });
-    expect(saves).toHaveLength(2);
-    expect(screen.getByTestId("designer-save")).toBeInTheDocument();
+    expect(saves).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "More" })).toBeInTheDocument();
   });
 
   it("shows real page dimensions on the canvas toolbar", async () => {

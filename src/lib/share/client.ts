@@ -111,6 +111,7 @@ async function authHeaders(): Promise<Record<string, string>> {
 // person to the sign-in screen without each caller knowing about the gate.
 
 const SESSION_ENDED_EVENT = "printninja:session-ended";
+const SESSION_STARTED_EVENT = "printninja:session-started";
 
 export type SessionEndReason = "expired" | "signed_out";
 
@@ -121,6 +122,14 @@ export function onSessionEnded(
     cb((e as CustomEvent<SessionEndReason>).detail ?? "expired");
   window.addEventListener(SESSION_ENDED_EVENT, handler);
   return () => window.removeEventListener(SESSION_ENDED_EVENT, handler);
+}
+
+/** A new session began (login or register, anywhere). Session-derived
+ * views reload on this: the app shell stays mounted across a
+ * logout→login cycle, so mount-time reads would otherwise stay stale. */
+export function onSessionStarted(cb: () => void): () => void {
+  window.addEventListener(SESSION_STARTED_EVENT, cb);
+  return () => window.removeEventListener(SESSION_STARTED_EVENT, cb);
 }
 
 /** Forget the stored token and account id, and send the app back to
@@ -177,6 +186,7 @@ async function authRequest(
   // The account this session belongs to, for the same-account pairing
   // check (§3.6). Stored with the URL it belongs to (already in settings).
   await setShareUserId(data.user.id);
+  window.dispatchEvent(new CustomEvent(SESSION_STARTED_EVENT));
   return data;
 }
 

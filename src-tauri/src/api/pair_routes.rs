@@ -181,6 +181,172 @@ pub struct ClaimResponse {
     pub paired_at: String,
 }
 
+/// One guest invite, as stored: the code itself never lands in the DB.
+struct Invite {
+    id: String,
+    expires_at: String,
+    uses_left: Option<i64>,
+    can_print: bool,
+}
+
+/// Look up an invite by the presented code. `None` means "not an
+/// invite" — the caller falls through to the window flow untouched.
+fn lookup_invite(state: &ApiState, normalized: &str) -> Option<Invite> {
+    if normalized.is_empty() {
+        return None;
+    }
+    let hash = super::pair_code::token_hash(normalized);
+    state.db.lock().ok().and_then(|guard| {
+        guard
+            .connection()
+            .query_row(
+                "SELECT id, expires_at, uses_left, can_print
+                 FROM pairing_invites WHERE code_hash = ?1",
+                [&hash],
+                |r| {
+                    Ok(Invite {
+                        id: r.get(0)?,
+                        expires_at: r.get(1)?,
+                        uses_left: r.get(2)?,
+                        can_print: r.get(3)?,
+                    })
+                },
+            )
+            .ok()
+    })
+}
+
+/// True while the invite still redeems: unexpired with uses left. An
+/// unparseable timestamp fails closed (only hand-edited rows do that —
+/// minted rows are always valid RFC-3339).
+fn invite_usable(invite: &Invite) -> bool {
+    if invite.uses_left.is_some_and(|n| n <= 0) {
+        return false;
+    }
+    invite
+        .expires_at
+        .parse::<chrono::DateTime<chrono::Utc>>()
+        .is_ok_and(|exp| exp > chrono::Utc::now())
+}
+
+/// Spend one redemption. The row stays at zero uses so exhaustion still
+/// answers 410 ("ask for a new one") instead of looking like an
+/// unknown code.
+fn spend_invite(state: &ApiState, invite: &Invite) {
+    if let Ok(guard) = state.db.lock() {
+        let _ = guard.connection().execute(
+            "UPDATE pairing_invites SET uses_left = uses_left - 1
+             WHERE id = ?1 AND uses_left IS NOT NULL",
+            [&invite.id],
+        );
+    }
+}
+
+/// Claim with a guest invite (docs/GUEST_PAIRING.md): no window, no
+/// account, just the invite. Mints the same per-device token; the row
+/// is `role = 'guest'` with the invite's expiry and print preset.
+fn claim_with_invite(
+    state: &ApiState,
+    invite: Invite,
+    device_id: &str,
+    device_name: &str,
+    platform: &str,
+) -> Response {
+    if !invite_usable(&invite) {
+        let exhausted = invite.uses_left.is_some_and(|n| n <= 0);
+        return (
+            StatusCode::GONE,
+            Json(serde_json::json!({
+                "error": if exhausted {
+                    "this invite is used up; ask the PC owner for a new one"
+                } else {
+                    "this invite expired; ask the PC owner for a new one"
+                },
+                "code": if exhausted { "invite_exhausted" } else { "invite_expired" },
+            })),
+        )
+            .into_response();
+    }
+    spend_invite(state, &invite);
+
+    let token = super::pair_code::mint_token();
+    let hash = super::pair_code::token_hash(&token);
+    let paired_at = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let provider_id = {
+        let guard = match state.db.lock() {
+            Ok(g) => g,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": "database unavailable" })),
+                )
+                    .into_response();
+            }
+        };
+        crate::db::ensure_provider_id(guard.connection()).unwrap_or_default()
+    };
+    let port = api_port(state);
+    {
+        let guard = match state.db.lock() {
+            Ok(g) => g,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": "database unavailable" })),
+                )
+                    .into_response();
+            }
+        };
+        // can_print comes from the invite on fresh rows but stays
+        // operator-controlled afterwards (same rule as §3.3); role,
+        // account and expiry follow the credential just used.
+        if let Err(e) = guard.connection().execute(
+            "INSERT INTO paired_devices
+                 (id, name, display_name, platform, token_hash, paired_at, last_seen_at, can_print,
+                  account_id, service_url, role, expires_at)
+             VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?5, ?6, NULL, NULL, 'guest', ?7)
+             ON CONFLICT(id) DO UPDATE SET
+               name = excluded.name,
+               platform = excluded.platform,
+               token_hash = excluded.token_hash,
+               paired_at = excluded.paired_at,
+               last_seen_at = excluded.last_seen_at,
+               account_id = excluded.account_id,
+               service_url = excluded.service_url,
+               role = excluded.role,
+               expires_at = excluded.expires_at",
+            rusqlite::params![
+                device_id,
+                device_name,
+                platform,
+                hash,
+                paired_at,
+                i64::from(invite.can_print),
+                invite.expires_at,
+            ],
+        ) {
+            tracing::warn!("pair claim insert failed: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "could not store the paired device" })),
+            )
+                .into_response();
+        }
+    }
+    (
+        StatusCode::OK,
+        Json(ClaimResponse {
+            provider_id,
+            provider_name: crate::commands::api::device_name(),
+            provider_platform: std::env::consts::OS.into(),
+            port,
+            token,
+            paired_at,
+        }),
+    )
+        .into_response()
+}
+
 /// Claim the open window with the 8-character code. Mints a per-device
 /// token, stores its hash in `paired_devices`, and closes the window
 /// (single use).
@@ -229,6 +395,27 @@ pub async fn claim(
         )
             .into_response();
     }
+    let device_name: String = req
+        .device_name
+        .unwrap_or_default()
+        .trim()
+        .chars()
+        .take(64)
+        .collect();
+    let device_name = if device_name.is_empty() {
+        "Phone".to_string()
+    } else {
+        device_name
+    };
+    let platform = req.platform.unwrap_or_default();
+    let platform: String = platform.trim().chars().take(32).collect();
+
+    // Guest invites (docs/GUEST_PAIRING.md) are tried before the window:
+    // they work with no window open, and a miss falls through to the
+    // owner flow below untouched (no attempts spent either way).
+    if let Some(invite) = lookup_invite(&state, &normalized) {
+        return claim_with_invite(&state, invite, &device_id, &device_name, &platform);
+    }
 
     // Same-account pairing (Release C §3.6): both devices sign in, and the
     // claim carries the phone's account for comparison. Checked before the
@@ -275,21 +462,6 @@ pub async fn claim(
         )
             .into_response();
     }
-    let device_name: String = req
-        .device_name
-        .unwrap_or_default()
-        .trim()
-        .chars()
-        .take(64)
-        .collect();
-    let device_name = if device_name.is_empty() {
-        "Phone".to_string()
-    } else {
-        device_name
-    };
-    let platform = req.platform.unwrap_or_default();
-    let platform: String = platform.trim().chars().take(32).collect();
-
     // Check the window state machine.
     let now = std::time::Instant::now();
     let outcome = state.window.lock().map(|mut guard| {
@@ -368,12 +540,14 @@ pub async fn claim(
         // can_print is deliberately untouched on re-pair: like the PC's
         // rename, the operator's printing choice survives. Fresh rows get
         // 1 from the column default above. The account is re-stored every
-        // time instead: re-pairing re-verifies it (§3.6).
+        // time instead: re-pairing re-verifies it (§3.6). Role and expiry
+        // follow the credential just used: an owner window promotes
+        // (clearing any guest expiry), an invite demotes.
         if let Err(e) = guard.connection().execute(
             "INSERT INTO paired_devices
                  (id, name, display_name, platform, token_hash, paired_at, last_seen_at, can_print,
-                  account_id, service_url)
-             VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?5, 1, ?6, ?7)
+                  account_id, service_url, role, expires_at)
+             VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?5, 1, ?6, ?7, 'owner', NULL)
              ON CONFLICT(id) DO UPDATE SET
                name = excluded.name,
                platform = excluded.platform,
@@ -381,7 +555,9 @@ pub async fn claim(
                paired_at = excluded.paired_at,
                last_seen_at = excluded.last_seen_at,
                account_id = excluded.account_id,
-               service_url = excluded.service_url",
+               service_url = excluded.service_url,
+               role = excluded.role,
+               expires_at = excluded.expires_at",
             rusqlite::params![
                 device_id,
                 device_name,

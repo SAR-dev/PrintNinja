@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { notifySuccess, notifyError } from "@/lib/notify";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,14 +70,19 @@ export function ProfileCard() {
     void load();
   }, [load]);
 
+  // The shell stays mounted across logout→login (AuthGate hides rather
+  // than unmounts), so a mount-time read would show the old session
+  // forever. Reload when a new session starts.
+  useEffect(() => share.onSessionStarted(() => void load()), [load]);
+
   const signOut = async () => {
     setBusy(true);
     try {
       await share.logout();
       setAccount({ kind: "signed_out" });
-      toast.success(t("settings_page.toast_signed_out"));
+      notifySuccess(t("settings_page.toast_signed_out"));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }

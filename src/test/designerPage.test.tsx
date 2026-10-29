@@ -190,13 +190,15 @@ describe("Designer page layout on a phone", () => {
     const tablist = await screen.findByRole("tablist", {
       name: "Designer views",
     });
-    const save = screen.getByTestId("designer-save");
     expect(screen.getByText("Only on this computer")).toBeInTheDocument();
     // TabsList carries data-orientation too, so start from its parent to reach the Tabs root.
     const tabsRoot = tablist.parentElement?.closest("[data-orientation]");
     expect(tabsRoot).not.toBeNull();
     expect(tabsRoot?.contains(tablist)).toBe(true);
-    expect(tabsRoot?.contains(save)).toBe(false);
+    // Phones keep one Save: the sticky shortcut. The header toolbar
+    // lives behind the overflow menu instead.
+    expect(screen.getByRole("button", { name: "More" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(1);
   });
 
   it("starts on the canvas, with its zoom controls, and shows the code editors on the Code tab", async () => {

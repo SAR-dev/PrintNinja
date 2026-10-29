@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
 import { Trash2, Plus } from "lucide-react";
 import { agent } from "@/lib/agent/commands";
 import type {
   PairedDevice,
+  PairingInvite,
   PairingState,
   PeerCapabilities,
   RenderPair,
@@ -27,7 +28,7 @@ import {
   parsePairs,
 } from "@/lib/pairing";
 import { isWebMode, readSetting, writeSetting } from "@/lib/settings";
-import { fetchMe, getShareUserId } from "@/lib/share/client";
+import { fetchMe, getShareUserId, onSessionStarted } from "@/lib/share/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -138,6 +139,12 @@ function PcSection() {
   const [myAccountId, setMyAccountId] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmShare, setConfirmShare] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [invites, setInvites] = useState<PairingInvite[]>([]);
+  const [inviteHours, setInviteHours] = useState("24");
+  const [inviteUses, setInviteUses] = useState("");
+  const [inviteCanPrint, setInviteCanPrint] = useState(true);
+  const [mintedCode, setMintedCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -170,6 +177,11 @@ function PcSection() {
       /* backend unavailable */
     }
     try {
+      setInvites(await agent("list_pairing_invites", {}));
+    } catch {
+      /* old backend without invites */
+    }
+    try {
       setMyAccountId(await getShareUserId());
     } catch {
       /* signed out or backend unavailable */
@@ -181,6 +193,9 @@ function PcSection() {
     void load();
     void loadDevices();
   }, [load, loadDevices]);
+  // Same staleness as ProfileCard: the shell hides rather than unmounts
+  // across logout→login, so re-read the account side on a new session.
+  useEffect(() => onSessionStarted(() => void loadDevices()), [loadDevices]);
   // The server can be started or stopped from the API card above or the
   // Explorer; keep the LAN warning in step with it.
   useApiStatusChanged(load);
@@ -215,7 +230,7 @@ function PcSection() {
           await ensureLanServer();
         } catch (e) {
           // Sharing stays on; the warning below offers a retry.
-          toast.error(describeError(e));
+          notifyError(describeError(e));
         }
       } else {
         setShowPair(false);
@@ -230,7 +245,7 @@ function PcSection() {
       }
       await load();
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -266,13 +281,50 @@ function PcSection() {
     void toggleSharing(true);
   };
 
+  const mintInvite = async () => {
+    setBusy(true);
+    try {
+      const hours = Math.max(1, Math.floor(Number(inviteHours) || 24));
+      const uses =
+        inviteUses.trim() === ""
+          ? null
+          : Math.max(1, Math.floor(Number(inviteUses) || 1));
+      const created = await agent("create_pairing_invite", {
+        expires_in_hours: hours,
+        max_uses: uses,
+        can_print: inviteCanPrint,
+      });
+      setMintedCode(created.code);
+      setInviteHours("24");
+      setInviteUses("");
+      setInviteCanPrint(true);
+      await loadDevices();
+    } catch (e) {
+      notifyError(describeError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revokeInvite = async (id: string) => {
+    setBusy(true);
+    try {
+      await agent("revoke_pairing_invite", { id });
+      await loadDevices();
+    } catch (e) {
+      notifyError(describeError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const enableLan = async () => {
     setBusy(true);
     try {
       await ensureLanServer();
       await load();
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -307,7 +359,7 @@ function PcSection() {
               fresh?.display_name ||
               fresh?.name ||
               t("settings_page.devices_phone_fallback");
-            toast.success(t("settings_page.devices_paired_phone", { name }));
+            notifySuccess(t("settings_page.devices_paired_phone", { name }));
             setShowPair(false);
             setPairing(null);
             prevOpen.current = false;
@@ -325,7 +377,7 @@ function PcSection() {
               }
               return;
             } catch (e) {
-              if (!cancelled) toast.error(describeError(e));
+              if (!cancelled) notifyError(describeError(e));
             }
           }
         }
@@ -359,7 +411,7 @@ function PcSection() {
       }
       setShowPair(true);
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -383,7 +435,7 @@ function PcSection() {
       prevOpen.current = state.open;
       panelOpenedAt.current = Date.now();
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -396,9 +448,9 @@ function PcSection() {
       await loadDevices();
       await load();
       setRemoving(null);
-      toast.success(t("settings_page.devices_removed"));
+      notifySuccess(t("settings_page.devices_removed"));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -411,9 +463,9 @@ function PcSection() {
       setConfirmClear(false);
       await loadDevices();
       await load();
-      toast.success(t("settings_page.devices_cleared"));
+      notifySuccess(t("settings_page.devices_cleared"));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -430,7 +482,7 @@ function PcSection() {
       setRenaming(null);
       setRenameValue("");
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -445,7 +497,7 @@ function PcSection() {
       });
       setDevices((prev) => prev.map((d) => (d.id === id ? updated : d)));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -529,6 +581,19 @@ function PcSection() {
                 {t("settings_page.devices_pair_phone_hide")}
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="devices-invite"
+              disabled={busy}
+              onClick={() => {
+                setMintedCode(null);
+                setShowInvite((v) => !v);
+                if (!showInvite) void loadDevices();
+              }}
+            >
+              {t("settings_page.devices_invite")}
+            </Button>
           </div>
 
           {showPair && (
@@ -574,6 +639,126 @@ function PcSection() {
                 <p className="text-center text-sm text-muted-foreground">
                   {t("settings_page.devices_code_gone")}
                 </p>
+              )}
+            </div>
+          )}
+
+          {showInvite && (
+            <div className="space-y-3 rounded-md border p-3">
+              <p className="text-xs text-muted-foreground">
+                {t("settings_page.devices_invite_hint")}
+              </p>
+              {mintedCode ? (
+                <>
+                  <p
+                    className="text-center font-mono text-4xl font-bold tracking-widest"
+                    data-testid="devices-invite-code"
+                  >
+                    {mintedCode}
+                  </p>
+                  <p className="text-center text-xs text-muted-foreground">
+                    {t("settings_page.devices_invite_code_once")}
+                  </p>
+                  <div className="flex justify-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => setMintedCode(null)}
+                    >
+                      {t("settings_page.devices_invite_another")}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="devices-invite-hours">
+                      {t("settings_page.devices_invite_hours")}
+                    </Label>
+                    <Input
+                      id="devices-invite-hours"
+                      data-testid="devices-invite-hours"
+                      type="number"
+                      min="1"
+                      value={inviteHours}
+                      onChange={(e) => setInviteHours(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="devices-invite-uses">
+                      {t("settings_page.devices_invite_uses")}
+                    </Label>
+                    <Input
+                      id="devices-invite-uses"
+                      data-testid="devices-invite-uses"
+                      type="number"
+                      min="1"
+                      placeholder="∞"
+                      value={inviteUses}
+                      onChange={(e) => setInviteUses(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="devices-invite-can-print"
+                      data-testid="devices-invite-can-print"
+                      checked={inviteCanPrint}
+                      onCheckedChange={setInviteCanPrint}
+                    />
+                    <Label htmlFor="devices-invite-can-print">
+                      {t("settings_page.devices_can_print")}
+                    </Label>
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      size="sm"
+                      data-testid="devices-invite-mint"
+                      disabled={busy}
+                      onClick={() => void mintInvite()}
+                    >
+                      {t("settings_page.devices_invite_mint")}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {invites.length > 0 ? (
+                <ul className="space-y-1">
+                  {invites.map((inv) => (
+                    <li
+                      key={inv.id}
+                      data-testid={`devices-invite-${inv.id}`}
+                      className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs"
+                    >
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        {t("settings_page.devices_invite_expires", {
+                          date: new Date(inv.expires_at).toLocaleString(),
+                        })}{" "}
+                        ·{" "}
+                        {inv.uses_left == null
+                          ? t("settings_page.devices_invite_unlimited")
+                          : t("settings_page.devices_invite_uses_left", {
+                              count: inv.uses_left,
+                            })}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        data-testid={`devices-invite-revoke-${inv.id}`}
+                        disabled={busy}
+                        onClick={() => void revokeInvite(inv.id)}
+                      >
+                        {t("settings_page.devices_invite_revoke")}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                !mintedCode && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings_page.devices_invite_empty")}
+                  </p>
+                )
               )}
             </div>
           )}
@@ -661,7 +846,19 @@ function PcSection() {
                               when: timeAgo(d.last_seen_at, t),
                             })}
                           </span>
-                          {d.account_id ? (
+                          {d.role === "guest" ? (
+                            <span className="mt-1 flex items-center gap-1">
+                              <Badge
+                                variant="secondary"
+                                data-testid={`devices-role-${d.id}`}
+                              >
+                                {t("settings_page.devices_guest")}
+                                {d.expires_at
+                                  ? ` · ${new Date(d.expires_at).toLocaleDateString()}`
+                                  : ""}
+                              </Badge>
+                            </span>
+                          ) : d.account_id ? (
                             <span className="mt-1 flex items-center gap-1">
                               <Badge
                                 variant={
@@ -810,6 +1007,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
       cancelledRef.current = true;
     };
   }, [load]);
+  useEffect(() => onSessionStarted(() => void load()), [load]);
 
   const savePairs = async (next: RenderPair[]) => {
     setPairs(next);
@@ -829,7 +1027,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
       // A bare score badge means nothing to most people; say plainly
       // that the PC answered. The auto-test after pairing stays quiet.
       if (notify) {
-        toast.success(
+        notifySuccess(
           t("settings_page.devices_test_toast_ok", { name: pair.name }),
         );
       }
@@ -840,7 +1038,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
         [pair.id]: { state: "error", message },
       }));
       if (notify) {
-        toast.error(message);
+        notifyError(message);
       }
     }
   };
@@ -853,7 +1051,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
     const { pairs: next, replacedStale } = mergePhonePair(pairs, pair);
     await savePairs(next);
     if (replacedStale || pair.replaced_stale) {
-      toast.info(
+      notifyInfo(
         t("settings_page.devices_replaced_stale", { name: pair.name }),
       );
     }
@@ -883,7 +1081,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
         ...(trimmedAddr ? { host: trimmedAddr } : {}),
       });
       await addPair(pair);
-      toast.success(t("settings_page.devices_paired_ok", { name: pair.name }));
+      notifySuccess(t("settings_page.devices_paired_ok", { name: pair.name }));
       setCode("");
       setAddress("");
       // The pairing gate used to notice this only on its next 2s poll,
@@ -919,7 +1117,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
     const removed = pairs.length - seen.size;
     if (removed > 0) {
       await savePairs([...seen.values()]);
-      toast.success(t("settings_page.devices_dedupe_done", { count: removed }));
+      notifySuccess(t("settings_page.devices_dedupe_done", { count: removed }));
     }
   };
 

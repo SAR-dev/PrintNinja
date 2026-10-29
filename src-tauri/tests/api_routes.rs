@@ -2006,3 +2006,108 @@ async fn lan_token_dies_when_pc_signs_out() {
         StatusCode::UNAUTHORIZED
     );
 }
+
+// ───────────────────────────────────────────────────────────────
+// guest pairs (docs/GUEST_PAIRING.md)
+// ───────────────────────────────────────────────────────────────
+
+/// Insert a guest row directly (the claim path is covered in pairing_api).
+fn seed_guest(db: &Db, token: &str, expires_at: &str) {
+    use sha2::Digest as _;
+    let hash = format!("{:x}", sha2::Sha256::digest(token.as_bytes()));
+    let guard = db.lock().unwrap();
+    guard
+        .connection()
+        .execute(
+            "INSERT INTO paired_devices
+                 (id, name, platform, token_hash, paired_at, last_seen_at,
+                  can_print, account_id, service_url, role, expires_at)
+             VALUES ('guest-1', 'Guest Phone', 'android', ?1,
+                     datetime('now'), datetime('now'),
+                     1, NULL, NULL, 'guest', ?2)
+             ON CONFLICT(id) DO UPDATE SET token_hash = excluded.token_hash,
+                                            expires_at = excluded.expires_at",
+            [&hash, &expires_at.to_string()],
+        )
+        .unwrap();
+}
+
+/// A signed-out PC refuses its owner pairs but keeps honouring guests:
+///
+/// guests were never claimed under an account, so there is nothing to
+/// re-check — only expiry governs them.
+#[tokio::test]
+async fn guest_survives_pc_signout_owner_does_not() {
+    let db = setup();
+    seed_sharing(&db, "owner-token-1");
+    seed_guest(&db, "guest-token-1", "2030-01-01T00:00:00Z");
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute(
+            "DELETE FROM settings WHERE key IN ('share_user_id', 'share_service_url')",
+            [],
+        )
+        .unwrap();
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(30),
+            Some("owner-token-1")
+        )
+        .await,
+        StatusCode::UNAUTHORIZED,
+        "owner pairs die with the session"
+    );
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(30),
+            Some("guest-token-1")
+        )
+        .await,
+        StatusCode::OK,
+        "guest pairs only care about expiry"
+    );
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/capabilities",
+            lan_ip(30),
+            Some("guest-token-1")
+        )
+        .await,
+        StatusCode::OK,
+        "renders too, not just prints"
+    );
+}
+
+/// A past-expiry guest fails both gates like a revocation.
+#[tokio::test]
+async fn expired_guest_is_401() {
+    let db = setup();
+    seed_sharing(&db, "owner-token-2");
+    seed_guest(&db, "guest-token-2", "2020-01-01T00:00:00Z");
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(31),
+            Some("guest-token-2")
+        )
+        .await,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/capabilities",
+            lan_ip(31),
+            Some("guest-token-2")
+        )
+        .await,
+        StatusCode::UNAUTHORIZED
+    );
+}

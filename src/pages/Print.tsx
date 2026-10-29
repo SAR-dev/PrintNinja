@@ -15,7 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Printer, Zap, CheckCircle2, XCircle, ChevronDown } from "lucide-react";
+import {
+  Printer,
+  Zap,
+  CheckCircle2,
+  XCircle,
+  ChevronDown,
+  RefreshCw,
+} from "lucide-react";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { TimingBreakdown } from "@/components/TimingBreakdown";
 import { formatSeconds } from "@/lib/timings";
@@ -27,11 +34,14 @@ import {
   isPrintViaPc,
   listPhonePairs,
   resolvePhonePair,
+  setPrintViaPcDevice,
 } from "@/lib/printViaPc";
 import type { PcPrinterInfo, RenderPair } from "@/lib/agent/types";
 import { cacheNow } from "@/lib/sync/useSyncStatus";
+import { usePcStatus } from "@/lib/shell/usePcStatus";
+import { Link } from "react-router-dom";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
-import { toast } from "sonner";
+import { notifySuccess, notifyError } from "@/lib/notify";
 import { usePrintStore } from "@/lib/store/printStore";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
 import { ensureStarterTemplates } from "@/lib/templates/seedTemplates";
@@ -89,16 +99,29 @@ export function PrintPage() {
   const [printedVia, setPrintedVia] = useState<string | null>(null);
   const keyRef = useRef<string>("");
   const viaPcPair = resolvePhonePair(pairs, viaPcDevice);
+  const { status: pcStatus } = usePcStatus();
+  const pcUnpaired = pcStatus.state === "down" && pcStatus.kind === "unpaired";
 
-  const refreshPcPrinters = async () => {
+  const refreshPcPrinters = async (pairId?: string | null) => {
     try {
-      const r = await fetchPcPrinters(viaPcDevice, true);
+      const r = await fetchPcPrinters(pairId ?? viaPcDevice, true);
       setPcPrinters(r.printers);
       setPcCached(r.cached);
       setPcFailed(false);
     } catch (e) {
       setPcFailed(true);
-      toast.error(describeError(e));
+      notifyError(describeError(e));
+    }
+  };
+
+  // Choosing here resolves the block in place: no trip to Automation.
+  const pickViaPcDevice = async (id: string) => {
+    try {
+      await setPrintViaPcDevice(id);
+      setViaPcDevice(id);
+      await refreshPcPrinters(id);
+    } catch (e) {
+      notifyError(describeError(e));
     }
   };
 
@@ -332,9 +355,9 @@ export function PrintPage() {
   const loadPrinters = async () => {
     try {
       const list = await refreshSystemPrinters();
-      toast.success(t("printers.toast_found_system", { count: list.length }));
+      notifySuccess(t("printers.toast_found_system", { count: list.length }));
     } catch (e) {
-      toast.error(t("settings_page.toast_failed", { error: describeError(e) }));
+      notifyError(t("settings_page.toast_failed", { error: describeError(e) }));
     }
     if (viaPc) {
       await refreshPcPrinters();
@@ -343,15 +366,15 @@ export function PrintPage() {
 
   const handlePrint = async (retry = false) => {
     if (!store.printerId) {
-      toast.error(t("print.blocker_printer"));
+      notifyError(t("print.blocker_printer"));
       return;
     }
     if (!store.templateId) {
-      toast.error(t("print.blocker_template"));
+      notifyError(t("print.blocker_template"));
       return;
     }
     if (store.copies < 1) {
-      toast.error(t("print.blocker_copies"));
+      notifyError(t("print.blocker_copies"));
       return;
     }
     // Print via PC: no local pipeline or transport call from here on.
@@ -414,7 +437,7 @@ export function PrintPage() {
   const handleRemotePrint = async (retry: boolean) => {
     const pair = resolvePhonePair(pairs, viaPcDevice);
     if (!pair) {
-      toast.error(t("print.via_pc_no_pair"));
+      notifyError(t("print.via_pc_no_pair"));
       return;
     }
     store.setStatus("printing");
@@ -466,9 +489,9 @@ export function PrintPage() {
     try {
       await cacheNow();
       setRemoteCode(null);
-      toast.success(t("print.synced_retry"));
+      notifySuccess(t("print.synced_retry"));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     }
   };
 
@@ -500,20 +523,25 @@ export function PrintPage() {
     store.copies >= 1 &&
     store.status !== "printing" &&
     !loading &&
-    (!viaPc || !!viaPcPair);
-  const blocker = !store.printerId
-    ? t("print.blocker_printer")
-    : !store.templateId
-      ? t("print.blocker_template")
-      : store.status === "printing"
-        ? t("print.blocker_running")
-        : store.copies < 1
-          ? t("print.blocker_copies")
-          : viaPc && !viaPcPair
-            ? t("print.via_pc_no_pair")
-            : loading
-              ? t("print.blocker_loading")
-              : "";
+    (!viaPc || !!viaPcPair) &&
+    !pcUnpaired;
+  // An unpaired phone cannot print at all: say so first, with the way
+  // out. Everything else is secondary to re-pairing.
+  const blocker = pcUnpaired
+    ? t("print.pair_again_to_print")
+    : !store.printerId
+      ? t("print.blocker_printer")
+      : !store.templateId
+        ? t("print.blocker_template")
+        : store.status === "printing"
+          ? t("print.blocker_running")
+          : store.copies < 1
+            ? t("print.blocker_copies")
+            : viaPc && !viaPcPair
+              ? t("print.via_pc_no_pair")
+              : loading
+                ? t("print.blocker_loading")
+                : "";
   const field = "space-y-1.5";
 
   // Paper presets: physical sheets. "auto" means the template's design
@@ -609,15 +637,7 @@ export function PrintPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title={t("print.title")} description={t("pages.print")}>
-        {/* With Print via PC the banner below owns refresh; two buttons
-            with the same name confused phone users. */}
-        {!viaPc && (
-          <Button variant="outline" size="sm" onClick={loadPrinters}>
-            {t("print.refresh")}
-          </Button>
-        )}
-      </PageHeader>
+      <PageHeader title={t("print.title")} description={t("pages.print")} />
 
       {/* Print via PC: the job runs on the paired PC's printers, never on
           this phone's transports. */}
@@ -643,9 +663,6 @@ export function PrintPage() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <ExitViaPcButton onExited={() => setViaPc(false)} />
-              <Button variant="outline" size="sm" onClick={refreshPcPrinters}>
-                {t("print.refresh")}
-              </Button>
             </div>
           </div>
         ) : (
@@ -655,29 +672,59 @@ export function PrintPage() {
             className="flex items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-danger"
           >
             <XCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
-            <p className="min-w-0 flex-1 text-sm font-medium">
-              {t("print.via_pc_no_pair")}
-            </p>
-            <ExitViaPcButton onExited={() => setViaPc(false)} />
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="text-sm font-medium">{t("print.via_pc_no_pair")}</p>
+              <p className="text-xs">{t("print.via_pc_choose_hint")}</p>
+              <div className="flex items-center gap-2">
+                <Label
+                  htmlFor="print-via-pc-picker"
+                  className="shrink-0 text-xs"
+                >
+                  {t("settings_page.via_pc_device")}
+                </Label>
+                <Select value="" onValueChange={(v) => void pickViaPcDevice(v)}>
+                  <SelectTrigger
+                    id="print-via-pc-picker"
+                    data-testid="print-via-pc-picker"
+                    aria-label={t("settings_page.via_pc_device")}
+                    className="min-w-0 flex-1"
+                  >
+                    <SelectValue
+                      placeholder={t("settings_page.via_pc_device_placeholder")}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pairs.map((p) => (
+                      <SelectItem
+                        key={p.provider_id || p.id}
+                        value={p.provider_id || p.id}
+                      >
+                        {p.name || p.host}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <ExitViaPcButton onExited={() => setViaPc(false)} />
+              </div>
+            </div>
           </div>
         ))}
 
-      {/* The one place a print's outcome is reported. It is always shown: ready
-          before the first print, then printing, then the result with its timing. */}
+      {/* The one place a print's outcome is reported. Idle is one
+          truncated line; the full card is for results with something
+          to say, so the form starts higher on a phone. */}
       {(store.status === "idle" || store.status === "queued") && (
         <div
           role="status"
-          className="flex items-center gap-3 rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-success"
+          className="flex items-center gap-3 rounded-lg border border-success/30 bg-success-soft px-4 py-2 text-success"
         >
           <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{t("print.ready_title")}</p>
-            <p className="break-words text-xs">
-              {store.printerId
-                ? t("print.ready_detail", { printer: store.printerId })
-                : t("print.ready_empty")}
-            </p>
-          </div>
+          <p className="min-w-0 flex-1 truncate text-sm">
+            {t("print.ready_title")} —{" "}
+            {store.printerId
+              ? t("print.ready_detail", { printer: store.printerId })
+              : t("print.ready_empty")}
+          </p>
         </div>
       )}
       {store.status === "success" && (
@@ -767,7 +814,19 @@ export function PrintPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className={field}>
-                <Label htmlFor="print-printer">{t("print.printer")}</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="print-printer">{t("print.printer")}</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={loadPrinters}
+                    aria-label={t("print.refresh")}
+                    title={t("print.refresh")}
+                  >
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                    {t("print.refresh")}
+                  </Button>
+                </div>
                 <Select
                   value={store.printerId}
                   onValueChange={store.setPrinterId}
@@ -1126,7 +1185,15 @@ export function PrintPage() {
                     id="print-blocker"
                     className="text-xs text-muted-foreground"
                   >
-                    {blocker}
+                    {blocker}{" "}
+                    {pcUnpaired && (
+                      <Link
+                        to="/automation?tab=phones"
+                        className="underline underline-offset-2"
+                      >
+                        {t("shell.pc_pair_again")}
+                      </Link>
+                    )}
                   </p>
                 )}
               </div>
@@ -1285,7 +1352,15 @@ export function PrintPage() {
               id="print-blocker-phone"
               className="mt-1 text-xs text-muted-foreground"
             >
-              {blocker}
+              {blocker}{" "}
+              {pcUnpaired && (
+                <Link
+                  to="/automation?tab=phones"
+                  className="underline underline-offset-2"
+                >
+                  {t("shell.pc_pair_again")}
+                </Link>
+              )}
             </p>
           )}
         </div>

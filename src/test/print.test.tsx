@@ -49,6 +49,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   invoke.mockReset();
+  localStorage.clear();
   vi.mocked(toast.success).mockClear();
   vi.mocked(toast.error).mockClear();
   usePrintStore.setState({
@@ -263,7 +264,8 @@ describe("Print page", () => {
 
   it("shows that the printer is ready before anything is printed", async () => {
     renderPage();
-    expect(await screen.findByText("Printer is ready")).toBeInTheDocument();
+    // One truncated line now, not a two-line card.
+    expect(await screen.findByText(/Printer is ready/)).toBeInTheDocument();
   });
 
   it("reports a finished print in the alert, with its timing, and shows no toast", async () => {
@@ -381,12 +383,59 @@ describe("Print via PC", () => {
     viaPcBackend({ pairs: [] });
     renderPage();
     expect(await screen.findByTestId("print-via-pc-banner")).toHaveTextContent(
-      /Automation/,
+      /Choose which PC/,
     );
     const print = await screen.findByRole("button", { name: /^Print$/ });
     await waitFor(() => expect(print).toBeDisabled());
     fireEvent.click(print);
     expect(invoke).not.toHaveBeenCalledWith("remote_print", expect.anything());
+  });
+
+  it("resolves the block from the banner picker, no Settings trip", async () => {
+    viaPcBackend({
+      pairs: [
+        {
+          id: "pc-1",
+          name: "Studio PC",
+          host: "192.168.1.9",
+          port: 17717,
+          secret: "s",
+          fingerprint: "",
+          provider_id: "pc-1",
+          platform: "linux",
+          paired_at: "",
+          device_id: "phone-1",
+        },
+        {
+          id: "pc-2",
+          name: "Shop PC",
+          host: "192.168.1.10",
+          port: 17717,
+          secret: "s",
+          fingerprint: "",
+          provider_id: "pc-2",
+          platform: "linux",
+          paired_at: "",
+          device_id: "phone-1",
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByTestId("print-via-pc-picker");
+    fireEvent.click(screen.getByTestId("print-via-pc-picker"));
+    fireEvent.click(await screen.findByText("Shop PC"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("set_setting", {
+        key: "print_via_pc_device",
+        value: "pc-2",
+      }),
+    );
+    // The banner flips to the chosen PC; printing unblocks.
+    expect(await screen.findByTestId("print-via-pc-banner")).toHaveTextContent(
+      "Shop PC",
+    );
+    const print = await screen.findByRole("button", { name: /^Print$/ });
+    await waitFor(() => expect(print).toBeEnabled());
   });
 
   it("offers Sync on a stale template and retries with the same key", async () => {
@@ -498,5 +547,46 @@ describe("Print via PC exit", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("print-via-pc-banner")).toBeNull(),
     );
+  });
+});
+
+describe("unpaired phone on the Print page", () => {
+  it("blocks Print with a Pair-again link instead of a generic message", async () => {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "get_setting") {
+        if (args?.key === "render_pairs")
+          return JSON.stringify([
+            {
+              id: "pc-1",
+              name: "Studio PC",
+              host: "192.168.1.9",
+              port: 17717,
+              secret: "s",
+              fingerprint: "",
+            },
+          ]);
+        return null;
+      }
+      if (cmd === "list_printers" || cmd === "enumerate_system_printers")
+        return [{ id: "1", name: "Dock Zebra" }];
+      if (cmd === "peer_capabilities")
+        throw new Error("Studio PC removed this phone. Pair again.");
+      return null;
+    });
+    try {
+      renderPage();
+      const print = await screen.findByRole("button", { name: /^Print$/ });
+      await waitFor(() => expect(print).toBeDisabled());
+      expect(screen.getByText("Pair again to print.")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Pair again" })).toHaveAttribute(
+        "href",
+        "/automation?tab=phones",
+      );
+    } finally {
+      ua.mockRestore();
+    }
   });
 });

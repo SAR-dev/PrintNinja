@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { agent } from "@/lib/agent/commands";
-import { describeError } from "@/lib/errors";
+import { describeError, PEER_REMOVED_RE, rawErrorMessage } from "@/lib/errors";
 import { RENDER_PAIRS_KEY, parsePairs } from "@/lib/pairing";
 import { isAndroid } from "@/lib/platform";
 import { readSetting } from "@/lib/settings";
@@ -23,10 +23,22 @@ import { readSetting } from "@/lib/settings";
 export type PcStatus =
   | { state: "none" }
   | { state: "up"; name: string }
-  | { state: "down"; name: string; reason: string; total: number };
+  | {
+      state: "down";
+      name: string;
+      reason: string;
+      total: number;
+      /** `unpaired` only when every failure is a removal; else `unreachable`. */
+      kind: "unpaired" | "unreachable";
+    };
 
 /** One paired PC's probe result: `error` is null when it answered. */
-export type PcCheck = { name: string; error: string | null };
+export type PcCheck = {
+  name: string;
+  error: string | null;
+  /** Set when `error` is set; meaningless otherwise. */
+  kind: "unpaired" | "unreachable";
+};
 
 /**
  * Fold the probes of every paired PC into one status. One reachable PC is
@@ -38,11 +50,17 @@ export function summarizePcChecks(checks: readonly PcCheck[]): PcStatus {
   const answered = checks.find((c) => c.error === null);
   if (answered) return { state: "up", name: answered.name };
   const first = checks[0];
+  // No answer above means every check failed; unpaired only when every
+  // failure is a removal.
+  const kind = checks.every((c) => c.kind === "unpaired")
+    ? ("unpaired" as const)
+    : ("unreachable" as const);
   return {
     state: "down",
     name: first.name,
     reason: first.error ?? "",
     total: checks.length,
+    kind,
   };
 }
 
@@ -51,11 +69,16 @@ export function summarizePcChecks(checks: readonly PcCheck[]): PcStatus {
  * down, or null when anything answers. The banner mutes per episode —
  * dismissing hides this outage, and any change (a PC recovers, another
  * fails, a new `down` after an `up`) is a new key that shows again.
- * Sorted so probe completion order cannot flip it.
+ * Sorted so probe completion order cannot flip it. An `unpaired` outage
+ * and an `unreachable` one over the same PCs are different keys: muting
+ * one must not mute the other.
  */
 export function episodeKeyFor(checks: readonly PcCheck[]): string | null {
   if (checks.length === 0 || checks.some((c) => c.error === null)) return null;
-  return `down:${[...checks.map((c) => c.name)].sort().join(",")}`;
+  const scope = checks.every((c) => c.kind === "unpaired")
+    ? "unpaired"
+    : "down";
+  return `${scope}:${[...checks.map((c) => c.name)].sort().join(",")}`;
 }
 
 /**
@@ -78,9 +101,14 @@ export async function checkPairedPcs(): Promise<{
           secret: p.secret,
           name: p.name,
         });
-        return { name: p.name, error: null };
+        return { name: p.name, error: null, kind: "unreachable" };
       } catch (e) {
-        return { name: p.name, error: describeError(e) };
+        // Classify the raw backend text, not the translation: a removal
+        // in any language starts life as the Rust string above.
+        const kind = PEER_REMOVED_RE.test(rawErrorMessage(e))
+          ? ("unpaired" as const)
+          : ("unreachable" as const);
+        return { name: p.name, error: describeError(e), kind };
       }
     }),
   );
@@ -110,6 +138,11 @@ export function usePcStatus(): {
   const lastRun = useRef(0);
   const inFlight = useRef(false);
   const mounted = useRef(true);
+  // Skip-the-quiet-poll bookkeeping: while every PC is unpaired, the
+  // 30 s tick only re-reads the (cheap, local) pairs list, and probes
+  // the network only when it changed. A removal cannot heal by waiting.
+  const unpairedRef = useRef(false);
+  const pairsJsonRef = useRef<string | null>(null);
 
   const run = useCallback(async (force: boolean) => {
     if (!isAndroid() || inFlight.current) return;
@@ -121,6 +154,11 @@ export function usePcStatus(): {
       if (mounted.current) {
         setStatus(next.status);
         setEpisodeKey(next.key);
+        unpairedRef.current =
+          next.status.state === "down" && next.status.kind === "unpaired";
+        pairsJsonRef.current = await readSetting(RENDER_PAIRS_KEY).catch(
+          () => null,
+        );
       }
     } catch {
       // Settings unreadable: say nothing rather than guess.
@@ -137,7 +175,18 @@ export function usePcStatus(): {
     mounted.current = true;
     void run(true);
     const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void run(true);
+      if (document.visibilityState !== "visible") return;
+      // Unpaired PCs cannot recover by waiting: skip the network probe
+      // unless the pairs list changed under us (re-pair, removal).
+      if (unpairedRef.current) {
+        void readSetting(RENDER_PAIRS_KEY)
+          .catch(() => null)
+          .then((raw) => {
+            if (raw !== pairsJsonRef.current) void run(true);
+          });
+        return;
+      }
+      void run(true);
     }, PC_POLL_MS);
     const onVisible = () => {
       if (document.visibilityState === "visible") void run(false);
