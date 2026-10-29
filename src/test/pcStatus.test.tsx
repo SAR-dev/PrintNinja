@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import "@/lib/i18n";
@@ -42,6 +42,10 @@ beforeEach(() => {
   storedPairs = [pair("Studio PC")];
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("summarizePcChecks", () => {
   it("says nothing when there is nothing paired", () => {
     expect(summarizePcChecks([])).toEqual({ state: "none" });
@@ -50,8 +54,12 @@ describe("summarizePcChecks", () => {
   it("is up as soon as one PC answers", () => {
     expect(
       summarizePcChecks([
-        { name: "Old PC", error: "Old PC is blocked or unreachable" },
-        { name: "Studio PC", error: null },
+        {
+          name: "Old PC",
+          error: "Old PC is blocked or unreachable",
+          kind: "unreachable",
+        },
+        { name: "Studio PC", error: null, kind: "unreachable" },
       ]),
     ).toEqual({ state: "up", name: "Studio PC" });
   });
@@ -59,24 +67,53 @@ describe("summarizePcChecks", () => {
   it("is down only when every PC failed, and names the first", () => {
     expect(
       summarizePcChecks([
-        { name: "Studio PC", error: "first reason" },
-        { name: "Old PC", error: "second reason" },
+        { name: "Studio PC", error: "first reason", kind: "unreachable" },
+        { name: "Old PC", error: "second reason", kind: "unreachable" },
       ]),
     ).toEqual({
       state: "down",
       name: "Studio PC",
       reason: "first reason",
       total: 2,
+      kind: "unreachable",
     });
   });
 
   it("counts a lone failure as one", () => {
-    expect(summarizePcChecks([{ name: "A", error: "x" }])).toEqual({
+    expect(
+      summarizePcChecks([{ name: "A", error: "x", kind: "unreachable" }]),
+    ).toEqual({
       state: "down",
       name: "A",
       reason: "x",
       total: 1,
+      kind: "unreachable",
     });
+    expect(
+      summarizePcChecks([
+        {
+          name: "A",
+          error: "A removed this phone. Pair again.",
+          kind: "unpaired",
+        },
+      ]),
+    ).toEqual({
+      state: "down",
+      name: "A",
+      reason: "A removed this phone. Pair again.",
+      total: 1,
+      kind: "unpaired",
+    });
+    // Mixed failures read unreachable: something may still recover.
+    const mixed = summarizePcChecks([
+      {
+        name: "A",
+        error: "A removed this phone. Pair again.",
+        kind: "unpaired",
+      },
+      { name: "B", error: "nope", kind: "unreachable" },
+    ]);
+    expect(mixed.state === "down" && mixed.kind).toBe("unreachable");
   });
 });
 
@@ -85,31 +122,38 @@ describe("episodeKeyFor", () => {
     expect(episodeKeyFor([])).toBeNull();
     expect(
       episodeKeyFor([
-        { name: "A", error: "x" },
-        { name: "B", error: null },
+        { name: "A", error: "x", kind: "unreachable" },
+        { name: "B", error: null, kind: "unreachable" },
       ]),
     ).toBeNull();
   });
 
   it("names the failing set, sorted so probe order cannot flip it", () => {
     const key = episodeKeyFor([
-      { name: "Studio PC", error: "x" },
-      { name: "Old PC", error: "y" },
+      { name: "Studio PC", error: "x", kind: "unreachable" },
+      { name: "Old PC", error: "y", kind: "unreachable" },
     ]);
     expect(key).toBe("down:Old PC,Studio PC");
     expect(
       episodeKeyFor([
-        { name: "Old PC", error: "other reason" },
-        { name: "Studio PC", error: "x" },
+        { name: "Old PC", error: "other reason", kind: "unreachable" },
+        { name: "Studio PC", error: "x", kind: "unreachable" },
       ]),
     ).toBe(key);
+    // Same PCs, other scope: muting one must not mute the other.
+    expect(
+      episodeKeyFor([
+        { name: "Studio PC", error: "x", kind: "unpaired" },
+        { name: "Old PC", error: "y", kind: "unpaired" },
+      ]),
+    ).toBe("unpaired:Old PC,Studio PC");
   });
 
   it("changes when the failing set changes", () => {
-    const one = episodeKeyFor([{ name: "A", error: "x" }]);
+    const one = episodeKeyFor([{ name: "A", error: "x", kind: "unreachable" }]);
     const two = episodeKeyFor([
-      { name: "A", error: "x" },
-      { name: "B", error: "y" },
+      { name: "A", error: "x", kind: "unreachable" },
+      { name: "B", error: "y", kind: "unreachable" },
     ]);
     expect(one).not.toBe(two);
   });
@@ -145,6 +189,20 @@ describe("checkPairedPcs", () => {
       expect(status.name).toBe("Studio PC");
       expect(status.reason).toContain("blocked or unreachable");
       expect(status.total).toBe(1);
+      expect(status.kind).toBe("unreachable");
+    }
+  });
+
+  it("classifies a removal as unpaired, whatever the translation", async () => {
+    agentMock.mockRejectedValue({
+      Validation: "Studio PC removed this phone. Pair again.",
+    });
+    const { status, key } = await checkPairedPcs();
+    expect(key).toBe("unpaired:Studio PC");
+    if (status.state === "down") {
+      expect(status.kind).toBe("unpaired");
+    } else {
+      throw new Error("a removed phone must read down");
     }
   });
 });
@@ -176,13 +234,12 @@ describe("PcStatusBanner", () => {
     agentMock.mockRejectedValue({ Validation: BLOCKED });
     view();
     const banner = await screen.findByTestId("pc-down-banner");
-    expect(banner).toHaveTextContent("Can’t reach Studio PC");
-    expect(banner).toHaveTextContent("Prints from this phone will fail");
-    // Single line by default: the detail hides behind the toggle.
+    expect(banner).toHaveTextContent("Can’t reach Studio PC.");
+    // Single line by default: the detail hides behind the title tap.
     expect(banner).not.toHaveTextContent("blocked or unreachable");
   });
 
-  it("reveals the reason behind the details toggle", async () => {
+  it("reveals the reason behind a tap on the title", async () => {
     agentMock.mockRejectedValue({ Validation: BLOCKED });
     view();
     await screen.findByTestId("pc-down-banner");
@@ -204,7 +261,21 @@ describe("PcStatusBanner", () => {
     agentMock.mockRejectedValue({ Validation: BLOCKED });
     view();
     const banner = await screen.findByTestId("pc-down-banner");
-    expect(banner).toHaveTextContent("Can’t reach any of your 2 PCs");
+    expect(banner).toHaveTextContent("Can’t reach 2 PCs.");
+  });
+
+  it("offers Pair again — and no Check again — to a removed phone", async () => {
+    agentMock.mockRejectedValue({
+      Validation: "Studio PC removed this phone. Pair again.",
+    });
+    view();
+    const banner = await screen.findByTestId("pc-down-banner");
+    expect(banner).toHaveTextContent("Studio PC removed this phone.");
+    const again = screen.getByTestId("pc-down-open");
+    expect(again).toHaveTextContent("Pair again");
+    expect(again.getAttribute("href")).toBe("/automation?tab=phones");
+    expect(screen.queryByTestId("pc-down-retry")).toBeNull();
+    expect(screen.queryByTestId("pc-down-details")).toBeNull();
   });
 
   it("dismiss hides this outage, and a remount warns again", async () => {
@@ -240,6 +311,48 @@ describe("PcStatusBanner", () => {
     view();
     await waitFor(() => expect(agentMock).toHaveBeenCalled());
     expect(screen.queryByTestId("pc-down-banner")).not.toBeInTheDocument();
+  });
+
+  it("stops polling the network while unpaired, until the pairs change", async () => {
+    vi.useFakeTimers();
+    try {
+      agentMock.mockRejectedValue({
+        Validation: "Studio PC removed this phone. Pair again.",
+      });
+      view();
+      await vi.waitFor(() =>
+        expect(screen.getByTestId("pc-down-banner")).toBeInTheDocument(),
+      );
+      const probed = () =>
+        agentMock.mock.calls.filter((c) => c[0] === "peer_capabilities").length;
+      expect(probed()).toBe(1);
+      // Two quiet intervals: no new probes while nothing changed.
+      await vi.advanceTimersByTimeAsync(65_000);
+      expect(probed()).toBe(1);
+      // A pairing change (here: a second row) re-arms the probe.
+      storedPairs = [
+        {
+          id: "Studio PC",
+          name: "Studio PC",
+          host: "192.168.1.9",
+          port: 17717,
+          secret: "s3cret",
+          fingerprint: "",
+        },
+        {
+          id: "Old PC",
+          name: "Old PC",
+          host: "192.168.1.10",
+          port: 17717,
+          secret: "s3cret",
+          fingerprint: "",
+        },
+      ];
+      await vi.advanceTimersByTimeAsync(35_000);
+      expect(probed()).toBeGreaterThan(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("never probes on a desktop", async () => {

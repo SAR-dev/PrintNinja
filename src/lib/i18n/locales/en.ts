@@ -127,15 +127,12 @@ const en = {
     share_offline: "Share service unreachable",
     share_signed_out: "Share service: not signed in",
     account_open: "Account: {{handle}}. Open your profile",
-    pc_down_title:
-      "Can’t reach {{name}}. Prints from this phone will fail until it answers.",
-    pc_down_title_plural:
-      "Can’t reach any of your {{count}} PCs. Prints from this phone will fail until one answers.",
-    pc_down_details_show: "Details",
-    pc_down_details_hide: "Hide details",
+    pc_unpaired_title: "{{name}} removed this phone.",
+    pc_unreachable_title: "Can’t reach {{name}}.",
+    pc_unreachable_plural: "Can’t reach {{count}} PCs.",
+    pc_pair_again: "Pair again",
+    pc_check_again: "Check again",
     pc_down_dismiss: "Dismiss this warning until something changes",
-    pc_down_retry: "Check again",
-    pc_down_open: "Devices",
     offline_banner:
       "Working offline — you can view and print the copies cached on this PC. Saving needs the server.",
     sync_drafts: "{{count}} draft(s) not saved to the server",
@@ -342,6 +339,7 @@ const en = {
     finished: "Finished in {{seconds}}.",
     failed_title: "Print failed",
     unknown_error: "Unknown error",
+    pair_again_to_print: "Pair again to print.",
     via_pc_banner: "Printing on {{pc}} — the job runs on its printers.",
     via_pc_cached: "Printer list is cached: the PC is unreachable.",
     via_pc_unreachable:
