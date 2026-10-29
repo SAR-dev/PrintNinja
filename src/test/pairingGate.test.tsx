@@ -2,11 +2,24 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import "@/lib/i18n";
 import { PairingGate } from "@/components/PairingGate";
+import { toast } from "sonner";
+
+function phoneMode() {
+  const ua = vi
+    .spyOn(window.navigator, "userAgent", "get")
+    .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+  (window as any).__TAURI_INTERNALS__ = {}; // leave web mode: real pairing form
+  return () => {
+    (window as any).__TAURI_INTERNALS__ = undefined;
+    ua.mockRestore();
+  };
+}
 
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...a: unknown[]) => invoke(...a),
 }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 // DevicesCard talks to the backend on mount; answer like a fresh
 // install with nothing paired and sharing off.
@@ -171,6 +184,67 @@ describe("PairingGate", () => {
     } finally {
       (window as any).__TAURI_INTERNALS__ = undefined;
       ua.mockRestore();
+    }
+  });
+});
+
+describe("pair Test button", () => {
+  const PAIR = {
+    id: "pc-1",
+    name: "Shop PC",
+    host: "192.168.1.9",
+    port: 17717,
+    secret: "s",
+    fingerprint: "",
+    provider_id: "pc-1",
+    platform: "linux",
+    paired_at: "",
+    device_id: "phone-1",
+  };
+
+  function pairedBackend(caps: unknown) {
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "get_setting") {
+        if (args?.key === "render_pairs") return JSON.stringify([PAIR]);
+        return null;
+      }
+      if (cmd === "peer_capabilities") {
+        if (caps instanceof Error) throw caps;
+        return caps;
+      }
+      return null;
+    });
+  }
+
+  it("announces a reachable PC out loud", async () => {
+    const done = phoneMode();
+    try {
+      pairedBackend({ protocol: 1, can_render: true, score: 800, cores: 8 });
+      render(<PairingGate onPaired={() => {}} />);
+      fireEvent.click(await screen.findByTestId("devices-pair-test-pc-1"));
+      await waitFor(() =>
+        expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
+          expect.stringContaining("Shop PC"),
+        ),
+      );
+    } finally {
+      done();
+    }
+  });
+
+  it("announces an unreachable PC out loud", async () => {
+    const done = phoneMode();
+    try {
+      pairedBackend(new Error("Shop PC is blocked or unreachable"));
+      render(<PairingGate onPaired={() => {}} />);
+      fireEvent.click(await screen.findByTestId("devices-pair-test-pc-1"));
+      await waitFor(() =>
+        expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+          expect.stringContaining("unreachable"),
+        ),
+      );
+    } finally {
+      done();
     }
   });
 });

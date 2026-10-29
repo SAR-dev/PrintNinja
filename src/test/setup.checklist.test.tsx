@@ -178,7 +178,7 @@ describe("Settings → Appearance", () => {
       </MemoryRouter>,
     );
     expect(
-      screen.getByRole("radiogroup", { name: "Density" }),
+      await screen.findByRole("radiogroup", { name: "Density" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Comfortable/ })).toHaveAttribute(
       "aria-checked",
@@ -193,7 +193,9 @@ describe("Settings → Appearance", () => {
         <SettingsPage />
       </MemoryRouter>,
     );
-    const input = screen.getByLabelText("Upload logo file") as HTMLInputElement;
+    const input = (await screen.findByLabelText(
+      "Upload logo file",
+    )) as HTMLInputElement;
     fireEvent.change(input, {
       target: {
         files: [new File(["x"], "logo.pdf", { type: "application/pdf" })],
