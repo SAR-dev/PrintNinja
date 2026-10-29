@@ -224,19 +224,17 @@ impl Default for OpenApiSpec {
                 "/v1/pair/hello": {
                     "get": {
                         "summary": "Pairing discovery hello",
-                        "description": "While a pairing window is open (PC tapped Pair a phone), answers who this PC is so a phone that typed the code can find it. No auth; only answers while a window is open, otherwise 403 like claim.",
+                        "description": "While sharing is on, answers who this PC is so a phone can find it — window open or not, since a guest invite is claimed with no window. `window_open` tells the phone whether an owner code is showing. No auth; the code does that at claim time.",
                         "responses": {
-                            "200": { "description": "`{ protocol, provider_id, name, platform, port }`" },
-                            "403": { "description": "Pairing is not available (sharing disabled or no window open)" },
-                            "410": { "description": "The pairing code expired" },
-                            "429": { "description": "Too many wrong codes; the window is closed" }
+                            "200": { "description": "`{ protocol, provider_id, name, platform, port, window_open }`" },
+                            "403": { "description": "Pairing is not available (sharing disabled or off-LAN caller)" }
                         }
                     }
                 },
                 "/v1/pair/claim": {
                     "post": {
                         "summary": "Claim a pairing code for a per-device token",
-                        "description": "Presents the 8-character code plus this device's id, name and platform. On success mints a per-device token (shown once; the PC stores only its SHA-256) and closes the window. Single use; 5 wrong guesses close the window. Same-account pairing: the phone also sends the `account_id` it is signed in to plus its `service_url`, and the PC refuses a mismatch — both devices must be signed in to the same account on the same server.",
+                        "description": "Presents the 8-character code plus this device's id, name and platform. An owner code needs an open window; a guest invite code redeems with no window, no account. On success mints a per-device token (shown once; the PC stores only its SHA-256) and closes the window. Single use; 5 wrong guesses close the window. Same-account pairing: the phone also sends the `account_id` it is signed in to plus its `service_url`, and the PC refuses a mismatch — both devices must be signed in to the same account on the same server.",
                         "requestBody": {
                             "required": true,
                             "content": {

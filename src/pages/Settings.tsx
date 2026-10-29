@@ -11,6 +11,7 @@ import {
 } from "@/components/BackgroundAndroid";
 import { parseSection, type SettingsSection } from "@/lib/setup/checklist";
 import { agent } from "@/lib/agent/commands";
+import { useFlashField } from "@/lib/hooks/useFlashField";
 import { readSetting, writeSetting } from "@/lib/settings";
 import type { FontRow } from "@/lib/agent/types";
 import { useTranslation } from "react-i18next";
@@ -135,30 +136,9 @@ export function SettingsPage() {
   // Declared up here: the palette effect below already depends on it.
   const [ready, setReady] = useState(false);
 
-  // Palette deep-link (`?section=&field=`): scroll the control into view
-  // and flash it. The ring is temporary — it only orients, the control
-  // itself is unchanged.
-  const field = searchParams.get("field");
-  useEffect(() => {
-    if (!field || !hasSection) return;
-    const el = document.getElementById(field);
-    if (!el) return;
-    if (typeof el.scrollIntoView === "function") {
-      el.scrollIntoView({ block: "center" });
-    }
-    const flash = [
-      "ring-2",
-      "ring-primary",
-      "ring-offset-2",
-      "ring-offset-background",
-      "rounded-md",
-    ];
-    el.classList.add(...flash);
-    const timer = window.setTimeout(() => el.classList.remove(...flash), 2400);
-    return () => window.clearTimeout(timer);
-    // `ready`: the target may not exist until the loading gate lifts —
-    // without it the effect runs once against nothing and never retries.
-  }, [field, hasSection, section, ready]);
+  // Palette deep-link (`?section=&field=`). `ready`: the target may not
+  // exist until the loading gate lifts.
+  useFlashField(searchParams.get("field"), hasSection, [section, ready]);
 
   const [retentionError, setRetentionError] = useState("");
   const [maxError, setMaxError] = useState("");
@@ -815,9 +795,7 @@ export function SettingsPage() {
                           </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Leave empty to hide sharing features (V1 behaviour).
-                          No database credentials are bundled in the app — the
-                          service keeps its own database.
+                          {t("settings_page.share_url_hint")}
                         </p>
                       </div>
 
@@ -934,6 +912,7 @@ export function SettingsPage() {
                       <div className="flex items-center gap-2">
                         <Switch
                           id="block-private"
+                          data-testid="settings-block-private"
                           checked={blockPrivate}
                           onCheckedChange={(v) => {
                             setBlockPrivate(v);

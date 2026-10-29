@@ -57,7 +57,11 @@ export function useApiStatusChanged(refresh: () => void | Promise<void>): void {
     window.addEventListener(API_STATUS_EVENT, run);
     window.addEventListener("focus", run);
     const timer = window.setInterval(tick, POLL_MS);
+    // A server that autostarts just after the window opens would
+    // otherwise wait a full poll before its badge appears.
+    const early = [1500, 4000].map((ms) => window.setTimeout(tick, ms));
     return () => {
+      early.forEach((id) => window.clearTimeout(id));
       window.removeEventListener(API_STATUS_EVENT, run);
       window.removeEventListener("focus", run);
       window.clearInterval(timer);

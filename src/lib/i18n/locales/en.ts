@@ -108,6 +108,7 @@ const en = {
     group_printers: "Printers",
     group_jobs: "Recent jobs",
     group_settings: "Settings",
+    group_automation: "Automation",
     group_actions: "Actions",
     new_template: "New template",
     reprint_last: "Reprint last job",
@@ -145,7 +146,14 @@ const en = {
     sync_failed: "Last refresh failed: {{error}}",
     lan_on: "LAN access is on",
     lan_on_detail:
-      "Anyone on your network can reach the local API. Select to turn it off in Settings.",
+      "Anyone on your network can reach the local API. Select to turn it off in Automation.",
+    api_listening: "API server listening on {{where}}",
+    sharing_on:
+      "This PC is shared with phones. Select to manage it in Automation.",
+    via_pc_on: "Printing through a paired PC. Select to manage it.",
+    private_open: "Private network open",
+    private_open_detail:
+      "Blocking of private IP addresses is off, so data URLs may reach devices on your network. Select to change it.",
   },
   designer: {
     title: "Designer",
@@ -621,6 +629,9 @@ const en = {
     unchecked: "Not checked",
     api: "API",
     lan: "LAN",
+    sharing: "Sharing",
+    via_pc: "Via PC",
+    exposed: "Private network open",
   },
   pages: {
     designer: "Build and edit print templates.",
@@ -638,8 +649,8 @@ const en = {
     section_profile: "Profile",
     section_general: "General",
     section_background: "Background",
-    section_share: "Share",
-    section_data: "Data sources",
+    section_share: "Account & sync",
+    section_data: "Data & network",
     section_retention: "Retention",
     section_diagnostics: "Diagnostics",
     appearance_language: "Language",
@@ -675,8 +686,8 @@ const en = {
     hint_profile: "Who is signed in, password, sign out",
     hint_general: "Name, logo, and density",
     hint_background: "Run when the PC starts",
-    hint_share: "Sync templates across PCs",
-    hint_data: "Where live data may come from",
+    hint_share: "Service account and template sync",
+    hint_data: "Allowed sources and private-network blocking",
     hint_retention: "How long jobs are kept",
     hint_diagnostics: "Export logs for support",
     background_title: "Run in the background",
@@ -735,7 +746,7 @@ const en = {
       "Only paired devices can connect — anyone else on the network gets no answer.",
     api_advanced: "Advanced",
     api_advanced_bind_hint:
-      "Manual bind override. The share switch above sets this automatically.",
+      "Lets other devices on your network reach the API. Turns on by itself when you share this PC with phones.",
     api_share_confirm_title: "Share with paired devices?",
     api_share_confirm_body:
       "Paired phones will be able to print on this PC's printers.",
@@ -756,7 +767,7 @@ const en = {
       "Your phone prints through your PC: the PC prepares every job and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. If the PC is off, asleep or blocked, prints fail until it answers; retry them from History.",
     devices_web_notice:
       "Shared rendering needs the app backend, which the browser preview does not have.",
-    devices_provider_title: "Share this PC with phones",
+    devices_provider_title: "Let phones print through this PC",
     devices_provider_hint:
       "Phones on your Wi-Fi may ask this PC to prepare their PDFs — and, with printing allowed, to print on its printers. The phone's own printers and history stay on the phone.",
     devices_lan_warning:
@@ -891,6 +902,8 @@ const en = {
     allow_all: "Allow all",
     share_title: "Share Service",
     share_url: "Service URL",
+    share_url_hint:
+      "Leave empty to hide sharing features (V1 behaviour). No database credentials are bundled in the app — the service keeps its own database.",
     share_url_example: "https://share.printninja.example",
     share_signin_title: "Sign in to publish",
     share_handle_example: "alice",
@@ -1161,6 +1174,15 @@ const en = {
     server_title: "Local API server",
     open_explorer: "Try the API",
     links_title: "Trusted deep-link sources",
+    status_running: "running",
+    status_disabled: "disabled",
+    port_line: "Port {{port}}",
+    network_title: "Network access",
+    network_domains_link:
+      "Allowed domains and private-IP blocking are in Settings → Data & network.",
+    trusted_empty:
+      "No trusted sources yet — every deep link asks for confirmation.",
+    trusted_remove: "Remove {{src}}",
   },
   explorer: {
     web_notice:

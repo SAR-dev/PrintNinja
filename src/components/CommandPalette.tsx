@@ -8,6 +8,7 @@ import {
   Search,
   Settings2,
   SlidersHorizontal,
+  Workflow,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -17,7 +18,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { NAV_ITEMS } from "@/lib/shell/nav";
+import {
+  AUTOMATION_SEARCH_ENTRIES,
+  AUTOMATION_TAB_ENTRIES,
+} from "@/lib/shell/automationSearch";
 import { SETTING_SEARCH_ENTRIES } from "@/lib/shell/settingsSearch";
+import { isAndroid } from "@/lib/platform";
 import { agent } from "@/lib/agent/commands";
 import type { HistoryJob, PrinterRow } from "@/lib/agent/types";
 import type { SettingsSection } from "@/lib/setup/checklist";
@@ -197,6 +203,63 @@ export function CommandPalette({
                     <span className="flex-1 truncate">{label}</span>
                     <span className="text-xs text-muted-foreground">
                       {sectionLabel}
+                    </span>
+                  </Command.Item>
+                );
+              })}
+            </Command.Group>
+            <Command.Group
+              heading={t("shell.group_automation")}
+              className={GROUP}
+            >
+              {AUTOMATION_TAB_ENTRIES.map((entry) => {
+                const label =
+                  entry.tab === "phones" && isAndroid()
+                    ? t("automation.tab_computer")
+                    : t(entry.labelKey);
+                return (
+                  <Command.Item
+                    key={`automation-tab:${entry.tab}`}
+                    value={`automation ${label}`}
+                    keywords={entry.keywords}
+                    onSelect={() =>
+                      run(() => onNavigate(`/automation?tab=${entry.tab}`))
+                    }
+                    className={ITEM}
+                  >
+                    <Workflow className="h-4 w-4" aria-hidden="true" />
+                    <span className="flex-1">{label}</span>
+                  </Command.Item>
+                );
+              })}
+              {AUTOMATION_SEARCH_ENTRIES.filter(
+                (entry) => !entry.androidOnly || isAndroid(),
+              ).map((entry) => {
+                const label = t(entry.labelKey);
+                const tabLabel = t(
+                  `automation.tab_${entry.tab === "phones" && isAndroid() ? "computer" : entry.tab}`,
+                );
+                return (
+                  <Command.Item
+                    key={`automation:${entry.tab}:${entry.field}`}
+                    value={`automation ${tabLabel} ${label}`}
+                    keywords={entry.keywords}
+                    onSelect={() =>
+                      run(() =>
+                        onNavigate(
+                          `/automation?tab=${entry.tab}&field=${entry.field}`,
+                        ),
+                      )
+                    }
+                    className={ITEM}
+                  >
+                    <SlidersHorizontal
+                      className="h-4 w-4 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="flex-1 truncate">{label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {tabLabel}
                     </span>
                   </Command.Item>
                 );

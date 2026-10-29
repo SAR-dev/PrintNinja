@@ -394,9 +394,10 @@ did the rendering.
 The PC shows a one-time 8-character code, valid for 30 seconds, together
 with its address. Turning sharing on does everything needed in one step,
 including bringing up the local server so phones on the Wi-Fi can reach
-it. The phone types the code; while a window is open the PC answers a
-discovery hello, and the phone otherwise probes its own /24 for it, with
-a typed address as fallback.
+it. The phone types the code; the PC answers a discovery hello whenever
+sharing is on (with a flag for whether a window is open), and the phone
+otherwise probes its own /24 for it, with a typed address as fallback —
+so a guest invite is discoverable with no window open.
 
 Both devices must be signed in to the same account on the same server:
 the claim carries the phone's account id and service URL, the PC

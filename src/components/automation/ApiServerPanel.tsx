@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { notifySuccess, notifyError } from "@/lib/notify";
 import { isAndroidBackground } from "@/components/BackgroundAndroid";
@@ -50,7 +51,7 @@ export function ApiServerPanel({
       const s = await agent("get_api_status", {});
       setApiStatus(s);
       // A running server was started with these values (possibly from
-      // another screen, e.g. Phones → Share this PC), so the inputs show
+      // another screen, e.g. Phones → "Let phones print through this PC"), so the inputs show
       // what is actually live instead of what this page loaded earlier.
       if (s.running) {
         setApiPort(String(s.port));
@@ -123,11 +124,13 @@ export function ApiServerPanel({
             <p className="text-xs text-muted-foreground">
               {apiStatus?.running
                 ? `${apiStatus.address}:${apiStatus.port}`
-                : `Port ${apiPort}`}
+                : t("automation.port_line", { port: apiPort })}
             </p>
           </div>
           <Badge variant={apiStatus?.running ? "success" : "secondary"}>
-            {apiStatus?.running ? "running" : "disabled"}
+            {apiStatus?.running
+              ? t("automation.status_running")
+              : t("automation.status_disabled")}
           </Badge>
         </div>
 
@@ -170,45 +173,57 @@ export function ApiServerPanel({
           )}
         </div>
 
-        <details>
-          <summary className="cursor-pointer text-sm text-muted-foreground">
-            {t("settings_page.api_advanced")}
-          </summary>
-          <div className="space-y-3 pt-3">
-            <div className="flex items-center gap-2">
-              <Switch
-                id="lan-access"
-                checked={lanAccess}
-                disabled={apiStatus?.running}
-                onCheckedChange={(v) => {
-                  setLanAccess(v);
-                  writeSetting("api_lan_access", String(v));
-                }}
-              />
-              <Label htmlFor="lan-access">{t("settings_page.api_lan")}</Label>
-            </div>
-            <p className="-mt-1 text-xs text-muted-foreground">
-              {t("settings_page.api_advanced_bind_hint")}
-            </p>
+        {/* Network exposure and startup sit in plain view: LAN access is the
+            one switch here that raises a red alert in the top bar. */}
+        <section
+          aria-labelledby="api-network-title"
+          className="space-y-3 border-t pt-4"
+        >
+          <h3 id="api-network-title" className="text-sm font-medium">
+            {t("automation.network_title")}
+          </h3>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="lan-access"
+              data-testid="automation-lan-switch"
+              checked={lanAccess}
+              disabled={apiStatus?.running}
+              onCheckedChange={(v) => {
+                setLanAccess(v);
+                writeSetting("api_lan_access", String(v));
+              }}
+            />
+            <Label htmlFor="lan-access">{t("settings_page.api_lan")}</Label>
           </div>
-        </details>
+          <p className="-mt-1 text-xs text-muted-foreground">
+            {t("settings_page.api_advanced_bind_hint")}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            <Link
+              to="/settings?section=data"
+              className="underline underline-offset-2"
+            >
+              {t("automation.network_domains_link")}
+            </Link>
+          </p>
 
-        <div className="flex items-center gap-2">
-          <Switch
-            id="api-autostart"
-            checked={apiAutostart}
-            onCheckedChange={(v) => {
-              setApiAutostart(v);
-              writeSetting("api_autostart", String(v));
-            }}
-          />
-          <Label htmlFor="api-autostart">
-            {t("settings_page.api_autostart")}
-          </Label>
-        </div>
-        <p className="-mt-3 text-xs text-muted-foreground">
-          {t("settings_page.api_autostart_hint")}
-        </p>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="api-autostart"
+              checked={apiAutostart}
+              onCheckedChange={(v) => {
+                setApiAutostart(v);
+                writeSetting("api_autostart", String(v));
+              }}
+            />
+            <Label htmlFor="api-autostart">
+              {t("settings_page.api_autostart")}
+            </Label>
+          </div>
+          <p className="-mt-1 text-xs text-muted-foreground">
+            {t("settings_page.api_autostart_hint")}
+          </p>
+        </section>
 
         <Button variant="outline" onClick={onOpenExplorer}>
           {t("automation.open_explorer")}
