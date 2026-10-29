@@ -1,5 +1,5 @@
 /**
- * Print via PC (Release B §3.5), phone-side settings.
+ * Print via PC (ARCHITECTURE §9), phone-side settings.
  *
  * `print_via_pc` reroutes the print dialog from the local pipeline to
  * the `remote_print` command; `print_via_pc_device` names the PC when

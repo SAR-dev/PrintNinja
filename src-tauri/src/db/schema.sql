@@ -80,17 +80,17 @@ CREATE TABLE IF NOT EXISTS print_jobs (
     -- history, as JSON), written once the job has run. NULL for rows that
     -- never ran or predate it.
     timings_json TEXT,
-    -- Which paired phone asked for this print (Release B §3.4). NULL for
+    -- Which paired phone asked for this print (ARCHITECTURE §9). NULL for
     -- local prints (UI, scripts, tests). Set by `POST /v1/print` from the
     -- authenticated device; the PC's history reads it as "printed for
     -- <phone name>". Revoking the phone NULLs it, keeping the row.
     requested_by_device_id TEXT REFERENCES paired_devices(id) ON DELETE SET NULL,
-    -- The template's `server_revision` that printed (Release B §3.7),
+    -- The template's `server_revision` that printed (ARCHITECTURE §9),
     -- read off the template row when the job opens. NULL for raw-HTML
     -- prints and rows that predate it. History shows exactly which
     -- revision printed.
     template_revision INTEGER,
-    -- Which paired PC printed this job (Release B §3.5): the pair's
+    -- Which paired PC printed this job (ARCHITECTURE §9): the pair's
     -- display name. NULL when printed locally. The phone's history reads
     -- it as "printed by <PC name>".
     printed_by TEXT
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS paired_devices (
     -- templates, jobs). Render-only phones keep the peer routes; those
     -- never consult this flag. A fresh pair can always print.
     can_print INTEGER NOT NULL DEFAULT 1,
-    -- Same-account pairing (Release C §3.6): the account both devices
+    -- Same-account pairing (ARCHITECTURE §9): the account both devices
     -- were signed in to when this pair was claimed. The claim refuses a
     -- mismatch, and later requests re-check against the PC's current
     -- account — a sign-out or switch disables existing pairs. NULL

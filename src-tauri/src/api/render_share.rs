@@ -206,14 +206,14 @@ fn sharing_on(state: &ApiState) -> bool {
 /// What the gate learned about the caller: `None` on loopback (the PC's
 /// own UI and local scripts, which need no device), `Some(id)` for a
 /// paired phone over LAN. `POST /v1/print` reads it to stamp
-/// `requested_by_device_id` on the job row (Release B §3.4).
+/// `requested_by_device_id` on the job row (ARCHITECTURE §9).
 #[derive(Clone, Debug)]
 pub(crate) struct AuthedDevice {
     pub device_id: Option<String>,
 }
 
 /// One hashed lookup answering every gate question at once (Release A
-/// §3.1 plus §3.3 and §3.6): who is this token, may they use the main
+/// ARCHITECTURE §9): who is this token, may they use the main
 /// routes, and which account claimed them? Length-guarded first so a megabyte Authorization header never reaches
 /// the hash. Anything about *why* it fails stays out of the message —
 /// callers answer 401 either way, so a scanner learns nothing.
@@ -258,7 +258,7 @@ pub(crate) fn lookup_device(state: &ApiState, presented: &str) -> Option<DeviceA
 }
 
 /// This PC's own account: the `share_user_id` saved at sign-in plus the
-/// service URL it belongs to (Release C §3.6). `None` while signed out —
+/// service URL it belongs to (ARCHITECTURE §9). `None` while signed out —
 /// and a signed-out PC honours no pair, on any route.
 pub(crate) fn pc_account(conn: &rusqlite::Connection) -> Option<(String, String)> {
     let user: String = conn
@@ -282,8 +282,8 @@ pub(crate) fn pc_account(conn: &rusqlite::Connection) -> Option<(String, String)
 
 /// Whether this pair is still good for `device`: claimed under the PC's
 /// current account, and the PC still signed in to it. A sign-out or an
-/// account switch disables existing pairs — they must be redone (§3.6).
-/// Guest pairs (docs/GUEST_PAIRING.md) skip this entirely: they were
+/// account switch disables existing pairs — they must be redone (ARCHITECTURE §9).
+/// Guest pairs (ARCHITECTURE §9) skip this entirely: they were
 /// never claimed under an account, only expiry governs them (checked
 /// separately). Callers answer the generic 401 either way, so the phone
 /// cannot tell a disabled pair from a revoked one; both mean "pair again".
@@ -330,7 +330,7 @@ pub(crate) fn touch_last_seen(state: &ApiState, presented: &str) {
     }
 }
 
-/// Failed-token attempts remembered per source address (Release A §3.1).
+/// Failed-token attempts remembered per source address (ARCHITECTURE §9).
 /// Process-global like `status::SUPPORT`: the server is one process, and
 /// tests use distinct addresses to stay isolated from each other.
 static AUTH_FAILURES: std::sync::LazyLock<
@@ -448,9 +448,9 @@ pub async fn require_peer_auth(
         note_auth_failure(&addr.ip());
         return unauthorized();
     };
-    // A sign-out or account switch disables the pair (§3.6): generic 401,
+    // A sign-out or account switch disables the pair (ARCHITECTURE §9): generic 401,
     // like a revocation. Renders too — a disabled pair renders nothing.
-    // Expired guests fail the same way (docs/GUEST_PAIRING.md).
+    // Expired guests fail the same way (ARCHITECTURE §9).
     if !pair_unexpired(&device) || !pair_account_current(&state, &device) {
         return unauthorized();
     }
@@ -458,14 +458,14 @@ pub async fn require_peer_auth(
     next.run(req).await
 }
 
-/// Gate for every non-pairing route (Release A §3.1, paired-only LAN).
+/// Gate for every non-pairing route (ARCHITECTURE §9, paired-only LAN).
 ///
 /// Loopback callers (the PC's own UI and local scripts, including the
 /// API explorer's Rust proxy) pass through unchanged. Anything else must
 /// present a paired-device Bearer token; failures answer 401 with the
 /// same generic text whatever the reason, and repeated failures from one
 /// address answer 429. A pair claimed under another account — or after
-/// the PC signed out — answers that same 401 (§3.6). Sharing off refuses
+/// the PC signed out — answers that same 401 (ARCHITECTURE §9). Sharing off refuses
 /// non-loopback with 403, like the peer gate. Pairing introduction
 /// (`/v1/pair/hello`, `/v1/pair/claim`) lives on its own sub-router and
 /// is exempt here — it has its own guards.
@@ -510,14 +510,14 @@ pub async fn require_paired_or_local(
         )
             .into_response();
     }
-    // A sign-out or account switch disables the pair (§3.6): generic 401,
+    // A sign-out or account switch disables the pair (ARCHITECTURE §9): generic 401,
     // like a revocation — the phone pairs again. Expired guests fail the
-    // same way (docs/GUEST_PAIRING.md).
+    // same way (ARCHITECTURE §9).
     if !pair_unexpired(&device) || !pair_account_current(&state, &device) {
         return unauthorized();
     }
     // Stamp the caller's device for handlers: `POST /v1/print` records it
-    // on the job row (Release B §3.4). The touch runs first so no borrow
+    // on the job row (ARCHITECTURE §9). The touch runs first so no borrow
     // of the request is live across the extensions insert.
     touch_last_seen(&state, presented);
     req.extensions_mut().insert(AuthedDevice {

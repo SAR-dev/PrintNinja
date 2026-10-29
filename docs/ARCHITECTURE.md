@@ -456,14 +456,28 @@ sign-out, or an account switch takes effect on the next request.
 
 ### Guests
 
-Owners prove who they are; guests prove they hold a time-boxed invite
-(docs/GUEST_PAIRING.md). The PC mints invite codes (expiry, optional
-max uses, print preset); a guest pairs with the code alone — no
-account, no window. Guest rows carry `role = 'guest'` and the invite
-expiry instead of an account, and both gates refuse them past expiry
-with the same generic 401. The account recheck never applies to
-guests: there is nothing to compare, so only expiry governs. Templates
-stay read-only structurally — the API serves names, never bodies.
+Owners prove who they are; guests prove they hold a time-boxed invite.
+The PC mints invite codes (expiry, optional max uses, print preset); a
+guest pairs with the code alone — no account, no window. Guest rows
+carry `role = 'guest'` and the invite expiry instead of an account,
+and both gates refuse them past expiry with the same generic 401. The
+account recheck never applies to guests: there is nothing to compare,
+so only expiry governs. Templates stay read-only structurally — the API
+serves names, never bodies.
+
+Decided, kept here so the plan file could go:
+
+- Identity: invite code only. The invite *is* the credential (entropy +
+  expiry + max-uses + 5-guess lockout); an account UUID was never doing
+  that work, and guests are the users least able to bear sign-in friction.
+- Scope per invite (render-only or print), stamped onto the fresh row,
+  still togglable per phone afterwards. All templates by name.
+- Defaults: 24 h, multi-use, print allowed; the owner narrows at mint.
+- Expired/exhausted invites answer 410 at claim ("ask for a new one");
+  spent pairs fail like revocations. Re-pairing follows the credential
+  just used (owner window promotes, invite demotes).
+- No per-template grants, no kiosk mode, no auto-merging guest rows by
+  device name (names collide across physical phones).
 
 ### Printing via a PC
 
@@ -497,6 +511,25 @@ Both histories tell the story: the PC's job row carries
 `requested_by_device_id` (shown as "from \<phone\>" until a revocation
 clears it), and the phone writes its own row marked "printed by \<PC\>"
 with the revision that ran.
+
+### Decisions behind this section
+
+Kept here so the plan file could go. All still hold, except sign-in,
+which guest pairing has since narrowed to owners:
+
+- Paired-only LAN, no API keys. Non-paired clients lose access
+  completely; scripts run on the PC itself over loopback.
+- `can_print` defaults true; the PC toggles render-only phones off.
+- No local fallback or override while Print-via-PC is on: unreachable
+  PC or rejected token fails the job with the reason.
+- Same-account owner pairing: the server `User.id` plus service URL,
+  saved on each device at login, checked locally at claim time, works
+  offline. Guests prove a time-boxed invite instead (see Guests above).
+- No backfill or migration support: development phase, reset the
+  database; schema changes go straight into the schema.
+- A phone may use all of the PC's printers; no per-printer switch.
+- Template mismatches are refused, never printed around: match by
+  `server_id` plus `server_revision`, `409` with a Sync prompt.
 
 ### Choosing a PC and asking it
 

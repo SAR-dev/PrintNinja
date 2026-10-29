@@ -1009,7 +1009,7 @@ fn seed_sharing(db: &Db, token: &str) -> String {
         [],
     )
     .unwrap();
-    // This PC is signed in (§3.6): the gate re-checks every LAN token
+    // This PC is signed in (ARCHITECTURE §9): the gate re-checks every LAN token
     // against this account.
     c.execute(
         "INSERT INTO settings (key, value) VALUES
@@ -1281,7 +1281,7 @@ async fn render_serves_pdf_from_a_real_browser() {
 }
 
 // ───────────────────────────────────────────────────────────────
-// paired-only LAN (Release A §3.1): require_paired_or_local
+// paired-only LAN (ARCHITECTURE §9): require_paired_or_local
 // ───────────────────────────────────────────────────────────────
 
 /// GET with an explicit source address and optional bearer, bypassing
@@ -1479,7 +1479,7 @@ async fn render_only_phone_keeps_peer_routes_but_loses_main_routes() {
 }
 
 // ───────────────────────────────────────────────────────────────
-// print-via-PC job attribution + remote limits (Release B §3.4)
+// print-via-PC job attribution + remote limits (ARCHITECTURE §9)
 // ───────────────────────────────────────────────────────────────
 
 /// POST with an explicit source address and optional bearer, like
@@ -1724,7 +1724,7 @@ async fn print_rejects_oversize_data_without_creating_a_job() {
 }
 
 // ───────────────────────────────────────────────────────────────
-// template version check (Release B §3.7)
+// template version check (ARCHITECTURE §9)
 // ───────────────────────────────────────────────────────────────
 
 /// A synced template the version check can resolve: `server_id` is the
@@ -1931,7 +1931,7 @@ async fn missing_client_revision_is_409_missing() {
 }
 
 // ───────────────────────────────────────────────────────────────
-// same-account re-check (Release C §3.6)
+// same-account re-check (ARCHITECTURE §9)
 // ───────────────────────────────────────────────────────────────
 
 /// A PC account switch disables existing pairs on every route: the phone
@@ -2008,7 +2008,7 @@ async fn lan_token_dies_when_pc_signs_out() {
 }
 
 // ───────────────────────────────────────────────────────────────
-// guest pairs (docs/GUEST_PAIRING.md)
+// guest pairs (ARCHITECTURE §9)
 // ───────────────────────────────────────────────────────────────
 
 /// Insert a guest row directly (the claim path is covered in pairing_api).

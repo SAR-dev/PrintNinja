@@ -63,6 +63,9 @@ const en = {
     registering: "Creating account...",
     switch_to_register: "New here? Create an account",
     switch_to_sign_in: "Already have an account? Sign in",
+    continue_as_guest: "Continue as guest",
+    guest_hint:
+      "Pair with a PC over Wi-Fi without an account. Sign in anytime from Settings to use the server.",
     session_expired:
       "Your session ended. Sign in again to keep working. Your edits on this PC are kept.",
     unreachable_inline:
@@ -776,7 +779,7 @@ const en = {
     devices_pair_phone: "Pair a phone",
     devices_pair_phone_hide: "Hide pairing code",
     devices_code_hint:
-      "On the phone: Settings → Shared rendering → type this code. It expires after a short time; a new one appears by itself.",
+      "On the phone: Settings → Shared rendering → type this code. It expires after a short time; a new one appears by itself for a few minutes, then use New code.",
     devices_code_expires: "Expires in {{count}} seconds",
     devices_code_gone:
       "This code is used or expired. Get a new one to keep pairing.",

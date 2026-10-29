@@ -20,6 +20,8 @@ interface SignInScreenProps {
   /** Shown above the form, for example when the session ended. */
   notice?: string;
   onSignedIn: (handle: string) => void;
+  /** Enter without an account: pair over LAN, server features stay signed out. */
+  onGuest: () => void;
 }
 
 // Same rules the server enforces on register.
@@ -30,6 +32,7 @@ export function SignInScreen({
   initialUrl,
   notice,
   onSignedIn,
+  onGuest,
 }: SignInScreenProps) {
   const { t } = useTranslation();
   const { appName, logo } = usePrefs();
@@ -190,6 +193,21 @@ export function SignInScreen({
                 ? t("auth.switch_to_sign_in")
                 : t("auth.switch_to_register")}
             </Button>
+            <div className="space-y-1">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                data-testid="auth-guest"
+                onClick={onGuest}
+                disabled={busy}
+              >
+                {t("auth.continue_as_guest")}
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                {t("auth.guest_hint")}
+              </p>
+            </div>
           </form>
         </CardContent>
       </Card>

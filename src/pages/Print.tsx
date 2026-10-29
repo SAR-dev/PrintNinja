@@ -83,7 +83,7 @@ export function PrintPage() {
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const showPreviewBody = !isPhone || previewOpen;
 
-  // Print via PC (§3.5): when the flag is on, the dialog talks to the
+  // Print via PC (ARCHITECTURE §9): when the flag is on, the dialog talks to the
   // chosen paired PC instead of the local pipeline — no local transport
   // call happens while it is on.
   const [viaPc, setViaPc] = useState(false);
