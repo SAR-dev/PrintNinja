@@ -697,9 +697,14 @@ pub fn find_remote_refs(html: &str, css: &str) -> Option<Vec<String>> {
         "href=\"//",
     ] {
         if lower_html.contains(needle) {
+            // The needle itself is the snippet (7-10 chars by
+            // construction): never slice it. `&needle[..20]` stood here
+            // and panicked on every hit — inside Tauri's WebView2 COM
+            // callback that panic cannot unwind, so the whole app died
+            // instead of reporting a validation error.
             issues.push(format!(
                 "Remote reference in HTML: {} — use data: URIs",
-                &needle[..20]
+                needle
             ));
         }
     }
@@ -1051,6 +1056,64 @@ mod tests {
         ] {
             assert_eq!(sanitize_html(clean), clean, "{clean}");
         }
+    }
+
+    /// Every documented needle must report instead of panic: the
+    /// `src=`/`href=` branch once sliced `&needle[..20]` on 7-10 byte
+    /// needles, and inside Tauri's WebView2 COM callback that panic
+    /// cannot unwind — the whole app died on save instead of showing
+    /// the validation error.
+    #[test]
+    fn every_remote_needle_reports_without_panicking() {
+        // src=/href= needles (HTML only).
+        for needle in [
+            r#"src="http"#,
+            r#"src='http"#,
+            r#"href="http"#,
+            r#"href='http"#,
+            r#"src="//"#,
+            r#"href="//"#,
+        ] {
+            let html = format!("<img {needle}://x.test/y.png\">");
+            let issues = find_remote_refs(&html, "");
+            assert!(
+                issues.is_some(),
+                "{needle} must be reported, not panicked on"
+            );
+        }
+        // url() needles (HTML and CSS).
+        for needle in [
+            r#"url("http"#,
+            r#"url('http"#,
+            "url(http",
+            r#"url("//"#,
+            r#"url('//"#,
+            "url(//",
+        ] {
+            let html = format!("<p style=\"background: {needle}://x.test/bg.png)\">hi</p>");
+            assert!(
+                find_remote_refs(&html, "").is_some(),
+                "{needle} in HTML must be reported"
+            );
+            let css = format!("p{{background:{needle}://x.test/bg.png)}}");
+            assert!(
+                find_remote_refs("", &css).is_some(),
+                "{needle} in CSS must be reported"
+            );
+        }
+        // Case-insensitivity: the user typed SRC="HTTP...".
+        assert!(
+            find_remote_refs(r#"<IMG SRC="HTTP://x.test/y.png">"#, "").is_some(),
+            "uppercase remote src must be reported"
+        );
+        // Clean content still passes.
+        assert_eq!(
+            find_remote_refs(
+                r#"<img src="data:image/png;base64,iVBOR"><a href="/order/1">x</a>"#,
+                "p{background:url(logo.png)}"
+            ),
+            None
+        );
     }
 
     #[test]
