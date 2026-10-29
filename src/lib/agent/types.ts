@@ -335,6 +335,9 @@ export interface PairedDevice {
   platform: string;
   paired_at: string;
   last_seen_at: string;
+  can_print: boolean;
+  /** Account both devices were signed in to at claim time, if any. */
+  account_id: string | null;
 }
 
 /** One paired render provider (stored as JSON in the `render_pairs` setting).

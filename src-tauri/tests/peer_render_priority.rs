@@ -8,9 +8,11 @@
 //! process-wide static, so a guard held here must not be visible to the
 //! parallel provider tests in `api_routes.rs`.
 
+use axum::extract::ConnectInfo;
 use axum::http::{header, Method, Request, StatusCode};
 use printninja_lib::api::render_share::{local_render_busy, LocalRenderGuard};
 use printninja_lib::db::Database;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 
@@ -33,13 +35,28 @@ fn setup_sharing(token: &str) -> Db {
                 [],
             )
             .unwrap();
+        // Signed-in PC (§3.6): the gate re-checks every token against this.
+        guard
+            .connection()
+            .execute(
+                "INSERT INTO settings (key, value) VALUES
+                     ('share_user_id', 'user-1'),
+                     ('share_service_url', 'https://share.test')
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [],
+            )
+            .unwrap();
         guard
             .connection()
             .execute(
                 "INSERT INTO paired_devices
-                     (id, name, display_name, platform, token_hash, paired_at, last_seen_at)
-                 VALUES ('phone-1', 'Test Phone', NULL, 'android', ?1, datetime('now'), datetime('now'))
-                 ON CONFLICT(id) DO UPDATE SET token_hash = excluded.token_hash",
+                     (id, name, display_name, platform, token_hash, paired_at, last_seen_at,
+                      account_id, service_url)
+                 VALUES ('phone-1', 'Test Phone', NULL, 'android', ?1, datetime('now'), datetime('now'),
+                         'user-1', 'https://share.test')
+                 ON CONFLICT(id) DO UPDATE SET token_hash = excluded.token_hash,
+                                                account_id = excluded.account_id,
+                                                service_url = excluded.service_url",
                 [&hash],
             )
             .unwrap();
@@ -48,14 +65,28 @@ fn setup_sharing(token: &str) -> Db {
 }
 
 fn router(db: &Db) -> axum::Router {
-    printninja_lib::api::routes::router_with_state(
+    let inner = printninja_lib::api::routes::router_with_state(
         printninja_lib::api::routes::ApiState::without_window(
             db.clone(),
             Arc::new(printninja_lib::queue::PrintQueue::new()),
             std::env::temp_dir().join(format!("printninja_prio_cache_{}", uuid::Uuid::new_v4())),
         ),
         false,
-    )
+    );
+    // Same as api_routes.rs: in-process requests carry no socket address.
+    axum::Router::new()
+        .merge(inner)
+        .layer(axum::middleware::from_fn(
+            |mut req: Request<axum::body::Body>, next: axum::middleware::Next| async move {
+                if req.extensions().get::<ConnectInfo<SocketAddr>>().is_none() {
+                    req.extensions_mut().insert(ConnectInfo(SocketAddr::new(
+                        IpAddr::V4(Ipv4Addr::LOCALHOST),
+                        50000,
+                    )));
+                }
+                next.run(req).await
+            },
+        ))
 }
 
 fn render_request(secret: &str) -> Request<axum::body::Body> {

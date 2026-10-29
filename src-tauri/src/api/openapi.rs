@@ -77,7 +77,7 @@ impl Default for OpenApiSpec {
                 "/v1/print": {
                     "post": {
                         "summary": "Render a template and print it",
-                        "description": "## Renders, then prints.\n\n`template` is required — the API has no inline HTML body, so there is\nnothing to render without one. `data` is optional. The response reports\nthe real outcome:\n\n* `200` — printed, with the job id and duration.\n* `400` — missing `template`, or a `callback_url` was sent (callbacks are not implemented; poll `GET /v1/jobs/{id}` for the outcome).\n* `404` — printer or template not found, or the template has no current version.\n* `500` — the transport failed (printer offline, unsupported platform, …).\n\nSend `Idempotency-Key` on a retryable request. A replayed key returns\n`200` without printing a second copy.\n\nThis runs the same pipeline as the desktop UI and serialises on the\ntarget printer, so an API job and a UI job cannot interleave on one head.",
+                        "description": "## Renders, then prints.\n\n`template` is required — the API has no inline HTML body, so there is\nnothing to render without one. `data` is optional. The response reports\nthe real outcome:\n\n* `200` — printed, with the job id and duration.\n* `400` — missing `template`, a `callback_url` was sent (callbacks are not implemented; poll `GET /v1/jobs/{id}` for the outcome), `settings.copies` is over the max, or `data` is over the size limit.\n* `404` — printer or template not found, or the template has no current version.\n* `409` — `template_server_id` named a template the PC lacks (`template_missing`) or a revision that differs from the PC's copy (`template_stale`, with both revisions); sync templates, then retry.\n* `500` — the transport failed (printer offline, unsupported platform, …).\n\nSend `Idempotency-Key` on a retryable request. A replayed key returns\n`200` without printing a second copy.\n\nOver LAN the caller's paired-device id is stamped on the job row as\n`requested_by_device_id`, so history shows which phone asked; loopback\ncalls leave it empty.\n\nThis runs the same pipeline as the desktop UI and serialises on the\ntarget printer, so an API job and a UI job cannot interleave on one head.",
                         "parameters": [
                             { "name": "Idempotency-Key", "in": "header", "required": false,
                               "schema": { "type": "string" },
@@ -92,14 +92,16 @@ impl Default for OpenApiSpec {
                                         "required": ["template", "printer"],
                                         "properties": {
                                             "template": { "type": "string", "description": "Template name (case-insensitive)" },
+                                            "template_server_id": { "type": "string", "description": "Synced template identity: resolved by this, never by name, and the revision must match the PC's copy (409 otherwise)" },
+                                            "template_server_revision": { "type": "integer", "description": "Revision the caller holds; required with `template_server_id`" },
                                             "printer": { "type": "string", "description": "Printer name (case-insensitive)" },
-                                            "data": { "type": "object", "description": "Context merged into the template; optional — an empty context prints, like the preview" },
+                                            "data": { "type": "object", "description": "Context merged into the template; optional — an empty context prints, like the preview. Over ~1 MiB is refused; use `data_url` for big payloads" },
                                             "data_url": { "type": "string", "description": "Fetch this URL and use the JSON as `data` instead; `http`/`https` only, public addresses only" },
                                             "test": { "type": "boolean", "default": false },
                                             "settings": {
                                                 "type": "object",
                                                 "properties": {
-                                                    "copies": { "type": "integer", "minimum": 1, "default": 1 },
+                                                    "copies": { "type": "integer", "minimum": 1, "maximum": 100, "default": 1 },
                                                     "orientation": { "type": "string", "enum": ["portrait", "landscape"] },
                                                     "page_range": { "type": "string", "description": "1-based pages, e.g. \"1-3\" or \"1,3,5-7\"; empty means all" },
                                                     "grayscale": { "type": "boolean", "default": false },
@@ -113,7 +115,8 @@ impl Default for OpenApiSpec {
                         },
                         "responses": {
                             "200": { "description": "Printed: `{ job_id, status, duration_ms }`; also the `duplicate` body for a replayed `Idempotency-Key`" },
-                            "400": { "description": "`template` is required, or `callback_url` was sent (not supported)" },                            "404": { "description": "Printer, template, or current version not found" },
+                            "400": { "description": "`template` is required, a `callback_url` was sent (not supported), or a remote-job limit bit (`copies`, `data` size)" },                            "404": { "description": "Printer, template, or current version not found" },
+                            "409": { "description": "`template_missing` or `template_stale`, with a `code` plus the revisions; sync and retry" },
                             "415": { "description": "Wrong or missing `Content-Type`" },
                             "422": { "description": "Malformed JSON, or `printer` missing" },
                             "500": { "description": "The transport failed" }
@@ -130,6 +133,7 @@ impl Default for OpenApiSpec {
                 "/v1/jobs/{id}": {
                     "get": {
                         "summary": "Get job status",
+                        "description": "The record carries `requested_by_device_id`: the paired phone that asked for the print, or null for a local print.",
                         "responses": {
                             "200": { "description": "Job record" },
                             "400": { "description": "`id` is not an integer" },                            "404": { "description": "No such job" }
@@ -232,7 +236,7 @@ impl Default for OpenApiSpec {
                 "/v1/pair/claim": {
                     "post": {
                         "summary": "Claim a pairing code for a per-device token",
-                        "description": "Presents the 8-character code plus this device's id, name and platform. On success mints a per-device token (shown once; the PC stores only its SHA-256) and closes the window. Single use; 5 wrong guesses close the window.",
+                        "description": "Presents the 8-character code plus this device's id, name and platform. On success mints a per-device token (shown once; the PC stores only its SHA-256) and closes the window. Single use; 5 wrong guesses close the window. Same-account pairing: the phone also sends the `account_id` it is signed in to plus its `service_url`, and the PC refuses a mismatch — both devices must be signed in to the same account on the same server.",
                         "requestBody": {
                             "required": true,
                             "content": {
@@ -245,7 +249,9 @@ impl Default for OpenApiSpec {
                                             "code": { "type": "string", "description": "8 characters from ABCDEFGHJKLMNPQRSTUVWXYZ23456789 (dashes and spaces optional)" },
                                             "device_id": { "type": "string", "description": "This phone's stable id (UUID); re-pairing replaces its row" },
                                             "device_name": { "type": "string", "description": "This phone's name" },
-                                            "platform": { "type": "string", "description": "This phone's platform" }
+                                            "platform": { "type": "string", "description": "This phone's platform" },
+                                            "account_id": { "type": "string", "description": "Account this phone is signed in to (server user id); must match the PC's" },
+                                            "service_url": { "type": "string", "description": "Service URL the account belongs to; must match the PC's" }
                                         }
                                     }
                                 }
@@ -253,9 +259,9 @@ impl Default for OpenApiSpec {
                         },
                         "responses": {
                             "200": { "description": "Paired: `{ provider_id, provider_name, provider_platform, port, token, paired_at }`" },
-                            "400": { "description": "Malformed code or body, or unsupported protocol" },
+                            "400": { "description": "Malformed code or body, unsupported protocol, or the phone sent no account (sign in first)" },
                             "401": { "description": "Wrong code (body includes `attempts_left`)" },
-                            "403": { "description": "Pairing is not available (sharing disabled or no window open)" },
+                            "403": { "description": "Pairing is not available (sharing disabled or no window open), the PC is signed out, or the accounts differ (body `code` tells which)" },
                             "410": { "description": "The pairing code expired" },
                             "429": { "description": "Wrong-guess cap hit; the window is closed" }
                         }

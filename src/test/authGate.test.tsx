@@ -18,6 +18,7 @@ import {
 
 const URL_KEY = "printninja-setting:share_service_url";
 const TOKEN_KEY = "printninja-setting:share_session_token";
+const USER_KEY = "printninja-setting:share_user_id";
 const SERVER = "http://server.test";
 
 const tauriInvoke = vi.hoisted(() => ({ fn: vi.fn() }));
@@ -285,6 +286,8 @@ describe("sign-in gate", () => {
     expect(await screen.findByText("The app")).toBeVisible();
     expect(localStorage.getItem(URL_KEY)).toBe(SERVER);
     expect(localStorage.getItem(TOKEN_KEY)).toBe("fresh");
+    // The account id rides along for the same-account pairing check.
+    expect(localStorage.getItem(USER_KEY)).toBe("u1");
     expect(calls.map((c) => c.url)).toEqual([`${SERVER}/v2/auth/login`]);
   });
 
@@ -596,6 +599,7 @@ describe("after sign-in", () => {
   });
 
   it("returns to sign-in after signing out, without the expiry notice", async () => {
+    localStorage.setItem(USER_KEY, "u1");
     await openApp();
     await act(async () => {
       await endSession("signed_out");
@@ -603,6 +607,10 @@ describe("after sign-in", () => {
     expect(await screen.findByLabelText("Password")).toBeInTheDocument();
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByText("The app", { selector: "h1" })).not.toBeVisible();
+    // The pairing account goes with the session: a stale id must not
+    // outlive the sign-out.
+    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem(USER_KEY)).toBeNull();
   });
 
   it("does not treat a network failure on a request as the end of the session", async () => {
