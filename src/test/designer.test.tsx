@@ -592,6 +592,9 @@ describe("CanvasWorkspace", () => {
         screen.getByRole("combobox", { name: "Zoom level" }),
       ).toHaveTextContent("50%"),
     );
+    // Zooming acts on measured pages: wait past the measuring skeleton
+    // (150 ms settle) before asserting on the frame.
+    await screen.findByTitle("Canvas preview");
     expect(pageBox()).toHaveStyle({ transform: "scale(0.5)" });
   });
 
