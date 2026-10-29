@@ -423,7 +423,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
               It sits outside the brand link so the link's visible text
               still matches its accessible name (axe
               label-content-name-mismatch). */}
-          <span className="shrink-0 text-xs text-muted-foreground">
+          {/* Hidden on phones: at 360px every spare pixel keeps the
+              search icon on screen (the release literal must stay in
+              source; tooling reads it there, not in the DOM). */}
+          <span className="hidden shrink-0 text-xs text-muted-foreground md:inline">
             {appVersion ? `v${appVersion}` : "v0.15.3"}
           </span>
         </span>
@@ -440,7 +443,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </kbd>
           </button>
         )}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1 md:gap-2">
           <ApiIndicator />
           {/* Share/sync state stays visible on phones as a compact icon-only
               badge; the word returns from sm up (see StatusBadge compact). */}

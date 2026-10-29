@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const BAR = "#FFFFFF"; // matches the top bar (`card`)
+const BAR = "#F4F7F7"; // matches the phone header background
 const ITEMS = [
   ["android:statusBarColor", BAR],
   ["android:navigationBarColor", BAR],
