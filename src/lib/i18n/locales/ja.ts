@@ -771,6 +771,12 @@ const ja: Translation = {
     devices_testing: "テスト中…",
     devices_test_ok: "スコア {{score}}・{{cores}}コア・{{platform}}",
     devices_test_toast_ok: "{{name}} が応答しました — 印刷可能です。",
+    devices_replaced_stale:
+      "{{name}} の古い登録を置き換えました — PCがリセットされた可能性があります。",
+    devices_dupe_hint:
+      "同じアドレスが複数回ペアリングされています。印刷時に無効な登録が使われる可能性があります。",
+    devices_dedupe: "重複を削除",
+    devices_dedupe_done: "重複した登録を{{count}}件削除しました。",
     devices_remove: "{{name}}を削除",
     devices_phone_hint:
       "スマートフォンはPCを経由して印刷します。PCがすべてのジョブを準備し、電話が印刷するか — PC経由印刷がオンならPC自身のプリンターで印刷します。PCがオフ・スリープ中・ブロックされているときは、応答があるまで印刷は失敗します。履歴から再試行できます。",
