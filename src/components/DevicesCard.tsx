@@ -19,9 +19,10 @@ import {
 } from "@/lib/apiServer";
 import {
   filterPairingInput,
-  formatPairingCode,
-  formatPairingCodeLive,
   isCompletePairingCode,
+  mergePhonePair,
+  duplicatePairGroups,
+  normalizePairHost,
   normalizePairingCode,
   parsePairs,
 } from "@/lib/pairing";
@@ -33,8 +34,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const PAIRS_KEY = "render_pairs";
+
+/** First-enable confirm, once per device (a UI decision, not a setting). */
+const SHARE_CONFIRM_KEY = "printninja-share-confirm-seen";
 
 /** How long the PC panel keeps regenerating an expired code by itself. */
 const PAIRING_AUTO_REGEN_MS = 5 * 60 * 1000;
@@ -125,6 +137,7 @@ function PcSection() {
   const [devices, setDevices] = useState<PairedDevice[]>([]);
   const [myAccountId, setMyAccountId] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmShare, setConfirmShare] = useState(false);
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -221,6 +234,36 @@ function PcSection() {
     } finally {
       setBusy(false);
     }
+  };
+
+  // First enable asks once: this is the only share switch (the server
+  // panel stages nothing), so the confirm lives here.
+  const onShareChange = (v: boolean) => {
+    if (!v) {
+      void toggleSharing(false);
+      return;
+    }
+    let seen = false;
+    try {
+      seen = localStorage.getItem(SHARE_CONFIRM_KEY) === "true";
+    } catch {
+      /* private mode: ask every time */
+    }
+    if (!seen) {
+      setConfirmShare(true);
+      return;
+    }
+    void toggleSharing(true);
+  };
+
+  const confirmShareOn = () => {
+    try {
+      localStorage.setItem(SHARE_CONFIRM_KEY, "true");
+    } catch {
+      /* private mode: the dialog just comes back next time */
+    }
+    setConfirmShare(false);
+    void toggleSharing(true);
   };
 
   const enableLan = async () => {
@@ -419,9 +462,29 @@ function PcSection() {
           data-testid="devices-share-toggle"
           checked={sharing}
           disabled={busy}
-          onCheckedChange={(v) => void toggleSharing(v)}
+          onCheckedChange={(v) => onShareChange(v)}
         />
       </div>
+      <Dialog open={confirmShare} onOpenChange={setConfirmShare}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {t("settings_page.api_share_confirm_title")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("settings_page.api_share_confirm_body")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmShare(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={confirmShareOn}>
+              {t("settings_page.api_share_confirm_ok")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <p className="text-xs text-muted-foreground">
         {t("settings_page.devices_provider_hint")}
       </p>
@@ -783,14 +846,17 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
   };
 
   /** Save a pair (replacing the same PC) and prove it works straight
-   * away, so a bad code shows up now, not at the first print. */
+   * away, so a bad code shows up now, not at the first print. A
+   * reset/reinstalled PC arrives under a new provider id at the same
+   * address: the old entry is replaced and named, not left to fail. */
   const addPair = async (pair: RenderPair) => {
-    const others = pairs.filter((p) => {
-      const sameProvider =
-        pair.provider_id && p.provider_id === pair.provider_id;
-      return !sameProvider && !(p.host === pair.host && p.port === pair.port);
-    });
-    await savePairs([...others, pair]);
+    const { pairs: next, replacedStale } = mergePhonePair(pairs, pair);
+    await savePairs(next);
+    if (replacedStale || pair.replaced_stale) {
+      toast.info(
+        t("settings_page.devices_replaced_stale", { name: pair.name }),
+      );
+    }
     await testPair(pair);
   };
 
@@ -835,6 +901,26 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
 
   const removePair = async (id: string) => {
     await savePairs(pairs.filter((p) => p.id !== id));
+  };
+
+  // Collapse entries sharing one normalized address, keeping the
+  // newest claim per address: pairing once by IP and once by name (or
+  // before/after a PC reset) forks one machine into rows, and the
+  // print dialog may dial the dead one.
+  const dedupePairs = async () => {
+    const seen = new Map<string, RenderPair>();
+    for (const p of pairs) {
+      const k = `${normalizePairHost(p.host)}:${p.port ?? 0}`;
+      const prev = seen.get(k);
+      if (!prev || (p.paired_at ?? "") > (prev.paired_at ?? "")) {
+        seen.set(k, p);
+      }
+    }
+    const removed = pairs.length - seen.size;
+    if (removed > 0) {
+      await savePairs([...seen.values()]);
+      toast.success(t("settings_page.devices_dedupe_done", { count: removed }));
+    }
   };
 
   const complete = isCompletePairingCode(code);
@@ -949,6 +1035,23 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
         })
       )}
 
+      {duplicatePairGroups(pairs).length > 0 && (
+        <div className="flex items-center justify-between gap-2 rounded-md border border-warning/40 p-3">
+          <p className="text-xs text-warning">
+            {t("settings_page.devices_dupe_hint")}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="devices-dedupe"
+            disabled={busy}
+            onClick={() => void dedupePairs()}
+          >
+            {t("settings_page.devices_dedupe")}
+          </Button>
+        </div>
+      )}
+
       <div className="space-y-2 rounded-md border p-3">
         <Label htmlFor="devices-code">
           {t("settings_page.devices_code_entry_label")}
@@ -970,12 +1073,12 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
             id="devices-code"
             ref={codeInputRef}
             data-testid="devices-code-input"
-            placeholder="XYZX-YZZY"
+            placeholder="XXXXXXXX"
             autoComplete="off"
             autoCapitalize="characters"
             spellCheck={false}
             className="font-mono uppercase placeholder:opacity-50"
-            value={formatPairingCodeLive(code)}
+            value={code}
             onChange={(e) => {
               setCode(filterPairingInput(e.target.value));
               setFormError("");
@@ -1000,7 +1103,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
         {code && !complete && (
           <p className="text-xs text-muted-foreground">
             {t("settings_page.devices_code_hint_short", {
-              code: formatPairingCode(code),
+              code,
             })}
           </p>
         )}

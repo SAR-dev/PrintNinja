@@ -146,6 +146,7 @@ fn pair(name: &str, port: u16, secret: &str) -> RenderPair {
         platform: String::new(),
         paired_at: String::new(),
         device_id: String::new(),
+        replaced_stale: false,
     }
 }
 

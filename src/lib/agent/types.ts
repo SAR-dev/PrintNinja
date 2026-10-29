@@ -371,7 +371,7 @@ export interface RenderShareStatus {
  * PC's address for the manual-address fallback. */
 export interface PairingState {
   open: boolean;
-  /** Display form, e.g. `K7QM-4XPD`. Empty when no window is open. */
+  /** The 8-character code to show, e.g. `K7QM4XPD`. Empty when no window is open. */
   code: string;
   expires_in: number;
   host: string;
@@ -413,6 +413,9 @@ export interface RenderPair {
   paired_at?: string;
   /** This phone's id, as the PC has it. */
   device_id?: string;
+  /** True when this claim replaced a differently-identified entry for
+   * the same address (reset/reinstalled PC): announce it. */
+  replaced_stale?: boolean;
 }
 
 /** Provider capability advertisement from `peer_capabilities`. */

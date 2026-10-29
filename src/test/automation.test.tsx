@@ -209,13 +209,15 @@ describe("Automation → Phones and server", () => {
           port: number;
           secret: string;
           fingerprint: string;
+          provider_id: string;
+          paired_at: string;
         }>)
       : null;
   };
 
   const PAIRING = {
     open: true,
-    code: "K7QM-4XPD",
+    code: "K7QM4XPD",
     expires_in: 30,
     host: "192.168.1.9",
     port: 17717,
@@ -381,6 +383,8 @@ describe("Automation → Phones and server", () => {
       try {
         // Sharing off and the API server stopped: the old screen sent
         // the user to a LAN switch elsewhere. Now one toggle does it.
+        // (Confirm seen: the dialog flow itself is covered above.)
+        localStorage.setItem("printninja-share-confirm-seen", "true");
         pcBackend({ enabled: false, lan: false });
         openApi();
         fireEvent.click(await screen.findByTestId("devices-share-toggle"));
@@ -465,7 +469,7 @@ describe("Automation → Phones and server", () => {
         fireEvent.click(pairBtn);
         expect(
           await screen.findByTestId("devices-pairing-code"),
-        ).toHaveTextContent("K7QM-4XPD");
+        ).toHaveTextContent("K7QM4XPD");
         expect(
           screen.getByTestId("devices-pairing-countdown"),
         ).toHaveTextContent(/30/);
@@ -680,15 +684,15 @@ describe("Automation → Phones and server", () => {
     });
   });
 
-  describe("API server share switch", () => {
-    const shareToggle = () =>
-      screen.findByRole("switch", { name: "Share with paired devices" });
+  describe("share switch (one switch, on the phones tab)", () => {
+    const shareToggle = () => screen.findByTestId("devices-share-toggle");
 
     it("writes both keys and warns on first enable after confirm", async () => {
       appMode();
       try {
-        openApi("server");
-        const toggle = await shareToggle();
+        pcBackend({ enabled: false, lan: false });
+        openApi();
+        const toggle = await screen.findByTestId("devices-share-toggle");
         expect(toggle).not.toBeChecked();
         fireEvent.click(toggle);
         // First enable asks once.
@@ -701,9 +705,9 @@ describe("Automation → Phones and server", () => {
         await waitFor(() =>
           expect(savedSetting("api_lan_access")).toBe("true"),
         );
-        expect(
-          await screen.findByText(/Only paired devices can connect/),
-        ).toBeVisible();
+        // The phones tab offers pairing once sharing is live.
+        expect(await screen.findByTestId("devices-pair-phone")).toBeVisible();
+        expect(screen.queryByTestId("devices-lan-enable")).toBeNull();
       } finally {
         webMode();
       }
@@ -713,7 +717,8 @@ describe("Automation → Phones and server", () => {
       appMode();
       try {
         localStorage.setItem("printninja-share-confirm-seen", "true");
-        openApi("server");
+        pcBackend({ enabled: false, lan: false });
+        openApi();
         fireEvent.click(await shareToggle());
         expect(screen.queryByRole("dialog")).toBeNull();
         await waitFor(() =>
@@ -732,7 +737,7 @@ describe("Automation → Phones and server", () => {
     it("cancelling the confirm leaves sharing off", async () => {
       appMode();
       try {
-        openApi("server");
+        openApi();
         fireEvent.click(await shareToggle());
         fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
         await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -889,10 +894,9 @@ describe("Automation → Phones and server", () => {
         const submit = screen.getByTestId("devices-code-submit");
         expect(submit).toBeDisabled();
         // Lowercase, dashes and spaces are accepted; other characters
-        // never reach the field. Displayed uppercased with the hyphen,
-        // like the code on the PC's screen.
+        // never reach the field. Displayed uppercased with no hyphen.
         fireEvent.change(input, { target: { value: "k7qm-4xpd!!01" } });
-        expect(input).toHaveValue("K7QM-4XPD");
+        expect(input).toHaveValue("K7QM4XPD");
         expect(submit).toBeEnabled();
       } finally {
         webMode();
@@ -1105,6 +1109,47 @@ describe("Automation → Phones and server", () => {
       }
     });
 
+    it("collapses duplicate pairs to the newest with one tap", async () => {
+      appMode();
+      try {
+        const dupes = JSON.stringify([
+          {
+            id: "old",
+            name: "Shop PC",
+            host: "192.168.1.9",
+            port: 17717,
+            secret: "old-secret",
+            fingerprint: "",
+            provider_id: "old-id",
+            paired_at: "2026-01-01T00:00:00Z",
+          },
+          {
+            id: "new",
+            name: "Shop PC",
+            host: "192.168.1.9",
+            port: 17717,
+            secret: "new-secret",
+            fingerprint: "",
+            provider_id: "new-id",
+            paired_at: "2026-02-01T00:00:00Z",
+          },
+        ]);
+        phoneBackend({ settings: { render_pairs: dupes } });
+        openApi();
+        await screen.findByTestId("devices-pair-old");
+        await screen.findByTestId("devices-pair-new");
+        fireEvent.click(await screen.findByTestId("devices-dedupe"));
+        await waitFor(() => {
+          const kept = savedPairs();
+          expect(kept).toHaveLength(1);
+          expect(kept![0].provider_id).toBe("new-id");
+        });
+        expect(screen.queryByTestId("devices-dedupe")).toBeNull();
+      } finally {
+        webMode();
+      }
+    });
+
     it("hides the share switch on a phone, server tab included", async () => {
       appMode();
       try {
@@ -1119,13 +1164,13 @@ describe("Automation → Phones and server", () => {
       }
     });
 
-    it("calls the pairs tab Computer on a phone", async () => {
+    it("calls the pairs tab PC on a phone", async () => {
       appMode();
       try {
         phoneBackend();
         openApi();
         expect(
-          await screen.findByRole("tab", { name: "Computer" }),
+          await screen.findByRole("tab", { name: "PC" }),
         ).toBeInTheDocument();
         expect(screen.queryByRole("tab", { name: "Phones" })).toBeNull();
       } finally {

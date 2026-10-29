@@ -436,6 +436,7 @@ pub async fn peer_capabilities(
         platform: String::new(),
         paired_at: String::new(),
         device_id: String::new(),
+        replaced_stale: false,
     };
     crate::api::peer_consume::probe_fresh(&pair)
         .await
@@ -461,6 +462,7 @@ pub async fn peer_render_request(
         platform: String::new(),
         paired_at: String::new(),
         device_id: String::new(),
+        replaced_stale: false,
     };
     let job = crate::api::peer_consume::PeerRenderJob {
         // The caller supplies raw HTML deliberately, but the no-fetch
@@ -626,7 +628,8 @@ fn pairing_status_locked(
                 .checked_sub(now.duration_since(w.opened()))
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
-            (crate::api::pair_code::format_display(w.code()), left, true)
+            // Plain 8 characters, no dash: the display form is the code.
+            (w.code().to_string(), left, true)
         }
         _ => (String::new(), 0, false),
     };
@@ -918,6 +921,46 @@ mod paired_device_tests {
 }
 /// This phone's stable id, minted once: the PC stores it as
 /// `paired_devices.id`, so re-pairing replaces the row.
+/// Normalize a paired host for identity comparison: cosmetic
+/// differences (`PC.local` vs `pc.local`, `[::1]`, a trailing dot) must
+/// not fork one machine into two pairs.
+fn norm_pair_host(host: &str) -> String {
+    host.trim()
+        .trim_matches(|c| c == '[' || c == ']')
+        .trim_end_matches('.')
+        .to_lowercase()
+}
+
+fn pair_addr_key(host: &str, port: u16) -> String {
+    format!("{}:{port}", norm_pair_host(host))
+}
+
+/// Merge a fresh pair into the stored list: the same provider (moved
+/// address) or the same address (reset PC with a new provider id)
+/// replaces. The returned pair carries `replaced_stale` when a
+/// differently-identified entry died — the phone announces that instead
+/// of leaving a dead row to fail mysteriously later.
+fn merge_pair(
+    mut pairs: Vec<crate::api::peer_consume::RenderPair>,
+    mut pair: crate::api::peer_consume::RenderPair,
+) -> (
+    Vec<crate::api::peer_consume::RenderPair>,
+    crate::api::peer_consume::RenderPair,
+) {
+    let key = pair_addr_key(&pair.host, pair.port);
+    let mut replaced_stale = false;
+    pairs.retain(|e| {
+        let same = e.provider_id == pair.provider_id || pair_addr_key(&e.host, e.port) == key;
+        if same && e.provider_id != pair.provider_id {
+            replaced_stale = true;
+        }
+        !same
+    });
+    pair.replaced_stale = replaced_stale;
+    pairs.push(pair.clone());
+    (pairs, pair)
+}
+
 fn phone_device_id(conn: &rusqlite::Connection) -> rusqlite::Result<String> {
     let existing: Option<String> = conn
         .query_row(
@@ -1245,8 +1288,11 @@ pub async fn pair_with_code(
                     platform: reply.provider_platform.clone(),
                     paired_at: reply.paired_at.clone(),
                     device_id: device_id.clone(),
+                    replaced_stale: false,
                 };
-                // Re-pairing the same PC replaces the old row.
+                // Re-pairing the same PC replaces the old row — including
+                // a reset one under a new provider id at the same
+                // address — and the flag tells the phone to say so.
                 let raw: Option<String> = db.lock().ok().and_then(|g| {
                     g.connection()
                         .query_row(
@@ -1256,15 +1302,11 @@ pub async fn pair_with_code(
                         )
                         .ok()
                 });
-                let mut pairs: Vec<crate::api::peer_consume::RenderPair> = raw
+                let pairs: Vec<crate::api::peer_consume::RenderPair> = raw
                     .as_deref()
                     .and_then(|s| serde_json::from_str(s).ok())
                     .unwrap_or_default();
-                pairs.retain(|e| {
-                    e.provider_id != pair.provider_id
-                        && !(e.host == pair.host && e.port == pair.port)
-                });
-                pairs.push(pair.clone());
+                let (pairs, pair) = merge_pair(pairs, pair);
                 if let Ok(guard) = db.lock() {
                     let _ = crate::commands::settings::write_setting(
                         guard.connection(),
@@ -1335,4 +1377,73 @@ pub fn spawn_test_server(port: u16) -> std::io::Result<(tokio::net::TcpListener,
     let listener = tokio::net::TcpListener::from_std(listener)
         .map_err(|e| std::io::Error::other(e.to_string()))?;
     Ok((listener, addr))
+}
+
+#[cfg(test)]
+mod pair_merge_tests {
+    use super::*;
+    use crate::api::peer_consume::RenderPair;
+
+    fn pair(provider: &str, host: &str, port: u16) -> RenderPair {
+        RenderPair {
+            id: provider.into(),
+            name: provider.into(),
+            host: host.into(),
+            port,
+            secret: "s".into(),
+            fingerprint: String::new(),
+            provider_id: provider.into(),
+            platform: String::new(),
+            paired_at: String::new(),
+            device_id: String::new(),
+            replaced_stale: false,
+        }
+    }
+
+    #[test]
+    fn host_normalization_kills_cosmetic_dupes() {
+        assert_eq!(norm_pair_host("  PC.local. "), "pc.local");
+        assert_eq!(norm_pair_host("[::1]"), "::1");
+        assert_eq!(norm_pair_host("192.168.1.9"), "192.168.1.9");
+        assert_eq!(
+            pair_addr_key("PC.LOCAL.", 17717),
+            pair_addr_key("pc.local", 17717)
+        );
+        assert_ne!(
+            pair_addr_key("pc.local", 17717),
+            pair_addr_key("pc.local", 17718)
+        );
+    }
+
+    #[test]
+    fn same_provider_replaces_silently_on_moved_address() {
+        let (pairs, merged) = merge_pair(
+            vec![pair("a", "192.168.1.9", 17717)],
+            pair("a", "192.168.1.20", 17717),
+        );
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].host, "192.168.1.20");
+        assert!(!merged.replaced_stale, "same PC moving is not a reset");
+    }
+
+    #[test]
+    fn same_address_new_provider_replaces_and_says_so() {
+        let (pairs, merged) = merge_pair(
+            vec![pair("old", "192.168.1.9", 17717)],
+            pair("new", "192.168.1.9", 17717),
+        );
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].provider_id, "new");
+        assert!(merged.replaced_stale, "the PC was reset or reinstalled");
+    }
+
+    #[test]
+    fn distinct_pcs_survive() {
+        let (pairs, merged) = merge_pair(
+            vec![pair("a", "192.168.1.9", 17717)],
+            pair("b", "192.168.1.10", 17717),
+        );
+        assert_eq!(pairs.len(), 2);
+        assert!(!merged.replaced_stale);
+    }
 }
