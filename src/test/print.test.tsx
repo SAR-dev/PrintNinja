@@ -423,3 +423,47 @@ describe("Print via PC", () => {
     expect(second.idempotency_key).toBe(first.idempotency_key);
   });
 });
+
+describe("Print via PC failure states", () => {
+  function unreachableBackend() {
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "get_setting") {
+        if (args?.key === "print_via_pc") return "true";
+        if (args?.key === "render_pairs")
+          return JSON.stringify([
+            {
+              id: "pc-1",
+              name: "Studio PC",
+              host: "192.168.1.9",
+              port: 17717,
+              secret: "s",
+              fingerprint: "",
+              provider_id: "pc-1",
+              platform: "linux",
+              paired_at: "",
+              device_id: "phone-1",
+            },
+          ]);
+        return null;
+      }
+      if (cmd === "list_printers" || cmd === "enumerate_system_printers")
+        return [{ id: "1", name: "Dock Zebra" }];
+      if (cmd === "remote_printers")
+        throw new Error("Studio PC is blocked or unreachable");
+      return null;
+    });
+  }
+
+  it("stays quiet on open, notes the dead PC, and shows one refresh", async () => {
+    unreachableBackend();
+    renderPage();
+    expect(await screen.findByTestId("print-via-pc-banner")).toHaveTextContent(
+      /did not answer/,
+    );
+    // The banner owns refresh now; the header button hides while via-PC.
+    expect(
+      screen.getAllByRole("button", { name: "Refresh printers" }),
+    ).toHaveLength(1);
+    expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
+  });
+});

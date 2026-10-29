@@ -136,9 +136,11 @@ test("settings admin: shared-rendering phone pairs by code, tests, removes", asy
   await row.getByRole("button", { name: "Test" }).click();
   await expect(row.getByText(/Score 800/)).toBeVisible();
 
-  // Remove drops the pair.
+  // Remove drops the pair. Scoped to the row: the Test button's
+  // success toast still names the PC for a few seconds, which is
+  // intended — it must not count as the pair surviving.
   await row.getByRole("button", { name: "Remove Studio PC" }).click();
-  await expect(page.getByText("Studio PC")).toBeHidden();
+  await expect(row).toBeHidden();
 });
 
 test("settings admin: shared-rendering manual address is tucked away but works", async ({

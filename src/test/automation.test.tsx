@@ -1105,6 +1105,34 @@ describe("Automation → Phones and server", () => {
       }
     });
 
+    it("hides the share switch on a phone, server tab included", async () => {
+      appMode();
+      try {
+        phoneBackend();
+        openApi("server");
+        // The panel itself renders (Start button proves it); the switch
+        // must not — sharing is a PC offer, not a phone one.
+        await screen.findByRole("button", { name: "Start Server" });
+        expect(screen.queryByTestId("settings-share-paired")).toBeNull();
+      } finally {
+        webMode();
+      }
+    });
+
+    it("calls the pairs tab Computer on a phone", async () => {
+      appMode();
+      try {
+        phoneBackend();
+        openApi();
+        expect(
+          await screen.findByRole("tab", { name: "Computer" }),
+        ).toBeInTheDocument();
+        expect(screen.queryByRole("tab", { name: "Phones" })).toBeNull();
+      } finally {
+        webMode();
+      }
+    });
+
     it("shows the failure on the row when the PC cannot be reached", async () => {
       appMode();
       try {

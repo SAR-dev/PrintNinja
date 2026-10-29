@@ -4,6 +4,7 @@ const ja: Translation = {
   common: {
     save: "保存",
     cancel: "キャンセル",
+    loading: "読み込み中…",
     delete: "削除",
     edit: "編集",
     close: "閉じる",
@@ -352,6 +353,8 @@ const ja: Translation = {
     via_pc_banner:
       "{{pc}}で印刷中 — ジョブはそのPCのプリンターで実行されます。",
     via_pc_cached: "プリンター一覧はキャッシュです。PCに到達できません。",
+    via_pc_unreachable:
+      "PCが応答しません — 電源が入っていて同じWi-Fiに接続されているか確認し、更新してください。",
     via_pc_no_pair: "設定 → 共有で印刷先のPCを選択してください。",
     printed_via: "{{pc}}経由で印刷しました",
     sync_templates: "テンプレートを同期",
@@ -767,6 +770,7 @@ const ja: Translation = {
     devices_test: "テスト",
     devices_testing: "テスト中…",
     devices_test_ok: "スコア {{score}}・{{cores}}コア・{{platform}}",
+    devices_test_toast_ok: "{{name}} が応答しました — 印刷可能です。",
     devices_remove: "{{name}}を削除",
     devices_phone_hint:
       "スマートフォンはPCを経由して印刷します。PCがすべてのジョブを準備し、スマートフォンがプリンターへ送ります。PCがオフ・スリープ中・ブロックされているときは、応答があるまで印刷は失敗します。履歴から再試行できます。",
@@ -1147,6 +1151,7 @@ const ja: Translation = {
     tab_server: "APIサーバー",
     tab_explorer: "APIを試す",
     tab_phones: "スマートフォン",
+    tab_computer: "PC",
     tab_links: "ディープリンク",
     server_title: "ローカルAPIサーバー",
     open_explorer: "APIを試す",

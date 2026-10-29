@@ -753,7 +753,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
     await writeSetting(PAIRS_KEY, JSON.stringify(next));
   };
 
-  const testPair = async (pair: RenderPair) => {
+  const testPair = async (pair: RenderPair, notify = false) => {
     setTests((prev) => ({ ...prev, [pair.id]: { state: "busy" } }));
     try {
       const caps = await agent("peer_capabilities", {
@@ -763,11 +763,22 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
         name: pair.name,
       });
       setTests((prev) => ({ ...prev, [pair.id]: { state: "ok", caps } }));
+      // A bare score badge means nothing to most people; say plainly
+      // that the PC answered. The auto-test after pairing stays quiet.
+      if (notify) {
+        toast.success(
+          t("settings_page.devices_test_toast_ok", { name: pair.name }),
+        );
+      }
     } catch (e) {
+      const message = describeError(e);
       setTests((prev) => ({
         ...prev,
-        [pair.id]: { state: "error", message: describeError(e) },
+        [pair.id]: { state: "error", message },
       }));
+      if (notify) {
+        toast.error(message);
+      }
     }
   };
 
@@ -915,7 +926,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
                   size="sm"
                   data-testid={`devices-pair-test-${pair.id}`}
                   disabled={test.state === "busy"}
-                  onClick={() => void testPair(pair)}
+                  onClick={() => void testPair(pair, true)}
                 >
                   {test.state === "busy"
                     ? t("settings_page.devices_testing")

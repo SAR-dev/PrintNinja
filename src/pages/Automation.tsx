@@ -5,6 +5,7 @@ import { ApiServerPanel } from "@/components/automation/ApiServerPanel";
 import { TrustedSourcesPanel } from "@/components/automation/TrustedSourcesPanel";
 import { DevicesCard } from "@/components/DevicesCard";
 import { PageHeader } from "@/components/PageHeader";
+import { isAndroid } from "@/lib/platform";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiExplorerPanel } from "@/pages/ApiExplorer";
 
@@ -47,7 +48,14 @@ export function AutomationPage() {
   }> = [
     { key: "server", label: t("automation.tab_server"), icon: Server },
     { key: "explorer", label: t("automation.tab_explorer"), icon: Play },
-    { key: "phones", label: t("automation.tab_phones"), icon: Smartphone },
+    // A phone pairs with a computer here; a PC lists its phones.
+    {
+      key: "phones",
+      label: isAndroid()
+        ? t("automation.tab_computer")
+        : t("automation.tab_phones"),
+      icon: Smartphone,
+    },
     { key: "links", label: t("automation.tab_links"), icon: Link2 },
   ];
 

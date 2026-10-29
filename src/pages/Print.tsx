@@ -80,6 +80,10 @@ export function PrintPage() {
   const [viaPcDevice, setViaPcDevice] = useState<string | null>(null);
   const [pcPrinters, setPcPrinters] = useState<PcPrinterInfo[]>([]);
   const [pcCached, setPcCached] = useState(false);
+  // The initial list fetch fails quietly: hammering an unreachable PC
+  // with an error toast on every page open is noise — the banner below
+  // already says the PC did not answer. Manual refreshes still toast.
+  const [pcFailed, setPcFailed] = useState(false);
   const [remoteCode, setRemoteCode] = useState<string | null>(null);
   const [printedVia, setPrintedVia] = useState<string | null>(null);
   const keyRef = useRef<string>("");
@@ -90,7 +94,9 @@ export function PrintPage() {
       const r = await fetchPcPrinters(viaPcDevice, true);
       setPcPrinters(r.printers);
       setPcCached(r.cached);
+      setPcFailed(false);
     } catch (e) {
+      setPcFailed(true);
       toast.error(describeError(e));
     }
   };
@@ -114,9 +120,10 @@ export function PrintPage() {
             if (!cancelled) {
               setPcPrinters(r.printers);
               setPcCached(r.cached);
+              setPcFailed(false);
             }
-          } catch (e) {
-            if (!cancelled) toast.error(describeError(e));
+          } catch {
+            if (!cancelled) setPcFailed(true);
           }
         }
       } catch {
@@ -602,9 +609,13 @@ export function PrintPage() {
   return (
     <div className="space-y-4">
       <PageHeader title={t("print.title")} description={t("pages.print")}>
-        <Button variant="outline" size="sm" onClick={loadPrinters}>
-          {t("print.refresh")}
-        </Button>
+        {/* With Print via PC the banner below owns refresh; two buttons
+            with the same name confused phone users. */}
+        {!viaPc && (
+          <Button variant="outline" size="sm" onClick={loadPrinters}>
+            {t("print.refresh")}
+          </Button>
+        )}
       </PageHeader>
 
       {/* Print via PC: the job runs on the paired PC's printers, never on
@@ -624,6 +635,9 @@ export function PrintPage() {
               </p>
               {pcCached && (
                 <p className="text-xs">{t("print.via_pc_cached")}</p>
+              )}
+              {pcFailed && pcPrinters.length === 0 && (
+                <p className="text-xs">{t("print.via_pc_unreachable")}</p>
               )}
             </div>
             <Button variant="outline" size="sm" onClick={refreshPcPrinters}>
