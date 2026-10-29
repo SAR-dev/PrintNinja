@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { renderTemplate } from "@/lib/render/renderTemplate";
+import { useDesignPageCounts } from "@/lib/hooks/useDesignPageCounts";
 
 interface Props {
   html: string;
@@ -15,7 +17,15 @@ interface Props {
   zoom?: number;
 }
 
-/** The live page: the template rendered with the chosen sample data. */
+/** Space between pages, in screen px: a gap, so a page break reads as one. */
+const PAGE_GAP = 16;
+
+/**
+ * The live page: the template rendered with the chosen sample data.
+ *
+ * The Height is one page. When the content is taller, the rest continues on
+ * further pages of that height, stacked below, exactly as it prints.
+ */
 export function CanvasPane({
   html,
   css,
@@ -26,28 +36,55 @@ export function CanvasPane({
   zoom = 1,
 }: Props) {
   const { t } = useTranslation();
+  const doc = useMemo(
+    () => renderTemplate(html, css, data, compiledCss),
+    [html, css, data, compiledCss],
+  );
+  const [pages] = useDesignPageCounts([doc], width, height);
+  const title = t("designer.canvas_preview");
+
   return (
-    // The outer box takes the scaled size so scrolling matches what is drawn.
-    <div
-      className="relative shrink-0 bg-white shadow-md ring-1 ring-border"
-      style={{ width: width * zoom, height: height * zoom }}
-    >
-      <div
-        style={{
-          width,
-          height,
-          transform: `scale(${zoom})`,
-          transformOrigin: "top left",
-        }}
-      >
-        <iframe
-          srcDoc={renderTemplate(html, css, data, compiledCss)}
-          sandbox=""
-          className="pointer-events-none"
-          title={t("designer.canvas_preview")}
-          style={{ width: "100%", height: "100%", border: 0 }}
-        />
-      </div>
+    <div className="flex shrink-0 flex-col" style={{ gap: PAGE_GAP }}>
+      {Array.from({ length: pages }, (_, k) => (
+        <div key={k} className="flex flex-col gap-1">
+          {/* The outer box takes the scaled size so scrolling matches what is drawn. */}
+          <div
+            className="relative shrink-0 bg-white shadow-md ring-1 ring-border"
+            style={{ width: width * zoom, height: height * zoom }}
+          >
+            <div
+              className="relative overflow-hidden"
+              style={{
+                width,
+                height,
+                transform: `scale(${zoom})`,
+                transformOrigin: "top left",
+              }}
+            >
+              {/* One frame as tall as every page together, moved up to this
+                  page; the box around it shows just the one page. */}
+              <iframe
+                srcDoc={doc}
+                sandbox=""
+                scrolling="no"
+                className="pointer-events-none absolute left-0"
+                title={k === 0 ? title : `${title} ${k + 1}`}
+                style={{
+                  width: "100%",
+                  height: `${pages * 100}%`,
+                  top: `${-k * 100}%`,
+                  border: 0,
+                }}
+              />
+            </div>
+          </div>
+          {pages > 1 && (
+            <span className="text-center text-xs text-muted-foreground">
+              {t("designer.page_n_of", { n: k + 1, total: pages })}
+            </span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

@@ -57,6 +57,18 @@ beforeAll(() => {
     Range.prototype.getBoundingClientRect || (() => new DOMRect());
 });
 
+// jsdom does no layout, so the measured content height is supplied per test:
+// 0 means "could not be measured", which keeps the page to one page.
+const measured = vi.hoisted(() => ({ height: 0 }));
+vi.mock("@/lib/render/paginate", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/render/paginate")>()),
+  measureContentHeightPx: async () => measured.height,
+}));
+
+beforeEach(() => {
+  measured.height = 0;
+});
+
 beforeEach(() => window.localStorage.clear());
 
 describe("DesignerToolbar", () => {
@@ -446,6 +458,42 @@ describe("CanvasPane", () => {
       width: "200px",
       height: "400px",
     });
+  });
+
+  it("shows content taller than the page as further pages, not a scrollbar", async () => {
+    measured.height = 2000; // 756 px pages: 3 of them
+    render(<CanvasPane {...base} data={{}} zoom={0.5} />);
+    await waitFor(() =>
+      expect(screen.getAllByTitle(/Canvas preview/)).toHaveLength(3),
+    );
+    const frames = screen.getAllByTitle(/Canvas preview/);
+    for (const [k, frame] of frames.entries()) {
+      // One frame three pages tall, moved up to page k, inside a one-page box.
+      expect(frame.getAttribute("scrolling")).toBe("no");
+      expect(frame).toHaveStyle({
+        height: "300%",
+        top: `${-k * 100}%`,
+      });
+      expect(frame.parentElement).toHaveStyle({
+        width: "302px",
+        height: "756px",
+      });
+      expect(frame.parentElement?.className).toContain("overflow-hidden");
+      expect(frame.parentElement?.parentElement).toHaveStyle({
+        width: "151px",
+        height: "378px",
+      });
+    }
+    expect(screen.getByText("Page 1 of 3")).toBeTruthy();
+    expect(screen.getByText("Page 3 of 3")).toBeTruthy();
+  });
+
+  it("is one page, with no page label, when the content fits", async () => {
+    measured.height = 500;
+    render(<CanvasPane {...base} data={{}} />);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(screen.getAllByTitle(/Canvas preview/)).toHaveLength(1);
+    expect(screen.queryByText(/Page \d+ of/)).toBeNull();
   });
 });
 
