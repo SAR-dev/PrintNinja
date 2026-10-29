@@ -116,7 +116,7 @@ test("settings admin: shared-rendering phone pairs by code, tests, removes", asy
   await expect(page.getByTestId(testids.devicesCodeInput)).toHaveValue("");
   await page.getByTestId(testids.devicesCodeInput).fill("k7qm-4xpd!!01");
   await expect(page.getByTestId(testids.devicesCodeInput)).toHaveValue(
-    "K7QM4XPD",
+    "K7QM-4XPD",
   );
 
   // The e2e code pairs, and the canned provider proves it straight away.
