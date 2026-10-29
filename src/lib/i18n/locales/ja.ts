@@ -355,7 +355,9 @@ const ja: Translation = {
     via_pc_cached: "プリンター一覧はキャッシュです。PCに到達できません。",
     via_pc_unreachable:
       "PCが応答しません — 電源が入っていて同じWi-Fiに接続されているか確認し、更新してください。",
-    via_pc_no_pair: "自動化 → PCで印刷先のPCを選択してください。",
+    via_pc_no_pair: "印刷先のPCを選択してください。",
+    via_pc_choose_hint:
+      "印刷には1台のPCの指定が必要です — レンダリングは共有できますが、プリンターは共有できません。",
     via_pc_exit: "このスマートフォンのプリンターを使う",
     via_pc_exited:
       "PC経由印刷をオフにしました — このスマートフォンで印刷します。",

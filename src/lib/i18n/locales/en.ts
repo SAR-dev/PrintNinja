@@ -344,7 +344,9 @@ const en = {
     via_pc_cached: "Printer list is cached: the PC is unreachable.",
     via_pc_unreachable:
       "The PC did not answer — check it is on and on the same Wi-Fi, then Refresh.",
-    via_pc_no_pair: "Choose which PC to print on in Automation → PC.",
+    via_pc_no_pair: "Choose which PC to print on.",
+    via_pc_choose_hint:
+      "Printing needs one chosen PC — rendering can share, printers can't.",
     via_pc_exit: "Use my printers",
     via_pc_exited: "Print via PC is off — printing on this phone again.",
     printed_via: "Printed via {{pc}}",

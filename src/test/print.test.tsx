@@ -49,6 +49,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   invoke.mockReset();
+  localStorage.clear();
   vi.mocked(toast.success).mockClear();
   vi.mocked(toast.error).mockClear();
   usePrintStore.setState({
@@ -382,12 +383,59 @@ describe("Print via PC", () => {
     viaPcBackend({ pairs: [] });
     renderPage();
     expect(await screen.findByTestId("print-via-pc-banner")).toHaveTextContent(
-      /Automation/,
+      /Choose which PC/,
     );
     const print = await screen.findByRole("button", { name: /^Print$/ });
     await waitFor(() => expect(print).toBeDisabled());
     fireEvent.click(print);
     expect(invoke).not.toHaveBeenCalledWith("remote_print", expect.anything());
+  });
+
+  it("resolves the block from the banner picker, no Settings trip", async () => {
+    viaPcBackend({
+      pairs: [
+        {
+          id: "pc-1",
+          name: "Studio PC",
+          host: "192.168.1.9",
+          port: 17717,
+          secret: "s",
+          fingerprint: "",
+          provider_id: "pc-1",
+          platform: "linux",
+          paired_at: "",
+          device_id: "phone-1",
+        },
+        {
+          id: "pc-2",
+          name: "Shop PC",
+          host: "192.168.1.10",
+          port: 17717,
+          secret: "s",
+          fingerprint: "",
+          provider_id: "pc-2",
+          platform: "linux",
+          paired_at: "",
+          device_id: "phone-1",
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByTestId("print-via-pc-picker");
+    fireEvent.click(screen.getByTestId("print-via-pc-picker"));
+    fireEvent.click(await screen.findByText("Shop PC"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("set_setting", {
+        key: "print_via_pc_device",
+        value: "pc-2",
+      }),
+    );
+    // The banner flips to the chosen PC; printing unblocks.
+    expect(await screen.findByTestId("print-via-pc-banner")).toHaveTextContent(
+      "Shop PC",
+    );
+    const print = await screen.findByRole("button", { name: /^Print$/ });
+    await waitFor(() => expect(print).toBeEnabled());
   });
 
   it("offers Sync on a stale template and retries with the same key", async () => {
