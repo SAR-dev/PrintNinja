@@ -454,6 +454,17 @@ default, toggled per phone on the PC). Render-only phones keep the
 render routes; every main route refuses them with 403. A removal, a
 sign-out, or an account switch takes effect on the next request.
 
+### Guests
+
+Owners prove who they are; guests prove they hold a time-boxed invite
+(docs/GUEST_PAIRING.md). The PC mints invite codes (expiry, optional
+max uses, print preset); a guest pairs with the code alone — no
+account, no window. Guest rows carry `role = 'guest'` and the invite
+expiry instead of an account, and both gates refuse them past expiry
+with the same generic 401. The account recheck never applies to
+guests: there is nothing to compare, so only expiry governs. Templates
+stay read-only structurally — the API serves names, never bodies.
+
 ### Printing via a PC
 
 Rendering borrows the PC's engine; printing via a PC borrows its

@@ -1,7 +1,8 @@
 # Guest pairing (invite codes)
 
-Status: design decided, not implemented.
-Branch: `feat/guest-pairing`.
+Status: implemented on `feat/guest-pairing` (unmerged at write time).
+Kept as the design record; behavior lives in the code and
+`docs/ARCHITECTURE.md` §9.
 
 ## Why
 
