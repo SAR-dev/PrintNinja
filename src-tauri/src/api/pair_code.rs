@@ -211,7 +211,7 @@ mod pair_code_tests {
         let mut w = PairingWindow::new("K7QM4XPD".into(), start);
         assert!(w
             .claim(
-                "k7qm-4xpd",
+                "k7qm4xpd",
                 start + Duration::from_secs(DEFAULT_TTL_SECS - 1)
             )
             .is_ok());
