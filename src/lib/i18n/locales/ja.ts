@@ -129,15 +129,12 @@ const ja: Translation = {
     share_offline: "共有サービスに接続できません",
     share_signed_out: "共有サービス: サインインしていません",
     account_open: "アカウント: {{handle}}。プロフィールを開く",
-    pc_down_title:
-      "{{name}}に接続できません。応答があるまで、このスマートフォンからの印刷は失敗します。",
-    pc_down_title_plural:
-      "ペアリング済みのPC（{{count}}台）のいずれにも接続できません。応答があるまで、このスマートフォンからの印刷は失敗します。",
-    pc_down_details_show: "詳細を表示",
-    pc_down_details_hide: "詳細を隠す",
     pc_down_dismiss: "状況が変わるまでこの警告を閉じる",
-    pc_down_retry: "再確認",
-    pc_down_open: "デバイス",
+    pc_unpaired_title: "{{name}} がこのスマートフォンを削除しました。",
+    pc_unreachable_title: "{{name}} に到達できません。",
+    pc_unreachable_plural: "{{count}}台のPCに到達できません。",
+    pc_pair_again: "再ペアリング",
+    pc_check_again: "再確認",
     offline_banner:
       "オフラインで作業中です。このPCにキャッシュされたコピーの表示と印刷はできますが、保存にはサーバーが必要です。",
     sync_drafts: "サーバーに保存されていない下書きが{{count}}件あります",
@@ -352,6 +349,7 @@ const ja: Translation = {
     finished: "{{seconds}}で完了しました。",
     failed_title: "印刷に失敗しました",
     unknown_error: "不明なエラー",
+    pair_again_to_print: "印刷するには再ペアリングしてください。",
     via_pc_banner:
       "{{pc}}で印刷中 — ジョブはそのPCのプリンターで実行されます。",
     via_pc_cached: "プリンター一覧はキャッシュです。PCに到達できません。",

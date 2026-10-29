@@ -500,3 +500,44 @@ describe("Print via PC exit", () => {
     );
   });
 });
+
+describe("unpaired phone on the Print page", () => {
+  it("blocks Print with a Pair-again link instead of a generic message", async () => {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "get_setting") {
+        if (args?.key === "render_pairs")
+          return JSON.stringify([
+            {
+              id: "pc-1",
+              name: "Studio PC",
+              host: "192.168.1.9",
+              port: 17717,
+              secret: "s",
+              fingerprint: "",
+            },
+          ]);
+        return null;
+      }
+      if (cmd === "list_printers" || cmd === "enumerate_system_printers")
+        return [{ id: "1", name: "Dock Zebra" }];
+      if (cmd === "peer_capabilities")
+        throw new Error("Studio PC removed this phone. Pair again.");
+      return null;
+    });
+    try {
+      renderPage();
+      const print = await screen.findByRole("button", { name: /^Print$/ });
+      await waitFor(() => expect(print).toBeDisabled());
+      expect(screen.getByText("Pair again to print.")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Pair again" })).toHaveAttribute(
+        "href",
+        "/automation?tab=phones",
+      );
+    } finally {
+      ua.mockRestore();
+    }
+  });
+});

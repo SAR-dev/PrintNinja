@@ -30,6 +30,8 @@ import {
 } from "@/lib/printViaPc";
 import type { PcPrinterInfo, RenderPair } from "@/lib/agent/types";
 import { cacheNow } from "@/lib/sync/useSyncStatus";
+import { usePcStatus } from "@/lib/shell/usePcStatus";
+import { Link } from "react-router-dom";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { toast } from "sonner";
 import { usePrintStore } from "@/lib/store/printStore";
@@ -89,6 +91,8 @@ export function PrintPage() {
   const [printedVia, setPrintedVia] = useState<string | null>(null);
   const keyRef = useRef<string>("");
   const viaPcPair = resolvePhonePair(pairs, viaPcDevice);
+  const { status: pcStatus } = usePcStatus();
+  const pcUnpaired = pcStatus.state === "down" && pcStatus.kind === "unpaired";
 
   const refreshPcPrinters = async () => {
     try {
@@ -500,20 +504,25 @@ export function PrintPage() {
     store.copies >= 1 &&
     store.status !== "printing" &&
     !loading &&
-    (!viaPc || !!viaPcPair);
-  const blocker = !store.printerId
-    ? t("print.blocker_printer")
-    : !store.templateId
-      ? t("print.blocker_template")
-      : store.status === "printing"
-        ? t("print.blocker_running")
-        : store.copies < 1
-          ? t("print.blocker_copies")
-          : viaPc && !viaPcPair
-            ? t("print.via_pc_no_pair")
-            : loading
-              ? t("print.blocker_loading")
-              : "";
+    (!viaPc || !!viaPcPair) &&
+    !pcUnpaired;
+  // An unpaired phone cannot print at all: say so first, with the way
+  // out. Everything else is secondary to re-pairing.
+  const blocker = pcUnpaired
+    ? t("print.pair_again_to_print")
+    : !store.printerId
+      ? t("print.blocker_printer")
+      : !store.templateId
+        ? t("print.blocker_template")
+        : store.status === "printing"
+          ? t("print.blocker_running")
+          : store.copies < 1
+            ? t("print.blocker_copies")
+            : viaPc && !viaPcPair
+              ? t("print.via_pc_no_pair")
+              : loading
+                ? t("print.blocker_loading")
+                : "";
   const field = "space-y-1.5";
 
   // Paper presets: physical sheets. "auto" means the template's design
@@ -1126,7 +1135,15 @@ export function PrintPage() {
                     id="print-blocker"
                     className="text-xs text-muted-foreground"
                   >
-                    {blocker}
+                    {blocker}{" "}
+                    {pcUnpaired && (
+                      <Link
+                        to="/automation?tab=phones"
+                        className="underline underline-offset-2"
+                      >
+                        {t("shell.pc_pair_again")}
+                      </Link>
+                    )}
                   </p>
                 )}
               </div>
@@ -1285,7 +1302,15 @@ export function PrintPage() {
               id="print-blocker-phone"
               className="mt-1 text-xs text-muted-foreground"
             >
-              {blocker}
+              {blocker}{" "}
+              {pcUnpaired && (
+                <Link
+                  to="/automation?tab=phones"
+                  className="underline underline-offset-2"
+                >
+                  {t("shell.pc_pair_again")}
+                </Link>
+              )}
             </p>
           )}
         </div>
