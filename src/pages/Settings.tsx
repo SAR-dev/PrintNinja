@@ -60,6 +60,12 @@ const SECTION_META: Array<{
   summaryKey: string;
 }> = [
   {
+    key: "general",
+    icon: Type,
+    labelKey: "section_general",
+    summaryKey: "hint_general",
+  },
+  {
     key: "setup",
     icon: ListChecks,
     labelKey: "section_setup",
@@ -70,12 +76,6 @@ const SECTION_META: Array<{
     icon: UserRound,
     labelKey: "section_profile",
     summaryKey: "hint_profile",
-  },
-  {
-    key: "general",
-    icon: Type,
-    labelKey: "section_general",
-    summaryKey: "hint_general",
   },
   {
     key: "background",
