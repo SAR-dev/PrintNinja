@@ -28,6 +28,7 @@ vi.mock("@/lib/share/client", () => ({
   register: async () => ({}),
   login: async () => ({}),
   logout: async () => {},
+  onSessionStarted: () => () => {},
 }));
 
 import { AutomationPage } from "@/pages/Automation";
