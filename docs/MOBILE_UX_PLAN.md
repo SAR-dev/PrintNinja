@@ -1,10 +1,7 @@
 # Mobile UX, unpaired banner and toast plan
 
-Status: all four phases implemented on `develop` (unreleased):
-Phase 1 (top bar, sort default, theme, nav labels), Phase 2 (unpaired
-vs unreachable strip), Phase 3 (notify funnel, tokens, actions),
-Phase 4 (Designer, Print and Printers layouts). Kept as the design
-record; behavior now lives in the code and `docs/UI_GUIDE.md`.
+Status: all four phases implemented and released in v0.15.4. Kept as
+the design record; behavior now lives in the code and `docs/UI_GUIDE.md`.
 
 Based on a read of the code and the committed phone screenshots in
 `e2e/tests/mobile.mobile.e2e.ts-snapshots/` (Pixel 7 and 360px). The app was not run.
