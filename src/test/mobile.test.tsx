@@ -175,6 +175,45 @@ describe("phone shell", () => {
       expect(screen.getByTestId("where")).toHaveTextContent("/"),
     );
   });
+
+  it("hides printers and Designer while Print via PC is on", async () => {
+    window.matchMedia = phoneMatchMedia as typeof window.matchMedia;
+    invoke.mockReset();
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "get_setting" && args?.key === "print_via_pc") return "true";
+      return null;
+    });
+    render(
+      <MemoryRouter initialEntries={["/history"]}>
+        <Layout>
+          <Routes>
+            <Route
+              path="*"
+              element={
+                <>
+                  <Where />
+                </>
+              }
+            />
+          </Routes>
+        </Layout>
+      </MemoryRouter>,
+    );
+    const bar = screen.getByRole("navigation", { name: "Primary, bottom bar" });
+    await waitFor(() =>
+      expect(within(bar).queryByRole("link", { name: "Printers" })).toBeNull(),
+    );
+    expect(within(bar).getAllByRole("link")).toHaveLength(3);
+    for (const name of ["Print", "History", "Templates"])
+      expect(within(bar).getByRole("link", { name })).toBeInTheDocument();
+
+    fireEvent.click(within(bar).getByRole("button", { name: "More" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByRole("link", { name: "Designer" })).toBeNull();
+    expect(
+      within(dialog).getByRole("link", { name: "Automation" }),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("phone Print page", () => {

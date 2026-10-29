@@ -83,7 +83,7 @@ const PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 /** Mirrors normalize/valid_format in src-tauri/src/api/pair_code.rs. */
 function normalizePairingCode(raw: string): string {
-  return raw.toUpperCase().replace(/[-\s]/g, "");
+  return raw.toUpperCase().replace(/\s/g, "");
 }
 
 function validPairingCode(code: string): boolean {

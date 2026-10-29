@@ -16,6 +16,7 @@ import { PcStatusBanner } from "@/components/PcStatusBanner";
 import { ShortcutsDialog } from "@/components/ShortcutsDialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import { UpdateBadge } from "@/components/UpdateBadge";
+import { isPrintViaPc } from "@/lib/printViaPc";
 import { Button } from "@/components/ui/button";
 import {
   DialogDescription,
@@ -288,6 +289,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [reprintJob, setReprintJob] = useState<HistoryJob | null>(null);
   const [reprinting, setReprinting] = useState(false);
   const [appVersion, setAppVersion] = useState("");
+  // Print-via-PC mode hides the pages that stop meaning anything: local
+  // printers and the designer (templates sync down; they are not drawn
+  // here). Mobile bar and More sheet only — desktop keeps everything,
+  // and the pages themselves explain when visited directly.
+  const [viaPc, setViaPc] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void isPrintViaPc()
+      .then((v) => {
+        if (!cancelled) setViaPc(v);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
 
   // The version lives in the topbar only; Settings shows no footer.
   useEffect(() => {
@@ -557,14 +574,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Bottom bar on phones: four primary pages plus More, so the bar is
-          five evenly-sized tap targets instead of a squeezed icon row. */}
+          five evenly-sized tap targets instead of a squeezed icon row.
+          Print-via-PC mode drops local printers: they mislead. */}
       <nav
         aria-label={t("shell.mobile_nav")}
         data-slot="mobile-nav"
         className="shrink-0 border-t bg-card pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         <ul className="flex items-stretch">
-          {MOBILE_PRIMARY_ITEMS.map((item) => {
+          {MOBILE_PRIMARY_ITEMS.filter(
+            (item) => !viaPc || item.path !== "/printers",
+          ).map((item) => {
             const active = isActivePath(location.pathname, item.path);
             return (
               <li key={item.path} className="min-w-0 flex-1">
@@ -621,7 +641,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </DialogHeader>
           <MoreAccountRow onNavigate={() => setMoreOpen(false)} />
           <ul className="flex-1 overflow-y-auto p-2">
-            {MOBILE_MORE_ITEMS.map((item) => (
+            {MOBILE_MORE_ITEMS.filter(
+              (item) => !viaPc || item.path !== "/",
+            ).map((item) => (
               <li key={item.path}>
                 <Link
                   to={item.path}

@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Printer, Zap, CheckCircle2, XCircle, ChevronDown } from "lucide-react";
+import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { TimingBreakdown } from "@/components/TimingBreakdown";
 import { formatSeconds } from "@/lib/timings";
 import { cn } from "@/lib/utils";
@@ -640,9 +641,12 @@ export function PrintPage() {
                 <p className="text-xs">{t("print.via_pc_unreachable")}</p>
               )}
             </div>
-            <Button variant="outline" size="sm" onClick={refreshPcPrinters}>
-              {t("print.refresh")}
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              <ExitViaPcButton onExited={() => setViaPc(false)} />
+              <Button variant="outline" size="sm" onClick={refreshPcPrinters}>
+                {t("print.refresh")}
+              </Button>
+            </div>
           </div>
         ) : (
           <div
@@ -651,7 +655,10 @@ export function PrintPage() {
             className="flex items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-danger"
           >
             <XCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
-            <p className="text-sm font-medium">{t("print.via_pc_no_pair")}</p>
+            <p className="min-w-0 flex-1 text-sm font-medium">
+              {t("print.via_pc_no_pair")}
+            </p>
+            <ExitViaPcButton onExited={() => setViaPc(false)} />
           </div>
         ))}
 
@@ -1080,15 +1087,19 @@ export function PrintPage() {
                 <p className="mb-2 text-xs text-muted-foreground">
                   {t("print.test_hint")}
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSpikeTest}
-                  disabled={store.status === "printing"}
-                >
-                  <Zap className="h-4 w-4" aria-hidden="true" />
-                  {t("print.send_test")}
-                </Button>
+                {/* Local test page: hidden while printing through a PC. */}
+                {!viaPc && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid="print-spike-test"
+                    onClick={handleSpikeTest}
+                    disabled={store.status === "printing"}
+                  >
+                    <Zap className="h-4 w-4" aria-hidden="true" />
+                    {t("print.send_test")}
+                  </Button>
+                )}
               </div>
 
               <div className="space-y-2 pt-1">
