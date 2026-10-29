@@ -4,6 +4,7 @@ const ja: Translation = {
   common: {
     save: "保存",
     cancel: "キャンセル",
+    loading: "読み込み中…",
     delete: "削除",
     edit: "編集",
     close: "閉じる",
@@ -1150,6 +1151,7 @@ const ja: Translation = {
     tab_server: "APIサーバー",
     tab_explorer: "APIを試す",
     tab_phones: "スマートフォン",
+    tab_computer: "PC",
     tab_links: "ディープリンク",
     server_title: "ローカルAPIサーバー",
     open_explorer: "APIを試す",

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { isAndroidBackground } from "@/components/BackgroundAndroid";
+import { isAndroid } from "@/lib/platform";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -210,18 +211,25 @@ export function ApiServerPanel({
           />
         </div>
 
+        {/* Sharing is a PC offer; a phone only consumes, so the switch
+            (and its warning) stays off Android entirely. Start/stop
+            stays: the panel still owns the local server there. */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Switch
-              id="share-paired"
-              data-testid="settings-share-paired"
-              checked={sharePaired}
-              disabled={apiStatus?.running}
-              onCheckedChange={onShareChange}
-            />
-            <Label htmlFor="share-paired">
-              {t("settings_page.api_share_paired")}
-            </Label>
+            {!isAndroid() && (
+              <>
+                <Switch
+                  id="share-paired"
+                  data-testid="settings-share-paired"
+                  checked={sharePaired}
+                  disabled={apiStatus?.running}
+                  onCheckedChange={onShareChange}
+                />
+                <Label htmlFor="share-paired">
+                  {t("settings_page.api_share_paired")}
+                </Label>
+              </>
+            )}
           </div>
           {apiStatus?.running ? (
             <Button variant="destructive" onClick={stopApi}>
@@ -236,7 +244,7 @@ export function ApiServerPanel({
           )}
         </div>
 
-        {sharePaired && (
+        {!isAndroid() && sharePaired && (
           <p className="text-xs text-warning">
             {t("settings_page.api_share_paired_warning")}
           </p>

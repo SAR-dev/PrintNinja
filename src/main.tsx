@@ -30,7 +30,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <PrefsProvider>
         <App />
-        <Toaster richColors />
+        <Toaster richColors closeButton />
       </PrefsProvider>
     </QueryClientProvider>
   </React.StrictMode>,
