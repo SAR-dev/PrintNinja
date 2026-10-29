@@ -1146,6 +1146,11 @@ struct HelloReply {
     #[allow(dead_code)]
     platform: String,
     port: u16,
+    /// Discovery only; older PCs omit it. The claim is tried either way —
+    /// a guest invite needs no open window.
+    #[serde(default)]
+    #[allow(dead_code)]
+    window_open: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1187,9 +1192,11 @@ async fn hello_at(client: &reqwest::Client, host: &str, port: u16) -> Option<(St
     Some((host.to_string(), reply))
 }
 
-/// Probe the phone's own /24 for PCs with an open pairing window (plan
-/// §5.3): 254 hosts, ~64 at a time, 400 ms timeout — a second or two.
-/// Returns each answering host with its hello reply.
+/// Probe the phone's own /24 for sharing PCs (ARCHITECTURE §9): 254
+/// hosts, ~64 at a time, 400 ms timeout — a second or two.
+/// Returns each answering host with its hello reply. An answer means
+/// sharing is on, not that a window is open — the claim decides that,
+/// so guest invites need no window to be found.
 async fn probe_subnet(port: u16) -> Vec<(String, HelloReply)> {
     let lan = lan_ip();
     let prefix = lan.rsplit_once('.').map(|(p, _)| p.to_string());
@@ -1385,7 +1392,7 @@ pub async fn pair_with_code(
         // subnets, client isolation, non-default ports).
         if candidates.is_empty() {
             return Err(AppError::Validation(
-                "Could not find your PC. Check it shows a code, is on the same Wi-Fi, then try Advanced: enter its address.".into(),
+                "Could not find your PC. Check it is on the same Wi-Fi with sharing on, then try Advanced: enter its address.".into(),
             ));
         }
     }

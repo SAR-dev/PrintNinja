@@ -85,10 +85,17 @@ pub struct HelloResponse {
     pub name: String,
     pub platform: String,
     pub port: u16,
+    /// Whether a pairing window is open right now. Discovery only: the
+    /// phone tries the claim on every answering PC either way, since a
+    /// guest invite needs no window.
+    pub window_open: bool,
 }
 
-/// While a pairing window is open, answer who this PC is. Otherwise 403,
-/// the same as `claim` — a scanner learns nothing about windows.
+/// Who this PC is, while sharing is on — window open or not. Guest
+/// invites are claimed with no window, so gating discovery on one would
+/// make invites undiscoverable (the probe only sees answering PCs).
+/// The code stays the credential: hello reveals a name and a random id,
+/// nothing that pairs. Sharing off still answers 403.
 pub async fn hello(State(state): State<ApiState>, addr: ConnectInfo<SocketAddr>) -> Response {
     if !sharing_enabled(&state) {
         return pairing_unavailable();
@@ -101,40 +108,14 @@ pub async fn hello(State(state): State<ApiState>, addr: ConnectInfo<SocketAddr>)
             .into_response();
     }
     let now = std::time::Instant::now();
-    enum WindowStatus {
-        Closed,
-        Open,
-        Expired,
-        Locked,
-    }
-    let status = state
+    let window_open = state
         .window
         .lock()
-        .map(|mut guard| match guard.as_mut() {
-            None => WindowStatus::Closed,
-            Some(w) if w.is_expired(now) => WindowStatus::Expired,
-            Some(w) if w.is_locked() => WindowStatus::Locked,
-            Some(_) => WindowStatus::Open,
+        .map(|guard| match guard.as_ref() {
+            Some(w) => !w.is_expired(now) && !w.is_locked(),
+            None => false,
         })
-        .unwrap_or(WindowStatus::Closed);
-    match status {
-        WindowStatus::Closed => return pairing_unavailable(),
-        WindowStatus::Expired => {
-            return (
-                StatusCode::GONE,
-                Json(serde_json::json!({ "error": "pairing code expired" })),
-            )
-                .into_response();
-        }
-        WindowStatus::Locked => {
-            return (
-                StatusCode::TOO_MANY_REQUESTS,
-                Json(serde_json::json!({ "error": "too many wrong codes; ask the PC for a new one" })),
-            )
-                .into_response();
-        }
-        WindowStatus::Open => {}
-    }
+        .unwrap_or(false);
     let provider_id = {
         let guard = match state.db.lock() {
             Ok(g) => g,
@@ -151,6 +132,7 @@ pub async fn hello(State(state): State<ApiState>, addr: ConnectInfo<SocketAddr>)
             name: crate::commands::api::device_name(),
             platform: std::env::consts::OS.into(),
             port,
+            window_open,
         }),
     )
         .into_response()

@@ -110,6 +110,7 @@ const ja: Translation = {
     group_printers: "プリンター",
     group_jobs: "最近のジョブ",
     group_settings: "設定",
+    group_automation: "自動化",
     group_actions: "操作",
     new_template: "新規テンプレート",
     reprint_last: "直前のジョブを再印刷",
@@ -147,7 +148,14 @@ const ja: Translation = {
     sync_failed: "前回の更新に失敗しました: {{error}}",
     lan_on: "LANアクセスが有効です",
     lan_on_detail:
-      "同じネットワーク上の誰でもローカルAPIにアクセスできます。選択すると設定で無効にできます。",
+      "同じネットワーク上の誰でもローカルAPIにアクセスできます。選択すると自動化で無効にできます。",
+    api_listening: "APIサーバーが {{where}} で待機中",
+    sharing_on:
+      "このPCをスマートフォンと共有中です。選択すると自動化で管理できます。",
+    via_pc_on: "ペアリングしたPC経由で印刷中です。選択すると管理できます。",
+    private_open: "プライベートネットワーク許可",
+    private_open_detail:
+      "プライベートIPのブロックが無効のため、データURLが同じネットワーク上の機器に届く可能性があります。選択すると変更できます。",
   },
   designer: {
     title: "デザイナー",
@@ -636,6 +644,9 @@ const ja: Translation = {
     unchecked: "未確認",
     api: "API",
     lan: "LAN",
+    sharing: "共有中",
+    via_pc: "PC経由",
+    exposed: "プライベートNW許可",
   },
   pages: {
     designer: "印刷テンプレートを作成・編集します。",
@@ -654,8 +665,8 @@ const ja: Translation = {
     section_profile: "プロフィール",
     section_general: "一般",
     section_background: "バックグラウンド",
-    section_share: "共有",
-    section_data: "データソース",
+    section_share: "アカウントと同期",
+    section_data: "データとネットワーク",
     section_retention: "保持期間",
     section_diagnostics: "診断",
     appearance_language: "言語",
@@ -691,9 +702,9 @@ const ja: Translation = {
     hint_setup: "初回セットアップのチェックリスト",
     hint_general: "名前、ロゴ、表示密度",
     hint_background: "PC起動時に実行",
-    hint_share: "PC間でテンプレートを同期",
+    hint_share: "サービスのアカウントとテンプレート同期",
     hint_profile: "サインイン中のアカウント、パスワード、サインアウト",
-    hint_data: "ライブデータの取得元",
+    hint_data: "許可する取得元とプライベートIPのブロック",
     hint_retention: "ジョブを保持する期間",
     hint_diagnostics: "サポート用にログをエクスポート",
     background_title: "バックグラウンドで実行",
@@ -752,7 +763,7 @@ const ja: Translation = {
       "ペア設定済みのデバイスのみ接続できます。それ以外のネットワークからのアクセスには応答しません。",
     api_advanced: "詳細設定",
     api_advanced_bind_hint:
-      "バインドの手動設定。通常は上記の共有スイッチが自動的に設定します。",
+      "同じネットワーク上の他のデバイスがAPIにアクセスできるようにします。このPCをスマートフォンと共有すると自動でオンになります。",
     api_share_confirm_title: "ペア設定済みのデバイスと共有しますか？",
     api_share_confirm_body:
       "ペア設定済みのスマートフォンが、このPCのプリンターで印刷できるようになります。",
@@ -773,7 +784,7 @@ const ja: Translation = {
       "スマートフォンはPCを経由して印刷します。PCがすべてのジョブを準備し、電話が印刷するか — PC経由印刷がオンならPC自身のプリンターで印刷します。PCがオフ・スリープ中・ブロックされているときは、応答があるまで印刷は失敗します。履歴から再試行できます。",
     devices_web_notice:
       "共有レンダリングにはアプリのバックエンドが必要です。ブラウザーのプレビューにはありません。",
-    devices_provider_title: "このPCをスマートフォンと共有",
+    devices_provider_title: "このPC経由でスマートフォンから印刷",
     devices_provider_hint:
       "同じWi-Fi上のスマートフォンが、このPCにPDFの作成を依頼できます。印刷が許可されていれば、このPCのプリンターで印刷もできます。スマートフォン自身のプリンターと履歴はスマートフォンに残ります。",
     devices_lan_warning:
@@ -915,6 +926,8 @@ const ja: Translation = {
     allow_all: "すべて許可",
     share_title: "共有サービス",
     share_url: "サービスURL",
+    share_url_hint:
+      "空欄にすると共有機能を非表示にします（V1の動作）。アプリにデータベースの認証情報は含まれません。サービス側が独自のデータベースを持ちます。",
     share_url_example: "https://share.printninja.example",
     share_signin_title: "公開するにはサインインしてください",
     share_handle_example: "alice",
@@ -1191,6 +1204,15 @@ const ja: Translation = {
     server_title: "ローカルAPIサーバー",
     open_explorer: "APIを試す",
     links_title: "信頼するディープリンクの送信元",
+    status_running: "稼働中",
+    status_disabled: "停止中",
+    port_line: "ポート {{port}}",
+    network_title: "ネットワークアクセス",
+    network_domains_link:
+      "許可ドメインとプライベートIPのブロックは、設定の「データとネットワーク」にあります。",
+    trusted_empty:
+      "信頼する送信元はまだありません。すべてのディープリンクで確認が表示されます。",
+    trusted_remove: "{{src}} を削除",
   },
   explorer: {
     web_notice:

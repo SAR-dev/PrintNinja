@@ -14,6 +14,7 @@ import type {
 import { describeError } from "@/lib/errors";
 import { isAndroid } from "@/lib/android/background";
 import {
+  notifyApiStatusChanged,
   startApiServer,
   stopApiServer,
   useApiStatusChanged,
@@ -244,6 +245,9 @@ function PcSection() {
         await writeSetting("api_lan_access", "false");
       }
       await load();
+      // The server may already have been up on the LAN, in which case
+      // no start/stop event fired; the top bar still needs to re-read.
+      notifyApiStatusChanged();
     } catch (e) {
       notifyError(describeError(e));
     } finally {

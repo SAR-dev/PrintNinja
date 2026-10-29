@@ -81,7 +81,7 @@ export function TrustedSourcesPanel() {
         </p>
         {trusted.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No trusted sources yet — every deep link asks for confirmation.
+            {t("automation.trusted_empty")}
           </p>
         ) : (
           trusted.map((src) => (
@@ -97,7 +97,7 @@ export function TrustedSourcesPanel() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  aria-label={`Remove ${src}`}
+                  aria-label={t("automation.trusted_remove", { src })}
                   onClick={() => removeTrusted(src)}
                 >
                   <Trash2 className="h-3 w-3" />
@@ -109,6 +109,7 @@ export function TrustedSourcesPanel() {
 
         <div className="flex gap-2">
           <Input
+            id="trusted-source-input"
             aria-label={t("settings_page.trusted_input_aria")}
             placeholder={t("settings_page.trusted_input_example")}
             value={newTrusted}

@@ -266,7 +266,9 @@ async fn poll_job(
 
 /// Record the attempt in the phone's own history: what was asked, what
 /// the PC said, and which PC ran it. Every tap leaves a row, success or
-/// not — the dialog reads this, not the PC.
+/// not — the dialog reads this, not the PC. A retry reuses the
+/// idempotency key, so it refreshes that row instead of colliding with
+/// it: one row per key, latest outcome wins.
 #[allow(clippy::too_many_arguments)]
 fn record_remote_job(
     conn: &rusqlite::Connection,
@@ -297,7 +299,14 @@ fn record_remote_job(
          VALUES (?1, NULL, 'ui', ?2, ?3, ?4, ?5,
                  '', ?6, ?7, ?8,
                  datetime('now'), datetime('now'), datetime('now'), ?9,
-                 ?10, ?11)",
+                 ?10, ?11)
+         ON CONFLICT(idempotency_key) DO UPDATE SET
+           status = excluded.status,
+           error = excluded.error,
+           duration_ms = excluded.duration_ms,
+           finished_at = excluded.finished_at,
+           printed_by = excluded.printed_by,
+           template_revision = excluded.template_revision",
         rusqlite::params![
             template_id,
             status,
@@ -742,6 +751,18 @@ pub async fn remote_printers(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::Database;
+    use std::sync::{Arc, Mutex};
+
+    fn test_db() -> DbState {
+        let path = std::env::temp_dir().join(format!(
+            "printninja_remote_print_{}.db",
+            uuid::Uuid::new_v4()
+        ));
+        Arc::new(Mutex::new(
+            Database::open(&format!("sqlite:{}", path.display())).expect("open db"),
+        ))
+    }
 
     fn pair(id: &str) -> RenderPair {
         RenderPair {
@@ -799,6 +820,60 @@ mod tests {
         let cached = serde_json::to_value(&list).unwrap();
         let again: Vec<PcPrinterInfo> = serde_json::from_value(cached).unwrap();
         assert_eq!(again[0].printer_type, "ipp");
+    }
+
+    /// A retry reuses the idempotency key: the history row is refreshed,
+    /// not collided with. Regression: the bare INSERT surfaced
+    /// "UNIQUE constraint failed: print_jobs.idempotency_key", hiding
+    /// the PC's real answer.
+    #[test]
+    fn retry_with_the_same_key_refreshes_the_history_row() {
+        let db = test_db();
+        let guard = db.lock().unwrap();
+        let conn = guard.connection();
+        conn.execute("INSERT INTO templates (id, name) VALUES (7, 'T')", [])
+            .expect("template row");
+        let data = Some(serde_json::json!({"order": 1}));
+        record_remote_job(
+            conn,
+            7,
+            Some(3),
+            1,
+            "Front Desk",
+            "Studio PC",
+            &data,
+            "key-1",
+            false,
+            "failed",
+            Some("timeout"),
+            900,
+        )
+        .expect("first attempt records");
+        record_remote_job(
+            conn,
+            7,
+            Some(3),
+            1,
+            "Front Desk",
+            "Studio PC",
+            &data,
+            "key-1",
+            false,
+            "success",
+            None,
+            1200,
+        )
+        .expect("retry with the same key refreshes");
+        let (count, status, error): (i64, String, Option<String>) = conn
+            .query_row(
+                "SELECT COUNT(*), MAX(status), MAX(error) FROM print_jobs WHERE idempotency_key = 'key-1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "one row per key");
+        assert_eq!(status, "success");
+        assert_eq!(error, None);
     }
 
     #[test]

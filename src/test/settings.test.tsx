@@ -58,8 +58,8 @@ describe("Settings page", () => {
       "Profile",
       "General",
       "Background",
-      "Share",
-      "Data sources",
+      "Account & sync",
+      "Data & network",
       "Retention",
       "Diagnostics",
     ]) {
@@ -109,7 +109,7 @@ describe("Settings page", () => {
     vi.stubEnv("VITE_DEFAULT_SHARE_URL", "https://share.example.com/");
     try {
       renderPage();
-      open("Share");
+      open("Account & sync");
       expect(await screen.findByLabelText("Service URL")).toHaveValue(
         "https://share.example.com",
       );
@@ -124,7 +124,7 @@ describe("Settings page", () => {
       return null;
     });
     renderPage();
-    open("Data sources");
+    open("Data & network");
     const input = await screen.findByLabelText(/allowed domains/i);
     fireEvent.change(input, { target: { value: "https://evil.example/path" } });
     fireEvent.blur(input);
