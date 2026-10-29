@@ -159,8 +159,16 @@ pub fn init_logging(app: &tauri::AppHandle) {
 
     let stdout = tracing_subscriber::fmt::layer().with_filter(filter.clone());
 
-    let file_layer = match app.path().app_log_dir() {
-        Ok(dir) => match SizeRotatingWriter::open(&dir) {
+    // Resolve the directory first: both the file layer and the panic
+    // hook below need it, and a panic must be recorded even if the
+    // tracing layer itself never starts.
+    let dir = app.path().app_log_dir().ok();
+    if let Some(dir) = &dir {
+        install_panic_hook(dir);
+    }
+
+    let file_layer = match dir.as_deref() {
+        Some(dir) => match SizeRotatingWriter::open(dir) {
             Ok(writer) => {
                 let (writer, guard) = tracing_appender::non_blocking(writer);
                 // Process lifetime (run() never returns while the app is
@@ -179,8 +187,8 @@ pub fn init_logging(app: &tauri::AppHandle) {
                 None
             }
         },
-        Err(e) => {
-            eprintln!("printninja: no log directory ({e}); stdout only");
+        None => {
+            eprintln!("printninja: no log directory; stdout only");
             None
         }
     };
@@ -194,6 +202,33 @@ pub fn init_logging(app: &tauri::AppHandle) {
             let _ = registry.try_init();
         }
     }
+}
+
+/// Route Rust panics into the log file. Without this a panic goes to
+/// stderr only — invisible in GUI apps and absent from the file log —
+/// so a crashing print leaves exactly the silent gap this closes.
+/// Best-effort and recursion-safe: the hook never panics itself, never
+/// blocks on a lock, and the stock hook still runs first, so nothing
+/// that used to be visible is lost.
+fn install_panic_hook(dir: &Path) {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    let dir = dir.to_path_buf();
+    ONCE.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            previous(info);
+            let stamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ");
+            let line = format!("{stamp}  PANIC: {info}\n");
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(dir.join(LIVE_NAME))
+            {
+                use std::io::Write as _;
+                let _ = file.write_all(line.as_bytes());
+            }
+        }));
+    });
 }
 
 /// Read up to `max_bytes` of recent logs for the viewer/export, oldest
@@ -324,6 +359,21 @@ mod tests {
         assert_eq!(read_recent_logs(&dir, 1024), "");
         // Zero budget never touches the disk.
         assert_eq!(read_recent_logs(&dir, 0), "");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn panic_hook_records_a_caught_panic() {
+        // The hook is process-global and installed once: this is the only
+        // test that touches it. Chaining (take_hook first) keeps the test
+        // harness's own reporting intact, and a removed tempdir only makes
+        // later writes fail silently.
+        let dir = tempdir("panichook");
+        install_panic_hook(&dir);
+        let _ = std::panic::catch_unwind(|| panic!("boom-for-test"));
+        let text = std::fs::read_to_string(dir.join(LIVE_NAME)).unwrap();
+        assert!(text.contains("PANIC"), "hook recorded: {text:?}");
+        assert!(text.contains("boom-for-test"), "message kept: {text:?}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
