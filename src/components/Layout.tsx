@@ -8,7 +8,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
 import { AppLogo } from "@/components/AppLogo";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -289,6 +289,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [reprintJob, setReprintJob] = useState<HistoryJob | null>(null);
   const [reprinting, setReprinting] = useState(false);
   const [appVersion, setAppVersion] = useState("");
+  // Phone toast clearance: the toaster sits above the bottom nav (plus
+  // the sticky Print bar on /print) via --toast-offset-bottom, measured
+  // from the real chrome so it follows heights instead of guessing.
+  useEffect(() => {
+    const update = () => {
+      const h = (sel: string) =>
+        document.querySelector(sel)?.getBoundingClientRect().height ?? 0;
+      const px =
+        Math.ceil(
+          h('[data-slot="mobile-nav"]') + h('[data-slot="action-bar"]'),
+        ) + 16;
+      document.documentElement.style.setProperty(
+        "--toast-offset-bottom",
+        `${px}px`,
+      );
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [location.pathname]);
   // Print-via-PC mode hides the pages that stop meaning anything: local
   // printers and the designer (templates sync down; they are not drawn
   // here). Mobile bar and More sheet only — desktop keeps everything,
@@ -349,12 +369,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
           ? [...jobs].sort((a, b) => b.id - a.id)[0]
           : jobs.find((j) => j.id === id);
       if (!job) {
-        toast.info(t("shell.reprint_none"));
+        notifyInfo(t("shell.reprint_none"));
         return;
       }
       setReprintJob(job);
     } catch {
-      toast.error(t("shell.reprint_failed"));
+      notifyError(t("shell.reprint_failed"));
     }
   };
 
@@ -365,10 +385,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     setReprinting(true);
     try {
       await agent("reprint_job", { id: reprintJob.id });
-      toast.success(t("shell.reprint_done", { id: reprintJob.id }));
+      notifySuccess(t("shell.reprint_done", { id: reprintJob.id }));
       setReprintJob(null);
     } catch {
-      toast.error(t("shell.reprint_failed"));
+      notifyError(t("shell.reprint_failed"));
     } finally {
       setReprinting(false);
     }
@@ -423,7 +443,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
               It sits outside the brand link so the link's visible text
               still matches its accessible name (axe
               label-content-name-mismatch). */}
-          <span className="shrink-0 text-xs text-muted-foreground">
+          {/* Hidden on phones: at 360px every spare pixel keeps the
+              search icon on screen (the release literal must stay in
+              source; tooling reads it there, not in the DOM). */}
+          <span className="hidden shrink-0 text-xs text-muted-foreground md:inline">
             {appVersion ? `v${appVersion}` : "v0.15.3"}
           </span>
         </span>
@@ -440,7 +463,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </kbd>
           </button>
         )}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1 md:gap-2">
           <ApiIndicator />
           {/* Share/sync state stays visible on phones as a compact icon-only
               badge; the word returns from sm up (see StatusBadge compact). */}

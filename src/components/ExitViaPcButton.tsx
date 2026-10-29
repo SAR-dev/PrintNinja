@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { notifySuccess, notifyError } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { describeError } from "@/lib/errors";
 import { setPrintViaPc } from "@/lib/printViaPc";
@@ -19,9 +19,9 @@ export function ExitViaPcButton({ onExited }: { onExited?: () => void }) {
     try {
       await setPrintViaPc(false);
       onExited?.();
-      toast.success(t("print.via_pc_exited"));
+      notifySuccess(t("print.via_pc_exited"));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }

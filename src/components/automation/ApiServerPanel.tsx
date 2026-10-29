@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { notifySuccess, notifyError } from "@/lib/notify";
 import { isAndroidBackground } from "@/components/BackgroundAndroid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,12 +80,12 @@ export function ApiServerPanel({
     setStarting(true);
     try {
       const addr = await startApiServer(Number(apiPort), lanAccess);
-      toast.success(t("settings_page.toast_api_up", { addr }));
+      notifySuccess(t("settings_page.toast_api_up", { addr }));
       await writeSetting("api_port", apiPort);
       await writeSetting("api_lan_access", String(lanAccess));
       await loadApiStatus();
     } catch (e) {
-      toast.error(
+      notifyError(
         t("settings_page.toast_api_start_failed", { error: describeError(e) }),
       );
     } finally {
@@ -96,10 +96,10 @@ export function ApiServerPanel({
   const stopApi = async () => {
     try {
       await stopApiServer();
-      toast.success(t("settings_page.toast_api_down"));
+      notifySuccess(t("settings_page.toast_api_down"));
       await loadApiStatus();
     } catch (e) {
-      toast.error(
+      notifyError(
         t("settings_page.toast_api_stop_failed", { error: describeError(e) }),
       );
     }

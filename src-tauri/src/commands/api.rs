@@ -725,8 +725,12 @@ pub struct PairedDeviceRow {
     /// Whether this phone may use the main routes. Render-only when false.
     pub can_print: bool,
     /// Account both devices were signed in to at claim time (§3.6).
-    /// `None` predates the check.
+    /// `None` predates the check — and guests never have one.
     pub account_id: Option<String>,
+    /// `owner` or `guest` (docs/GUEST_PAIRING.md). Guests pair by invite.
+    pub role: String,
+    /// Invite expiry for guests (RFC-3339); `None` never expires.
+    pub expires_at: Option<String>,
 }
 
 #[tauri::command]
@@ -736,7 +740,7 @@ pub fn list_paired_devices(db: State<DbState>) -> AppResult<Vec<PairedDeviceRow>
         .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let mut stmt = guard.connection().prepare(
         "SELECT id, name, display_name, platform, paired_at, last_seen_at, can_print,
-                account_id
+                account_id, role, expires_at
          FROM paired_devices ORDER BY paired_at DESC",
     )?;
     let rows = stmt
@@ -750,6 +754,8 @@ pub fn list_paired_devices(db: State<DbState>) -> AppResult<Vec<PairedDeviceRow>
                 last_seen_at: row.get(5)?,
                 can_print: row.get(6)?,
                 account_id: row.get(7)?,
+                role: row.get(8)?,
+                expires_at: row.get(9)?,
             })
         })?
         .filter_map(Result::ok)
@@ -823,7 +829,7 @@ pub fn rename_paired_device(
     }
     Ok(conn.query_row(
         "SELECT id, name, display_name, platform, paired_at, last_seen_at, can_print,
-                account_id
+                account_id, role, expires_at
          FROM paired_devices WHERE id = ?1",
         [&id],
         |row| {
@@ -836,6 +842,8 @@ pub fn rename_paired_device(
                 last_seen_at: row.get(5)?,
                 can_print: row.get(6)?,
                 account_id: row.get(7)?,
+                role: row.get(8)?,
+                expires_at: row.get(9)?,
             })
         },
     )?)
@@ -870,7 +878,7 @@ pub fn set_paired_can_print(
     )?;
     Ok(conn.query_row(
         "SELECT id, name, display_name, platform, paired_at, last_seen_at, can_print,
-                account_id
+                account_id, role, expires_at
          FROM paired_devices WHERE id = ?1",
         [&id],
         |row| {
@@ -883,9 +891,133 @@ pub fn set_paired_can_print(
                 last_seen_at: row.get(5)?,
                 can_print: row.get(6)?,
                 account_id: row.get(7)?,
+                role: row.get(8)?,
+                expires_at: row.get(9)?,
             })
         },
     )?)
+}
+
+/// One guest invite (docs/GUEST_PAIRING.md). The code itself is shown
+/// once at mint time and never stored — only its hash.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PairingInviteRow {
+    pub id: String,
+    pub expires_at: String,
+    pub uses_left: Option<i64>,
+    pub can_print: bool,
+    pub created_at: String,
+    pub created_by: Option<String>,
+}
+
+/// The minted invite, including the code — returned once, never again.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct NewPairingInvite {
+    #[serde(flatten)]
+    pub row: PairingInviteRow,
+    pub code: String,
+}
+
+/// Mint a guest invite code. Anyone holding it pairs as a guest — no
+/// account, no window — until it expires or runs out of uses.
+#[tauri::command(rename_all = "snake_case")]
+pub fn create_pairing_invite(
+    db: State<DbState>,
+    expires_in_hours: Option<u32>,
+    max_uses: Option<i64>,
+    can_print: Option<bool>,
+) -> AppResult<NewPairingInvite> {
+    let hours = expires_in_hours.unwrap_or(24).clamp(1, 24 * 30);
+    if max_uses.is_some_and(|n| n < 1) {
+        return Err(AppError::Validation("max_uses must be at least 1".into()));
+    }
+    let code = crate::api::pair_code::generate_code();
+    let hash = crate::api::pair_code::token_hash(&code);
+    let now = chrono::Utc::now();
+    let expires_at = (now + chrono::Duration::hours(hours as i64))
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let created_at = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let id = uuid::Uuid::new_v4().to_string();
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let conn = guard.connection();
+    let created_by: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'share_user_id'",
+            [],
+            |r| r.get(0),
+        )
+        .ok()
+        .filter(|s: &String| !s.trim().is_empty());
+    conn.execute(
+        "INSERT INTO pairing_invites
+           (id, code_hash, created_at, expires_at, uses_left, can_print, created_by)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![
+            id,
+            hash,
+            created_at,
+            expires_at,
+            max_uses,
+            i64::from(can_print.unwrap_or(true)),
+            created_by,
+        ],
+    )?;
+    Ok(NewPairingInvite {
+        row: PairingInviteRow {
+            id,
+            expires_at,
+            uses_left: max_uses,
+            can_print: can_print.unwrap_or(true),
+            created_at,
+            created_by,
+        },
+        code,
+    })
+}
+
+/// Active and spent guest invites, newest first. Codes are never listed.
+#[tauri::command]
+pub fn list_pairing_invites(db: State<DbState>) -> AppResult<Vec<PairingInviteRow>> {
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let mut stmt = guard.connection().prepare(
+        "SELECT id, expires_at, uses_left, can_print, created_at, created_by
+         FROM pairing_invites ORDER BY created_at DESC",
+    )?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(PairingInviteRow {
+                id: row.get(0)?,
+                expires_at: row.get(1)?,
+                uses_left: row.get(2)?,
+                can_print: row.get(3)?,
+                created_at: row.get(4)?,
+                created_by: row.get(5)?,
+            })
+        })?
+        .filter_map(Result::ok)
+        .collect();
+    Ok(rows)
+}
+
+/// Delete a guest invite. Pairs it already minted keep working until
+/// their own expiry — revoking future redemptions, not past ones. (To
+/// cut a guest off, remove the phone.)
+#[tauri::command(rename_all = "snake_case")]
+pub fn revoke_pairing_invite(db: State<DbState>, id: String) -> AppResult<()> {
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let n = guard
+        .connection()
+        .execute("DELETE FROM pairing_invites WHERE id = ?1", [&id])?;
+    if n == 0 {
+        return Err(AppError::NotFound(format!("invite '{id}' not found")));
+    }
+    Ok(())
 }
 
 /// Trimmed rename, capped at 64 characters. `None` clears the override
@@ -1193,9 +1325,10 @@ pub async fn pair_with_code(
             .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
         phone_device_id(guard.connection()).map_err(|e| AppError::Internal(e.to_string()))?
     };
-    // Same-account pairing (§3.6): no account, no claim — checked here so
-    // the phone says "sign in first" without burning the PC's code, and
-    // again by the PC, which does not trust us.
+    // Same-account pairing (§3.6) plus guests (docs/GUEST_PAIRING.md):
+    // the phone always sends whatever account it has — possibly none —
+    // and the PC decides. Requiring sign-in here would lock out guests
+    // before the server ever sees the code.
     let (account_id, service_url) = {
         let guard = db
             .lock()
@@ -1217,14 +1350,7 @@ pub async fn pair_with_code(
             )
             .ok()
             .filter(|s: &String| !s.trim().is_empty());
-        match (account, url) {
-            (Some(a), Some(u)) => (a, u),
-            _ => {
-                return Err(AppError::Validation(
-                    "Sign in to your account on this phone first, then pair.".into(),
-                ));
-            }
-        }
+        (account.unwrap_or_default(), url.unwrap_or_default())
     };
     // Candidate PCs: the typed address, or whoever answers the probe.
     // The host is always the address that answered — never anything in

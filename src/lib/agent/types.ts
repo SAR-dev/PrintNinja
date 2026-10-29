@@ -187,6 +187,28 @@ export interface PrintResponse {
   rendered_by?: string | null;
 }
 
+/** One guest invite. The code itself is shown once and never listed. */
+export interface PairingInvite {
+  id: string;
+  expires_at: string;
+  /** Remaining redemptions; null means unlimited. */
+  uses_left: number | null;
+  can_print: boolean;
+  created_at: string;
+  created_by: string | null;
+}
+
+/** A minted invite, including its one-time code. */
+export interface NewPairingInvite {
+  id: string;
+  expires_at: string;
+  uses_left: number | null;
+  can_print: boolean;
+  created_at: string;
+  created_by: string | null;
+  code: string;
+}
+
 /** One print through a paired PC (see `remote_print`). Field names mirror
  * the local print request; `template_id` is this phone's local id. */
 export interface RemotePrintArgs {
@@ -390,6 +412,10 @@ export interface PairedDevice {
   can_print: boolean;
   /** Account both devices were signed in to at claim time, if any. */
   account_id: string | null;
+  /** `owner` or `guest` (guests pair by invite, need no account). */
+  role: string;
+  /** Invite expiry for guests (RFC-3339); null never expires. */
+  expires_at: string | null;
 }
 
 /** One paired render provider (stored as JSON in the `render_pairs` setting).

@@ -581,3 +581,101 @@ async fn dashed_code_is_malformed_not_wrong() {
     let (status, _) = post_claim(router(&db, &window), claim_body("K7QM4XPD", "phone-1")).await;
     assert_eq!(status, StatusCode::OK);
 }
+
+// ── guest invites (docs/GUEST_PAIRING.md) ──────────────────────────
+
+/// Mint an invite straight into the DB (the command layer is thin).
+fn seed_invite(db: &Db, code: &str, expires_at: &str, uses_left: Option<i64>, can_print: bool) {
+    use sha2::Digest as _;
+    let hash = format!("{:x}", sha2::Sha256::digest(code.as_bytes()));
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute(
+            "INSERT INTO pairing_invites
+                 (id, code_hash, created_at, expires_at, uses_left, can_print, created_by)
+             VALUES ('inv-1', ?1, datetime('now'), ?2, ?3, ?4, 'user-1')",
+            rusqlite::params![hash, expires_at, uses_left, i64::from(can_print)],
+        )
+        .unwrap();
+}
+
+fn guest_body(code: &str, device_id: &str) -> serde_json::Value {
+    // No account fields: guests have no account.
+    serde_json::json!({
+        "protocol": 1,
+        "code": code,
+        "device_id": device_id,
+        "device_name": "Guest Phone",
+        "platform": "android",
+    })
+}
+
+/// An invite redeems with no window open, no account anywhere: the row
+/// is a guest with the invite's expiry and print preset.
+#[tokio::test]
+async fn invite_claim_needs_no_window_no_account() {
+    let (db, window) = setup();
+    seed_invite(&db, "12345678", "2030-01-01T00:00:00Z", None, true);
+    let (status, reply) = post_claim(router(&db, &window), guest_body("12345678", "guest-1")).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert!(reply["token"].as_str().is_some_and(|t| t.len() == 32));
+    let (role, account, can_print, expires): (String, Option<String>, i64, Option<String>) = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT role, account_id, can_print, expires_at FROM paired_devices WHERE id = 'guest-1'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .unwrap();
+    assert_eq!(role, "guest");
+    assert_eq!(account, None, "guests store no account");
+    assert_eq!(can_print, 1);
+    assert_eq!(expires.as_deref(), Some("2030-01-01T00:00:00Z"));
+}
+
+/// A render-only invite stamps can_print false.
+#[tokio::test]
+async fn invite_claim_honors_print_preset() {
+    let (db, window) = setup();
+    seed_invite(&db, "12345678", "2030-01-01T00:00:00Z", None, false);
+    let (status, _) = post_claim(router(&db, &window), guest_body("12345678", "guest-2")).await;
+    assert_eq!(status, StatusCode::OK);
+    let can_print: i64 = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT can_print FROM paired_devices WHERE id = 'guest-2'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(can_print, 0);
+}
+
+/// Past invites answer 410, spending nothing and storing nothing.
+#[tokio::test]
+async fn expired_invite_is_410() {
+    let (db, window) = setup();
+    seed_invite(&db, "12345678", "2020-01-01T00:00:00Z", None, true);
+    let (status, body) = post_claim(router(&db, &window), guest_body("12345678", "guest-3")).await;
+    assert_eq!(status, StatusCode::GONE);
+    assert_eq!(body["code"], "invite_expired");
+    assert_eq!(paired_count(&db), 0);
+}
+
+/// A single-use invite redeems once; the second claim is told it is used up.
+#[tokio::test]
+async fn single_use_invite_exhausts() {
+    let (db, window) = setup();
+    seed_invite(&db, "12345678", "2030-01-01T00:00:00Z", Some(1), true);
+    let (status, _) = post_claim(router(&db, &window), guest_body("12345678", "guest-4")).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = post_claim(router(&db, &window), guest_body("12345678", "guest-5")).await;
+    assert_eq!(status, StatusCode::GONE);
+    assert_eq!(body["code"], "invite_exhausted");
+    assert_eq!(paired_count(&db), 1, "only the first claim stored a row");
+}

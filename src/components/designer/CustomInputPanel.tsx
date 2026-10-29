@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { QrCode, Type } from "lucide-react";
-import { toast } from "sonner";
+import { notifySuccess, notifyError } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { agent } from "@/lib/agent/commands";
 
@@ -41,11 +41,11 @@ export function CustomInputPanel({ onBarcode }: { onBarcode: () => void }) {
               file_data: bytes,
               family: file.name.replace(/\.[^/.]+$/, ""),
             });
-            toast.success(
+            notifySuccess(
               t("designer.custom_font_uploaded", { name: file.name }),
             );
           } catch (err) {
-            toast.error(
+            notifyError(
               t("designer.custom_font_failed", { error: String(err) }),
             );
           } finally {

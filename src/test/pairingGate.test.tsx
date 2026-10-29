@@ -225,6 +225,7 @@ describe("pair Test button", () => {
       await waitFor(() =>
         expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
           expect.stringContaining("Shop PC"),
+          expect.anything(),
         ),
       );
     } finally {
@@ -241,6 +242,7 @@ describe("pair Test button", () => {
       await waitFor(() =>
         expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
           expect.stringContaining("unreachable"),
+          expect.anything(),
         ),
       );
     } finally {

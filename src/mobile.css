@@ -243,7 +243,7 @@
   [data-slot="mobile-nav"] button {
     min-height: 3.75rem;
     gap: 0.3125rem;
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 500;
     letter-spacing: 0.01em;
     justify-content: flex-start;
@@ -416,15 +416,6 @@
   /* Primary action first and full width, like a native action sheet. */
   [data-slot="dialog-content"] [data-slot="button"] {
     width: 100%;
-  }
-
-  /* ---------- Toasts ---------- */
-  [data-sonner-toast] {
-    border-radius: 1.125rem !important;
-    border-color: transparent !important;
-    box-shadow:
-      0 2px 4px hsl(var(--foreground) / 0.06),
-      0 12px 32px -8px hsl(var(--foreground) / 0.25) !important;
   }
 }
 

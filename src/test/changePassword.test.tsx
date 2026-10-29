@@ -39,19 +39,25 @@ describe("ChangePasswordForm", () => {
 
     fill("", "new-password-1", "new-password-1");
     fireEvent.click(submit);
-    expect(toast.error).toHaveBeenCalledWith("Enter the current password");
+    // Field-level, not a toast: the fix sits next to the field.
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Enter the current password",
+    );
 
     fill("old", "short", "short");
     fireEvent.click(submit);
-    expect(toast.error).toHaveBeenCalledWith(
+    expect(await screen.findByRole("alert")).toHaveTextContent(
       "The new password needs at least 8 characters",
     );
 
     fill("old", "new-password-1", "different");
     fireEvent.click(submit);
-    expect(toast.error).toHaveBeenCalledWith("The new passwords do not match");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The new passwords do not match",
+    );
 
     expect(changePassword).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it("calls changePassword and reports revoked sessions", async () => {
@@ -65,7 +71,7 @@ describe("ChangePasswordForm", () => {
         "new-password-1",
       ),
     );
-    expect(toast.success).toHaveBeenCalledWith(
+    expect(vi.mocked(toast.success).mock.calls[0][0]).toBe(
       "Password changed — 2 other session(s) signed out",
     );
     // Cleared after success.
@@ -78,7 +84,7 @@ describe("ChangePasswordForm", () => {
     fill("wrong", "new-password-1", "new-password-1");
     fireEvent.click(screen.getByRole("button", { name: "Change password" }));
     await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith("401 Unauthorized"),
+      expect(vi.mocked(toast.error).mock.calls[0][0]).toBe("401 Unauthorized"),
     );
   });
 });

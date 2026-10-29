@@ -15,7 +15,7 @@ describe("patch-android-theme", () => {
     expect(out).not.toContain("DayNight");
   });
   it("sets light status and navigation bars", () => {
-    expect(out).toContain('<item name="android:statusBarColor">#FFFFFF</item>');
+    expect(out).toContain('<item name="android:statusBarColor">#F4F7F7</item>');
     expect(out).toContain(
       '<item name="android:windowLightStatusBar">true</item>',
     );

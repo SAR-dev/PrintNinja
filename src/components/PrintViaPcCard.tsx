@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import type { RenderPair } from "@/lib/agent/types";
 import { describeError } from "@/lib/errors";
 import { isAndroid } from "@/lib/platform";
@@ -65,7 +65,7 @@ export function PrintViaPcCard() {
       await setPrintViaPc(next);
       setOn(next);
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -77,7 +77,7 @@ export function PrintViaPcCard() {
       await setPrintViaPcDevice(id);
       setDevice(id);
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }

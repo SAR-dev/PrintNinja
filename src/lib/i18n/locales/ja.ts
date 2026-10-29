@@ -129,15 +129,12 @@ const ja: Translation = {
     share_offline: "共有サービスに接続できません",
     share_signed_out: "共有サービス: サインインしていません",
     account_open: "アカウント: {{handle}}。プロフィールを開く",
-    pc_down_title:
-      "{{name}}に接続できません。応答があるまで、このスマートフォンからの印刷は失敗します。",
-    pc_down_title_plural:
-      "ペアリング済みのPC（{{count}}台）のいずれにも接続できません。応答があるまで、このスマートフォンからの印刷は失敗します。",
-    pc_down_details_show: "詳細を表示",
-    pc_down_details_hide: "詳細を隠す",
     pc_down_dismiss: "状況が変わるまでこの警告を閉じる",
-    pc_down_retry: "再確認",
-    pc_down_open: "デバイス",
+    pc_unpaired_title: "{{name}} がこのスマートフォンを削除しました。",
+    pc_unreachable_title: "{{name}} に到達できません。",
+    pc_unreachable_plural: "{{count}}台のPCに到達できません。",
+    pc_pair_again: "再ペアリング",
+    pc_check_again: "再確認",
     offline_banner:
       "オフラインで作業中です。このPCにキャッシュされたコピーの表示と印刷はできますが、保存にはサーバーが必要です。",
     sync_drafts: "サーバーに保存されていない下書きが{{count}}件あります",
@@ -352,12 +349,15 @@ const ja: Translation = {
     finished: "{{seconds}}で完了しました。",
     failed_title: "印刷に失敗しました",
     unknown_error: "不明なエラー",
+    pair_again_to_print: "印刷するには再ペアリングしてください。",
     via_pc_banner:
       "{{pc}}で印刷中 — ジョブはそのPCのプリンターで実行されます。",
     via_pc_cached: "プリンター一覧はキャッシュです。PCに到達できません。",
     via_pc_unreachable:
       "PCが応答しません — 電源が入っていて同じWi-Fiに接続されているか確認し、更新してください。",
-    via_pc_no_pair: "自動化 → PCで印刷先のPCを選択してください。",
+    via_pc_no_pair: "印刷先のPCを選択してください。",
+    via_pc_choose_hint:
+      "印刷には1台のPCの指定が必要です — レンダリングは共有できますが、プリンターは共有できません。",
     via_pc_exit: "このスマートフォンのプリンターを使う",
     via_pc_exited:
       "PC経由印刷をオフにしました — このスマートフォンで印刷します。",
@@ -609,6 +609,7 @@ const ja: Translation = {
     toast_reprint_failed: "再印刷に失敗しました: {{error}}",
     toast_reprinted: "ジョブ #{{id}} の再印刷をキューに追加しました",
     toast_requeued: "ジョブ #{{id}} を再キューに追加しました",
+    view_action: "表示",
     toast_retry_failed: "再試行に失敗しました: {{error}}",
     toast_saved: "フィルター「{{name}}」を保存しました",
     view_menu_item: "ジョブ {{id}} を表示",
@@ -820,6 +821,21 @@ const ja: Translation = {
     devices_can_print: "印刷を許可",
     devices_account_same: "同じアカウント",
     devices_account_other: "別のアカウント — 再ペアリング",
+    devices_invite: "ゲストを招待",
+    devices_invite_hint:
+      "ゲストはコードでペアリングします — アカウントもウィンドウも不要です。有効期限が切れると使えなくなります。",
+    devices_invite_hours: "有効期限（時間）",
+    devices_invite_uses: "最大使用回数（空欄で無制限）",
+    devices_invite_mint: "招待を作成",
+    devices_invite_code_once:
+      "今コピーしてください — 表示されるのは今回のみです。",
+    devices_invite_another: "別途作成",
+    devices_invite_empty: "招待はまだありません。",
+    devices_invite_expires: "期限 {date}",
+    devices_invite_uses_left: "残り{count}回",
+    devices_invite_unlimited: "無制限",
+    devices_invite_revoke: "取り消し",
+    devices_guest: "ゲスト",
     devices_account_signed_in: "{{handle}} としてサインイン中",
     devices_account_signed_out:
       "サインインしていません — ペアリングするにはサインインしてください。",
@@ -1158,6 +1174,7 @@ const ja: Translation = {
     server_are: "",
     server_already:
       "{{count}}件のテンプレートは既にこのコンピューターにあります",
+    server_failed: "{{count}}件のテンプレートが失敗しました",
   },
   automation: {
     tabs_aria: "自動化のセクション",

@@ -123,9 +123,35 @@ CREATE TABLE IF NOT EXISTS paired_devices (
     -- account — a sign-out or switch disables existing pairs. NULL
     -- predates the check (no backfill: reset the database).
     account_id TEXT,
-    service_url TEXT
+    service_url TEXT,
+    -- Guest pairing (docs/GUEST_PAIRING.md): `owner` pairs need the same
+    -- account; `guest` pairs come from an invite code and need none. A
+    -- guest row with a past `expires_at` is refused like a revocation.
+    -- NULL account predates both checks.
+    role TEXT NOT NULL DEFAULT 'owner' CHECK(role IN ('owner', 'guest')),
+    expires_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_paired_devices_token ON paired_devices(token_hash);
+
+-- Guest invite codes (docs/GUEST_PAIRING.md): minted by the PC owner,
+-- redeemed once each through `/v1/pair/claim` without any window. Only
+-- the hash is stored; the code itself is shown once at mint time.
+CREATE TABLE IF NOT EXISTS pairing_invites (
+    id TEXT PRIMARY KEY,
+    code_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    -- RFC-3339. Redemption past this answers 410 (ask for a new one).
+    expires_at TEXT NOT NULL,
+    -- Remaining redemptions; NULL means unlimited. Hits zero stays as
+    -- a row so exhaustion still answers 410 instead of looking unknown.
+    uses_left INTEGER CHECK(uses_left IS NULL OR uses_left >= 0),
+    -- Printing preset stamped onto the fresh pair row (still togglable
+    -- per phone afterwards, like any other pair).
+    can_print INTEGER NOT NULL DEFAULT 1,
+    -- PC account that minted it, for the audit trail. NULL when the PC
+    -- was signed out at mint time.
+    created_by TEXT
+);
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON print_jobs(status);

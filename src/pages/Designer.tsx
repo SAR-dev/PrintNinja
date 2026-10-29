@@ -20,6 +20,7 @@ import {
   type DesignerLayout,
 } from "@/components/designer/LayoutToggle";
 import { DesignerActions } from "@/components/designer/DesignerActions";
+import { DesignerOverflowMenu } from "@/components/designer/DesignerOverflowMenu";
 import { DesignerToolbar } from "@/components/designer/DesignerToolbar";
 import { HelpersPanel } from "@/components/designer/HelpersPanel";
 import { ReadmePanel } from "@/components/designer/ReadmePanel";
@@ -65,7 +66,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { PanelLeftClose, QrCode, Save, SlidersHorizontal } from "lucide-react";
-import { toast } from "sonner";
+import { notifySuccess, notifyError } from "@/lib/notify";
 import CodeMirror from "@uiw/react-codemirror";
 import { json } from "@codemirror/lang-json";
 import {
@@ -117,6 +118,8 @@ export function DesignerPage() {
   const [barcodeError, setBarcodeError] = useState<string | null>(null);
   const [showNewTemplateDialog, setShowNewTemplateDialog] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");
+  // Name problems show under the field, not as a toast.
+  const [newNameError, setNewNameError] = useState("");
   const [htmlCode, setHtmlCode] = useState(DEFAULT_TEMPLATE_HTML);
   const [cssCode, setCssCode] = useState(DEFAULT_TEMPLATE_CSS);
   const [templateName, setTemplateName] = useState(STARTER_TEMPLATES[0].name);
@@ -337,7 +340,7 @@ export function DesignerPage() {
       })();
     }
     // Content now lives on the template row itself; nothing more to load.
-    toast.success(t("designer.toast_loaded", { name: tpl.name }));
+    notifySuccess(t("designer.toast_loaded", { name: tpl.name }));
   };
 
   /**
@@ -362,18 +365,18 @@ export function DesignerPage() {
 
   const handleSave = async () => {
     if (!currentTemplateDbId) {
-      toast.error(t("designer.toast_no_template"));
+      notifyError(t("designer.toast_no_template"));
       return;
     }
     if (offline) {
-      toast.error(t("designer.toast_offline_save"));
+      notifyError(t("designer.toast_offline_save"));
       return;
     }
     setPending("save");
     try {
       const row = await getLocalTemplate(currentTemplateDbId);
       if (isReadOnly(row)) {
-        toast.error(t("designer.toast_readonly"));
+        notifyError(t("designer.toast_readonly"));
         return;
       }
       const content = await buildContent();
@@ -400,7 +403,7 @@ export function DesignerPage() {
       );
       setTemplateName(content.name);
       window.dispatchEvent(new Event("sync:pulled"));
-      toast.success(
+      notifySuccess(
         result.published
           ? "Saved — the published copy is updated"
           : "Saved to the server",
@@ -410,7 +413,7 @@ export function DesignerPage() {
         setConflict({ rowId: currentTemplateDbId, serverId: e.serverId });
         return;
       }
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setPending(null);
     }
@@ -459,15 +462,15 @@ export function DesignerPage() {
       if (makePublic) {
         const remote = await share.publishRemoteTemplate(id);
         setPublishedAt(remote.published_at ?? remote.updated_at ?? null);
-        toast.success(t("designer.toast_now_public"));
+        notifySuccess(t("designer.toast_now_public"));
       } else {
         await share.unpublishRemoteTemplate(id);
         setPublishedAt(null);
-        toast.success(t("designer.toast_now_private"));
+        notifySuccess(t("designer.toast_now_private"));
       }
       window.dispatchEvent(new Event("sync:pulled"));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setPending(null);
     }
@@ -489,9 +492,9 @@ export function DesignerPage() {
       setRemoteId(conflict.serverId);
       setPublishedAt(taken.updatedAt);
       setConflict(null);
-      toast.success(t("designer.toast_server_copy"));
+      notifySuccess(t("designer.toast_server_copy"));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setPending(null);
     }
@@ -508,13 +511,13 @@ export function DesignerPage() {
       setRemoteId(result.remoteId);
       setPublishedAt(result.published ? result.updatedAt : null);
       setConflict(null);
-      toast.success(t("designer.toast_overwrote"));
+      notifySuccess(t("designer.toast_overwrote"));
     } catch (e) {
       if (e instanceof TemplateConflictError) {
-        toast.error(t("designer.toast_moved_again"));
+        notifyError(t("designer.toast_moved_again"));
         return;
       }
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setPending(null);
     }
@@ -523,17 +526,18 @@ export function DesignerPage() {
   const createNewTemplate = async () => {
     const name = newTemplateName.trim();
     if (!name) {
-      toast.error(t("designer.toast_name_required"));
+      setNewNameError(t("designer.toast_name_required"));
       return;
     }
     if (templates.some((t) => t.name.toLowerCase() === name.toLowerCase())) {
-      toast.error(t("designer.toast_name_exists"));
+      setNewNameError(t("designer.toast_name_exists"));
       return;
     }
+    setNewNameError("");
     // Server-first: the server owns the copies, so a new template starts
     // there and is cached locally synced. Offline there is no creation.
     if (offline) {
-      toast.error(t("designer.toast_offline_create"));
+      notifyError(t("designer.toast_offline_create"));
       return;
     }
     try {
@@ -559,7 +563,7 @@ export function DesignerPage() {
       setTemplates((prev) => [...prev, tpl]);
       loadTemplate(tpl);
       setCurrentTemplateDbId(tpl.id);
-      toast.success(t("designer.toast_created_server", { name }));
+      notifySuccess(t("designer.toast_created_server", { name }));
     } catch {
       // Web mode / DB unavailable — keep in-memory fallback so UI stays usable.
       const id = templates.length
@@ -578,7 +582,7 @@ export function DesignerPage() {
       setTemplates((prev) => [...prev, tpl]);
       loadTemplate(tpl);
       setCurrentTemplateDbId(tpl.id);
-      toast.success(t("designer.toast_created_local", { name }));
+      notifySuccess(t("designer.toast_created_local", { name }));
     } finally {
       setNewTemplateName("");
       setShowNewTemplateDialog(false);
@@ -753,7 +757,7 @@ export function DesignerPage() {
     setShowBarcodeDialog(false);
     setBarcodeValue("");
     setBarcodeError(null);
-    toast.success(t("designer.toast_barcode_inserted", { type: barcodeType }));
+    notifySuccess(t("designer.toast_barcode_inserted", { type: barcodeType }));
   };
 
   const sampleData = useMemo<Record<string, unknown>>(() => {
@@ -769,12 +773,12 @@ export function DesignerPage() {
 
   const handleSaveReadme = async () => {
     if (!currentTemplateDbId) {
-      toast.error(t("designer.toast_no_template"));
+      notifyError(t("designer.toast_no_template"));
       return;
     }
     const bytes = new TextEncoder().encode(readme).length;
     if (bytes > 64 * 1024) {
-      toast.error(t("designer.toast_readme_too_big"));
+      notifyError(t("designer.toast_readme_too_big"));
       return;
     }
     setReadmeSaving(true);
@@ -783,9 +787,9 @@ export function DesignerPage() {
         req: { id: currentTemplateDbId, readme },
       });
       // The README rides along with the next Save; nothing to send here.
-      toast.success(t("designer.toast_readme_saved"));
+      notifySuccess(t("designer.toast_readme_saved"));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setReadmeSaving(false);
     }
@@ -793,7 +797,7 @@ export function DesignerPage() {
 
   const handleShowCanvas = () => {
     setActiveTab("canvas");
-    toast.success(t("designer.toast_showing_canvas"));
+    notifySuccess(t("designer.toast_showing_canvas"));
   };
 
   const sampleDataPanel = (
@@ -822,9 +826,9 @@ export function DesignerPage() {
             if (selectedDatasetName === ds.name) {
               setSelectedDatasetName(visibleDatasets[0]?.name ?? "");
             }
-            toast.success(t("designer.toast_dataset_deleted"));
+            notifySuccess(t("designer.toast_dataset_deleted"));
           } catch (e) {
-            toast.error(
+            notifyError(
               t("designer.toast_delete_failed", { error: describeError(e) }),
             );
           }
@@ -903,19 +907,30 @@ export function DesignerPage() {
     <div className="space-y-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:gap-4 lg:space-y-0">
       <PageHeader title={t("designer.title")} description={t("pages.designer")}>
         {isDesktop && <LayoutToggle value={layout} onChange={setLayout} />}
-        <DesignerToolbar
-          onNew={() => setShowNewTemplateDialog(true)}
-          onSave={() => void handleSave()}
-          saveDisabled={offline || isReadOnly({ origin })}
-          saveTitle={
-            offline ? "Offline — connect to save to the server" : undefined
-          }
-          remoteId={remoteId}
-          publishedAt={publishedAt}
-          readOnly={isReadOnly({ origin })}
-          pending={pending}
-          onVisibilityChange={(v) => void handleVisibilityChange(v)}
-        />
+        {isDesktop ? (
+          <DesignerToolbar
+            onNew={() => setShowNewTemplateDialog(true)}
+            onSave={() => void handleSave()}
+            saveDisabled={offline || isReadOnly({ origin })}
+            saveTitle={
+              offline ? "Offline — connect to save to the server" : undefined
+            }
+            remoteId={remoteId}
+            publishedAt={publishedAt}
+            readOnly={isReadOnly({ origin })}
+            pending={pending}
+            onVisibilityChange={(v) => void handleVisibilityChange(v)}
+          />
+        ) : (
+          <DesignerOverflowMenu
+            onNew={() => setShowNewTemplateDialog(true)}
+            published={!!remoteId && !!publishedAt}
+            remoteId={remoteId}
+            readOnly={isReadOnly({ origin })}
+            busy={pending != null}
+            onVisibilityChange={(v) => void handleVisibilityChange(v)}
+          />
+        )}
       </PageHeader>
 
       {viaPc && (
@@ -1048,18 +1063,24 @@ export function DesignerPage() {
                     aria-label={t("designer.views_aria")}
                     className="min-h-8 w-max gap-0.5 p-0.5"
                   >
-                    <TabsTrigger value="canvas" className="h-7 px-3 text-xs">
+                    <TabsTrigger
+                      value="canvas"
+                      className="min-h-11 px-3 text-xs"
+                    >
                       {t("designer.canvas")}
                     </TabsTrigger>
-                    <TabsTrigger value="code" className="h-7 px-3 text-xs">
+                    <TabsTrigger value="code" className="min-h-11 px-3 text-xs">
                       {t("designer.code")}
                     </TabsTrigger>
-                    <TabsTrigger value="readme" className="h-7 px-3 text-xs">
+                    <TabsTrigger
+                      value="readme"
+                      className="min-h-11 px-3 text-xs"
+                    >
                       README
                     </TabsTrigger>
                     <TabsTrigger
                       value="sample-data"
-                      className="h-7 px-3 text-xs"
+                      className="min-h-11 px-3 text-xs"
                     >
                       {t("designer.sampleData")}
                     </TabsTrigger>
@@ -1269,13 +1290,13 @@ export function DesignerPage() {
             <Button
               onClick={() => {
                 if (!datasetName.trim()) {
-                  toast.error(t("designer.toast_dataset_name_required"));
+                  notifyError(t("designer.toast_dataset_name_required"));
                   return;
                 }
                 try {
                   JSON.parse(datasetJson);
                 } catch {
-                  toast.error(t("designer.toast_invalid_json"));
+                  notifyError(t("designer.toast_invalid_json"));
                   return;
                 }
                 void (async () => {
@@ -1285,11 +1306,11 @@ export function DesignerPage() {
                     });
                     await loadDatasets();
                     setShowDatasetDialog(false);
-                    toast.success(
+                    notifySuccess(
                       t("designer.toast_dataset_added", { name: datasetName }),
                     );
                   } catch (e) {
-                    toast.error(
+                    notifyError(
                       t("designer.toast_add_failed", {
                         error: describeError(e),
                       }),
@@ -1344,7 +1365,7 @@ export function DesignerPage() {
                 try {
                   JSON.parse(editJson);
                 } catch {
-                  toast.error(t("designer.toast_invalid_json"));
+                  notifyError(t("designer.toast_invalid_json"));
                   return;
                 }
                 void (async () => {
@@ -1359,9 +1380,9 @@ export function DesignerPage() {
                     });
                     await loadDatasets();
                     setShowEditDataset(false);
-                    toast.success(t("designer.toast_dataset_updated"));
+                    notifySuccess(t("designer.toast_dataset_updated"));
                   } catch (e) {
-                    toast.error(
+                    notifyError(
                       t("designer.toast_save_failed", {
                         error: describeError(e),
                       }),
@@ -1387,12 +1408,30 @@ export function DesignerPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label>{t("designer.template_name")}</Label>
+              <Label htmlFor="new-template-name">
+                {t("designer.template_name")}
+              </Label>
               <Input
+                id="new-template-name"
                 placeholder={t("designer.new_name_example")}
                 value={newTemplateName}
-                onChange={(e) => setNewTemplateName(e.target.value)}
+                onChange={(e) => {
+                  setNewTemplateName(e.target.value);
+                  setNewNameError("");
+                }}
+                aria-describedby={
+                  newNameError ? "new-template-name-error" : undefined
+                }
               />
+              {newNameError && (
+                <p
+                  id="new-template-name-error"
+                  role="alert"
+                  className="text-xs text-danger"
+                >
+                  {newNameError}
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>

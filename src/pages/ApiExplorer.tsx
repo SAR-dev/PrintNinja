@@ -1,7 +1,7 @@
 import { describeError } from "@/lib/errors";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -224,7 +224,7 @@ export function ApiExplorerPanel({
   const send = async () => {
     if (!status?.running) return;
     if (selected.needsId && !jobId.trim()) {
-      toast.error(t("explorer.toast_job_id_required"));
+      notifyError(t("explorer.toast_job_id_required"));
       return;
     }
     let parsed: unknown = undefined;
@@ -232,7 +232,7 @@ export function ApiExplorerPanel({
       try {
         parsed = JSON.parse(body);
       } catch {
-        toast.error(t("explorer.toast_bad_json"));
+        notifyError(t("explorer.toast_bad_json"));
         return;
       }
     }
@@ -256,7 +256,7 @@ export function ApiExplorerPanel({
       });
       setResponse({ status: res.status, text: res.text });
     } catch (e) {
-      toast.error(
+      notifyError(
         t("explorer.toast_request_failed", { error: describeError(e) }),
       );
     } finally {

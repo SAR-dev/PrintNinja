@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { currentLanguage } from "@/lib/i18n";
-import { toast } from "sonner";
+import { notifySuccess, notifyError } from "@/lib/notify";
 import { agent } from "@/lib/agent/commands";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
@@ -151,7 +151,7 @@ export function HistoryPage() {
         if (!cancelled) store.setJobs(jobs ?? []);
       } catch (e) {
         if (!cancelled)
-          toast.error(
+          notifyError(
             t("history.toast_load_failed", { error: describeError(e) }),
           );
       } finally {
@@ -234,14 +234,20 @@ export function HistoryPage() {
     const updated = await agent("retry_job", { id: job.id });
     const cur = useHistoryStore.getState();
     cur.setJobs(cur.jobs.map((j) => (j.id === updated.id ? updated : j)));
+    return updated;
   };
 
   const handleReprint = async (job: HistoryJob) => {
     try {
-      await reprintOne(job);
-      toast.success(t("history.toast_reprinted", { id: job.id }));
+      const copy = await reprintOne(job);
+      notifySuccess(t("history.toast_reprinted", { id: job.id }), {
+        action: {
+          label: t("history.view_action"),
+          onClick: () => store.setSelectedJob(copy),
+        },
+      });
     } catch (e) {
-      toast.error(
+      notifyError(
         t("history.toast_reprint_failed", { error: describeError(e) }),
       );
     } finally {
@@ -250,10 +256,15 @@ export function HistoryPage() {
   };
   const handleRetry = async (job: HistoryJob) => {
     try {
-      await retryOne(job);
-      toast.success(t("history.toast_requeued", { id: job.id }));
+      const updated = await retryOne(job);
+      notifySuccess(t("history.toast_requeued", { id: job.id }), {
+        action: {
+          label: t("history.view_action"),
+          onClick: () => store.setSelectedJob(updated),
+        },
+      });
     } catch (e) {
-      toast.error(t("history.toast_retry_failed", { error: describeError(e) }));
+      notifyError(t("history.toast_retry_failed", { error: describeError(e) }));
     } finally {
       setConfirm(null);
     }
@@ -278,9 +289,9 @@ export function HistoryPage() {
     setBusy(false);
     setConfirm(null);
     if (failures.length === 0)
-      toast.success(t("history.bulk_done", { verb: t(verbKey), count: ok }));
+      notifySuccess(t("history.bulk_done", { verb: t(verbKey), count: ok }));
     else
-      toast.error(
+      notifyError(
         t("history.bulk_partial", {
           verb: t(verbKey),
           count: ok,
@@ -301,10 +312,10 @@ export function HistoryPage() {
         n.delete(String(job.id));
         return n;
       });
-      toast.success(t("history.toast_deleted", { id: job.id }));
+      notifySuccess(t("history.toast_deleted", { id: job.id }));
       setConfirm(null);
     } catch (e) {
-      toast.error(
+      notifyError(
         t("history.toast_delete_failed", {
           id: job.id,
           error: describeError(e),
@@ -317,7 +328,7 @@ export function HistoryPage() {
 
   const handleExportCsv = () => {
     if (filteredJobs.length === 0) {
-      toast.error(t("history.toast_nothing"));
+      notifyError(t("history.toast_nothing"));
       return;
     }
     // Full-row export: everything the details dialog shows, with the
@@ -390,7 +401,7 @@ export function HistoryPage() {
     a.download = "printninja-history.csv";
     a.click();
     URL.revokeObjectURL(url);
-    toast.success(t("history.toast_exported", { count: filteredJobs.length }));
+    notifySuccess(t("history.toast_exported", { count: filteredJobs.length }));
   };
 
   const saveCurrentFilter = () => {
@@ -404,7 +415,7 @@ export function HistoryPage() {
     persistSaved(next);
     setSaveOpen(false);
     setSaveName("");
-    toast.success(t("history.toast_saved", { name }));
+    notifySuccess(t("history.toast_saved", { name }));
   };
   const removeSaved = (name: string) => {
     const next = saved.filter((s) => s.name !== name);
