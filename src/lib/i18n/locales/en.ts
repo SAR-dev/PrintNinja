@@ -400,7 +400,9 @@ const en = {
     preview_empty_template:
       "This template is empty. Open it in Designer and save it.",
     preview_data_failed:
-      "Could not load data from the URL ({{error}}); showing sample data.",
+      "Could not load data from the URL ({{error}}); showing sample data. The print itself loads the URL on the server, so it may still work.",
+    preview_data_timeout:
+      "The URL took too long to answer; showing sample data. The print itself loads the URL on the server, so it may still work.",
     preview_empty_data: "The data is an empty array: nothing to print.",
     preview_truncated:
       "Showing first {{shown}} of {{total}} pages — the print has them all.",

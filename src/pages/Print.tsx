@@ -246,6 +246,15 @@ export function PrintPage() {
   const httpMethod = store.httpMethod;
   const pageCount = Math.min(500, Math.max(1, Math.floor(store.records || 1)));
   const PREVIEW_PAGE_CAP = 10;
+  /** A hanging data URL stalls the preview; the print fetches server-side. */
+  const PREVIEW_DATA_TIMEOUT_MS = 10_000;
+  // The preview fetches on every keystroke without this — with POST that
+  // repeats a side-effecting call against the user's endpoint.
+  const [debouncedDataUrl, setDebouncedDataUrl] = useState(dataUrl);
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedDataUrl(dataUrl), 500);
+    return () => window.clearTimeout(id);
+  }, [dataUrl]);
   useEffect(() => {
     const template = selectedTemplate;
     if (!template) {
@@ -292,25 +301,36 @@ export function PrintPage() {
 
         let data: unknown = DEFAULT_MOCK_DATA;
         let notice = "";
-        if (!useTestData && dataUrl.trim()) {
+        if (!useTestData && debouncedDataUrl.trim()) {
+          const ctrl = new AbortController();
+          const timeout = window.setTimeout(
+            () => ctrl.abort(),
+            PREVIEW_DATA_TIMEOUT_MS,
+          );
           try {
             const res = await fetch(
-              dataUrl.trim(),
+              debouncedDataUrl.trim(),
               httpMethod === "POST"
                 ? {
                     method: "POST",
                     headers: { "content-type": "application/json" },
                     body: "{}",
+                    signal: ctrl.signal,
                   }
-                : undefined,
+                : { signal: ctrl.signal },
             );
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             data = await res.json();
           } catch (e) {
-            notice = t("print.preview_data_failed", {
-              error: describeError(e),
-            });
+            notice =
+              e instanceof DOMException && e.name === "AbortError"
+                ? t("print.preview_data_timeout")
+                : t("print.preview_data_failed", {
+                    error: describeError(e),
+                  });
             data = DEFAULT_MOCK_DATA;
+          } finally {
+            window.clearTimeout(timeout);
           }
         }
 
@@ -350,7 +370,7 @@ export function PrintPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedTemplate, dataUrl, useTestData, httpMethod, pageCount]);
+  }, [selectedTemplate, debouncedDataUrl, useTestData, httpMethod, pageCount]);
 
   const loadPrinters = async () => {
     // Via PC, the phone's own printers are not in play: asking the OS
