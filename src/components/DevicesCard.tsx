@@ -20,6 +20,9 @@ import {
 import {
   filterPairingInput,
   isCompletePairingCode,
+  mergePhonePair,
+  duplicatePairGroups,
+  normalizePairHost,
   normalizePairingCode,
   parsePairs,
 } from "@/lib/pairing";
@@ -843,14 +846,17 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
   };
 
   /** Save a pair (replacing the same PC) and prove it works straight
-   * away, so a bad code shows up now, not at the first print. */
+   * away, so a bad code shows up now, not at the first print. A
+   * reset/reinstalled PC arrives under a new provider id at the same
+   * address: the old entry is replaced and named, not left to fail. */
   const addPair = async (pair: RenderPair) => {
-    const others = pairs.filter((p) => {
-      const sameProvider =
-        pair.provider_id && p.provider_id === pair.provider_id;
-      return !sameProvider && !(p.host === pair.host && p.port === pair.port);
-    });
-    await savePairs([...others, pair]);
+    const { pairs: next, replacedStale } = mergePhonePair(pairs, pair);
+    await savePairs(next);
+    if (replacedStale || pair.replaced_stale) {
+      toast.info(
+        t("settings_page.devices_replaced_stale", { name: pair.name }),
+      );
+    }
     await testPair(pair);
   };
 
@@ -895,6 +901,26 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
 
   const removePair = async (id: string) => {
     await savePairs(pairs.filter((p) => p.id !== id));
+  };
+
+  // Collapse entries sharing one normalized address, keeping the
+  // newest claim per address: pairing once by IP and once by name (or
+  // before/after a PC reset) forks one machine into rows, and the
+  // print dialog may dial the dead one.
+  const dedupePairs = async () => {
+    const seen = new Map<string, RenderPair>();
+    for (const p of pairs) {
+      const k = `${normalizePairHost(p.host)}:${p.port ?? 0}`;
+      const prev = seen.get(k);
+      if (!prev || (p.paired_at ?? "") > (prev.paired_at ?? "")) {
+        seen.set(k, p);
+      }
+    }
+    const removed = pairs.length - seen.size;
+    if (removed > 0) {
+      await savePairs([...seen.values()]);
+      toast.success(t("settings_page.devices_dedupe_done", { count: removed }));
+    }
   };
 
   const complete = isCompletePairingCode(code);
@@ -1007,6 +1033,23 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
             </div>
           );
         })
+      )}
+
+      {duplicatePairGroups(pairs).length > 0 && (
+        <div className="flex items-center justify-between gap-2 rounded-md border border-warning/40 p-3">
+          <p className="text-xs text-warning">
+            {t("settings_page.devices_dupe_hint")}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="devices-dedupe"
+            disabled={busy}
+            onClick={() => void dedupePairs()}
+          >
+            {t("settings_page.devices_dedupe")}
+          </Button>
+        </div>
       )}
 
       <div className="space-y-2 rounded-md border p-3">

@@ -413,6 +413,9 @@ export interface RenderPair {
   paired_at?: string;
   /** This phone's id, as the PC has it. */
   device_id?: string;
+  /** True when this claim replaced a differently-identified entry for
+   * the same address (reset/reinstalled PC): announce it. */
+  replaced_stale?: boolean;
 }
 
 /** Provider capability advertisement from `peer_capabilities`. */

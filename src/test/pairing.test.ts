@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import {
+  duplicatePairGroups,
   filterPairingInput,
   hasPairedProvider,
   isCompletePairingCode,
+  mergePhonePair,
+  normalizePairHost,
   normalizePairingCode,
+  pairAddressKey,
 } from "@/lib/pairing";
+import type { RenderPair } from "@/lib/agent/types";
 
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -116,5 +121,67 @@ describe("pairing codes", () => {
     // The dash is gone from every display; input tolerance for old
     // habits stays in normalize/filter above.
     expect(normalizePairingCode("K7QM4XPD")).toBe("K7QM4XPD");
+  });
+});
+
+describe("pair address identity", () => {
+  const P = (over: Partial<RenderPair>): RenderPair => ({
+    id: "x",
+    name: "PC",
+    host: "192.168.1.9",
+    port: 17717,
+    secret: "s",
+    fingerprint: "",
+    provider_id: "pc-1",
+    platform: "linux",
+    paired_at: "2026-01-01T00:00:00Z",
+    device_id: "phone-1",
+    ...over,
+  });
+
+  it("normalizes cosmetic host differences", async () => {
+    expect(normalizePairHost("  PC.local. ")).toBe("pc.local");
+    expect(normalizePairHost("[::1]")).toBe("::1");
+    expect(pairAddressKey("PC.LOCAL.", 17717)).toBe(
+      pairAddressKey("pc.local", 17717),
+    );
+    expect(pairAddressKey("pc.local", 17717)).not.toBe(
+      pairAddressKey("pc.local", 17718),
+    );
+  });
+
+  it("replaces the same provider silently on a moved address", async () => {
+    const { pairs, replacedStale } = mergePhonePair(
+      [P({ provider_id: "a", host: "192.168.1.9" })],
+      P({ provider_id: "a", host: "192.168.1.20" }),
+    );
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].host).toBe("192.168.1.20");
+    expect(replacedStale).toBe(false);
+  });
+
+  it("replaces a reset PC at the same address and says so", async () => {
+    const { pairs, replacedStale } = mergePhonePair(
+      [P({ provider_id: "old" })],
+      P({ provider_id: "new" }),
+    );
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].provider_id).toBe("new");
+    expect(replacedStale).toBe(true);
+  });
+
+  it("keeps distinct PCs and spots duplicate groups", async () => {
+    const { pairs } = mergePhonePair(
+      [P({ provider_id: "a", host: "192.168.1.9" })],
+      P({ provider_id: "b", host: "192.168.1.10" }),
+    );
+    expect(pairs).toHaveLength(2);
+    expect(
+      duplicatePairGroups([
+        P({ provider_id: "a", host: "PC.local" }),
+        P({ provider_id: "b", host: "pc.local." }),
+        P({ provider_id: "c", host: "192.168.1.10" }),
+      ]),
+    ).toHaveLength(1);
   });
 });

@@ -1107,6 +1107,47 @@ describe("Automation → Phones and server", () => {
       }
     });
 
+    it("collapses duplicate pairs to the newest with one tap", async () => {
+      appMode();
+      try {
+        const dupes = JSON.stringify([
+          {
+            id: "old",
+            name: "Shop PC",
+            host: "192.168.1.9",
+            port: 17717,
+            secret: "old-secret",
+            fingerprint: "",
+            provider_id: "old-id",
+            paired_at: "2026-01-01T00:00:00Z",
+          },
+          {
+            id: "new",
+            name: "Shop PC",
+            host: "192.168.1.9",
+            port: 17717,
+            secret: "new-secret",
+            fingerprint: "",
+            provider_id: "new-id",
+            paired_at: "2026-02-01T00:00:00Z",
+          },
+        ]);
+        phoneBackend({ settings: { render_pairs: dupes } });
+        openApi();
+        await screen.findByTestId("devices-pair-old");
+        await screen.findByTestId("devices-pair-new");
+        fireEvent.click(await screen.findByTestId("devices-dedupe"));
+        await waitFor(() => {
+          const kept = savedPairs();
+          expect(kept).toHaveLength(1);
+          expect(kept![0].provider_id).toBe("new-id");
+        });
+        expect(screen.queryByTestId("devices-dedupe")).toBeNull();
+      } finally {
+        webMode();
+      }
+    });
+
     it("hides the share switch on a phone, server tab included", async () => {
       appMode();
       try {

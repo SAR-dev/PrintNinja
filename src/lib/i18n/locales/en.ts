@@ -754,6 +754,12 @@ const en = {
     devices_testing: "Testing…",
     devices_test_ok: "Score {{score}} · {{cores}} cores · {{platform}}",
     devices_test_toast_ok: "{{name}} answered — ready to print.",
+    devices_replaced_stale:
+      "{{name}} replaced an older entry — the PC may have been reset.",
+    devices_dupe_hint:
+      "The same address is paired more than once. Printing may use the dead entry.",
+    devices_dedupe: "Remove duplicates",
+    devices_dedupe_done: "Removed {{count}} duplicate entries.",
     devices_remove: "Remove {{name}}",
     devices_phone_hint:
       "Your phone prints through your PC: the PC prepares every job and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. If the PC is off, asleep or blocked, prints fail until it answers; retry them from History.",
