@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { ProfileCard } from "@/components/ProfileCard";
+import { PrintViaPcCard } from "@/components/PrintViaPcCard";
 import { toast } from "sonner";
 import { diagnostics } from "@/lib/diagnostics";
 import * as share from "@/lib/share/client";
@@ -856,6 +857,7 @@ export function SettingsPage() {
                   )}
                 </CardContent>
               </Card>
+              <PrintViaPcCard />
               <SyncStatusCard />
             </TabsContent>
 

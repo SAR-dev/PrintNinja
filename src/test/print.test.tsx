@@ -282,3 +282,144 @@ describe("Print page", () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 });
+
+describe("Print via PC", () => {
+  const PAIR = {
+    id: "pc-1",
+    name: "Studio PC",
+    host: "192.168.1.9",
+    port: 17717,
+    secret: "s",
+    fingerprint: "",
+    provider_id: "pc-1",
+    platform: "linux",
+    paired_at: "",
+    device_id: "phone-1",
+  };
+  const remoteOk = {
+    success: true,
+    status: "success",
+    pc_job_id: "7",
+    duration_ms: 50,
+    error: null,
+    code: null,
+    pc_name: "Studio PC",
+  };
+
+  function viaPcBackend(
+    opts: {
+      pairs?: unknown[];
+      printers?: unknown[];
+      cached?: boolean;
+      print?: unknown;
+    } = {},
+  ) {
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "get_setting") {
+        if (args?.key === "print_via_pc") return "true";
+        if (args?.key === "render_pairs")
+          return JSON.stringify(opts.pairs ?? [PAIR]);
+        return null;
+      }
+      if (cmd === "list_printers" || cmd === "enumerate_system_printers")
+        return [{ id: "1", name: "Dock Zebra" }];
+      if (cmd === "remote_printers")
+        return {
+          printers: opts.printers ?? [
+            { name: "PC Printer", printer_type: "ipp", language: "pdf" },
+          ],
+          cached: opts.cached ?? false,
+        };
+      if (cmd === "remote_print") return opts.print ?? remoteOk;
+      return null;
+    });
+  }
+
+  const remoteCalls = () =>
+    invoke.mock.calls
+      .filter((c) => c[0] === "remote_print")
+      .map((c) => (c[1] as any).args);
+
+  it("prints through the PC and never calls the local pipeline", async () => {
+    viaPcBackend();
+    renderPage();
+    expect(await screen.findByTestId("print-via-pc-banner")).toHaveTextContent(
+      "Studio PC",
+    );
+    const print = await screen.findByRole("button", { name: /^Print$/ });
+    await waitFor(() => expect(print).toBeEnabled());
+    fireEvent.click(print);
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "remote_print",
+        expect.objectContaining({
+          args: expect.objectContaining({
+            template_id: 7,
+            printer_name: "PC Printer",
+            copies: 1,
+          }),
+        }),
+      ),
+    );
+    expect(invoke).not.toHaveBeenCalledWith("print_html", expect.anything());
+    expect(await screen.findByText("Print sent")).toBeInTheDocument();
+    expect(screen.getByTestId("print-printed-via")).toHaveTextContent(
+      "Studio PC",
+    );
+  });
+
+  it("says when the printer list is cached", async () => {
+    viaPcBackend({ cached: true });
+    renderPage();
+    expect(await screen.findByTestId("print-via-pc-banner")).toHaveTextContent(
+      /cached/,
+    );
+  });
+
+  it("blocks with a banner when no PC is chosen", async () => {
+    viaPcBackend({ pairs: [] });
+    renderPage();
+    expect(await screen.findByTestId("print-via-pc-banner")).toHaveTextContent(
+      /Settings/,
+    );
+    const print = await screen.findByRole("button", { name: /^Print$/ });
+    await waitFor(() => expect(print).toBeDisabled());
+    fireEvent.click(print);
+    expect(invoke).not.toHaveBeenCalledWith("remote_print", expect.anything());
+  });
+
+  it("offers Sync on a stale template and retries with the same key", async () => {
+    viaPcBackend({
+      print: {
+        success: false,
+        status: "failed",
+        pc_job_id: null,
+        duration_ms: 5,
+        error: "template 'srv-1' is out of date",
+        code: "template_stale",
+        pc_name: "Studio PC",
+      },
+    });
+    renderPage();
+    const print = await screen.findByRole("button", { name: /^Print$/ });
+    await waitFor(() => expect(print).toBeEnabled());
+    fireEvent.click(print);
+
+    expect(
+      await screen.findByTestId("print-sync-templates"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("print-sync-templates"));
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("print-sync-templates"),
+      ).not.toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(remoteCalls()).toHaveLength(2));
+    const [first, second] = remoteCalls();
+    expect(first.idempotency_key).toBeTruthy();
+    expect(second.idempotency_key).toBe(first.idempotency_key);
+  });
+});
