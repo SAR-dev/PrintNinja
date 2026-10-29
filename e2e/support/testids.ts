@@ -52,6 +52,8 @@ export const testids = {
   designerSave: "designer-save",
   /** Designer sync bar: visibility switch (Public/Private). */
   templateVisibility: "template-visibility",
+  /** Designer overflow menu (phones): visibility checkbox, same action. */
+  templateVisibilityMenu: "template-visibility-menu",
   /** Settings appearance: app name field. */
   settingsBrandName: "settings-brand-name",
   /** Settings appearance: density radio group. */

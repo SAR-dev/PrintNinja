@@ -64,7 +64,10 @@ describe("Profile section", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(client.logout).toHaveBeenCalledOnce());
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith("Signed out", expect.anything()),
+      expect(toast.success).toHaveBeenCalledWith(
+        "Signed out",
+        expect.anything(),
+      ),
     );
     expect(
       await screen.findByText(/You are not signed in/),

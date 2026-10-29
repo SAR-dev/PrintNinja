@@ -297,8 +297,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       const h = (sel: string) =>
         document.querySelector(sel)?.getBoundingClientRect().height ?? 0;
       const px =
-        Math.ceil(h('[data-slot="mobile-nav"]') + h('[data-slot="action-bar"]')) +
-        16;
+        Math.ceil(
+          h('[data-slot="mobile-nav"]') + h('[data-slot="action-bar"]'),
+        ) + 16;
       document.documentElement.style.setProperty(
         "--toast-offset-bottom",
         `${px}px`,

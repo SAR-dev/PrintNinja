@@ -15,7 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Printer, Zap, CheckCircle2, XCircle, ChevronDown } from "lucide-react";
+import {
+  Printer,
+  Zap,
+  CheckCircle2,
+  XCircle,
+  ChevronDown,
+  RefreshCw,
+} from "lucide-react";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { TimingBreakdown } from "@/components/TimingBreakdown";
 import { formatSeconds } from "@/lib/timings";
@@ -618,15 +625,7 @@ export function PrintPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title={t("print.title")} description={t("pages.print")}>
-        {/* With Print via PC the banner below owns refresh; two buttons
-            with the same name confused phone users. */}
-        {!viaPc && (
-          <Button variant="outline" size="sm" onClick={loadPrinters}>
-            {t("print.refresh")}
-          </Button>
-        )}
-      </PageHeader>
+      <PageHeader title={t("print.title")} description={t("pages.print")} />
 
       {/* Print via PC: the job runs on the paired PC's printers, never on
           this phone's transports. */}
@@ -652,9 +651,6 @@ export function PrintPage() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <ExitViaPcButton onExited={() => setViaPc(false)} />
-              <Button variant="outline" size="sm" onClick={refreshPcPrinters}>
-                {t("print.refresh")}
-              </Button>
             </div>
           </div>
         ) : (
@@ -671,22 +667,21 @@ export function PrintPage() {
           </div>
         ))}
 
-      {/* The one place a print's outcome is reported. It is always shown: ready
-          before the first print, then printing, then the result with its timing. */}
+      {/* The one place a print's outcome is reported. Idle is one
+          truncated line; the full card is for results with something
+          to say, so the form starts higher on a phone. */}
       {(store.status === "idle" || store.status === "queued") && (
         <div
           role="status"
-          className="flex items-center gap-3 rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-success"
+          className="flex items-center gap-3 rounded-lg border border-success/30 bg-success-soft px-4 py-2 text-success"
         >
           <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{t("print.ready_title")}</p>
-            <p className="break-words text-xs">
-              {store.printerId
-                ? t("print.ready_detail", { printer: store.printerId })
-                : t("print.ready_empty")}
-            </p>
-          </div>
+          <p className="min-w-0 flex-1 truncate text-sm">
+            {t("print.ready_title")} —{" "}
+            {store.printerId
+              ? t("print.ready_detail", { printer: store.printerId })
+              : t("print.ready_empty")}
+          </p>
         </div>
       )}
       {store.status === "success" && (
@@ -776,7 +771,19 @@ export function PrintPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className={field}>
-                <Label htmlFor="print-printer">{t("print.printer")}</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="print-printer">{t("print.printer")}</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={loadPrinters}
+                    aria-label={t("print.refresh")}
+                    title={t("print.refresh")}
+                  >
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                    {t("print.refresh")}
+                  </Button>
+                </div>
                 <Select
                   value={store.printerId}
                   onValueChange={store.setPrinterId}

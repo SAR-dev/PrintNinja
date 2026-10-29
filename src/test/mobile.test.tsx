@@ -816,11 +816,11 @@ describe("phone Designer page", () => {
       name: "Designer views",
     });
     expect(tablist.closest("div.sticky")).not.toBeNull();
-    // Header toolbar Save keeps its test id; the sticky shortcut duplicates
-    // the action without one.
+    // Phones keep one Save: the sticky shortcut. The header toolbar
+    // (New, Save, visibility) lives behind the overflow menu instead.
     const saves = screen.getAllByRole("button", { name: "Save" });
-    expect(saves).toHaveLength(2);
-    expect(screen.getByTestId("designer-save")).toBeInTheDocument();
+    expect(saves).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "More" })).toBeInTheDocument();
   });
 
   it("shows real page dimensions on the canvas toolbar", async () => {
