@@ -607,10 +607,102 @@ describe("Automation → Phones and server", () => {
             enabled: false,
           }),
         );
+        // Sharing off means loopback-only: the bind follows, so a
+        // stopped-then-started server listens locally.
+        await waitFor(() =>
+          expect(savedSetting("api_lan_access")).toBe("false"),
+        );
         await waitFor(() =>
           expect(screen.queryByTestId("devices-pairing-code")).toBeNull(),
         );
         expect(screen.queryByTestId("devices-pair-phone")).toBeNull();
+      } finally {
+        webMode();
+      }
+    });
+  });
+
+  describe("API server share switch", () => {
+    const shareToggle = () =>
+      screen.findByRole("switch", { name: "Share with paired devices" });
+
+    it("writes both keys and warns on first enable after confirm", async () => {
+      appMode();
+      try {
+        openApi("server");
+        const toggle = await shareToggle();
+        expect(toggle).not.toBeChecked();
+        fireEvent.click(toggle);
+        // First enable asks once.
+        fireEvent.click(await screen.findByRole("button", { name: "Share" }));
+        await waitFor(() =>
+          expect(invoke).toHaveBeenCalledWith("set_render_sharing", {
+            enabled: true,
+          }),
+        );
+        await waitFor(() =>
+          expect(savedSetting("api_lan_access")).toBe("true"),
+        );
+        expect(
+          await screen.findByText(/Only paired devices can connect/),
+        ).toBeVisible();
+      } finally {
+        webMode();
+      }
+    });
+
+    it("skips the confirm once seen", async () => {
+      appMode();
+      try {
+        localStorage.setItem("printninja-share-confirm-seen", "true");
+        openApi("server");
+        fireEvent.click(await shareToggle());
+        expect(screen.queryByRole("dialog")).toBeNull();
+        await waitFor(() =>
+          expect(savedSetting("api_lan_access")).toBe("true"),
+        );
+        await waitFor(() =>
+          expect(invoke).toHaveBeenCalledWith("set_render_sharing", {
+            enabled: true,
+          }),
+        );
+      } finally {
+        webMode();
+      }
+    });
+
+    it("cancelling the confirm leaves sharing off", async () => {
+      appMode();
+      try {
+        openApi("server");
+        fireEvent.click(await shareToggle());
+        fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        expect(
+          invoke.mock.calls.some((c) => c[0] === "set_render_sharing"),
+        ).toBe(false);
+        expect(savedSetting("api_lan_access")).toBeNull();
+      } finally {
+        webMode();
+      }
+    });
+
+    it("keeps the port visible but the bind wording out of the main view", async () => {
+      appMode();
+      try {
+        openApi("server");
+        // Port stays a primary start parameter...
+        expect(await screen.findByTestId("settings-api-port")).toBeVisible();
+        // ...while the stopped status names no bind address anymore
+        // (the curl example below legitimately keeps its loopback URL).
+        expect(await screen.findByText("Port 17717")).toBeVisible();
+        expect(screen.queryByText(/0\.0\.0\.0/)).toBeNull();
+        const advanced = await screen.findByText("Advanced");
+        expect(advanced.closest("details")).not.toBeNull();
+        fireEvent.click(advanced);
+        expect(
+          await screen.findByRole("switch", { name: "Allow LAN access" }),
+        ).toBeInTheDocument();
       } finally {
         webMode();
       }

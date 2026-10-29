@@ -707,8 +707,16 @@ const en = {
     sync_never: "Never",
     sync_unconfigured: "Not configured",
     sync_sign_in_first: "Sign in to the share service to refresh the cache.",
-    api_lan_warning:
-      "LAN access is enabled: anyone on your network can trigger prints and read templates, jobs and metrics.",
+    api_share_paired: "Share with paired devices",
+    api_share_paired_warning:
+      "Only paired devices can connect — anyone else on the network gets no answer.",
+    api_advanced: "Advanced",
+    api_advanced_bind_hint:
+      "Manual bind override. The share switch above sets this automatically.",
+    api_share_confirm_title: "Share with paired devices?",
+    api_share_confirm_body:
+      "Paired phones will be able to print on this PC's printers.",
+    api_share_confirm_ok: "Share",
     api_title: "Local REST API",
     api_port: "Port",
     api_lan: "Allow LAN access",
@@ -716,7 +724,7 @@ const en = {
     api_starting: "Starting…",
     api_stop: "Stop Server",
     api_autostart: "Start server when the app starts",
-    api_autostart_hint: "Uses the port and LAN choice above.",
+    api_autostart_hint: "Uses the port and sharing settings.",
     api_background_hint:
       "Keeps running in the background — the pinned notification shows this address while the server is up.",
     api_curl_title: "curl example",
