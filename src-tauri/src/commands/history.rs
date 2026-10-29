@@ -23,6 +23,10 @@ pub struct PrintJob {
     /// Which paired phone asked for this print (`None` for local prints).
     /// Revoking the phone NULLs it; the row stays.
     pub requested_by_device_id: Option<String>,
+    /// The template's `server_revision` that printed (`None` for raw-HTML
+    /// prints and rows that predate it). History shows exactly which
+    /// revision ran.
+    pub template_revision: Option<i64>,
     pub is_test: bool,
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
@@ -245,7 +249,8 @@ pub fn delete_job_conn(conn: &Connection, id: i64) -> AppResult<()> {
 const SELECT_JOB_COLUMNS: &str = "SELECT id, batch_id, record_index, template_id,
             printer_id, source, source_url, status, error,
             copies, settings_json, rendered_html, idempotency_key, is_test,
-            started_at, finished_at, duration_ms, timings_json, requested_by_device_id
+            started_at, finished_at, duration_ms, timings_json, requested_by_device_id,
+            template_revision
      FROM print_jobs";
 
 fn map_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
@@ -269,5 +274,6 @@ fn map_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
         duration_ms: row.get(16)?,
         timings_json: row.get(17)?,
         requested_by_device_id: row.get(18)?,
+        template_revision: row.get(19)?,
     })
 }

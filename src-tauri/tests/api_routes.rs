@@ -795,7 +795,7 @@ async fn openapi_documents_the_print_response_codes() {
     let responses = spec["paths"]["/v1/print"]["post"]["responses"]
         .as_object()
         .expect("documented responses");
-    for code in ["200", "400", "404", "500"] {
+    for code in ["200", "400", "404", "409", "500"] {
         assert!(responses.contains_key(code), "missing documented {code}");
     }
 
@@ -1707,4 +1707,211 @@ async fn print_rejects_oversize_data_without_creating_a_job() {
         .query_row("SELECT COUNT(*) FROM print_jobs", [], |r| r.get(0))
         .unwrap();
     assert_eq!(n, 0, "refused requests create no job");
+}
+
+// ───────────────────────────────────────────────────────────────
+// template version check (Release B §3.7)
+// ───────────────────────────────────────────────────────────────
+
+/// A synced template the version check can resolve: `server_id` is the
+/// cross-device identity, `server_revision` the compared version.
+fn seed_versioned_template(db: &Db) {
+    let guard = db.lock().unwrap();
+    guard
+        .connection()
+        .execute(
+            "INSERT INTO templates (name, page_w_mm, page_h_mm, orientation, html, css,
+                                    server_id, server_revision, sync_state)
+             VALUES ('Versioned', 120, 200, 'portrait', '<p>v</p>', '',
+                     'srv-1', 7, 'synced')",
+            [],
+        )
+        .unwrap();
+}
+
+fn versioned_body(revision: Option<i64>) -> serde_json::Value {
+    let mut data = serde_json::json!({
+        "template": "Versioned",
+        "template_server_id": "srv-1",
+        "printer": "Desk",
+        "data": {}
+    });
+    if let Some(rev) = revision {
+        data["template_server_revision"] = rev.into();
+    }
+    data
+}
+
+fn job_count(db: &Db) -> i64 {
+    db.lock()
+        .unwrap()
+        .connection()
+        .query_row("SELECT COUNT(*) FROM print_jobs", [], |r| r.get(0))
+        .unwrap()
+}
+
+/// A matching revision prints (row created, revision recorded) and the
+/// job endpoint reports which revision ran.
+#[tokio::test]
+async fn version_match_prints_and_records_revision() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_versioned_template(&db);
+    seed_sharing(&db, "ver-token-1");
+
+    let (status, _) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(22),
+        Some("ver-token-1"),
+        versioned_body(Some(7)),
+    )
+    .await;
+    assert_ne!(status, StatusCode::UNAUTHORIZED);
+    assert_ne!(status, StatusCode::CONFLICT, "matching revision must pass");
+
+    let (id, rev): (i64, Option<i64>) = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT id, template_revision FROM print_jobs ORDER BY id DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(rev, Some(7), "job records the revision that ran");
+    let (_, body) = get_body(router(&db), &format!("/v1/jobs/{id}")).await;
+    assert_eq!(body["template_revision"], 7);
+}
+
+/// A `server_id` the PC never saw is 409 `template_missing`, with no job.
+#[tokio::test]
+async fn unknown_server_id_is_409_missing() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "ver-token-2");
+
+    let (status, body) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(23),
+        Some("ver-token-2"),
+        serde_json::json!({
+            "template": "Versioned",
+            "template_server_id": "srv-nope",
+            "template_server_revision": 1,
+            "printer": "Desk",
+            "data": {}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["code"], "template_missing");
+    assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+/// A differing revision is 409 `template_stale` carrying both revisions.
+#[tokio::test]
+async fn stale_revision_is_409_with_both_revisions() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_versioned_template(&db);
+    seed_sharing(&db, "ver-token-3");
+
+    let (status, body) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(24),
+        Some("ver-token-3"),
+        versioned_body(Some(6)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["code"], "template_stale");
+    assert_eq!(body["client_revision"], 6);
+    assert_eq!(body["pc_revision"], 7);
+    assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+/// The PC's own copy with unsynced local edits is refused: it would print
+/// content the server and the phone do not have.
+#[tokio::test]
+async fn dirty_pc_copy_is_refused() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_versioned_template(&db);
+    seed_sharing(&db, "ver-token-4");
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute(
+            "UPDATE templates SET sync_state = 'dirty' WHERE server_id = 'srv-1'",
+            [],
+        )
+        .unwrap();
+
+    let (status, body) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(25),
+        Some("ver-token-4"),
+        versioned_body(Some(7)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["code"], "template_stale");
+    assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+/// A renamed template is still found by `server_id`: the name is not a
+/// fallback, so the stale name in the request does not matter.
+#[tokio::test]
+async fn renamed_template_found_by_server_id() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_versioned_template(&db);
+    seed_sharing(&db, "ver-token-5");
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute(
+            "UPDATE templates SET name = 'Renamed' WHERE server_id = 'srv-1'",
+            [],
+        )
+        .unwrap();
+
+    let (status, _) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(26),
+        Some("ver-token-5"),
+        versioned_body(Some(7)),
+    )
+    .await;
+    assert_ne!(status, StatusCode::CONFLICT, "server_id wins over the name");
+    assert_ne!(status, StatusCode::NOT_FOUND, "no name fallback attempted");
+    assert_eq!(job_count(&db), 1);
+}
+
+/// A `server_id` with no revision to compare (never-synced phone copy) is
+/// 409 `template_missing`: sync first, then retry.
+#[tokio::test]
+async fn missing_client_revision_is_409_missing() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_versioned_template(&db);
+    seed_sharing(&db, "ver-token-6");
+
+    let (status, body) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(27),
+        Some("ver-token-6"),
+        versioned_body(None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["code"], "template_missing");
+    assert_eq!(job_count(&db), 0, "refused requests create no job");
 }
