@@ -126,6 +126,11 @@ const implemented: Record<string, Handler> = {
     return cache.resetDatabase();
   },
   ping: () => null,
+  // Backend log tail for the Diagnostics viewer/download. The real agent
+  // reads the size-rotated file; here a canned two-liner proves the
+  // plumbing without touching the disk.
+  read_app_logs: () =>
+    "2026-01-01T00:00:00Z  INFO printninja_lib: fake agent log line one\n2026-01-01T00:00:00Z  INFO printninja_lib: fake agent log line two\n",
   // Phone side of pairing: the 8-character code flow. The fake agent
   // accepts the well-known e2e code and mints a canned pair; anything
   // else is a wrong code. The subnet probe is Rust-only.

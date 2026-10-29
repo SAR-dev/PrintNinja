@@ -830,6 +830,11 @@ const ja: Translation = {
     diag_hint:
       "トラブルシューティング用にアプリのログと診断情報をエクスポートします。",
     diag_export: "診断情報をエクスポート",
+    diag_app_log_export: "アプリのログをダウンロード",
+    diag_app_log_view: "アプリのログを表示",
+    diag_app_log_empty: "アプリのログはまだ記録されていません。",
+    diag_app_log_hint:
+      "バックエンドの最新のログ（印刷パイプライン）を古い順に表示します。ファイルログが開始されていない場合は空です。",
     diag_note: "シークレットとAPIトークンはエクスポートから除外されます。",
     allow_title: "すべてのドメインからのデータを許可しますか？",
     allow_hint:
@@ -879,6 +884,8 @@ const ja: Translation = {
     toast_signed_in: "{{handle}}としてサインインしました",
     toast_signed_out: "サインアウトしました",
     toast_diag_exported: "診断情報をエクスポートしました",
+    toast_diag_app_log_exported: "アプリのログをダウンロードしました",
+    toast_diag_app_log_failed: "アプリのログを読み取れませんでした",
     toast_allow_all:
       "許可ドメインを消去しました。すべてのドメインが許可されます",
     toast_reset_failed: "リセットに失敗しました: {{error}}",

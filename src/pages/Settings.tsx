@@ -418,6 +418,37 @@ export function SettingsPage() {
     }
   };
 
+  const downloadAppLog = async () => {
+    try {
+      const text = await agent("read_app_logs", { max_kb: 256 });
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `printninja-app-${new Date().toISOString().slice(0, 10)}.log`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(t("settings_page.toast_diag_app_log_exported"));
+    } catch {
+      toast.error(t("settings_page.toast_diag_app_log_failed"));
+    }
+  };
+
+  const [appLogOpen, setAppLogOpen] = useState(false);
+  const [appLogText, setAppLogText] = useState<string | null>(null);
+
+  const openAppLogViewer = async () => {
+    try {
+      // Small budget: the dialog renders raw text, so keep the DOM light;
+      // the download above carries the full export.
+      const text = await agent("read_app_logs", { max_kb: 64 });
+      setAppLogText(text);
+      setAppLogOpen(true);
+    } catch {
+      toast.error(t("settings_page.toast_diag_app_log_failed"));
+    }
+  };
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -1018,6 +1049,26 @@ export function SettingsPage() {
                     <Download className="h-4 w-4 mr-2" />
                     {t("settings_page.diag_export")}
                   </Button>
+                  <p className="text-sm text-muted-foreground">
+                    {t("settings_page.diag_app_log_hint")}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      id="settings-diag-app-log-view"
+                      onClick={() => void openAppLogViewer()}
+                    >
+                      {t("settings_page.diag_app_log_view")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      id="settings-diag-app-log"
+                      onClick={() => void downloadAppLog()}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      {t("settings_page.diag_app_log_export")}
+                    </Button>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {t("settings_page.diag_note")}
                   </p>
@@ -1109,6 +1160,23 @@ export function SettingsPage() {
                 : t("settings_page.reset_confirm")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Backend log viewer: same source as the download, smaller budget
+          so the dialog stays light on phones. Works on every platform
+          with a backend; in the web preview the invoke fails into a toast. */}
+      <Dialog open={appLogOpen} onOpenChange={setAppLogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{t("settings_page.diag_app_log_view")}</DialogTitle>
+            <DialogDescription>
+              {t("settings_page.diag_app_log_hint")}
+            </DialogDescription>
+          </DialogHeader>
+          <pre className="max-h-[50dvh] overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">
+            {appLogText || t("settings_page.diag_app_log_empty")}
+          </pre>
         </DialogContent>
       </Dialog>
     </div>

@@ -810,6 +810,11 @@ const en = {
     diag_title: "Diagnostics",
     diag_hint: "Export application logs and diagnostics for troubleshooting.",
     diag_export: "Export Diagnostics",
+    diag_app_log_export: "Download App Log",
+    diag_app_log_view: "View App Log",
+    diag_app_log_empty: "No app log recorded yet.",
+    diag_app_log_hint:
+      "Recent backend log (print pipeline), oldest first. Empty when file logging never started.",
     diag_note: "Secrets and API tokens are redacted from the export.",
     allow_title: "Allow data from any domain?",
     allow_hint:
@@ -857,6 +862,8 @@ const en = {
     toast_signed_in: "Signed in as {{handle}}",
     toast_signed_out: "Signed out",
     toast_diag_exported: "Diagnostics exported",
+    toast_diag_app_log_exported: "App log downloaded",
+    toast_diag_app_log_failed: "Could not read the app log",
     toast_allow_all: "Allowed domains cleared — any domain allowed",
     toast_reset_failed: "Reset failed: {{error}}",
     font_ready: "Ready",

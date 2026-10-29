@@ -5,6 +5,7 @@ pub mod datasets;
 pub mod deeplink_cmd;
 pub mod font;
 pub mod history;
+pub mod logfile;
 pub mod print;
 pub mod printer;
 pub mod profile;
