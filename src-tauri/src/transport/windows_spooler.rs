@@ -187,8 +187,6 @@ mod winapi {
             pDocInfo: *mut DOC_INFO_1A,
         ) -> DWORD;
         pub fn EndDocPrinter(hPrinter: HANDLE) -> BOOL;
-        pub fn StartPagePrinter(hPrinter: HANDLE) -> BOOL;
-        pub fn EndPagePrinter(hPrinter: HANDLE) -> BOOL;
         pub fn WritePrinter(
             hPrinter: HANDLE,
             pBuf: LPVOID,
