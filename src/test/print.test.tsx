@@ -263,7 +263,8 @@ describe("Print page", () => {
 
   it("shows that the printer is ready before anything is printed", async () => {
     renderPage();
-    expect(await screen.findByText("Printer is ready")).toBeInTheDocument();
+    // One truncated line now, not a two-line card.
+    expect(await screen.findByText(/Printer is ready/)).toBeInTheDocument();
   });
 
   it("reports a finished print in the alert, with its timing, and shows no toast", async () => {

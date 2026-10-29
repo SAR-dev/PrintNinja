@@ -1028,3 +1028,39 @@ describe("EditorPane insertAtCursor", () => {
     );
   });
 });
+
+describe("DesignerOverflowMenu", () => {
+  it("hides New and visibility behind More, and reports state outside", async () => {
+    const { DesignerOverflowMenu } = await import(
+      "@/components/designer/DesignerOverflowMenu"
+    );
+    const onNew = vi.fn();
+    const onVisibilityChange = vi.fn();
+    render(
+      <DesignerOverflowMenu
+        onNew={onNew}
+        published={false}
+        remoteId="r1"
+        readOnly={false}
+        busy={false}
+        onVisibilityChange={onVisibilityChange}
+      />,
+    );
+    // State reads without opening: unpublished server copy.
+    expect(screen.getByText("Private")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New template" })).toBeNull();
+    const more = () => screen.getByRole("button", { name: "More" });
+    const openMenu = () =>
+      fireEvent.pointerDown(more(), { button: 0, ctrlKey: false });
+    openMenu();
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "New Template" }),
+    );
+    expect(onNew).toHaveBeenCalledOnce();
+    openMenu();
+    fireEvent.click(
+      await screen.findByRole("menuitemcheckbox", { name: "Private" }),
+    );
+    expect(onVisibilityChange).toHaveBeenCalledWith(true);
+  });
+});

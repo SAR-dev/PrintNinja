@@ -268,7 +268,7 @@ export function CanvasWorkspace({
         onTouchCancel={onTouchEnd}
         className={cn(
           "flex overflow-auto bg-muted p-4 [scrollbar-gutter:stable] [touch-action:pan-x_pan-y]",
-          fill ? "min-h-0 flex-1" : "min-h-[500px]",
+          fill ? "min-h-0 flex-1" : "min-h-[62dvh]",
         )}
       >
         <div className="m-auto">

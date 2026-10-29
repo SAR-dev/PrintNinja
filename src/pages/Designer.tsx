@@ -20,6 +20,7 @@ import {
   type DesignerLayout,
 } from "@/components/designer/LayoutToggle";
 import { DesignerActions } from "@/components/designer/DesignerActions";
+import { DesignerOverflowMenu } from "@/components/designer/DesignerOverflowMenu";
 import { DesignerToolbar } from "@/components/designer/DesignerToolbar";
 import { HelpersPanel } from "@/components/designer/HelpersPanel";
 import { ReadmePanel } from "@/components/designer/ReadmePanel";
@@ -906,19 +907,30 @@ export function DesignerPage() {
     <div className="space-y-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:gap-4 lg:space-y-0">
       <PageHeader title={t("designer.title")} description={t("pages.designer")}>
         {isDesktop && <LayoutToggle value={layout} onChange={setLayout} />}
-        <DesignerToolbar
-          onNew={() => setShowNewTemplateDialog(true)}
-          onSave={() => void handleSave()}
-          saveDisabled={offline || isReadOnly({ origin })}
-          saveTitle={
-            offline ? "Offline — connect to save to the server" : undefined
-          }
-          remoteId={remoteId}
-          publishedAt={publishedAt}
-          readOnly={isReadOnly({ origin })}
-          pending={pending}
-          onVisibilityChange={(v) => void handleVisibilityChange(v)}
-        />
+        {isDesktop ? (
+          <DesignerToolbar
+            onNew={() => setShowNewTemplateDialog(true)}
+            onSave={() => void handleSave()}
+            saveDisabled={offline || isReadOnly({ origin })}
+            saveTitle={
+              offline ? "Offline — connect to save to the server" : undefined
+            }
+            remoteId={remoteId}
+            publishedAt={publishedAt}
+            readOnly={isReadOnly({ origin })}
+            pending={pending}
+            onVisibilityChange={(v) => void handleVisibilityChange(v)}
+          />
+        ) : (
+          <DesignerOverflowMenu
+            onNew={() => setShowNewTemplateDialog(true)}
+            published={!!remoteId && !!publishedAt}
+            remoteId={remoteId}
+            readOnly={isReadOnly({ origin })}
+            busy={pending != null}
+            onVisibilityChange={(v) => void handleVisibilityChange(v)}
+          />
+        )}
       </PageHeader>
 
       {viaPc && (
@@ -1051,18 +1063,24 @@ export function DesignerPage() {
                     aria-label={t("designer.views_aria")}
                     className="min-h-8 w-max gap-0.5 p-0.5"
                   >
-                    <TabsTrigger value="canvas" className="h-7 px-3 text-xs">
+                    <TabsTrigger
+                      value="canvas"
+                      className="min-h-11 px-3 text-xs"
+                    >
                       {t("designer.canvas")}
                     </TabsTrigger>
-                    <TabsTrigger value="code" className="h-7 px-3 text-xs">
+                    <TabsTrigger value="code" className="min-h-11 px-3 text-xs">
                       {t("designer.code")}
                     </TabsTrigger>
-                    <TabsTrigger value="readme" className="h-7 px-3 text-xs">
+                    <TabsTrigger
+                      value="readme"
+                      className="min-h-11 px-3 text-xs"
+                    >
                       README
                     </TabsTrigger>
                     <TabsTrigger
                       value="sample-data"
-                      className="h-7 px-3 text-xs"
+                      className="min-h-11 px-3 text-xs"
                     >
                       {t("designer.sampleData")}
                     </TabsTrigger>

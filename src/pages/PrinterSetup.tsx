@@ -6,7 +6,7 @@ import {
 } from "@/lib/platform";
 import { hasPairedProvider } from "@/lib/pairing";
 import { TimeoutError, withTimeout } from "@/lib/withTimeout";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { PageHeader } from "@/components/PageHeader";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
@@ -143,6 +143,7 @@ export function PrinterSetupPage() {
   const [networkPrinters, setNetworkPrinters] = useState<SystemPrinter[]>([]);
   const [scanningNet, setScanningNet] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<PrinterRow | null>(null);
+  const tabListRef = useRef<HTMLDivElement>(null);
 
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -162,6 +163,19 @@ export function PrinterSetupPage() {
       cancelled = true;
     };
   }, []);
+  // A mid-word cut tab reads broken on a phone: keep the active one in
+  // view when the tab changes — but only when it is actually cut off,
+  // so loading never shifts a fully-visible strip.
+  useEffect(() => {
+    const list = tabListRef.current;
+    const active = list?.querySelector('[data-state="active"]');
+    if (!list || !active) return;
+    const r = active.getBoundingClientRect();
+    const lr = list.getBoundingClientRect();
+    if (r.left < lr.left || r.right > lr.right) {
+      active.scrollIntoView({ inline: "center", block: "nearest" });
+    }
+  }, [tab]);
   const [form, setForm] = useState({
     name: "",
     printer_type: "ipp",
@@ -664,7 +678,10 @@ export function PrinterSetupPage() {
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         {/* Edge fade signals the row scrolls on phones. */}
-        <TabsList className="[mask-image:linear-gradient(to_right,black_calc(100%-12px),transparent)]">
+        <TabsList
+          ref={tabListRef}
+          className="[mask-image:linear-gradient(to_right,black_calc(100%-12px),transparent)]"
+        >
           {visibleGroups.map((g) => (
             <TabsTrigger key={g.key} value={g.key}>
               {t(g.labelKey)} ({counts(g.types)})

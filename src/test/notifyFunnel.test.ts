@@ -6,10 +6,7 @@ import path from "node:path";
 // and placement live in one place), so importing `toast` from sonner
 // anywhere else is a regression. Allowed: the wrapper itself and the
 // Toaster component that renders them.
-const ALLOWED = new Set([
-  "src/lib/notify.ts",
-  "src/components/ui/sonner.tsx",
-]);
+const ALLOWED = new Set(["src/lib/notify.ts", "src/components/ui/sonner.tsx"]);
 
 const ROOTS = ["../lib", "../components", "../pages"];
 
