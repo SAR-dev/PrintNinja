@@ -198,6 +198,7 @@ const en = {
     canvas_preview: "Canvas preview",
     canvas_size: "{{w}} × {{h}} mm",
     page_n_of: "Page {{n}} of {{total}}",
+    measuring_pages: "Measuring pages…",
     helpers_insert: "Click a helper to insert it at the cursor:",
     helpers_available: "Available helpers:",
     helper_insert: "Insert {{helper}} helper",

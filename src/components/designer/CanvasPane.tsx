@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { renderTemplate } from "@/lib/render/renderTemplate";
 import { useDesignPageCounts } from "@/lib/hooks/useDesignPageCounts";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Props {
   html: string;
@@ -40,8 +41,24 @@ export function CanvasPane({
     () => renderTemplate(html, css, data, compiledCss),
     [html, css, data, compiledCss],
   );
-  const [pages] = useDesignPageCounts([doc], width, height);
+  const { counts, ready } = useDesignPageCounts([doc], width, height);
+  const pages = counts[0] ?? 1;
   const title = t("designer.canvas_preview");
+
+  // Measuring takes a beat (settle + frame load): hold a skeleton until
+  // the real page count is known rather than flashing one page first.
+  if (!ready) {
+    return (
+      <div className="flex shrink-0 flex-col" style={{ gap: PAGE_GAP }}>
+        <Skeleton
+          data-testid="canvas-loading"
+          role="status"
+          aria-label={t("designer.measuring_pages")}
+          style={{ width: width * zoom, height: height * zoom }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex shrink-0 flex-col" style={{ gap: PAGE_GAP }}>

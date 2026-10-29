@@ -145,7 +145,9 @@ frames' `load` events), and the Designer canvas and Print preview use
 `lib/render/paginate.ts`. Pages are cut at exact multiples of the Height, not
 at line or block boundaries. A record whose frames the script cannot read
 stays one page. Raster (ZPL/ESC-POS) output rasterizes the first sheet only,
-as before.
+as before. The UI holds a skeleton until each record's page count is
+measured rather than flashing a premature single page; re-edits keep the
+stale count (no flash while typing) until the new measurement lands.
 
 Placement is the one piece of logic that exists twice — once in the browser
 for the preview and once in the backend for the real output. Both are pinned
