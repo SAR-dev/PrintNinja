@@ -739,9 +739,10 @@ describe("Automation → Phones and server", () => {
         const submit = screen.getByTestId("devices-code-submit");
         expect(submit).toBeDisabled();
         // Lowercase, dashes and spaces are accepted; other characters
-        // never reach the field.
+        // never reach the field. Displayed uppercased with the hyphen,
+        // like the code on the PC's screen.
         fireEvent.change(input, { target: { value: "k7qm-4xpd!!01" } });
-        expect(input).toHaveValue("K7QM4XPD");
+        expect(input).toHaveValue("K7QM-4XPD");
         expect(submit).toBeEnabled();
       } finally {
         webMode();

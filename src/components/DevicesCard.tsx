@@ -20,6 +20,7 @@ import {
 import {
   filterPairingInput,
   formatPairingCode,
+  formatPairingCodeLive,
   isCompletePairingCode,
   normalizePairingCode,
   parsePairs,
@@ -878,7 +879,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
             autoCapitalize="characters"
             spellCheck={false}
             className="font-mono uppercase placeholder:opacity-50"
-            value={code}
+            value={formatPairingCodeLive(code)}
             onChange={(e) => {
               setCode(filterPairingInput(e.target.value));
               setFormError("");
