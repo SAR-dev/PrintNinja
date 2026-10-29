@@ -77,7 +77,11 @@ pub struct RemotePrintResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PcPrinterInfo {
     pub name: String,
+    /// The PC's `GET /v1/printers` names this key `type`; the phone's own
+    /// UI and cache use `printer_type`. Accept both.
+    #[serde(alias = "type")]
     pub printer_type: String,
+    #[serde(default)]
     pub language: String,
 }
 
@@ -667,12 +671,19 @@ pub async fn remote_printers(
         Ok(res) => match res.error_for_status() {
             Ok(res) => match res.json::<serde_json::Value>().await {
                 Ok(v) => {
-                    live = serde_json::from_value::<Vec<PcPrinterInfo>>(
+                    match serde_json::from_value::<Vec<PcPrinterInfo>>(
                         v.get("printers")
                             .cloned()
                             .unwrap_or(serde_json::Value::Null),
-                    )
-                    .ok();
+                    ) {
+                        Ok(list) => live = Some(list),
+                        Err(e) => {
+                            unreachable = Some(format!(
+                                "{} sent a printer list this app could not read ({e})",
+                                pair.name
+                            ));
+                        }
+                    }
                 }
                 Err(e) => {
                     unreachable = Some(format!(
@@ -768,6 +779,26 @@ mod tests {
             &serde_json::json!({}),
         );
         assert!(r.to_string().contains("refused"), "{r}");
+    }
+
+    #[test]
+    fn reads_the_pc_printer_list_as_the_pc_sends_it() {
+        // Exactly what `GET /v1/printers` returns: `type`, plus extra keys.
+        let body = serde_json::json!({
+            "printers": [
+                {"id": 1, "name": "Front desk", "type": "ipp",
+                 "address": "192.168.1.20:631", "language": "pdf"}
+            ],
+            "count": 1
+        });
+        let list: Vec<PcPrinterInfo> =
+            serde_json::from_value(body["printers"].clone()).expect("PC wire format");
+        assert_eq!(list[0].name, "Front desk");
+        assert_eq!(list[0].printer_type, "ipp");
+        // The phone's own cache uses `printer_type` and must still round-trip.
+        let cached = serde_json::to_value(&list).unwrap();
+        let again: Vec<PcPrinterInfo> = serde_json::from_value(cached).unwrap();
+        assert_eq!(again[0].printer_type, "ipp");
     }
 
     #[test]

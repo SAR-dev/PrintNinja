@@ -353,14 +353,17 @@ export function PrintPage() {
   }, [selectedTemplate, dataUrl, useTestData, httpMethod, pageCount]);
 
   const loadPrinters = async () => {
+    // Via PC, the phone's own printers are not in play: asking the OS
+    // would only toast "Found 0 system printers" next to the real result.
+    if (viaPc) {
+      await refreshPcPrinters();
+      return;
+    }
     try {
       const list = await refreshSystemPrinters();
       notifySuccess(t("printers.toast_found_system", { count: list.length }));
     } catch (e) {
       notifyError(t("settings_page.toast_failed", { error: describeError(e) }));
-    }
-    if (viaPc) {
-      await refreshPcPrinters();
     }
   };
 
