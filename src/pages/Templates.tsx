@@ -98,10 +98,16 @@ export function TemplatesPage() {
   const [saved, setSaved] = useState<TemplateRow[]>([]);
   // Controlled sorting for the phone-only sort dropdowns below: desktop
   // keeps header-button sorting on the same state.
-  const [mineSorting, setMineSorting] = useState<SortingState>([]);
-  const [savedSorting, setSavedSorting] = useState<SortingState>([]);
-  const [mineSortKey, setMineSortKey] = useState("");
-  const [savedSortKey, setSavedSortKey] = useState("");
+  const [mineSorting, setMineSorting] = useState<SortingState>([
+    { id: "updated", desc: true },
+  ]);
+  const [savedSorting, setSavedSorting] = useState<SortingState>([
+    { id: "name", desc: false },
+  ]);
+  // The phone dropdown shows the active value, never the placeholder:
+  // defaults match the initial sortings above.
+  const [mineSortKey, setMineSortKey] = useState("updated");
+  const [savedSortKey, setSavedSortKey] = useState("name");
   const isPhone = useMediaQuery(PHONE_QUERY);
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState<number | null>(null);

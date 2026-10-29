@@ -526,7 +526,7 @@ describe("phone Templates page", () => {
       server_id: "r3",
       base_revision: 2,
       published_at: "2026-01-01T00:00:00Z",
-      updated_at: "2026-02-01T00:00:00Z",
+      updated_at: "2026-03-01T00:00:00Z",
     },
   ];
 
@@ -585,7 +585,12 @@ describe("phone Templates page", () => {
       within(list)
         .getAllByRole("listitem")
         .map((li) => li.querySelector("p")?.textContent);
-    expect(names()).toEqual(["Shipping label", "Receipt", "Pallet tag"]);
+    // The dropdown defaults to the active sort (last updated), not the
+    // placeholder — and the cards follow it.
+    expect(
+      screen.getByRole("combobox", { name: "Sort templates" }),
+    ).toHaveTextContent("Recently updated");
+    expect(names()).toEqual(["Pallet tag", "Shipping label", "Receipt"]);
     fireEvent.click(screen.getByRole("combobox", { name: "Sort templates" }));
     fireEvent.click(await screen.findByRole("option", { name: "Name (A–Z)" }));
     await waitFor(() =>
