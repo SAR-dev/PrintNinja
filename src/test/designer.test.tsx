@@ -416,14 +416,26 @@ describe("CanvasPane", () => {
     height: 756,
   };
 
-  it("renders the template with the sample data into a sandboxed frame", () => {
+  it("renders the template with the sample data into a sandboxed frame", async () => {
     render(<CanvasPane {...base} data={{ store: { name: "Ninja Mart" } }} />);
-    const frame = screen.getByTitle("Canvas preview") as HTMLIFrameElement;
+    const frame = (await screen.findByTitle(
+      "Canvas preview",
+    )) as HTMLIFrameElement;
     expect(frame.getAttribute("sandbox")).toBe("");
     expect(frame.getAttribute("srcdoc")).toContain("Hi Ninja Mart");
   });
 
-  it("re-renders when the sample data changes and sizes the page from width and height", () => {
+  it("holds a loading state until the page count is measured", async () => {
+    render(<CanvasPane {...base} data={{}} />);
+    // First paint: skeleton, not a premature single page.
+    expect(screen.getByTestId("canvas-loading")).toBeInTheDocument();
+    expect(screen.queryByTitle("Canvas preview")).toBeNull();
+    // Then the measured pages.
+    expect(await screen.findByTitle("Canvas preview")).toBeInTheDocument();
+    expect(screen.queryByTestId("canvas-loading")).toBeNull();
+  });
+
+  it("re-renders when the sample data changes and sizes the page from width and height", async () => {
     const { rerender } = render(
       <CanvasPane {...base} data={{ store: { name: "One" } }} />,
     );
@@ -435,7 +447,7 @@ describe("CanvasPane", () => {
         height={200}
       />,
     );
-    const frame = screen.getByTitle("Canvas preview");
+    const frame = await screen.findByTitle("Canvas preview");
     expect(frame.getAttribute("srcdoc")).toContain("Hi Two");
     expect(frame.parentElement).toHaveStyle({
       width: "100px",
@@ -443,11 +455,11 @@ describe("CanvasPane", () => {
     });
   });
 
-  it("scales the page instead of resizing it, so zooming never reflows the template", () => {
+  it("scales the page instead of resizing it, so zooming never reflows the template", async () => {
     render(
       <CanvasPane {...base} data={{}} width={400} height={800} zoom={0.5} />,
     );
-    const frame = screen.getByTitle("Canvas preview");
+    const frame = await screen.findByTitle("Canvas preview");
     // The page keeps its true size and is scaled; the box around it takes the scaled size.
     expect(frame.parentElement).toHaveStyle({
       width: "400px",
@@ -548,8 +560,10 @@ describe("CanvasWorkspace", () => {
     expect(readout()).toHaveTextContent("100%");
   });
 
-  it("zooms out and in by steps, leaving Fit", () => {
+  it("zooms out and in by steps, leaving Fit", async () => {
     render(<CanvasWorkspace {...props} />);
+    // Wait past the page-count measuring skeleton: zooming acts on pages.
+    await screen.findByTitle("Canvas preview");
     fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
     expect(readout()).toHaveTextContent("75%");
     expect(

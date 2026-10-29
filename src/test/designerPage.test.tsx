@@ -463,7 +463,7 @@ describe("Designer page, phase 3 polish on desktop", () => {
     ).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "Canvas only" }));
     expect(screen.queryByLabelText("HTML editor")).not.toBeInTheDocument();
-    expect(screen.getByTitle("Canvas preview")).toBeInTheDocument();
+    expect(await screen.findByTitle("Canvas preview")).toBeInTheDocument();
     first.unmount();
 
     // A new visit comes back in the layout it was left in.
@@ -476,7 +476,7 @@ describe("Designer page, phase 3 polish on desktop", () => {
     expect(screen.queryByLabelText("HTML editor")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Stacked" }));
     expect(screen.getByLabelText("HTML editor")).toBeInTheDocument();
-    expect(screen.getByTitle("Canvas preview")).toBeInTheDocument();
+    expect(await screen.findByTitle("Canvas preview")).toBeInTheDocument();
   });
 
   it("has no layout toggle on a phone", async () => {
