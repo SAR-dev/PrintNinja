@@ -77,7 +77,7 @@ impl Default for OpenApiSpec {
                 "/v1/print": {
                     "post": {
                         "summary": "Render a template and print it",
-                        "description": "## Renders, then prints.\n\n`template` is required — the API has no inline HTML body, so there is\nnothing to render without one. `data` is optional. The response reports\nthe real outcome:\n\n* `200` — printed, with the job id and duration.\n* `400` — missing `template`, or a `callback_url` was sent (callbacks are not implemented; poll `GET /v1/jobs/{id}` for the outcome).\n* `404` — printer or template not found, or the template has no current version.\n* `500` — the transport failed (printer offline, unsupported platform, …).\n\nSend `Idempotency-Key` on a retryable request. A replayed key returns\n`200` without printing a second copy.\n\nThis runs the same pipeline as the desktop UI and serialises on the\ntarget printer, so an API job and a UI job cannot interleave on one head.",
+                        "description": "## Renders, then prints.\n\n`template` is required — the API has no inline HTML body, so there is\nnothing to render without one. `data` is optional. The response reports\nthe real outcome:\n\n* `200` — printed, with the job id and duration.\n* `400` — missing `template`, a `callback_url` was sent (callbacks are not implemented; poll `GET /v1/jobs/{id}` for the outcome), `settings.copies` is over the max, or `data` is over the size limit.\n* `404` — printer or template not found, or the template has no current version.\n* `500` — the transport failed (printer offline, unsupported platform, …).\n\nSend `Idempotency-Key` on a retryable request. A replayed key returns\n`200` without printing a second copy.\n\nOver LAN the caller's paired-device id is stamped on the job row as\n`requested_by_device_id`, so history shows which phone asked; loopback\ncalls leave it empty.\n\nThis runs the same pipeline as the desktop UI and serialises on the\ntarget printer, so an API job and a UI job cannot interleave on one head.",
                         "parameters": [
                             { "name": "Idempotency-Key", "in": "header", "required": false,
                               "schema": { "type": "string" },
@@ -93,13 +93,13 @@ impl Default for OpenApiSpec {
                                         "properties": {
                                             "template": { "type": "string", "description": "Template name (case-insensitive)" },
                                             "printer": { "type": "string", "description": "Printer name (case-insensitive)" },
-                                            "data": { "type": "object", "description": "Context merged into the template; optional — an empty context prints, like the preview" },
+                                            "data": { "type": "object", "description": "Context merged into the template; optional — an empty context prints, like the preview. Over ~1 MiB is refused; use `data_url` for big payloads" },
                                             "data_url": { "type": "string", "description": "Fetch this URL and use the JSON as `data` instead; `http`/`https` only, public addresses only" },
                                             "test": { "type": "boolean", "default": false },
                                             "settings": {
                                                 "type": "object",
                                                 "properties": {
-                                                    "copies": { "type": "integer", "minimum": 1, "default": 1 },
+                                                    "copies": { "type": "integer", "minimum": 1, "maximum": 100, "default": 1 },
                                                     "orientation": { "type": "string", "enum": ["portrait", "landscape"] },
                                                     "page_range": { "type": "string", "description": "1-based pages, e.g. \"1-3\" or \"1,3,5-7\"; empty means all" },
                                                     "grayscale": { "type": "boolean", "default": false },
@@ -113,7 +113,7 @@ impl Default for OpenApiSpec {
                         },
                         "responses": {
                             "200": { "description": "Printed: `{ job_id, status, duration_ms }`; also the `duplicate` body for a replayed `Idempotency-Key`" },
-                            "400": { "description": "`template` is required, or `callback_url` was sent (not supported)" },                            "404": { "description": "Printer, template, or current version not found" },
+                            "400": { "description": "`template` is required, a `callback_url` was sent (not supported), or a remote-job limit bit (`copies`, `data` size)" },                            "404": { "description": "Printer, template, or current version not found" },
                             "415": { "description": "Wrong or missing `Content-Type`" },
                             "422": { "description": "Malformed JSON, or `printer` missing" },
                             "500": { "description": "The transport failed" }
@@ -130,6 +130,7 @@ impl Default for OpenApiSpec {
                 "/v1/jobs/{id}": {
                     "get": {
                         "summary": "Get job status",
+                        "description": "The record carries `requested_by_device_id`: the paired phone that asked for the print, or null for a local print.",
                         "responses": {
                             "200": { "description": "Job record" },
                             "400": { "description": "`id` is not an integer" },                            "404": { "description": "No such job" }

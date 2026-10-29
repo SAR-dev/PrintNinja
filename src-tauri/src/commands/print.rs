@@ -14,6 +14,17 @@ use tauri::{AppHandle, Manager, State};
 /// than this many times is rejected instead of building a giant PDF.
 pub const MAX_RECORDS: u32 = 500;
 
+/// Upper bound for copies in one print: the send stage duplicates the
+/// payload bytes per copy for transports without a hardware copies count
+/// (A11 batching), so an unbounded count allocates without bound and can
+/// abort the process. Rejected on intake, before any job row exists.
+pub const MAX_COPIES: u32 = 100;
+
+/// Upper bound for an inline `data` payload on `POST /v1/print` (Release B
+/// §3.4): a phone cannot make the PC render an unbounded document. Big
+/// payloads go through `data_url`, whose fetch already caps at 5 MiB.
+pub const MAX_API_DATA_BYTES: usize = 1024 * 1024;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct PrintRequest {
     pub printer_name: String,
@@ -80,6 +91,12 @@ pub struct PrintRequest {
     /// a replayed request was never detected and printed twice.
     #[serde(default)]
     pub idempotency_key: Option<String>,
+    /// Which paired phone asked for this print (Release B §3.4). `None`
+    /// for local prints. `POST /v1/print` fills it from the authenticated
+    /// device; it is persisted on the job row so history can show
+    /// "printed for <phone name>".
+    #[serde(default)]
+    pub requested_by_device_id: Option<String>,
 }
 
 /// Where one job's time went, in whole milliseconds per pipeline stage.
@@ -423,6 +440,19 @@ pub fn validate_http_method(raw: Option<&str>) -> AppResult<String> {
     }
 }
 
+/// Copies for one print: at least 1, at most [`MAX_COPIES`]. Rejected —
+/// never silently clamped — so a caller that asked for 1000 learns it got
+/// 100 instead of discovering it from the paper tray.
+pub fn check_copies(raw: u32) -> AppResult<u32> {
+    let copies = raw.max(1);
+    if copies > MAX_COPIES {
+        return Err(AppError::Validation(format!(
+            "Too many copies requested: {raw} (max {MAX_COPIES})"
+        )));
+    }
+    Ok(copies)
+}
+
 /// Tauri command wrapper around [`run_print`].
 #[tauri::command]
 pub async fn print_html(
@@ -473,7 +503,7 @@ pub async fn run_print_with(
     validate_page_range(req.page_range.as_deref())?;
     // Fail fast on an unsupported fetch method, before the job row exists.
     validate_http_method(req.http_method.as_deref())?;
-    let copies = req.copies.unwrap_or(1).max(1);
+    let copies = check_copies(req.copies.unwrap_or(1))?;
 
     // ── 1. Resolve content ───────────────────────────────────────────
     let content = resolve_content(db, &req)?;
@@ -751,7 +781,10 @@ async fn run_stages(
         orientation,
         render_template,
     } = content;
-    let copies = req.copies.unwrap_or(1).max(1);
+    // Replayed rows predate the intake cap, so clamp rather than fail: the
+    // send stage below duplicates the payload per copy, and an old row with
+    // a huge count must not abort the process on retry.
+    let copies = req.copies.unwrap_or(1).clamp(1, MAX_COPIES);
 
     // Where the time goes, filled in as each stage finishes and saved on the
     // job row on every exit path, so History can show it.
@@ -1487,9 +1520,9 @@ fn begin_job(db: &DbState, req: &PrintRequest, copies: i64, page_mm: (f64, f64))
         "INSERT INTO print_jobs
            (template_id, printer_id, source, source_url,
             status, copies, settings_json, rendered_html, is_test,
-            started_at, idempotency_key, data_json)
+            started_at, idempotency_key, data_json, requested_by_device_id)
          VALUES (?1, ?2, ?3, ?4, 'printing', ?5, ?6, '', ?7,
-                 datetime('now'), ?8, ?9)",
+                 datetime('now'), ?8, ?9, ?10)",
         rusqlite::params![
             req.template_id,
             printer_id,
@@ -1500,6 +1533,7 @@ fn begin_job(db: &DbState, req: &PrintRequest, copies: i64, page_mm: (f64, f64))
             i64::from(req.test.unwrap_or(false)),
             req.idempotency_key,
             data_json,
+            req.requested_by_device_id,
         ],
     ) {
         Ok(_) => Ok(conn.last_insert_rowid()),
@@ -1626,6 +1660,7 @@ struct JobRow {
     rendered_html: Option<String>,
     is_test: i64,
     data_json: Option<String>,
+    requested_by_device_id: Option<String>,
 }
 
 fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Option<String>)> {
@@ -1645,10 +1680,11 @@ fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Optio
         rendered_html,
         is_test,
         data_json,
+        requested_by_device_id,
     } = conn.query_row(
         "SELECT j.printer_id, p.name, j.template_id, j.source,
                 j.source_url, j.copies, j.settings_json, j.rendered_html, j.is_test,
-                j.data_json
+                j.data_json, j.requested_by_device_id
          FROM print_jobs j LEFT JOIN printers p ON p.id = j.printer_id
          WHERE j.id = ?1",
         [job_id],
@@ -1664,6 +1700,7 @@ fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Optio
                 rendered_html: r.get(7)?,
                 is_test: r.get(8)?,
                 data_json: r.get(9)?,
+                requested_by_device_id: r.get(10)?,
             })
         },
     )?;
@@ -1732,6 +1769,8 @@ fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Optio
         test: Some(is_test != 0),
         source: Some(source),
         idempotency_key: None,
+        // A retry still prints for the phone that asked first.
+        requested_by_device_id,
     };
     Ok((req, replay))
 }
@@ -1837,6 +1876,7 @@ pub async fn spike_test_print(
         test: None,
         source: Some("test".into()),
         idempotency_key: None,
+        requested_by_device_id: None,
     };
 
     print_html(app, db, queue, req).await
@@ -1869,6 +1909,7 @@ mod tests {
             test: Some(true),
             source: None,
             idempotency_key: None,
+            requested_by_device_id: None,
         }
     }
 
@@ -1906,6 +1947,15 @@ mod tests {
     }
 
     const HTML_DOC: &str = "<!DOCTYPE html><html><head></head><body><p>hi</p></body></html>";
+
+    #[test]
+    fn copies_zero_means_one_and_huge_is_rejected_not_wrapped() {
+        assert_eq!(check_copies(0).unwrap(), 1);
+        assert_eq!(check_copies(1).unwrap(), 1);
+        assert_eq!(check_copies(MAX_COPIES).unwrap(), MAX_COPIES);
+        assert!(check_copies(MAX_COPIES + 1).is_err(), "over max rejects");
+        assert!(check_copies(u32::MAX).is_err(), "u32::MAX rejects");
+    }
 
     /// Pull the `srcdoc` of every design frame back out of the final HTML.
     fn design_docs(out: &str) -> Vec<String> {

@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::{HeaderMap, StatusCode},
     response::Response,
     routing::{get, post},
@@ -223,8 +223,16 @@ struct PrintJobRequest {
     idempotency_key: Option<String>,
 }
 
+/// `settings.copies` as the caller sent it: missing (or a non-number)
+/// means 1, matching the pipeline default. Kept beside the handler so the
+/// pre-DB limit check and the pipeline agree on where the number comes from.
+fn settings_copies(settings: &Value) -> u64 {
+    settings.get("copies").and_then(|c| c.as_u64()).unwrap_or(1)
+}
+
 async fn print_job(
     State(state): State<ApiState>,
+    Extension(authed): Extension<crate::api::render_share::AuthedDevice>,
     headers: HeaderMap,
     Json(req): Json<PrintJobRequest>,
 ) -> Result<(StatusCode, Json<Value>), ApiRejection> {
@@ -245,12 +253,28 @@ async fn print_job(
         )));
     }
 
+    // Remote-job limits (Release B §3.4), refused before any DB work: a
+    // request the server will not honour creates no job.
     let settings = req.settings.unwrap_or_else(|| json!({}));
-    let copies = settings
-        .get("copies")
-        .and_then(|c| c.as_u64())
-        .unwrap_or(1)
-        .max(1) as u32;
+    let copies_raw = settings_copies(&settings);
+    if copies_raw > crate::commands::print::MAX_COPIES as u64 {
+        return Err(ApiRejection::BadRequest(format!(
+            "Too many copies requested: {copies_raw} (max {})",
+            crate::commands::print::MAX_COPIES
+        )));
+    }
+    // No `.max(1) as u32` truncation here: over-max is rejected above, so
+    // the cast cannot wrap.
+    let copies = copies_raw.max(1) as u32;
+    if let Some(data) = &req.data {
+        let bytes = serde_json::to_string(data).map(|s| s.len()).unwrap_or(0);
+        if bytes > crate::commands::print::MAX_API_DATA_BYTES {
+            return Err(ApiRejection::BadRequest(format!(
+                "`data` is too large ({bytes} bytes, max {}); use `data_url` for big payloads",
+                crate::commands::print::MAX_API_DATA_BYTES
+            )));
+        }
+    }
 
     // Everything that touches the DB happens in its own scope so the
     // `MutexGuard` is definitely released before the print. Holding it across
@@ -336,6 +360,9 @@ async fn print_job(
         source: Some("api".into()),
         // Recorded by the begin_job INSERT under a unique index.
         idempotency_key,
+        // Who asked: the paired phone's id over LAN, None on loopback.
+        // Stamped on the job row so history shows "printed for <phone>".
+        requested_by_device_id: authed.device_id,
     };
 
     let outcome =
@@ -380,7 +407,8 @@ async fn get_job(
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, status, error, duration_ms, copies, source, created_at
+            "SELECT id, status, error, duration_ms, copies, source, created_at,
+                    requested_by_device_id
              FROM print_jobs WHERE id = ?1",
         )
         .map_err(ApiRejection::from)?;
@@ -399,6 +427,7 @@ async fn get_job(
         "copies": row.get::<_, i64>(4)?,
         "source": row.get::<_, String>(5)?,
         "created_at": row.get::<_, String>(6)?,
+        "requested_by_device_id": row.get::<_, Option<String>>(7)?,
     })))
 }
 
@@ -409,7 +438,8 @@ async fn list_jobs(State(state): State<ApiState>) -> Result<Json<Value>, ApiReje
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, status, source, copies, created_at FROM print_jobs ORDER BY id DESC LIMIT 200",
+            "SELECT id, status, source, copies, created_at, requested_by_device_id
+             FROM print_jobs ORDER BY id DESC LIMIT 200",
         )
         .map_err(ApiRejection::from)?;
 
@@ -421,6 +451,7 @@ async fn list_jobs(State(state): State<ApiState>) -> Result<Json<Value>, ApiReje
                 "source": row.get::<_, String>(2)?,
                 "copies": row.get::<_, i64>(3)?,
                 "created_at": row.get::<_, String>(4)?,
+                "requested_by_device_id": row.get::<_, Option<String>>(5)?,
             }))
         })
         .map_err(ApiRejection::from)?

@@ -79,7 +79,12 @@ CREATE TABLE IF NOT EXISTS print_jobs (
     -- Per-stage breakdown of duration_ms (fetch/template/layout/render/send/
     -- history, as JSON), written once the job has run. NULL for rows that
     -- never ran or predate it.
-    timings_json TEXT
+    timings_json TEXT,
+    -- Which paired phone asked for this print (Release B §3.4). NULL for
+    -- local prints (UI, scripts, tests). Set by `POST /v1/print` from the
+    -- authenticated device; the PC's history reads it as "printed for
+    -- <phone name>". Revoking the phone NULLs it, keeping the row.
+    requested_by_device_id TEXT REFERENCES paired_devices(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS settings (
