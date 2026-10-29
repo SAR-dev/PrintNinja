@@ -785,6 +785,8 @@ const en = {
     devices_can_print: "Can print",
     devices_account_same: "Same account",
     devices_account_other: "Different account — pair again",
+    devices_account_signed_in: "Signed in as {{handle}}",
+    devices_account_signed_out: "Not signed in — sign in to pair.",
     via_pc_title: "Print via PC",
     via_pc_hint:
       "Send print jobs to a paired PC instead of printing on this phone. No fallback: if the PC is unreachable, the job fails.",
