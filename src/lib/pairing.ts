@@ -104,17 +104,18 @@ export function parsePairs(raw: string | null): RenderPair[] {
 /** Pairing-code alphabet: 32 symbols, no `0 O 1 I` (plan §3 decision 2). */
 export const PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-/** Uppercase, strip dashes and whitespace (tolerated in input, never shown). */
+/** Uppercase and strip whitespace. Dashes are neither stripped nor
+ * accepted: a dash fails the format check. */
 export function normalizePairingCode(raw: string): string {
-  return raw.toUpperCase().replace(/[-\s]/g, "");
+  return raw.toUpperCase().replace(/\s/g, "");
 }
 
-/** Filter keystrokes: uppercase, drop spaces/dashes, drop characters
- * outside the alphabet. */
+/** Filter keystrokes: uppercase, drop whitespace, drop characters
+ * outside the alphabet — dashes never reach the field. */
 export function filterPairingInput(raw: string): string {
   return raw
     .toUpperCase()
-    .replace(/[-\s]/g, "")
+    .replace(/\s/g, "")
     .split("")
     .filter((c) => PAIRING_ALPHABET.includes(c))
     .join("")

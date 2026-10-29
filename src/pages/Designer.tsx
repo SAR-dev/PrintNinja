@@ -1,6 +1,8 @@
 import { describeError } from "@/lib/errors";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
+import { ExitViaPcButton } from "@/components/ExitViaPcButton";
+import { isPrintViaPc } from "@/lib/printViaPc";
 import { ControlsAccordion } from "@/components/designer/ControlsAccordion";
 import { CanvasWorkspace } from "@/components/designer/CanvasWorkspace";
 import {
@@ -127,6 +129,19 @@ export function DesignerPage() {
   const [orientation, setOrientation] = useState<"portrait" | "landscape">(
     "portrait",
   );
+  // Print-via-PC mode: templates sync down, they are not drawn here.
+  const [viaPc, setViaPc] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void isPrintViaPc()
+      .then((v) => {
+        if (!cancelled) setViaPc(v);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Which tab is open on a phone. On desktop the canvas and editor are always both on screen.
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
   // Desktop workspace preferences, remembered across launches.
@@ -902,6 +917,18 @@ export function DesignerPage() {
           onVisibilityChange={(v) => void handleVisibilityChange(v)}
         />
       </PageHeader>
+
+      {viaPc && (
+        <div
+          data-testid="designer-via-pc-note"
+          className="flex items-center gap-3 rounded-lg border border-info/30 bg-info-soft px-4 py-3 text-info"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{t("designer.via_pc_note")}</p>
+          </div>
+          <ExitViaPcButton onExited={() => setViaPc(false)} />
+        </div>
+      )}
 
       {isDesktop ? (
         <div className="flex min-h-0 flex-1 gap-4">

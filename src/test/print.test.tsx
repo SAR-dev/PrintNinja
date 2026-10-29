@@ -467,3 +467,36 @@ describe("Print via PC failure states", () => {
     expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
   });
 });
+
+describe("Print via PC exit", () => {
+  function flagOnBackend() {
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "get_setting") {
+        if (args?.key === "print_via_pc") return "true";
+        return null;
+      }
+      if (cmd === "list_printers" || cmd === "enumerate_system_printers")
+        return [{ id: "1", name: "Dock Zebra" }];
+      if (cmd === "remote_printers") return { printers: [], cached: false };
+      return null;
+    });
+  }
+
+  it("leaves remote mode from the banner without visiting Settings", async () => {
+    flagOnBackend();
+    renderPage();
+    await screen.findByTestId("print-via-pc-banner");
+    // The local test page stays out of reach while remote.
+    expect(screen.queryByText("Send test page")).toBeNull();
+    fireEvent.click(screen.getByTestId("via-pc-exit"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("set_setting", {
+        key: "print_via_pc",
+        value: "false",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId("print-via-pc-banner")).toBeNull(),
+    );
+  });
+});

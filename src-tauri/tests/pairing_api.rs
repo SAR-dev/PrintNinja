@@ -172,9 +172,11 @@ async fn claim_succeeds_token_works_and_device_is_listed() {
     assert!(hello["provider_id"].is_string());
     assert!(hello["port"].is_number());
 
-    // Claim with lowercase + dash: normalization accepts it.
+    // Claim with lowercase: normalization accepts it. A dash is no
+    // longer cosmetic — it fails the format check (400), spending no
+    // attempt and leaving the window open.
     let (status, reply) =
-        post_claim(router(&db, &window), claim_body("k7qm-4xpd", "phone-1")).await;
+        post_claim(router(&db, &window), claim_body("k7qm4xpd", "phone-1")).await;
     assert_eq!(status, StatusCode::OK, "{reply}");
     let token = reply["token"].as_str().expect("token").to_string();
     assert_eq!(token.len(), 32);
@@ -562,4 +564,23 @@ async fn claim_stores_account_on_row() {
         .unwrap();
     assert_eq!(account.as_deref(), Some("user-1"));
     assert_eq!(url.as_deref(), Some("https://share.test"));
+}
+
+/// A dashed code is malformed, not wrong: 400 without spending an
+/// attempt, and the window stays open for the real code.
+#[tokio::test]
+async fn dashed_code_is_malformed_not_wrong() {
+    let (db, window) = setup();
+    open_window(&window, "K7QM4XPD", Instant::now());
+    let (status, _) =
+        post_claim(router(&db, &window), claim_body("k7qm-4xpd", "phone-1")).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(paired_count(&db), 0);
+    {
+        let guard = window.lock().unwrap();
+        assert_eq!(guard.as_ref().map(|w| w.wrong()), Some(0));
+    }
+    let (status, _) =
+        post_claim(router(&db, &window), claim_body("K7QM4XPD", "phone-1")).await;
+    assert_eq!(status, StatusCode::OK);
 }

@@ -9,6 +9,8 @@ import { TimeoutError, withTimeout } from "@/lib/withTimeout";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { PageHeader } from "@/components/PageHeader";
+import { ExitViaPcButton } from "@/components/ExitViaPcButton";
+import { isPrintViaPc } from "@/lib/printViaPc";
 import { agent } from "@/lib/agent/commands";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -147,6 +149,19 @@ export function PrinterSetupPage() {
   // Whether a PC is paired for shared rendering (auto policy): on
   // Android this unlocks the thermal languages, which the PC renders.
   const [pairedProvider, setPairedProvider] = useState(false);
+  // Print-via-PC mode: local printers sit unused while it is on.
+  const [viaPc, setViaPc] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void isPrintViaPc()
+      .then((v) => {
+        if (!cancelled) setViaPc(v);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [form, setForm] = useState({
     name: "",
     printer_type: "ipp",
@@ -634,6 +649,18 @@ export function PrinterSetupPage() {
           {t("printers.add_printer")}
         </Button>
       </PageHeader>
+
+      {viaPc && (
+        <div
+          data-testid="printers-via-pc-note"
+          className="flex items-center gap-3 rounded-lg border border-info/30 bg-info-soft px-4 py-3 text-info"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{t("printers.via_pc_note")}</p>
+          </div>
+          <ExitViaPcButton onExited={() => setViaPc(false)} />
+        </div>
+      )}
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         {/* Edge fade signals the row scrolls on phones. */}

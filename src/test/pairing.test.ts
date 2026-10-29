@@ -97,21 +97,21 @@ describe("hasPairedProvider", () => {
 });
 
 describe("pairing codes", () => {
-  it("normalizes lowercase, dashes and spaces", () => {
-    expect(normalizePairingCode("k7qm-4xpd")).toBe("K7QM4XPD");
+  it("normalizes case and spaces, but keeps dashes (invalid)", () => {
     expect(normalizePairingCode("k7qm 4xpd")).toBe("K7QM4XPD");
-    expect(normalizePairingCode("  K7QM-4XPD\n")).toBe("K7QM4XPD");
+    expect(normalizePairingCode("  K7QM4XPD\n")).toBe("K7QM4XPD");
+    expect(normalizePairingCode("k7qm-4xpd")).toBe("K7QM-4XPD");
   });
 
   it("filters keystrokes to the alphabet", () => {
-    // 0 O 1 I never reach the field; dashes and spaces are cosmetic.
+    // 0 O 1 I never reach the field; neither do dashes or spaces.
     expect(filterPairingInput("k7qm-4xpd!!01oi")).toBe("K7QM4XPD");
     expect(filterPairingInput("01oi")).toBe("");
     expect(filterPairingInput("K7QM4XPDZZZZ")).toBe("K7QM4XPD");
   });
 
   it("is complete only at 8 alphabet characters", () => {
-    expect(isCompletePairingCode("K7QM-4XPD")).toBe(true);
+    expect(isCompletePairingCode("K7QM-4XPD")).toBe(false);
     expect(isCompletePairingCode("k7qm 4xpd")).toBe(true);
     expect(isCompletePairingCode("K7QM4XP")).toBe(false);
     expect(isCompletePairingCode("")).toBe(false);

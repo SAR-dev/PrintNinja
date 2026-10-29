@@ -113,11 +113,12 @@ impl PairingWindow {
     }
 }
 
-/// Uppercase, strip `-` and whitespace. The dash in `K7QM-4XPD` is cosmetic.
+/// Uppercase, strip whitespace. Dashes are neither stripped nor
+/// accepted: codes are dashless, so a dash fails `valid_format`.
 pub fn normalize_code(raw: &str) -> String {
     raw.to_ascii_uppercase()
         .chars()
-        .filter(|c| *c != '-' && !c.is_whitespace())
+        .filter(|c| !c.is_whitespace())
         .collect()
 }
 
@@ -185,10 +186,13 @@ mod pair_code_tests {
     }
 
     #[test]
-    fn normalization_accepts_lowercase_dashes_and_spaces() {
-        assert_eq!(normalize_code("k7qm-4xpd"), "K7QM4XPD");
+    fn normalization_strips_spaces_but_rejects_dashes() {
         assert_eq!(normalize_code("k7qm 4xpd"), "K7QM4XPD");
-        assert_eq!(normalize_code("  K7QM-4XPD\n"), "K7QM4XPD");
+        assert_eq!(normalize_code("  K7QM4XPD\n"), "K7QM4XPD");
+        assert!(
+            !valid_format(&normalize_code("k7qm-4xpd")),
+            "a dash is a format error, not cosmetics"
+        );
     }
 
     #[test]
