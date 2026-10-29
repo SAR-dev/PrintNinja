@@ -200,6 +200,7 @@ const ja: Translation = {
     canvas_preview: "キャンバスプレビュー",
     canvas_size: "{{w}} × {{h}} mm",
     page_n_of: "{{n}} / {{total}} ページ",
+    measuring_pages: "ページを計測しています…",
     helpers_insert: "ヘルパーをクリックすると、カーソル位置に挿入されます:",
     helpers_available: "使用できるヘルパー:",
     helper_insert: "{{helper}}ヘルパーを挿入",
