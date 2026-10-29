@@ -138,15 +138,6 @@ pub fn generate_code() -> String {
         .collect()
 }
 
-/// Display form `K7QM-4XPD`. The dash is cosmetic; input strips it.
-pub fn format_display(code: &str) -> String {
-    if code.len() == CODE_LEN {
-        format!("{}-{}", &code[..4], &code[4..])
-    } else {
-        code.to_string()
-    }
-}
-
 /// Compare without an early exit (same pattern as `secrets_match`).
 fn constant_time_eq(a: &str, b: &str) -> bool {
     let (a, b) = (a.as_bytes(), b.as_bytes());
@@ -201,8 +192,9 @@ mod pair_code_tests {
     }
 
     #[test]
-    fn display_form_is_dashed() {
-        assert_eq!(format_display("K7QM4XPD"), "K7QM-4XPD");
+    fn display_form_is_the_plain_code() {
+        // No dash: what the PC shows is what the phone types.
+        assert_eq!(normalize_code("K7QM4XPD"), "K7QM4XPD");
     }
 
     #[test]
