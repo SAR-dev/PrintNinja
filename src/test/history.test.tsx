@@ -36,6 +36,9 @@ const job = (over: Partial<HistoryJob>): HistoryJob => ({
   finished_at: "2026-01-02T10:00:02Z",
   duration_ms: 2000,
   timings_json: null,
+  requested_by_device_id: null,
+  template_revision: null,
+  printed_by: null,
   ...over,
 });
 
@@ -258,5 +261,38 @@ describe("History page", () => {
     expect(
       within(dialog).getByText(/No timing breakdown was recorded/),
     ).toBeInTheDocument();
+  });
+});
+
+describe("job attribution", () => {
+  it("labels remote jobs with the PC and the phone", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_jobs")
+        return [
+          job({ id: 4, printer_id: null, printed_by: "Studio PC" }),
+          job({ id: 5, requested_by_device_id: "phone-1" }),
+        ];
+      if (cmd === "list_paired_devices")
+        return [
+          {
+            id: "phone-1",
+            name: "Android phone",
+            display_name: "Shop Phone",
+            platform: "android",
+            paired_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+            can_print: true,
+            account_id: "user-1",
+          },
+        ];
+      if (cmd === "list_printers") return [];
+      return null;
+    });
+    renderPage();
+    await screen.findByText("#4");
+    // The phone's row names the PC that printed it…
+    expect(screen.getByText("via Studio PC")).toBeInTheDocument();
+    // …and the PC's row names the phone that asked (rename wins).
+    expect(await screen.findByText("from Shop Phone")).toBeInTheDocument();
   });
 });

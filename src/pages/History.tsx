@@ -123,6 +123,8 @@ export function HistoryPage() {
   const store = useHistoryStore();
   const [loading, setLoading] = useState(true);
   const [printers, setPrinters] = useState<PrinterOption[]>([]);
+  // Paired-phone names for the "from <phone>" label on remote jobs.
+  const [phoneNames, setPhoneNames] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saved, setSaved] = useState<SavedFilter[]>(loadSaved);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -160,6 +162,16 @@ export function HistoryPage() {
         if (!cancelled) setPrinters(list ?? []);
       } catch {
         /* printer names are optional here */
+      }
+      try {
+        const devices = await agent("list_paired_devices", {});
+        if (!cancelled && devices) {
+          const names: Record<string, string> = {};
+          for (const d of devices) names[d.id] = d.display_name || d.name;
+          setPhoneNames(names);
+        }
+      } catch {
+        /* attribution falls back to the device id */
       }
     })();
     return () => {
@@ -449,7 +461,27 @@ export function HistoryPage() {
         header: t("common.status"),
         accessorFn: (j) => j.status,
         enableSorting: true,
-        cell: (c) => <JobStatusBadge status={c.row.original.status} />,
+        cell: (c) => {
+          const j = c.row.original;
+          const from = j.requested_by_device_id
+            ? (phoneNames[j.requested_by_device_id] ?? j.requested_by_device_id)
+            : null;
+          return (
+            <div>
+              <JobStatusBadge status={j.status} />
+              {j.printed_by && (
+                <p className="text-xs text-muted-foreground">
+                  {t("history.printed_via", { pc: j.printed_by })}
+                </p>
+              )}
+              {from && (
+                <p className="text-xs text-muted-foreground">
+                  {t("history.printed_from", { phone: from })}
+                </p>
+              )}
+            </div>
+          );
+        },
       },
       {
         id: "duration",
@@ -552,7 +584,7 @@ export function HistoryPage() {
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
     ],
-    [printers, t],
+    [printers, phoneNames, t],
   );
 
   const f = store.filter;

@@ -89,7 +89,11 @@ CREATE TABLE IF NOT EXISTS print_jobs (
     -- read off the template row when the job opens. NULL for raw-HTML
     -- prints and rows that predate it. History shows exactly which
     -- revision printed.
-    template_revision INTEGER
+    template_revision INTEGER,
+    -- Which paired PC printed this job (Release B §3.5): the pair's
+    -- display name. NULL when printed locally. The phone's history reads
+    -- it as "printed by <PC name>".
+    printed_by TEXT
 );
 
 CREATE TABLE IF NOT EXISTS settings (
