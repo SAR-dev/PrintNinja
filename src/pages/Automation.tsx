@@ -6,6 +6,7 @@ import { TrustedSourcesPanel } from "@/components/automation/TrustedSourcesPanel
 import { DevicesCard } from "@/components/DevicesCard";
 import { PrintViaPcCard } from "@/components/PrintViaPcCard";
 import { PageHeader } from "@/components/PageHeader";
+import { useFlashField } from "@/lib/hooks/useFlashField";
 import { isAndroid } from "@/lib/platform";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiExplorerPanel } from "@/pages/ApiExplorer";
@@ -35,10 +36,15 @@ export function AutomationPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = parseAutomationTab(searchParams.get("tab"));
+  // Palette deep-link (`?tab=&field=`): the control lives in a tab that
+  // only mounts once opened, and some cards load before they render.
+  useFlashField(searchParams.get("field"), true, [tab]);
   const openTab = (next: AutomationTab) => {
     const params = new URLSearchParams(searchParams);
     if (next === "server") params.delete("tab");
     else params.set("tab", next);
+    // A flash target belongs to the tab the link opened, not the next one.
+    params.delete("field");
     setSearchParams(params, { replace: true });
   };
 

@@ -91,7 +91,19 @@ adding a second library for the same job. Join class names with `cn()` from `src
 top bar or sidebar.
 
 - **Top bar** (48 px): logo and app name (from branding), search field that opens the command
-  palette, share-service indicator, help button.
+  palette, status badges, help button. Badges are one per switch that changes how the app
+  behaves while it is on, each linking to where it turns off. Their state comes from one hook,
+  `useShellStatus` (`src/lib/shell/useShellStatus.ts`), which refreshes on route change, window
+  focus, API start/stop and every `writeSetting` (the `setting:changed` event):
+  - **LAN** (danger) or **API** (success): the local API server. LAN means anyone on the
+    network can reach it.
+  - **Sharing** (info): this PC is live as a renderer for phones (server running and on the LAN).
+  - **Via PC** (info): this phone prints through a paired PC.
+  - **Private network open** (warning): "Block private IPs" is switched off.
+  - The share-service sign-in and sync badges, the update badge, search and help.
+
+  Add a badge here when a new switch changes behaviour and the person could forget it is on.
+  A single failed status read keeps the last known badge; it only disappears after three in a row.
 - **Sidebar** (desktop, `md` and up): grouped by the job being done, collapsible to icons.
   The collapsed state is remembered in `localStorage`.
 - **Bottom bar** (phones): the same items and labels as the sidebar.
@@ -141,7 +153,8 @@ the code editor. "Reprint last job" asks for confirmation before it prints.
 | `/print` | Print | "Print job" card (printer, template, copies, options such as grayscale and test data), a live preview, and a banner that says "Print sent" or "Print failed" |
 | `/printers` | Printers | `DataTable` of printers with their status; "Add printer" opens a side sheet |
 | `/history` | History | `DataTable` of jobs with `JobStatusBadge`; reprint, retry and delete, one at a time or in bulk, with a confirmation |
-| `/settings` | Settings | Sections opened with `?section=`: `setup` (checklist), `profile` (signed-in account, password, sign out; opened by the top-bar user badge and by the account row in the phone More sheet), `general` (appearance, branding, density), `share`, `api`, `data`, `retention`, `diagnostics`. An unknown value opens General |
+| `/settings` | Settings | Sections opened with `?section=`: `setup` (checklist), `profile` (signed-in account, password, sign out; opened by the top-bar user badge and by the account row in the phone More sheet), `general` (appearance, branding, density), `background`, `share` (labelled **Account & sync**: the share service URL and sign-in), `data` (labelled **Data & network**: allowed domains and private-IP blocking), `retention`, `diagnostics`. `&field=<id>` scrolls to and flashes a control. An unknown section opens General. The local API server is not here; it lives on Automation |
+| `/automation` | Automation | Tabs opened with `?tab=`: `server` (port, start/stop, **Network access**: LAN access and start at launch), `explorer` (try the API), `phones` (share this PC with phones, paired devices, Print via PC on Android), `links` (trusted deep-link sources). `&field=<id>` scrolls to and flashes a control. An unknown tab opens the server tab |
 | `/__ui` | UI kit | Development only; not in production builds |
 
 Unknown paths redirect to `/`.
@@ -241,6 +254,10 @@ Add new states there, not in pages.
 | `withdrawn` | Neutral | Eye off | Withdrawn by author |
 | `online` | Success | Wifi | Printer or share service reachable |
 | `offline` | Danger | Wifi off | Unreachable |
+| `api` / `lan` | Success / Danger | Globe / Wifi | Local API server on loopback / reachable from the LAN |
+| `sharing` | Info | Share | This PC is live as a renderer for phones |
+| `via_pc` | Info | Monitor and phone | This phone prints through a paired PC |
+| `exposed` | Warning | Shield alert | Private-IP blocking is off |
 
 - `StatusBadge` takes a `status` key and an optional `label` override ("Done", "Yours") when
   the icon and tone fit but the word should differ. Default labels come from the `status.*`
@@ -393,8 +410,8 @@ than hardcoding the product name in new UI, and use `AppLogo` to show the logo.
 
 - The layout switches at the `md` breakpoint (768 px): sidebar and search field above, bottom
   bar and a search icon below.
-- The share indicator is hidden below `sm`. Do not rely on anything in the top bar being
-  visible on a phone.
+- Top-bar badges are compact below `sm`: the icon and tone stay, the word is hidden, and the
+  link's accessible name carries it. Do not rely on the word being visible on a phone.
 - The top and bottom bars respect the device safe areas (`env(safe-area-inset-*)`).
 - On touch screens, buttons, inputs, selects and palette rows keep a 44 px minimum height.
 - Test at 390 px and 1440 px, and at 125% and 150% Windows scaling (see
@@ -495,3 +512,13 @@ Be aware of these before copying existing code:
   `title` hints.
 - The Designer and Print pages are large single files. Prefer extracting pieces into
   `src/components/designer/` rather than growing them.
+
+## Finding a setting
+
+Every control that has a switch or field someone might hunt for is in the command palette
+(`Ctrl+K`): Settings controls from `src/lib/shell/settingsSearch.ts`, Automation controls from
+`src/lib/shell/automationSearch.ts`. Selecting one opens its page and tab and flashes the control
+(`useFlashField`, which retries for about two seconds when the card loads late). When you add a
+control, give it a stable DOM `id`, add an entry with English lowercase keywords, and keep a
+control in exactly one place. If two screens are related, link them (see the **Network access**
+note on the API server tab) instead of duplicating the switch.

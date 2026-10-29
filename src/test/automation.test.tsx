@@ -871,7 +871,7 @@ describe("Automation → Phones and server", () => {
       }
     });
 
-    it("keeps the port visible but the bind wording out of the main view", async () => {
+    it("keeps the port visible and shows LAN access under Network access", async () => {
       appMode();
       try {
         openApi("server");
@@ -881,12 +881,15 @@ describe("Automation → Phones and server", () => {
         // (the curl example below legitimately keeps its loopback URL).
         expect(await screen.findByText("Port 17717")).toBeVisible();
         expect(screen.queryByText(/0\.0\.0\.0/)).toBeNull();
-        const advanced = await screen.findByText("Advanced");
-        expect(advanced.closest("details")).not.toBeNull();
-        fireEvent.click(advanced);
-        expect(
-          await screen.findByRole("switch", { name: "Allow LAN access" }),
-        ).toBeInTheDocument();
+        // LAN access is a plain switch under "Network access", not
+        // tucked into a collapsed section.
+        expect(await screen.findByText("Network access")).toBeVisible();
+        const lan = await screen.findByRole("switch", {
+          name: "Allow LAN access",
+        });
+        expect(lan).toBeVisible();
+        expect(lan.closest("details")).toBeNull();
+        expect(screen.queryByText("Advanced")).toBeNull();
       } finally {
         webMode();
       }

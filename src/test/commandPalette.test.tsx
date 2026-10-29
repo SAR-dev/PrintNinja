@@ -88,16 +88,16 @@ describe("CommandPalette search coverage", () => {
   it("lists settings sections and deep-links to them", async () => {
     const onNavigate = vi.fn();
     show({ onNavigate });
-    await screen.findByRole("option", { name: "Data sources" });
+    await screen.findByRole("option", { name: "Data & network" });
     expect(headings()).toContain("Settings");
-    fireEvent.click(screen.getByRole("option", { name: "Data sources" }));
+    fireEvent.click(screen.getByRole("option", { name: "Data & network" }));
     expect(onNavigate).toHaveBeenCalledWith("/settings?section=data");
   });
 
   it("finds individual settings by their control text", async () => {
     const onNavigate = vi.fn();
     show({ onNavigate });
-    await screen.findByRole("option", { name: "Data sources" });
+    await screen.findByRole("option", { name: "Data & network" });
     const input = document.querySelector("[cmdk-input]") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "density" } });
     const item = await screen.findByText("Density");
@@ -110,13 +110,65 @@ describe("CommandPalette search coverage", () => {
   it("matches settings by English keywords regardless of locale", async () => {
     const onNavigate = vi.fn();
     show({ onNavigate });
-    await screen.findByRole("option", { name: "Data sources" });
+    await screen.findByRole("option", { name: "Data & network" });
     const input = document.querySelector("[cmdk-input]") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "autostart" } });
     const item = await screen.findByText("Launch at startup");
     fireEvent.click(item);
     expect(onNavigate).toHaveBeenCalledWith(
       "/settings?section=background&field=launch-at-startup",
+    );
+  });
+
+  it("lists the Automation tabs and deep-links to them", async () => {
+    const onNavigate = vi.fn();
+    show({ onNavigate });
+    await screen.findByRole("option", { name: "Data & network" });
+    expect(headings()).toContain("Automation");
+    fireEvent.click(screen.getByRole("option", { name: "Deep links" }));
+    expect(onNavigate).toHaveBeenCalledWith("/automation?tab=links");
+  });
+
+  it("finds Automation controls that used to be unsearchable", async () => {
+    const cases: Array<[query: string, label: string, to: string]> = [
+      ["lan", "Allow LAN access", "/automation?tab=server&field=lan-access"],
+      ["port", "Port", "/automation?tab=server&field=api-port"],
+      [
+        "boot",
+        "Start server when the app starts",
+        "/automation?tab=server&field=api-autostart",
+      ],
+      [
+        "pair",
+        "Let phones print through this PC",
+        "/automation?tab=phones&field=devices-share",
+      ],
+      [
+        "trusted",
+        "Trusted deep-link sources",
+        "/automation?tab=links&field=trusted-source-input",
+      ],
+    ];
+    for (const [query, label, to] of cases) {
+      const onNavigate = vi.fn();
+      const { unmount } = show({ onNavigate });
+      await screen.findByRole("option", { name: "Data & network" });
+      const input = document.querySelector("[cmdk-input]") as HTMLInputElement;
+      fireEvent.change(input, { target: { value: query } });
+      const item = await screen.findByText(label);
+      fireEvent.click(item);
+      expect(onNavigate).toHaveBeenCalledWith(to);
+      unmount();
+    }
+  });
+
+  it("hides Android-only controls on a PC", async () => {
+    show();
+    await screen.findByRole("option", { name: "Data & network" });
+    const input = document.querySelector("[cmdk-input]") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "print via pc" } });
+    await waitFor(() =>
+      expect(screen.queryByText("Print via PC")).not.toBeInTheDocument(),
     );
   });
 
