@@ -163,6 +163,11 @@ pub struct ClaimRequest {
     pub device_id: Option<String>,
     pub device_name: Option<String>,
     pub platform: Option<String>,
+    /// Same-account pairing (Release C §3.6): the account this phone is
+    /// signed in to, plus the service URL it belongs to. Both are
+    /// identifiers, not secrets — the one-time code still does the auth.
+    pub account_id: Option<String>,
+    pub service_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -221,6 +226,52 @@ pub async fn claim(
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({ "error": "device_id is required" })),
+        )
+            .into_response();
+    }
+
+    // Same-account pairing (Release C §3.6): both devices sign in, and the
+    // claim carries the phone's account for comparison. Checked before the
+    // window so a sign-in problem never burns the one-time code.
+    let phone_account = req.account_id.unwrap_or_default().trim().to_string();
+    let phone_url = req
+        .service_url
+        .unwrap_or_default()
+        .trim()
+        .trim_end_matches('/')
+        .to_string();
+    if phone_account.is_empty() || phone_account.len() > 128 || phone_url.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "sign in to your account on this phone first, then pair",
+                "code": "phone_sign_in_required",
+            })),
+        )
+            .into_response();
+    }
+    let pc_account = state
+        .db
+        .lock()
+        .ok()
+        .and_then(|guard| super::render_share::pc_account(guard.connection()));
+    let Some((pc_user, pc_url)) = pc_account else {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "sign in to your account on this PC first, then pair",
+                "code": "pc_sign_in_required",
+            })),
+        )
+            .into_response();
+    };
+    if phone_account != pc_user || phone_url != pc_url.trim_end_matches('/') {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "this phone is signed in to a different account than this PC",
+                "code": "different_account",
+            })),
         )
             .into_response();
     }
@@ -316,18 +367,30 @@ pub async fn claim(
         };
         // can_print is deliberately untouched on re-pair: like the PC's
         // rename, the operator's printing choice survives. Fresh rows get
-        // 1 from the column default above.
+        // 1 from the column default above. The account is re-stored every
+        // time instead: re-pairing re-verifies it (§3.6).
         if let Err(e) = guard.connection().execute(
             "INSERT INTO paired_devices
-                 (id, name, display_name, platform, token_hash, paired_at, last_seen_at, can_print)
-             VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?5, 1)
+                 (id, name, display_name, platform, token_hash, paired_at, last_seen_at, can_print,
+                  account_id, service_url)
+             VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?5, 1, ?6, ?7)
              ON CONFLICT(id) DO UPDATE SET
                name = excluded.name,
                platform = excluded.platform,
                token_hash = excluded.token_hash,
                paired_at = excluded.paired_at,
-               last_seen_at = excluded.last_seen_at",
-            rusqlite::params![device_id, device_name, platform, hash, paired_at],
+               last_seen_at = excluded.last_seen_at,
+               account_id = excluded.account_id,
+               service_url = excluded.service_url",
+            rusqlite::params![
+                device_id,
+                device_name,
+                platform,
+                hash,
+                paired_at,
+                phone_account,
+                phone_url
+            ],
         ) {
             tracing::warn!("pair claim insert failed: {e}");
             return (

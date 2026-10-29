@@ -236,7 +236,7 @@ impl Default for OpenApiSpec {
                 "/v1/pair/claim": {
                     "post": {
                         "summary": "Claim a pairing code for a per-device token",
-                        "description": "Presents the 8-character code plus this device's id, name and platform. On success mints a per-device token (shown once; the PC stores only its SHA-256) and closes the window. Single use; 5 wrong guesses close the window.",
+                        "description": "Presents the 8-character code plus this device's id, name and platform. On success mints a per-device token (shown once; the PC stores only its SHA-256) and closes the window. Single use; 5 wrong guesses close the window. Same-account pairing: the phone also sends the `account_id` it is signed in to plus its `service_url`, and the PC refuses a mismatch — both devices must be signed in to the same account on the same server.",
                         "requestBody": {
                             "required": true,
                             "content": {
@@ -249,7 +249,9 @@ impl Default for OpenApiSpec {
                                             "code": { "type": "string", "description": "8 characters from ABCDEFGHJKLMNPQRSTUVWXYZ23456789 (dashes and spaces optional)" },
                                             "device_id": { "type": "string", "description": "This phone's stable id (UUID); re-pairing replaces its row" },
                                             "device_name": { "type": "string", "description": "This phone's name" },
-                                            "platform": { "type": "string", "description": "This phone's platform" }
+                                            "platform": { "type": "string", "description": "This phone's platform" },
+                                            "account_id": { "type": "string", "description": "Account this phone is signed in to (server user id); must match the PC's" },
+                                            "service_url": { "type": "string", "description": "Service URL the account belongs to; must match the PC's" }
                                         }
                                     }
                                 }
@@ -257,9 +259,9 @@ impl Default for OpenApiSpec {
                         },
                         "responses": {
                             "200": { "description": "Paired: `{ provider_id, provider_name, provider_platform, port, token, paired_at }`" },
-                            "400": { "description": "Malformed code or body, or unsupported protocol" },
+                            "400": { "description": "Malformed code or body, unsupported protocol, or the phone sent no account (sign in first)" },
                             "401": { "description": "Wrong code (body includes `attempts_left`)" },
-                            "403": { "description": "Pairing is not available (sharing disabled or no window open)" },
+                            "403": { "description": "Pairing is not available (sharing disabled or no window open), the PC is signed out, or the accounts differ (body `code` tells which)" },
                             "410": { "description": "The pairing code expired" },
                             "429": { "description": "Wrong-guess cap hit; the window is closed" }
                         }

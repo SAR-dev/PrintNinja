@@ -256,6 +256,7 @@ describe("Automation → Phones and server", () => {
         paired_at: string;
         last_seen_at: string;
         can_print: boolean;
+        account_id: string | null;
       }>,
     };
     mockBackend(async (cmd: string, args?: Record<string, unknown>) => {
@@ -511,6 +512,7 @@ describe("Automation → Phones and server", () => {
             paired_at: new Date().toISOString(),
             last_seen_at: new Date().toISOString(),
             can_print: true,
+            account_id: "user-1",
           },
         ];
         openApi();
@@ -541,6 +543,7 @@ describe("Automation → Phones and server", () => {
             paired_at: new Date().toISOString(),
             last_seen_at: new Date().toISOString(),
             can_print: true,
+            account_id: "user-1",
           },
         ];
         openApi();
@@ -572,6 +575,7 @@ describe("Automation → Phones and server", () => {
             paired_at: new Date().toISOString(),
             last_seen_at: new Date().toISOString(),
             can_print: true,
+            account_id: "user-1",
           },
         ];
         openApi();
@@ -618,10 +622,16 @@ describe("Automation → Phones and server", () => {
             paired_at: new Date().toISOString(),
             last_seen_at: new Date().toISOString(),
             can_print: true,
+            account_id: "user-1",
           },
         ];
         openApi();
         await screen.findByText("Android phone");
+        // The account badge renders from the stored row (§3.6); no local
+        // account here, so it reads as different.
+        expect(
+          await screen.findByTestId("devices-account-p1"),
+        ).toHaveTextContent(/Different account/);
         const toggle = await screen.findByTestId("devices-can-print-p1");
         expect(toggle).toHaveAttribute("aria-checked", "true");
         fireEvent.click(toggle);

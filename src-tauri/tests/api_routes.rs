@@ -1009,11 +1009,25 @@ fn seed_sharing(db: &Db, token: &str) -> String {
         [],
     )
     .unwrap();
+    // This PC is signed in (§3.6): the gate re-checks every LAN token
+    // against this account.
+    c.execute(
+        "INSERT INTO settings (key, value) VALUES
+             ('share_user_id', 'user-1'),
+             ('share_service_url', 'https://share.test')
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [],
+    )
+    .unwrap();
     c.execute(
         "INSERT INTO paired_devices
-             (id, name, display_name, platform, token_hash, paired_at, last_seen_at)
-         VALUES ('phone-1', 'Test Phone', NULL, 'android', ?1, datetime('now'), datetime('now'))
-         ON CONFLICT(id) DO UPDATE SET token_hash = excluded.token_hash",
+             (id, name, display_name, platform, token_hash, paired_at, last_seen_at,
+              account_id, service_url)
+         VALUES ('phone-1', 'Test Phone', NULL, 'android', ?1, datetime('now'), datetime('now'),
+                 'user-1', 'https://share.test')
+         ON CONFLICT(id) DO UPDATE SET token_hash = excluded.token_hash,
+                                        account_id = excluded.account_id,
+                                        service_url = excluded.service_url",
         [&hash],
     )
     .unwrap();
@@ -1914,4 +1928,81 @@ async fn missing_client_revision_is_409_missing() {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["code"], "template_missing");
     assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+// ───────────────────────────────────────────────────────────────
+// same-account re-check (Release C §3.6)
+// ───────────────────────────────────────────────────────────────
+
+/// A PC account switch disables existing pairs on every route: the phone
+/// must pair again under the new account.
+#[tokio::test]
+async fn lan_token_dies_when_pc_switches_account() {
+    let db = setup();
+    seed_sharing(&db, "acct-token-1");
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(28),
+            Some("acct-token-1")
+        )
+        .await,
+        StatusCode::OK
+    );
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute(
+            "UPDATE settings SET value = 'user-2' WHERE key = 'share_user_id'",
+            [],
+        )
+        .unwrap();
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(28),
+            Some("acct-token-1")
+        )
+        .await,
+        StatusCode::UNAUTHORIZED,
+        "pairs claimed under another account must be redone"
+    );
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/capabilities",
+            lan_ip(28),
+            Some("acct-token-1")
+        )
+        .await,
+        StatusCode::UNAUTHORIZED,
+        "renders stop too, not just prints"
+    );
+}
+
+/// A signed-out PC honours no pair.
+#[tokio::test]
+async fn lan_token_dies_when_pc_signs_out() {
+    let db = setup();
+    seed_sharing(&db, "acct-token-2");
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute(
+            "DELETE FROM settings WHERE key IN ('share_user_id', 'share_service_url')",
+            [],
+        )
+        .unwrap();
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(29),
+            Some("acct-token-2")
+        )
+        .await,
+        StatusCode::UNAUTHORIZED
+    );
 }

@@ -112,7 +112,14 @@ CREATE TABLE IF NOT EXISTS paired_devices (
     -- Whether this phone may use the main routes (print, printers,
     -- templates, jobs). Render-only phones keep the peer routes; those
     -- never consult this flag. A fresh pair can always print.
-    can_print INTEGER NOT NULL DEFAULT 1
+    can_print INTEGER NOT NULL DEFAULT 1,
+    -- Same-account pairing (Release C §3.6): the account both devices
+    -- were signed in to when this pair was claimed. The claim refuses a
+    -- mismatch, and later requests re-check against the PC's current
+    -- account — a sign-out or switch disables existing pairs. NULL
+    -- predates the check (no backfill: reset the database).
+    account_id TEXT,
+    service_url TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_paired_devices_token ON paired_devices(token_hash);
 

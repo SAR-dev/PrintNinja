@@ -26,6 +26,7 @@ import {
   parsePairs,
 } from "@/lib/pairing";
 import { isWebMode, readSetting, writeSetting } from "@/lib/settings";
+import { getShareUserId } from "@/lib/share/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,6 +123,7 @@ function PcSection() {
   const [pairing, setPairing] = useState<PairingState | null>(null);
   const [showPair, setShowPair] = useState(false);
   const [devices, setDevices] = useState<PairedDevice[]>([]);
+  const [myAccountId, setMyAccountId] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -153,6 +155,12 @@ function PcSection() {
       setDevices(await agent("list_paired_devices", {}));
     } catch {
       /* backend unavailable */
+    }
+    try {
+      setMyAccountId(await getShareUserId());
+    } catch {
+      /* signed out or backend unavailable */
+      setMyAccountId(null);
     }
   }, []);
 
@@ -590,6 +598,22 @@ function PcSection() {
                               when: timeAgo(d.last_seen_at, t),
                             })}
                           </span>
+                          {d.account_id ? (
+                            <span className="mt-1 flex items-center gap-1">
+                              <Badge
+                                variant={
+                                  myAccountId && d.account_id === myAccountId
+                                    ? "success"
+                                    : "secondary"
+                                }
+                                data-testid={`devices-account-${d.id}`}
+                              >
+                                {myAccountId && d.account_id === myAccountId
+                                  ? t("settings_page.devices_account_same")
+                                  : t("settings_page.devices_account_other")}
+                              </Badge>
+                            </span>
+                          ) : null}
                         </span>
                         <span className="flex shrink-0 items-center gap-1">
                           <Label

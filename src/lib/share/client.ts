@@ -31,6 +31,7 @@ function apiDeps(): ApiDeps {
 const SETTINGS_KEYS = {
   serviceUrl: "share_service_url",
   token: "share_session_token",
+  userId: "share_user_id",
 } as const;
 
 async function getSetting(key: string): Promise<string | null> {
@@ -82,6 +83,18 @@ export async function setSessionToken(token: string | null): Promise<void> {
   await setSetting(SETTINGS_KEYS.token, token);
 }
 
+/** The stable account id from the last sign-in (`user.id`), saved
+ * alongside the token so pairing can prove same-account (§3.6). It is an
+ * identifier, not a secret — the pairing token stays the credential. */
+export async function getShareUserId(): Promise<string | null> {
+  const v = await getSetting(SETTINGS_KEYS.userId);
+  return v && v.trim() ? v.trim() : null;
+}
+
+export async function setShareUserId(id: string | null): Promise<void> {
+  await setSetting(SETTINGS_KEYS.userId, id);
+}
+
 export async function isSignedIn(): Promise<boolean> {
   return (await getSessionToken()) != null;
 }
@@ -110,11 +123,13 @@ export function onSessionEnded(
   return () => window.removeEventListener(SESSION_ENDED_EVENT, handler);
 }
 
-/** Forget the stored token and send the app back to sign-in. */
+/** Forget the stored token and account id, and send the app back to
+ * sign-in. A device with no stored id simply signs in again (§3.6). */
 export async function endSession(
   reason: SessionEndReason = "expired",
 ): Promise<void> {
   await setSessionToken(null);
+  await setShareUserId(null);
   window.dispatchEvent(
     new CustomEvent<SessionEndReason>(SESSION_ENDED_EVENT, { detail: reason }),
   );
@@ -159,6 +174,9 @@ async function authRequest(
     body: { handle, password },
   });
   await setSessionToken(data.token);
+  // The account this session belongs to, for the same-account pairing
+  // check (§3.6). Stored with the URL it belongs to (already in settings).
+  await setShareUserId(data.user.id);
   return data;
 }
 

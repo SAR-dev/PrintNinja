@@ -721,6 +721,9 @@ pub struct PairedDeviceRow {
     pub last_seen_at: String,
     /// Whether this phone may use the main routes. Render-only when false.
     pub can_print: bool,
+    /// Account both devices were signed in to at claim time (§3.6).
+    /// `None` predates the check.
+    pub account_id: Option<String>,
 }
 
 #[tauri::command]
@@ -729,7 +732,8 @@ pub fn list_paired_devices(db: State<DbState>) -> AppResult<Vec<PairedDeviceRow>
         .lock()
         .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let mut stmt = guard.connection().prepare(
-        "SELECT id, name, display_name, platform, paired_at, last_seen_at, can_print
+        "SELECT id, name, display_name, platform, paired_at, last_seen_at, can_print,
+                account_id
          FROM paired_devices ORDER BY paired_at DESC",
     )?;
     let rows = stmt
@@ -742,6 +746,7 @@ pub fn list_paired_devices(db: State<DbState>) -> AppResult<Vec<PairedDeviceRow>
                 paired_at: row.get(4)?,
                 last_seen_at: row.get(5)?,
                 can_print: row.get(6)?,
+                account_id: row.get(7)?,
             })
         })?
         .filter_map(Result::ok)
@@ -814,7 +819,8 @@ pub fn rename_paired_device(
         }
     }
     Ok(conn.query_row(
-        "SELECT id, name, display_name, platform, paired_at, last_seen_at, can_print
+        "SELECT id, name, display_name, platform, paired_at, last_seen_at, can_print,
+                account_id
          FROM paired_devices WHERE id = ?1",
         [&id],
         |row| {
@@ -826,6 +832,7 @@ pub fn rename_paired_device(
                 paired_at: row.get(4)?,
                 last_seen_at: row.get(5)?,
                 can_print: row.get(6)?,
+                account_id: row.get(7)?,
             })
         },
     )?)
@@ -859,7 +866,8 @@ pub fn set_paired_can_print(
         rusqlite::params![can_print as i64, id],
     )?;
     Ok(conn.query_row(
-        "SELECT id, name, display_name, platform, paired_at, last_seen_at, can_print
+        "SELECT id, name, display_name, platform, paired_at, last_seen_at, can_print,
+                account_id
          FROM paired_devices WHERE id = ?1",
         [&id],
         |row| {
@@ -871,6 +879,7 @@ pub fn set_paired_can_print(
                 paired_at: row.get(4)?,
                 last_seen_at: row.get(5)?,
                 can_print: row.get(6)?,
+                account_id: row.get(7)?,
             })
         },
     )?)
@@ -1046,6 +1055,8 @@ async fn claim_at(
     port: u16,
     code: &str,
     device_id: &str,
+    account_id: &str,
+    service_url: &str,
 ) -> Result<ClaimReply, String> {
     let res = client
         .post(format!("http://{host}:{port}/v1/pair/claim"))
@@ -1055,6 +1066,8 @@ async fn claim_at(
             "device_id": device_id,
             "device_name": phone_name(),
             "platform": std::env::consts::OS,
+            "account_id": account_id,
+            "service_url": service_url,
         }))
         .send()
         .await
@@ -1065,8 +1078,24 @@ async fn claim_at(
     if status == reqwest::StatusCode::NOT_FOUND {
         return Err("Update PrintNinja on your PC, then pair again.".into());
     }
+    // Account refusals (§3.6) share 403 with "not open": the body's `code`
+    // tells them apart. Read it before the generic branch below.
     if status == reqwest::StatusCode::FORBIDDEN {
-        return Err("Pairing is not open on that PC. Tap Pair a phone on it first.".into());
+        let code = res
+            .json::<serde_json::Value>()
+            .await
+            .ok()
+            .and_then(|v| v.get("code").and_then(|c| c.as_str()).map(str::to_string))
+            .unwrap_or_default();
+        return Err(match code.as_str() {
+            "different_account" => {
+                "That PC is signed in to a different account. Sign in to the same account on both, then pair again.".into()
+            }
+            "pc_sign_in_required" => {
+                "Sign in to your account on that PC first, then pair again.".into()
+            }
+            _ => "Pairing is not open on that PC. Tap Pair a phone on it first.".into(),
+        });
     }
     if status == reqwest::StatusCode::GONE {
         return Err("That code expired. Ask the PC for a new one.".into());
@@ -1121,6 +1150,39 @@ pub async fn pair_with_code(
             .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
         phone_device_id(guard.connection()).map_err(|e| AppError::Internal(e.to_string()))?
     };
+    // Same-account pairing (§3.6): no account, no claim — checked here so
+    // the phone says "sign in first" without burning the PC's code, and
+    // again by the PC, which does not trust us.
+    let (account_id, service_url) = {
+        let guard = db
+            .lock()
+            .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+        let conn = guard.connection();
+        let account: Option<String> = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'share_user_id'",
+                [],
+                |r| r.get(0),
+            )
+            .ok()
+            .filter(|s: &String| !s.trim().is_empty());
+        let url: Option<String> = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'share_service_url'",
+                [],
+                |r| r.get(0),
+            )
+            .ok()
+            .filter(|s: &String| !s.trim().is_empty());
+        match (account, url) {
+            (Some(a), Some(u)) => (a, u),
+            _ => {
+                return Err(AppError::Validation(
+                    "Sign in to your account on this phone first, then pair.".into(),
+                ));
+            }
+        }
+    };
     // Candidate PCs: the typed address, or whoever answers the probe.
     // The host is always the address that answered — never anything in
     // a payload (plan §5.3.3).
@@ -1160,7 +1222,17 @@ pub async fn pair_with_code(
     }
     let mut last_err = String::new();
     for (h, p) in &candidates {
-        match claim_at(&client, h, *p, &normalized, &device_id).await {
+        match claim_at(
+            &client,
+            h,
+            *p,
+            &normalized,
+            &device_id,
+            &account_id,
+            &service_url,
+        )
+        .await
+        {
             Ok(reply) => {
                 let pair = crate::api::peer_consume::RenderPair {
                     id: reply.provider_id.clone(),
