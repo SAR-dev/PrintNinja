@@ -35,7 +35,7 @@ fn setup_sharing(token: &str) -> Db {
                 [],
             )
             .unwrap();
-        // Signed-in PC (§3.6): the gate re-checks every token against this.
+        // Signed-in PC (ARCHITECTURE §9): the gate re-checks every token against this.
         guard
             .connection()
             .execute(

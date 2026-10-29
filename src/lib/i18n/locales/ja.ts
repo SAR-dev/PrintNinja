@@ -65,6 +65,9 @@ const ja: Translation = {
     registering: "アカウントを作成しています…",
     switch_to_register: "初めての方はこちら: アカウントを作成",
     switch_to_sign_in: "アカウントをお持ちの方はこちら: サインイン",
+    continue_as_guest: "ゲストとして続ける",
+    guest_hint:
+      "アカウントなしでWi-Fi経由でPCとペアリングします。サーバーを使うときは設定からいつでもサインインできます。",
     session_expired:
       "セッションが終了しました。作業を続けるには、もう一度サインインしてください。このPCでの編集内容は保持されています。",
     unreachable_inline:
@@ -794,7 +797,7 @@ const ja: Translation = {
     devices_pair_phone: "スマートフォンをペアリング",
     devices_pair_phone_hide: "ペアリングコードを隠す",
     devices_code_hint:
-      "スマートフォン側：設定 → 共有レンダリング → このコードを入力。まもなく期限切れになります。新しいコードは自動で表示されます。",
+      "スマートフォン側：設定 → 共有レンダリング → このコードを入力。まもなく期限切れになります。しばらくは新しいコードが自動で表示され、その後は「新しいコード」で取得できます。",
     devices_code_expires: "有効期限まであと{{count}}秒",
     devices_code_gone:
       "このコードは使用済みか期限切れです。続けるには新しいコードを取得してください。",

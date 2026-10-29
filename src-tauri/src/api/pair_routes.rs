@@ -163,7 +163,7 @@ pub struct ClaimRequest {
     pub device_id: Option<String>,
     pub device_name: Option<String>,
     pub platform: Option<String>,
-    /// Same-account pairing (Release C §3.6): the account this phone is
+    /// Same-account pairing (ARCHITECTURE §9): the account this phone is
     /// signed in to, plus the service URL it belongs to. Both are
     /// identifiers, not secrets — the one-time code still does the auth.
     pub account_id: Option<String>,
@@ -242,7 +242,7 @@ fn spend_invite(state: &ApiState, invite: &Invite) {
     }
 }
 
-/// Claim with a guest invite (docs/GUEST_PAIRING.md): no window, no
+/// Claim with a guest invite (ARCHITECTURE §9): no window, no
 /// account, just the invite. Mints the same per-device token; the row
 /// is `role = 'guest'` with the invite's expiry and print preset.
 fn claim_with_invite(
@@ -298,7 +298,7 @@ fn claim_with_invite(
             }
         };
         // can_print comes from the invite on fresh rows but stays
-        // operator-controlled afterwards (same rule as §3.3); role,
+        // operator-controlled afterwards (same rule as ARCHITECTURE §9); role,
         // account and expiry follow the credential just used.
         if let Err(e) = guard.connection().execute(
             "INSERT INTO paired_devices
@@ -410,14 +410,14 @@ pub async fn claim(
     let platform = req.platform.unwrap_or_default();
     let platform: String = platform.trim().chars().take(32).collect();
 
-    // Guest invites (docs/GUEST_PAIRING.md) are tried before the window:
+    // Guest invites (ARCHITECTURE §9) are tried before the window:
     // they work with no window open, and a miss falls through to the
     // owner flow below untouched (no attempts spent either way).
     if let Some(invite) = lookup_invite(&state, &normalized) {
         return claim_with_invite(&state, invite, &device_id, &device_name, &platform);
     }
 
-    // Same-account pairing (Release C §3.6): both devices sign in, and the
+    // Same-account pairing (ARCHITECTURE §9): both devices sign in, and the
     // claim carries the phone's account for comparison. Checked before the
     // window so a sign-in problem never burns the one-time code.
     let phone_account = req.account_id.unwrap_or_default().trim().to_string();
@@ -540,7 +540,7 @@ pub async fn claim(
         // can_print is deliberately untouched on re-pair: like the PC's
         // rename, the operator's printing choice survives. Fresh rows get
         // 1 from the column default above. The account is re-stored every
-        // time instead: re-pairing re-verifies it (§3.6). Role and expiry
+        // time instead: re-pairing re-verifies it (ARCHITECTURE §9). Role and expiry
         // follow the credential just used: an owner window promotes
         // (clearing any guest expiry), an invite demotes.
         if let Err(e) = guard.connection().execute(

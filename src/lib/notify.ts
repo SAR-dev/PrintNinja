@@ -1,5 +1,5 @@
 /**
- * The one place that shows toasts (Phase 3 of docs/MOBILE_UX_PLAN.md).
+ * The one place that shows toasts (see "Toasts" in docs/UI_GUIDE.md).
  * Nothing else imports `sonner` directly — a guard test enforces it.
  *
  * House rules, so a toast means the same thing everywhere:

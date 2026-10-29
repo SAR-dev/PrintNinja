@@ -1,4 +1,4 @@
-//! Print via PC, phone side (docs/ANDROID_PRINT_VIA_PC.md §3.5):
+//! Print via PC, phone side (ARCHITECTURE §9):
 //! `remote_print` POSTs a live loopback PC and records the outcome in
 //! the phone's own history. The PC has no spooler here, so the print
 //! itself fails — the attribution on both rows is the point.
