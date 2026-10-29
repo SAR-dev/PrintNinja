@@ -215,7 +215,8 @@ const implemented: Record<string, Handler> = {
   peer_capabilities: () => ({
     protocol: 1,
     can_render: true,
-    score: 800,    cores: 8,
+    score: 800,
+    cores: 8,
     platform: "linux",
     max_concurrent_renders: 2,
   }),
