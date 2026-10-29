@@ -86,7 +86,7 @@ const en = {
       "Setting up a printer, templates, or sharing? The checklist in Settings walks through it.",
     pair_required_title: "Pair your PC to start printing",
     pair_required_body:
-      "Printing on this phone always goes through a paired PC: the PC renders each page and the phone sends it to the printer. Pair once below — it stays paired.",
+      "Printing on this phone always goes through a paired PC: the PC renders each page and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. Pair once below — it stays paired.",
   },
   shell: {
     skip_to_content: "Skip to content",
@@ -344,7 +344,7 @@ const en = {
     via_pc_cached: "Printer list is cached: the PC is unreachable.",
     via_pc_unreachable:
       "The PC did not answer — check it is on and on the same Wi-Fi, then Refresh.",
-    via_pc_no_pair: "Choose which PC to print on in Settings → Share.",
+    via_pc_no_pair: "Choose which PC to print on in Automation → PC.",
     printed_via: "Printed via {{pc}}",
     sync_templates: "Sync templates",
     synced_retry: "Templates synced — retry the print.",
@@ -741,12 +741,12 @@ const en = {
     api_curl_title: "curl example",
     devices_title: "Shared rendering",
     devices_hint:
-      "Your phone prints through your PC: the PC prepares every job and the phone sends it to the printer. If the PC is off, asleep or blocked, prints fail until it answers; retry them from History.",
+      "Your phone prints through your PC: the PC prepares every job and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. If the PC is off, asleep or blocked, prints fail until it answers; retry them from History.",
     devices_web_notice:
       "Shared rendering needs the app backend, which the browser preview does not have.",
     devices_provider_title: "Share this PC with phones",
     devices_provider_hint:
-      "Phones on your Wi-Fi may ask this PC to prepare their PDFs. Printing, printers and history stay on the phone.",
+      "Phones on your Wi-Fi may ask this PC to prepare their PDFs — and, with printing allowed, to print on its printers. The phone's own printers and history stay on the phone.",
     devices_lan_warning:
       "Phones can only reach this PC while the server is running with Wi-Fi (LAN) access on.",
     devices_no_pairs: "No PC paired yet. Type the code shown on your PC.",
@@ -756,7 +756,7 @@ const en = {
     devices_test_toast_ok: "{{name}} answered — ready to print.",
     devices_remove: "Remove {{name}}",
     devices_phone_hint:
-      "Your phone prints through your PC: the PC prepares every job and the phone sends it to the printer. If the PC is off, asleep or blocked, prints fail until it answers; retry them from History.",
+      "Your phone prints through your PC: the PC prepares every job and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. If the PC is off, asleep or blocked, prints fail until it answers; retry them from History.",
     devices_pc_hint:
       "Let phones on your Wi-Fi use this PC to prepare their PDFs. Nothing changes for printing from this PC.",
     devices_lan_enable: "Turn on Wi-Fi access",
@@ -1122,7 +1122,7 @@ const en = {
     tab_server: "API server",
     tab_explorer: "Try the API",
     tab_phones: "Phones",
-    tab_computer: "Computer",
+    tab_computer: "PC",
     tab_links: "Deep links",
     server_title: "Local API server",
     open_explorer: "Try the API",

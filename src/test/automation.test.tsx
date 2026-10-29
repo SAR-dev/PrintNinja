@@ -381,6 +381,8 @@ describe("Automation → Phones and server", () => {
       try {
         // Sharing off and the API server stopped: the old screen sent
         // the user to a LAN switch elsewhere. Now one toggle does it.
+        // (Confirm seen: the dialog flow itself is covered above.)
+        localStorage.setItem("printninja-share-confirm-seen", "true");
         pcBackend({ enabled: false, lan: false });
         openApi();
         fireEvent.click(await screen.findByTestId("devices-share-toggle"));
@@ -680,15 +682,15 @@ describe("Automation → Phones and server", () => {
     });
   });
 
-  describe("API server share switch", () => {
-    const shareToggle = () =>
-      screen.findByRole("switch", { name: "Share with paired devices" });
+  describe("share switch (one switch, on the phones tab)", () => {
+    const shareToggle = () => screen.findByTestId("devices-share-toggle");
 
     it("writes both keys and warns on first enable after confirm", async () => {
       appMode();
       try {
-        openApi("server");
-        const toggle = await shareToggle();
+        pcBackend({ enabled: false, lan: false });
+        openApi();
+        const toggle = await screen.findByTestId("devices-share-toggle");
         expect(toggle).not.toBeChecked();
         fireEvent.click(toggle);
         // First enable asks once.
@@ -701,9 +703,9 @@ describe("Automation → Phones and server", () => {
         await waitFor(() =>
           expect(savedSetting("api_lan_access")).toBe("true"),
         );
-        expect(
-          await screen.findByText(/Only paired devices can connect/),
-        ).toBeVisible();
+        // The phones tab offers pairing once sharing is live.
+        expect(await screen.findByTestId("devices-pair-phone")).toBeVisible();
+        expect(screen.queryByTestId("devices-lan-enable")).toBeNull();
       } finally {
         webMode();
       }
@@ -713,7 +715,8 @@ describe("Automation → Phones and server", () => {
       appMode();
       try {
         localStorage.setItem("printninja-share-confirm-seen", "true");
-        openApi("server");
+        pcBackend({ enabled: false, lan: false });
+        openApi();
         fireEvent.click(await shareToggle());
         expect(screen.queryByRole("dialog")).toBeNull();
         await waitFor(() =>
@@ -732,7 +735,7 @@ describe("Automation → Phones and server", () => {
     it("cancelling the confirm leaves sharing off", async () => {
       appMode();
       try {
-        openApi("server");
+        openApi();
         fireEvent.click(await shareToggle());
         fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
         await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -1119,13 +1122,13 @@ describe("Automation → Phones and server", () => {
       }
     });
 
-    it("calls the pairs tab Computer on a phone", async () => {
+    it("calls the pairs tab PC on a phone", async () => {
       appMode();
       try {
         phoneBackend();
         openApi();
         expect(
-          await screen.findByRole("tab", { name: "Computer" }),
+          await screen.findByRole("tab", { name: "PC" }),
         ).toBeInTheDocument();
         expect(screen.queryByRole("tab", { name: "Phones" })).toBeNull();
       } finally {

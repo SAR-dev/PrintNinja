@@ -95,7 +95,7 @@ test("settings admin: shared-rendering phone pairs by code, tests, removes", asy
     settings: PAIRED_PC_SETTINGS,
   });
   const page = await seeded.context.newPage();
-  // The pair form is the phone half of Automation → Phones, shown only on
+  // The pair form is the phone half of Automation → PC, shown only on
   // Android; a PC shows the "Share this PC" half instead.
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "userAgent", {
