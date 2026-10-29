@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
+import { notifySuccess, notifyError } from "@/lib/notify";
 import * as share from "@/lib/share/client";
 
 /**
@@ -22,34 +22,38 @@ export function ChangePasswordForm({
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
+  // Field-level validation: a toast for a fixable typo is noise next
+  // to the field that names it.
+  const [fieldError, setFieldError] = useState("");
   const { t } = useTranslation();
 
   const submit = async () => {
     if (!current) {
-      toast.error(t("settings_page.change_password_current_required"));
+      setFieldError(t("settings_page.change_password_current_required"));
       return;
     }
     if (next.length < 8) {
-      toast.error(t("settings_page.change_password_too_short"));
+      setFieldError(t("settings_page.change_password_too_short"));
       return;
     }
     if (next !== confirm) {
-      toast.error(t("settings_page.change_password_mismatch"));
+      setFieldError(t("settings_page.change_password_mismatch"));
       return;
     }
+    setFieldError("");
     setBusy(true);
     try {
       const { revoked } = await share.changePassword(current, next);
       setCurrent("");
       setNext("");
       setConfirm("");
-      toast.success(
+      notifySuccess(
         revoked > 0
           ? t("settings_page.change_password_revoked", { count: revoked })
           : t("settings_page.change_password_done"),
       );
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -116,6 +120,11 @@ export function ChangePasswordForm({
       >
         {t("settings_page.change_password_title")}
       </Button>
+      {fieldError && (
+        <p role="alert" className="text-xs text-danger">
+          {fieldError}
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">
         {t("settings_page.change_password_hint")}
       </p>

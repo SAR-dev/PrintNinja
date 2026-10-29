@@ -592,6 +592,7 @@ const en = {
     toast_reprint_failed: "Reprint failed: {{error}}",
     toast_reprinted: "Queued reprint of job #{{id}}",
     toast_requeued: "Job #{{id}} re-queued",
+    view_action: "View",
     toast_retry_failed: "Retry failed: {{error}}",
     toast_saved: 'Saved filter "{{name}}"',
     view_menu_item: "View job {{id}}",
@@ -1126,6 +1127,7 @@ const en = {
     server_are: "are",
     server_already:
       "{{count}} template{{plural}} {{verb}} already on this computer",
+    server_failed: "{{count}} template{{plural}} failed",
   },
   automation: {
     tabs_aria: "Automation sections",

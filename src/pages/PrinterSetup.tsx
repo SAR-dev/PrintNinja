@@ -54,7 +54,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
+import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
 import { validatePrinterForm } from "@/lib/printerSchema";
 import type { PrinterRow } from "@/lib/agent/types";
 
@@ -205,7 +205,7 @@ export function PrinterSetupPage() {
       const saved = await agent("list_printers", {});
       setPrinters(saved ?? []);
     } catch (e) {
-      toast.error(t("printers.toast_load_failed", { error: describeError(e) }));
+      notifyError(t("printers.toast_load_failed", { error: describeError(e) }));
     } finally {
       setLoading(false);
     }
@@ -225,9 +225,9 @@ export function PrinterSetupPage() {
     try {
       const list = await agent("enumerate_system_printers", {});
       setSystemPrinters(list ?? []);
-      toast.success(t("printers.toast_found_system", { count: list.length }));
+      notifySuccess(t("printers.toast_found_system", { count: list.length }));
     } catch (e) {
-      toast.error(
+      notifyError(
         t("printers.toast_discovery_failed", { error: describeError(e) }),
       );
     }
@@ -244,10 +244,10 @@ export function PrinterSetupPage() {
       });
       setNetworkPrinters(list ?? []);
       if (!list || list.length === 0) {
-        toast.info(t("printers.toast_no_network"));
+        notifyInfo(t("printers.toast_no_network"));
       }
     } catch (e) {
-      toast.error(
+      notifyError(
         t("printers.toast_discovery_failed", { error: describeError(e) }),
       );
     } finally {
@@ -260,7 +260,7 @@ export function PrinterSetupPage() {
     try {
       const list = await agent("enumerate_system_printers", {});
       if (!list || list.length === 0) {
-        toast.info(t("printers.toast_no_system"));
+        notifyInfo(t("printers.toast_no_system"));
         return;
       }
       let added = 0;
@@ -290,14 +290,14 @@ export function PrinterSetupPage() {
       // refresh discovered list too
       setSystemPrinters(list);
       if (added > 0)
-        toast.success(
+        notifySuccess(
           `Added ${added} system printer(s)${skipped ? `, ${skipped} already existed` : ""}`,
         );
       else if (skipped)
-        toast.info(t("printers.toast_all_added", { count: skipped }));
-      else toast.info(t("printers.toast_none_new"));
+        notifyInfo(t("printers.toast_all_added", { count: skipped }));
+      else notifyInfo(t("printers.toast_none_new"));
     } catch (e) {
-      toast.error(t("printers.toast_scan_failed", { error: describeError(e) }));
+      notifyError(t("printers.toast_scan_failed", { error: describeError(e) }));
     } finally {
       setScanning(false);
     }
@@ -306,17 +306,17 @@ export function PrinterSetupPage() {
   const addPrinter = async () => {
     const parsed = validatePrinterForm(form);
     if (!parsed.ok) {
-      toast.error(t(parsed.messageKey));
+      notifyError(t(parsed.messageKey));
       return;
     }
     const req = parsed.req;
     try {
       if (editingId === null) {
         await agent("add_printer", { req });
-        toast.success(t("printers.toast_added", { name: form.name.trim() }));
+        notifySuccess(t("printers.toast_added", { name: form.name.trim() }));
       } else {
         await agent("update_printer", { id: editingId, req });
-        toast.success(t("printers.toast_saved", { name: form.name.trim() }));
+        notifySuccess(t("printers.toast_saved", { name: form.name.trim() }));
       }
       setShowAdd(false);
       setEditingId(null);
@@ -324,7 +324,7 @@ export function PrinterSetupPage() {
       await load();
     } catch (e) {
       const msg = describeError(e);
-      toast.error(
+      notifyError(
         isAlreadyExists(e)
           ? msg
           : t("printers.toast_save_failed", { error: msg }),
@@ -336,9 +336,9 @@ export function PrinterSetupPage() {
     try {
       await agent("delete_printer", { id: p.id });
       setPrinters((prev) => prev.filter((x) => x.id !== p.id));
-      toast.success(t("printers.toast_removed", { name: p.name }));
+      notifySuccess(t("printers.toast_removed", { name: p.name }));
     } catch (e) {
-      toast.error(
+      notifyError(
         t("printers.toast_remove_failed", { error: describeError(e) }),
       );
     }
@@ -352,19 +352,19 @@ export function PrinterSetupPage() {
         TEST_TIMEOUT_MS,
         "test_printer",
       );
-      toast.success(t("printers.toast_test_sent", { name: p.name }));
+      notifySuccess(t("printers.toast_test_sent", { name: p.name }));
     } catch (e) {
       // A backend that never answers used to leave this button on
       // "Testing…" for ever; say so instead of spinning.
       if (e instanceof TimeoutError) {
-        toast.error(
+        notifyError(
           t("printers.toast_test_timeout", {
             name: p.name,
             seconds: Math.round(e.afterMs / 1000),
           }),
         );
       } else {
-        toast.error(
+        notifyError(
           t("printers.toast_test_failed", { error: describeError(e) }),
         );
       }

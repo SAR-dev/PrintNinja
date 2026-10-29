@@ -607,6 +607,7 @@ const ja: Translation = {
     toast_reprint_failed: "再印刷に失敗しました: {{error}}",
     toast_reprinted: "ジョブ #{{id}} の再印刷をキューに追加しました",
     toast_requeued: "ジョブ #{{id}} を再キューに追加しました",
+    view_action: "表示",
     toast_retry_failed: "再試行に失敗しました: {{error}}",
     toast_saved: "フィルター「{{name}}」を保存しました",
     view_menu_item: "ジョブ {{id}} を表示",
@@ -1156,6 +1157,7 @@ const ja: Translation = {
     server_are: "",
     server_already:
       "{{count}}件のテンプレートは既にこのコンピューターにあります",
+    server_failed: "{{count}}件のテンプレートが失敗しました",
   },
   automation: {
     tabs_aria: "自動化のセクション",

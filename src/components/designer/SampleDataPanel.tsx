@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { notifySuccess } from "@/lib/notify";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -62,7 +62,7 @@ export function SampleDataPanel({
   const { t } = useTranslation();
   const copyAndToast = async (token: string) => {
     await copyToken(token);
-    toast.success(t("designer.copied_token", { token }));
+    notifySuccess(t("designer.copied_token", { token }));
   };
   return (
     <div className="space-y-3">

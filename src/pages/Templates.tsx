@@ -57,7 +57,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { notifySuccess, notifyError } from "@/lib/notify";
 import * as share from "@/lib/share/client";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { downloadToLocal } from "@/lib/share/sync";
@@ -236,10 +236,10 @@ export function TemplatesPage() {
     setSyncing(tpl.id);
     try {
       await saveRowToServer(tpl);
-      toast.success(t("templates.toast_saved_server", { name: tpl.name }));
+      notifySuccess(t("templates.toast_saved_server", { name: tpl.name }));
       await loadMine();
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setSyncing(null);
     }
@@ -252,12 +252,12 @@ export function TemplatesPage() {
       // Server first, then the cache: offline the button that opens this
       // dialog is disabled, so there is no queue to drain later.
       await deleteTemplateEverywhere(tpl);
-      toast.success(
+      notifySuccess(
         t("templates.toast_deleted_everywhere", { name: tpl.name }),
       );
       await loadMine();
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setSyncing(null);
     }
@@ -268,11 +268,11 @@ export function TemplatesPage() {
     setSyncing(tpl.id);
     try {
       const result = await takeServerCopy(tpl);
-      toast.success(t("templates.toast_refreshed", { name: result.name }));
+      notifySuccess(t("templates.toast_refreshed", { name: result.name }));
       await loadMine();
     } catch (e) {
       // The local copy is untouched when the fetch fails, so it still prints.
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setSyncing(null);
     }
@@ -282,12 +282,12 @@ export function TemplatesPage() {
     if (saving.has(serverTpl.id)) return;
     const url = await share.getServiceUrl();
     if (!url) {
-      toast.error(t("templates.toast_share_unconfigured"));
+      notifyError(t("templates.toast_share_unconfigured"));
       return;
     }
     const token = await share.getSessionToken();
     if (!token) {
-      toast.error(t("templates.toast_signin_required"));
+      notifyError(t("templates.toast_signin_required"));
       return;
     }
 
@@ -303,13 +303,13 @@ export function TemplatesPage() {
         serverTpl.owner_handle,
       );
       if (!result.created) {
-        toast.success(t("templates.toast_already_saved"));
+        notifySuccess(t("templates.toast_already_saved"));
         return;
       }
-      toast.success(t("templates.toast_saved_local", { name: serverTpl.name }));
+      notifySuccess(t("templates.toast_saved_local", { name: serverTpl.name }));
       await loadMine();
     } catch (e) {
-      toast.error(describeError(e), {
+      notifyError(describeError(e), {
         description: t("templates.toast_tap_retry"),
         action: {
           label: t("templates.toast_retry"),
@@ -333,7 +333,7 @@ export function TemplatesPage() {
       // Saving is a network operation: without the server round-trip the
       // copy stays, and the next pull (which still lists it as saved)
       // would bring it right back.
-      toast.error(describeError(e));
+      notifyError(describeError(e));
       return;
     }
     // The server confirmed the unsave, so the local copy is forgotten
@@ -342,10 +342,10 @@ export function TemplatesPage() {
       await agent("cache_forget_template", {
         server_id: localTpl.server_id ?? localTpl.remote_id,
       });
-      toast.success(t("templates.toast_removed_saved"));
+      notifySuccess(t("templates.toast_removed_saved"));
       await loadMine();
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     }
   };
 

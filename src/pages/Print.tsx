@@ -33,7 +33,7 @@ import { cacheNow } from "@/lib/sync/useSyncStatus";
 import { usePcStatus } from "@/lib/shell/usePcStatus";
 import { Link } from "react-router-dom";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
-import { toast } from "sonner";
+import { notifySuccess, notifyError } from "@/lib/notify";
 import { usePrintStore } from "@/lib/store/printStore";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
 import { ensureStarterTemplates } from "@/lib/templates/seedTemplates";
@@ -102,7 +102,7 @@ export function PrintPage() {
       setPcFailed(false);
     } catch (e) {
       setPcFailed(true);
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     }
   };
 
@@ -336,9 +336,9 @@ export function PrintPage() {
   const loadPrinters = async () => {
     try {
       const list = await refreshSystemPrinters();
-      toast.success(t("printers.toast_found_system", { count: list.length }));
+      notifySuccess(t("printers.toast_found_system", { count: list.length }));
     } catch (e) {
-      toast.error(t("settings_page.toast_failed", { error: describeError(e) }));
+      notifyError(t("settings_page.toast_failed", { error: describeError(e) }));
     }
     if (viaPc) {
       await refreshPcPrinters();
@@ -347,15 +347,15 @@ export function PrintPage() {
 
   const handlePrint = async (retry = false) => {
     if (!store.printerId) {
-      toast.error(t("print.blocker_printer"));
+      notifyError(t("print.blocker_printer"));
       return;
     }
     if (!store.templateId) {
-      toast.error(t("print.blocker_template"));
+      notifyError(t("print.blocker_template"));
       return;
     }
     if (store.copies < 1) {
-      toast.error(t("print.blocker_copies"));
+      notifyError(t("print.blocker_copies"));
       return;
     }
     // Print via PC: no local pipeline or transport call from here on.
@@ -418,7 +418,7 @@ export function PrintPage() {
   const handleRemotePrint = async (retry: boolean) => {
     const pair = resolvePhonePair(pairs, viaPcDevice);
     if (!pair) {
-      toast.error(t("print.via_pc_no_pair"));
+      notifyError(t("print.via_pc_no_pair"));
       return;
     }
     store.setStatus("printing");
@@ -470,9 +470,9 @@ export function PrintPage() {
     try {
       await cacheNow();
       setRemoteCode(null);
-      toast.success(t("print.synced_retry"));
+      notifySuccess(t("print.synced_retry"));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     }
   };
 

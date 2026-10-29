@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Upload } from "lucide-react";
-import { toast } from "sonner";
+import { notifySuccess } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -55,7 +55,7 @@ export function AppearanceSettings() {
   const saveName = async () => {
     if (name.trim() === appName) return;
     await setAppName(name);
-    toast.success(t("settings_page.appearance_name_saved"));
+    notifySuccess(t("settings_page.appearance_name_saved"));
   };
 
   const pickLogo = async (file: File) => {
@@ -67,7 +67,7 @@ export function AppearanceSettings() {
     setLogoError("");
     try {
       await setLogo(await readAsDataUrl(file));
-      toast.success(t("settings_page.appearance_logo_saved"));
+      notifySuccess(t("settings_page.appearance_logo_saved"));
     } catch {
       setLogoError(t("settings_page.appearance_logo_unreadable"));
     }
@@ -221,7 +221,7 @@ export function AppearanceSettings() {
                   variant="ghost"
                   onClick={async () => {
                     await setLogo(null);
-                    toast.success(t("settings_page.appearance_logo_removed"));
+                    notifySuccess(t("settings_page.appearance_logo_removed"));
                   }}
                 >
                   {t("settings_page.appearance_remove_logo")}
@@ -244,7 +244,7 @@ export function AppearanceSettings() {
               onClick={async () => {
                 await setAppName(DEFAULT_APP_NAME);
                 await setLogo(null);
-                toast.success(t("settings_page.appearance_branding_reset"));
+                notifySuccess(t("settings_page.appearance_branding_reset"));
               }}
             >
               {t("settings_page.appearance_reset", { name: DEFAULT_APP_NAME })}

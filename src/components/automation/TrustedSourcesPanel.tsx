@@ -1,7 +1,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { notifySuccess, notifyInfo } from "@/lib/notify";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,12 +56,12 @@ export function TrustedSourcesPanel() {
     const value = newTrusted.trim();
     if (!value) return;
     if (trusted.includes(value)) {
-      toast.info(t("settings_page.toast_already_trusted"));
+      notifyInfo(t("settings_page.toast_already_trusted"));
       return;
     }
     await persistTrusted([...trusted, value]);
     setNewTrusted("");
-    toast.success(t("settings_page.toast_trusted_added"));
+    notifySuccess(t("settings_page.toast_trusted_added"));
   };
 
   const removeTrusted = async (value: string) => {
