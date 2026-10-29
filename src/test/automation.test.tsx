@@ -209,6 +209,8 @@ describe("Automation → Phones and server", () => {
           port: number;
           secret: string;
           fingerprint: string;
+          provider_id: string;
+          paired_at: string;
         }>)
       : null;
   };
