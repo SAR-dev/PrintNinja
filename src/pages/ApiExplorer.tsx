@@ -24,7 +24,20 @@ interface Endpoint {
   mutating: boolean;
   needsId?: boolean;
   hasBody?: boolean;
+  /** Prefill for the body box when it still holds another example. */
+  bodyExample?: string;
 }
+
+/** Minimal claim: the 8-character owner code (or a guest invite) plus
+ * this caller's identity. Succeeds only inside an open pairing window
+ * (owner) or within the invite's expiry and uses (guest). */
+const CLAIM_BODY_EXAMPLE = `{
+  "protocol": 1,
+  "code": "K7QM4XPD",
+  "device_id": "demo-phone",
+  "device_name": "Demo phone",
+  "platform": "android"
+}`;
 
 /**
  * The local API surface the explorer can call. Mirrors
@@ -91,6 +104,13 @@ const ENDPOINTS: Endpoint[] = [
     mutating: false,
   },
   {
+    method: "GET",
+    path: "/v1/pair/hello",
+    summaryKey: "explorer.endpoint_hello",
+    descriptionKey: "explorer.endpoint_hello_desc",
+    mutating: false,
+  },
+  {
     method: "POST",
     path: "/v1/jobs/{id}/retry",
     summaryKey: "explorer.endpoint_retry",
@@ -113,6 +133,15 @@ const ENDPOINTS: Endpoint[] = [
     descriptionKey: "explorer.endpoint_print_desc",
     mutating: true,
     hasBody: true,
+  },
+  {
+    method: "POST",
+    path: "/v1/pair/claim",
+    summaryKey: "explorer.endpoint_claim",
+    descriptionKey: "explorer.endpoint_claim_desc",
+    mutating: true,
+    hasBody: true,
+    bodyExample: CLAIM_BODY_EXAMPLE,
   },
 ];
 
@@ -245,7 +274,7 @@ export function ApiExplorerPanel({
       if (selected.hasBody) {
         headers["Content-Type"] = "application/json";
         payload = JSON.stringify(parsed);
-        if (idempotencyKey.trim())
+        if (selected.path === "/v1/print" && idempotencyKey.trim())
           headers["Idempotency-Key"] = idempotencyKey.trim();
       }
       const res = await agent("api_request", {
@@ -343,6 +372,11 @@ export function ApiExplorerPanel({
                   onClick={() => {
                     setSelected(ep);
                     setResponse(null);
+                    // A fresh example for endpoints that carry one, but
+                    // never clobber something the person typed themselves.
+                    if (ep.bodyExample && body === PRINT_BODY_EXAMPLE) {
+                      setBody(ep.bodyExample);
+                    }
                   }}
                   aria-pressed={selected === ep}
                   className={cn(
@@ -410,12 +444,22 @@ export function ApiExplorerPanel({
                   {t("explorer.print_warning")}
                 </p>
               )}
-              {selected.mutating && selected.path !== "/v1/print" && (
+              {selected.mutating &&
+                selected.path !== "/v1/print" &&
+                selected.path !== "/v1/pair/claim" && (
+                  <p
+                    role="alert"
+                    className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning"
+                  >
+                    {t("explorer.mutate_warning")}
+                  </p>
+                )}
+              {selected.path === "/v1/pair/claim" && (
                 <p
                   role="alert"
                   className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning"
                 >
-                  {t("explorer.mutate_warning")}
+                  {t("explorer.claim_warning")}
                 </p>
               )}
 
@@ -461,6 +505,18 @@ export function ApiExplorerPanel({
                       </Button>
                     </div>
                   )}
+                  {selected.path === "/v1/pair/claim" && (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setBody(CLAIM_BODY_EXAMPLE)}
+                      >
+                        {t("explorer.example_claim")}
+                      </Button>
+                    </div>
+                  )}
                   <div className="space-y-1">
                     <Label htmlFor="api-explorer-body">
                       {t("explorer.body_label")}
@@ -479,18 +535,20 @@ export function ApiExplorerPanel({
                       </p>
                     )}
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="api-explorer-idempotency">
-                      {t("explorer.idem_label")}
-                    </Label>
-                    <Input
-                      id="api-explorer-idempotency"
-                      data-testid="api-explorer-idempotency"
-                      placeholder={t("explorer.idem_hint")}
-                      value={idempotencyKey}
-                      onChange={(e) => setIdempotencyKey(e.target.value)}
-                    />
-                  </div>
+                  {selected.path === "/v1/print" && (
+                    <div className="space-y-1">
+                      <Label htmlFor="api-explorer-idempotency">
+                        {t("explorer.idem_label")}
+                      </Label>
+                      <Input
+                        id="api-explorer-idempotency"
+                        data-testid="api-explorer-idempotency"
+                        placeholder={t("explorer.idem_hint")}
+                        value={idempotencyKey}
+                        onChange={(e) => setIdempotencyKey(e.target.value)}
+                      />
+                    </div>
+                  )}
                 </>
               )}
 
