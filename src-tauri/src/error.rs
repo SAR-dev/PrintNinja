@@ -10,8 +10,8 @@ pub enum AppError {
     Validation(String),
     #[error("Internal error: {0}")]
     Internal(String),
-    /// The request is well-formed but the target state conflicts (Release B
-    /// §3.7): a paired phone asked to print a template revision the PC does
+    /// The request is well-formed but the target state conflicts (ARCHITECTURE
+    /// §9): a paired phone asked to print a template revision the PC does
     /// not have. Answered 409 with a machine-readable `code` plus details,
     /// so the phone can offer a Sync action instead of printing wrongly.
     #[error("Conflict: {message}")]

@@ -675,7 +675,7 @@ describe("Automation → Phones and server", () => {
         ];
         openApi();
         await screen.findByText("Android phone");
-        // The account badge renders from the stored row (§3.6); no local
+        // The account badge renders from the stored row (ARCHITECTURE §9); no local
         // account here, so it reads as different.
         expect(
           await screen.findByTestId("devices-account-p1"),

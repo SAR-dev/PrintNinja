@@ -1,4 +1,4 @@
-//! Print via PC (Release B §3.5), phone side: send the job to a paired
+//! Print via PC (ARCHITECTURE §9), phone side: send the job to a paired
 //! PC's `POST /v1/print` instead of the local pipeline, then record the
 //! outcome in the phone's own history.
 //!
@@ -8,8 +8,8 @@
 //! message, and printing locally means turning the flag off. Retries
 //! reuse the caller's idempotency key, so a timeout never prints twice.
 //!
-//! The PC endpoint already stamps `requested_by_device_id` (§3.4) and
-//! enforces the template version check (§3.7); this command feeds it the
+//! The PC endpoint already stamps `requested_by_device_id` (ARCHITECTURE §9) and
+//! enforces the template version check (ARCHITECTURE §9); this command feeds it the
 //! `server_id`/`server_revision` from the phone's own template row.
 
 use crate::api::peer_consume::{describe_no_answer_for, pair_base, RenderPair};
@@ -602,7 +602,7 @@ pub async fn remote_print_inner(
     })
 }
 
-/// Print one job through the paired PC (phone side of §3.5).
+/// Print one job through the paired PC (phone side, ARCHITECTURE §9).
 #[tauri::command(rename_all = "snake_case")]
 pub async fn remote_print(
     db: State<'_, DbState>,

@@ -57,7 +57,7 @@ pub fn router_with_state(state: ApiState, lan_access: bool) -> Router {
     // server through the Rust `api_request` proxy (loopback allow-list),
     // and paired phones call from native code — so no legitimate caller
     // needs CORS, and a wildcard would let any web page on the LAN probe
-    // the API (Release A §3.1). `lan_access` still decides the bind
+    // the API (ARCHITECTURE §9). `lan_access` still decides the bind
     // address in the launcher; it no longer changes CORS here.
     let _ = lan_access;
     let cors = tower_http::cors::CorsLayer::new()
@@ -106,7 +106,7 @@ pub fn router_with_state(state: ApiState, lan_access: bool) -> Router {
         .route("/v1/metrics", get(metrics))
         .route("/v1/metrics/prometheus", get(metrics_prometheus))
         .route("/v1/openapi.json", get(openapi))
-        // Paired-only LAN (Release A §3.1): every route above needs a
+        // Paired-only LAN (ARCHITECTURE §9): every route above needs a
         // loopback source or a paired-device token. `route_layer` covers
         // only these routes — the peer/pair routers merged below keep
         // their own gates.
@@ -211,7 +211,7 @@ async fn list_templates(State(state): State<ApiState>) -> Result<Json<Value>, Ap
 #[derive(Deserialize)]
 struct PrintJobRequest {
     template: Option<String>,
-    /// The template's synced identity (Release B §3.7): the phone sends
+    /// The template's synced identity (ARCHITECTURE §9): the phone sends
     /// the `server_id` plus the `server_revision` it rendered against, as
     /// well as the name. The PC resolves by `server_id` — never by name
     /// fallback — and refuses a missing or mismatched revision with 409
@@ -260,7 +260,7 @@ fn resolve_template_by_name(
     }
 }
 
-/// Version-checked lookup for synced callers (Release B §3.7): the phone
+/// Version-checked lookup for synced callers (ARCHITECTURE §9): the phone
 /// sends the `server_id` plus the `server_revision` it holds, as well as
 /// the name. The PC finds its copy by `server_id` — never by name, so a
 /// renamed template still resolves and a same-named different template
@@ -349,7 +349,7 @@ async fn print_job(
         )));
     }
 
-    // Remote-job limits (Release B §3.4), refused before any DB work: a
+    // Remote-job limits (ARCHITECTURE §9), refused before any DB work: a
     // request the server will not honour creates no job.
     let settings = req.settings.unwrap_or_else(|| json!({}));
     let copies_raw = settings_copies(&settings);
@@ -380,7 +380,7 @@ async fn print_job(
         let guard = db.lock().map_err(ApiRejection::from)?;
         let conn = guard.connection();
 
-        // A synced caller names the exact revision (Release B §3.7).
+        // A synced caller names the exact revision (ARCHITECTURE §9).
         // A legacy caller sends only the name and keeps the old lookup.
         let template_id =
             if let Some(server_id) = req.template_server_id.as_deref().filter(|s| !s.is_empty()) {

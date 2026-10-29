@@ -20,8 +20,7 @@ pub const MAX_RECORDS: u32 = 500;
 /// abort the process. Rejected on intake, before any job row exists.
 pub const MAX_COPIES: u32 = 100;
 
-/// Upper bound for an inline `data` payload on `POST /v1/print` (Release B
-/// §3.4): a phone cannot make the PC render an unbounded document. Big
+/// Upper bound for an inline `data` payload on `POST /v1/print` (ARCHITECTURE §9): a phone cannot make the PC render an unbounded document. Big
 /// payloads go through `data_url`, whose fetch already caps at 5 MiB.
 pub const MAX_API_DATA_BYTES: usize = 1024 * 1024;
 
@@ -91,7 +90,7 @@ pub struct PrintRequest {
     /// a replayed request was never detected and printed twice.
     #[serde(default)]
     pub idempotency_key: Option<String>,
-    /// Which paired phone asked for this print (Release B §3.4). `None`
+    /// Which paired phone asked for this print (ARCHITECTURE §9). `None`
     /// for local prints. `POST /v1/print` fills it from the authenticated
     /// device; it is persisted on the job row so history can show
     /// "printed for <phone name>".
@@ -1516,7 +1515,7 @@ fn begin_job(db: &DbState, req: &PrintRequest, copies: i64, page_mm: (f64, f64))
         .as_ref()
         .and_then(|d| serde_json::to_string(d).ok());
 
-    // The template revision that printed (Release B §3.7): read off the
+    // The template revision that printed (ARCHITECTURE §9): read off the
     // template row, so every path — UI, API, replayed claim — records
     // exactly which revision ran. Raw-HTML prints and missing rows stay NULL.
     let template_revision: Option<i64> = req

@@ -512,6 +512,25 @@ Both histories tell the story: the PC's job row carries
 clears it), and the phone writes its own row marked "printed by \<PC\>"
 with the revision that ran.
 
+### Decisions behind this section
+
+Kept here so the plan file could go. All still hold, except sign-in,
+which guest pairing has since narrowed to owners:
+
+- Paired-only LAN, no API keys. Non-paired clients lose access
+  completely; scripts run on the PC itself over loopback.
+- `can_print` defaults true; the PC toggles render-only phones off.
+- No local fallback or override while Print-via-PC is on: unreachable
+  PC or rejected token fails the job with the reason.
+- Same-account owner pairing: the server `User.id` plus service URL,
+  saved on each device at login, checked locally at claim time, works
+  offline. Guests prove a time-boxed invite instead (see Guests above).
+- No backfill or migration support: development phase, reset the
+  database; schema changes go straight into the schema.
+- A phone may use all of the PC's printers; no per-printer switch.
+- Template mismatches are refused, never printed around: match by
+  `server_id` plus `server_revision`, `409` with a Sync prompt.
+
 ### Choosing a PC and asking it
 
 When "use my PC" is on (on a phone it has to be, or no job can print), each
