@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { notifySuccess, notifyError } from "@/lib/notify";
 import type { RemoteTemplateSummary } from "@/lib/share/client";
 import {
   downloadToLocal,
@@ -96,15 +96,17 @@ export function GetFromServerDialog({
     }
     setDownloading(false);
     onOpenChange(false);
+    // One summarized toast, not one per item: the dialog already showed
+    // per-row progress while downloading.
     if (added > 0)
-      toast.success(
+      notifySuccess(
         t("templates.server_added", {
           count: added,
           plural: added === 1 ? "" : "s",
         }),
       );
     if (already > 0)
-      toast.success(
+      notifySuccess(
         t("templates.server_already", {
           count: already,
           plural: already === 1 ? "" : "s",
@@ -114,7 +116,14 @@ export function GetFromServerDialog({
               : t("templates.server_are"),
         }),
       );
-    for (const message of failed) toast.error(message);
+    if (failed.length > 0)
+      notifyError(
+        t("templates.server_failed", {
+          count: failed.length,
+          plural: failed.length === 1 ? "" : "s",
+        }),
+        { description: failed.slice(0, 3).join(" · ") },
+      );
     onDownloaded();
   };
 

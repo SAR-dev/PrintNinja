@@ -417,15 +417,6 @@
   [data-slot="dialog-content"] [data-slot="button"] {
     width: 100%;
   }
-
-  /* ---------- Toasts ---------- */
-  [data-sonner-toast] {
-    border-radius: 1.125rem !important;
-    border-color: transparent !important;
-    box-shadow:
-      0 2px 4px hsl(var(--foreground) / 0.06),
-      0 12px 32px -8px hsl(var(--foreground) / 0.25) !important;
-  }
 }
 
 @keyframes phone-sheet-up {

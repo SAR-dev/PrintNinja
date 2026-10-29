@@ -46,7 +46,7 @@ import {
 } from "lucide-react";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { ProfileCard } from "@/components/ProfileCard";
-import { toast } from "sonner";
+import { notifySuccess, notifyError } from "@/lib/notify";
 import { diagnostics } from "@/lib/diagnostics";
 import * as share from "@/lib/share/client";
 import { defaultServiceUrl, normalizeServiceUrl } from "@/lib/share/session";
@@ -273,7 +273,7 @@ export function SettingsPage() {
     }
     setErr("");
     await writeSetting(key, String(n));
-    toast.success(t("settings_page.toast_saved"));
+    notifySuccess(t("settings_page.toast_saved"));
   };
 
   // One behavior for every background toggle: persist the key, ask the
@@ -291,7 +291,7 @@ export function SettingsPage() {
       // Web preview or an old backend: the stored value still applies
       // at the next launch.
     }
-    toast.success(t("settings_page.toast_bg_saved"));
+    notifySuccess(t("settings_page.toast_bg_saved"));
   };
 
   // A completed pull may bring another PC's fonts (or confirm a
@@ -313,7 +313,7 @@ export function SettingsPage() {
         file_data: bytes,
         family: null,
       });
-      toast.success(
+      notifySuccess(
         t("settings_page.toast_font_uploaded", { name: file.name }),
       );
       await loadFonts();
@@ -359,19 +359,19 @@ export function SettingsPage() {
     await writeSetting("allowed_domains", normalized);
     if (normalized !== raw) setAllowedDomains(normalized);
     lastSavedDomains.current = normalized;
-    toast.success(t("settings_page.toast_domains_updated"));
+    notifySuccess(t("settings_page.toast_domains_updated"));
   };
 
   const saveShareUrl = async () => {
     const typed = shareUrl.trim();
     const next = typed ? normalizeServiceUrl(typed) : null;
     if (typed && !next) {
-      toast.error(t("settings_page.toast_bad_url"));
+      notifyError(t("settings_page.toast_bad_url"));
       return;
     }
     const current = await share.getServiceUrl();
     if (next === current) {
-      toast.success(t("settings_page.toast_url_unchanged"));
+      notifySuccess(t("settings_page.toast_url_unchanged"));
       return;
     }
     const hadSession = !!(await share.getSessionToken());
@@ -383,12 +383,12 @@ export function SettingsPage() {
       setShareUser(null);
       await share.endSession("signed_out");
     }
-    toast.success(t("settings_page.toast_url_saved"));
+    notifySuccess(t("settings_page.toast_url_saved"));
   };
 
   const doRegister = async () => {
     if (!shareUrl.trim() || !shareHandle.trim() || !sharePassword) {
-      toast.error(t("settings_page.toast_signin_required"));
+      notifyError(t("settings_page.toast_signin_required"));
       return;
     }
     setShareBusy(true);
@@ -396,11 +396,11 @@ export function SettingsPage() {
       const res = await share.register(shareHandle.trim(), sharePassword);
       setShareUser({ handle: res.user.handle });
       setSharePassword("");
-      toast.success(
+      notifySuccess(
         t("settings_page.toast_registered", { handle: res.user.handle }),
       );
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setShareBusy(false);
     }
@@ -408,7 +408,7 @@ export function SettingsPage() {
 
   const doLogin = async () => {
     if (!shareUrl.trim() || !shareHandle.trim() || !sharePassword) {
-      toast.error(t("settings_page.toast_signin_required"));
+      notifyError(t("settings_page.toast_signin_required"));
       return;
     }
     setShareBusy(true);
@@ -416,11 +416,11 @@ export function SettingsPage() {
       const res = await share.login(shareHandle.trim(), sharePassword);
       setShareUser({ handle: res.user.handle });
       setSharePassword("");
-      toast.success(
+      notifySuccess(
         t("settings_page.toast_signed_in", { handle: res.user.handle }),
       );
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setShareBusy(false);
     }
@@ -436,9 +436,9 @@ export function SettingsPage() {
       a.download = `printninja-app-${new Date().toISOString().slice(0, 10)}.log`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success(t("settings_page.toast_diag_app_log_exported"));
+      notifySuccess(t("settings_page.toast_diag_app_log_exported"));
     } catch {
-      toast.error(t("settings_page.toast_diag_app_log_failed"));
+      notifyError(t("settings_page.toast_diag_app_log_failed"));
     }
   };
 
@@ -453,7 +453,7 @@ export function SettingsPage() {
       setAppLogText(text);
       setAppLogOpen(true);
     } catch {
-      toast.error(t("settings_page.toast_diag_app_log_failed"));
+      notifyError(t("settings_page.toast_diag_app_log_failed"));
     }
   };
 
@@ -607,13 +607,13 @@ export function SettingsPage() {
                                 try {
                                   await agent("delete_font", { id: f.id });
                                   await loadFonts();
-                                  toast.success(
+                                  notifySuccess(
                                     t("settings_page.toast_font_removed", {
                                       name: f.family,
                                     }),
                                   );
                                 } catch (e) {
-                                  toast.error(
+                                  notifyError(
                                     t("settings_page.toast_failed", {
                                       error: describeError(e),
                                     }),
@@ -696,7 +696,7 @@ export function SettingsPage() {
                             setBatteryExempt(
                               await bg.isBatteryExemptionGranted(),
                             );
-                            toast.success(
+                            notifySuccess(
                               t("settings_page.background_toast_updated"),
                             );
                           } finally {
@@ -1076,7 +1076,7 @@ export function SettingsPage() {
                         id="settings-diag-export"
                         onClick={() => {
                           diagnostics.download();
-                          toast.success(t("settings_page.toast_diag_exported"));
+                          notifySuccess(t("settings_page.toast_diag_exported"));
                         }}
                       >
                         <Download className="h-4 w-4 mr-2" />
@@ -1134,7 +1134,7 @@ export function SettingsPage() {
                   await writeSetting("allowed_domains", "");
                   lastSavedDomains.current = "";
                   setAllowAllOpen(false);
-                  toast.success(t("settings_page.toast_allow_all"));
+                  notifySuccess(t("settings_page.toast_allow_all"));
                 })();
               }}
             >
@@ -1169,7 +1169,7 @@ export function SettingsPage() {
                   setResetBusy(true);
                   try {
                     const report = await agent("reset_database", {});
-                    toast.success(
+                    notifySuccess(
                       t("settings_page.toast_reset_done", {
                         templates: report.templates,
                         jobs: report.print_jobs,
@@ -1178,7 +1178,7 @@ export function SettingsPage() {
                     );
                     window.location.reload();
                   } catch (e) {
-                    toast.error(
+                    notifyError(
                       t("settings_page.toast_reset_failed", {
                         error: describeError(e),
                       }),

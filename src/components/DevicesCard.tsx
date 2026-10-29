@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
 import { Trash2, Plus } from "lucide-react";
 import { agent } from "@/lib/agent/commands";
 import type {
@@ -215,7 +215,7 @@ function PcSection() {
           await ensureLanServer();
         } catch (e) {
           // Sharing stays on; the warning below offers a retry.
-          toast.error(describeError(e));
+          notifyError(describeError(e));
         }
       } else {
         setShowPair(false);
@@ -230,7 +230,7 @@ function PcSection() {
       }
       await load();
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -272,7 +272,7 @@ function PcSection() {
       await ensureLanServer();
       await load();
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -307,7 +307,7 @@ function PcSection() {
               fresh?.display_name ||
               fresh?.name ||
               t("settings_page.devices_phone_fallback");
-            toast.success(t("settings_page.devices_paired_phone", { name }));
+            notifySuccess(t("settings_page.devices_paired_phone", { name }));
             setShowPair(false);
             setPairing(null);
             prevOpen.current = false;
@@ -325,7 +325,7 @@ function PcSection() {
               }
               return;
             } catch (e) {
-              if (!cancelled) toast.error(describeError(e));
+              if (!cancelled) notifyError(describeError(e));
             }
           }
         }
@@ -359,7 +359,7 @@ function PcSection() {
       }
       setShowPair(true);
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -383,7 +383,7 @@ function PcSection() {
       prevOpen.current = state.open;
       panelOpenedAt.current = Date.now();
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -396,9 +396,9 @@ function PcSection() {
       await loadDevices();
       await load();
       setRemoving(null);
-      toast.success(t("settings_page.devices_removed"));
+      notifySuccess(t("settings_page.devices_removed"));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -411,9 +411,9 @@ function PcSection() {
       setConfirmClear(false);
       await loadDevices();
       await load();
-      toast.success(t("settings_page.devices_cleared"));
+      notifySuccess(t("settings_page.devices_cleared"));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -430,7 +430,7 @@ function PcSection() {
       setRenaming(null);
       setRenameValue("");
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -445,7 +445,7 @@ function PcSection() {
       });
       setDevices((prev) => prev.map((d) => (d.id === id ? updated : d)));
     } catch (e) {
-      toast.error(describeError(e));
+      notifyError(describeError(e));
     } finally {
       setBusy(false);
     }
@@ -829,7 +829,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
       // A bare score badge means nothing to most people; say plainly
       // that the PC answered. The auto-test after pairing stays quiet.
       if (notify) {
-        toast.success(
+        notifySuccess(
           t("settings_page.devices_test_toast_ok", { name: pair.name }),
         );
       }
@@ -840,7 +840,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
         [pair.id]: { state: "error", message },
       }));
       if (notify) {
-        toast.error(message);
+        notifyError(message);
       }
     }
   };
@@ -853,7 +853,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
     const { pairs: next, replacedStale } = mergePhonePair(pairs, pair);
     await savePairs(next);
     if (replacedStale || pair.replaced_stale) {
-      toast.info(
+      notifyInfo(
         t("settings_page.devices_replaced_stale", { name: pair.name }),
       );
     }
@@ -883,7 +883,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
         ...(trimmedAddr ? { host: trimmedAddr } : {}),
       });
       await addPair(pair);
-      toast.success(t("settings_page.devices_paired_ok", { name: pair.name }));
+      notifySuccess(t("settings_page.devices_paired_ok", { name: pair.name }));
       setCode("");
       setAddress("");
       // The pairing gate used to notice this only on its next 2s poll,
@@ -919,7 +919,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
     const removed = pairs.length - seen.size;
     if (removed > 0) {
       await savePairs([...seen.values()]);
-      toast.success(t("settings_page.devices_dedupe_done", { count: removed }));
+      notifySuccess(t("settings_page.devices_dedupe_done", { count: removed }));
     }
   };
 
