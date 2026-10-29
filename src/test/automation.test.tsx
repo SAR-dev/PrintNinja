@@ -259,7 +259,18 @@ describe("Automation → Phones and server", () => {
         last_seen_at: string;
         can_print: boolean;
         account_id: string | null;
+        role: string;
+        expires_at: string | null;
       }>,
+      invites: [] as Array<{
+        id: string;
+        expires_at: string;
+        uses_left: number | null;
+        can_print: boolean;
+        created_at: string;
+        created_by: string | null;
+      }>,
+      inviteSeq: 0,
     };
     mockBackend(async (cmd: string, args?: Record<string, unknown>) => {
       switch (cmd) {
@@ -327,6 +338,30 @@ describe("Automation → Phones and server", () => {
           if (!row) throw new Error("not found");
           row.can_print = args?.["can_print"] === true;
           return { ...row };
+        }
+        case "create_pairing_invite": {
+          state.inviteSeq += 1;
+          const uses =
+            args?.["max_uses"] == null ? null : Number(args?.["max_uses"]);
+          const inv = {
+            id: `inv-${state.inviteSeq}`,
+            expires_at: new Date(
+              Date.now() + Number(args?.["expires_in_hours"] ?? 24) * 3600000,
+            ).toISOString(),
+            uses_left: uses,
+            can_print: args?.["can_print"] !== false,
+            created_at: new Date().toISOString(),
+            created_by: "user-1",
+          };
+          state.invites.push(inv);
+          return { ...inv, code: "12345678" };
+        }
+        case "list_pairing_invites":
+          return [...state.invites];
+        case "revoke_pairing_invite": {
+          const id = String(args?.["id"] ?? "");
+          state.invites = state.invites.filter((v) => v.id !== id);
+          return null;
         }
         default:
           return null;
@@ -517,6 +552,8 @@ describe("Automation → Phones and server", () => {
             last_seen_at: new Date().toISOString(),
             can_print: true,
             account_id: "user-1",
+            role: "owner",
+            expires_at: null,
           },
         ];
         openApi();
@@ -548,6 +585,8 @@ describe("Automation → Phones and server", () => {
             last_seen_at: new Date().toISOString(),
             can_print: true,
             account_id: "user-1",
+            role: "owner",
+            expires_at: null,
           },
         ];
         openApi();
@@ -580,6 +619,8 @@ describe("Automation → Phones and server", () => {
             last_seen_at: new Date().toISOString(),
             can_print: true,
             account_id: "user-1",
+            role: "owner",
+            expires_at: null,
           },
         ];
         openApi();
@@ -627,6 +668,8 @@ describe("Automation → Phones and server", () => {
             last_seen_at: new Date().toISOString(),
             can_print: true,
             account_id: "user-1",
+            role: "owner",
+            expires_at: null,
           },
         ];
         openApi();
@@ -650,6 +693,55 @@ describe("Automation → Phones and server", () => {
             "aria-checked",
             "false",
           ),
+        );
+      } finally {
+        webMode();
+      }
+    });
+
+    it("mints a guest invite, shows the code once, and revokes it", async () => {
+      appMode();
+      try {
+        pcBackend({ enabled: true });
+        openApi();
+        fireEvent.click(await screen.findByTestId("devices-invite"));
+        fireEvent.click(screen.getByTestId("devices-invite-mint"));
+        expect(
+          await screen.findByTestId("devices-invite-code"),
+        ).toHaveTextContent("12345678");
+        expect(
+          await screen.findByTestId("devices-invite-inv-1"),
+        ).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId("devices-invite-revoke-inv-1"));
+        await waitFor(() =>
+          expect(screen.queryByTestId("devices-invite-inv-1")).toBeNull(),
+        );
+      } finally {
+        webMode();
+      }
+    });
+
+    it("badges guest phones", async () => {
+      appMode();
+      try {
+        const be = pcBackend({ enabled: true });
+        be.devices = [
+          {
+            id: "g1",
+            name: "Guest Phone",
+            display_name: null,
+            platform: "android",
+            paired_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+            can_print: true,
+            account_id: null,
+            role: "guest",
+            expires_at: "2030-01-01T00:00:00Z",
+          },
+        ];
+        openApi();
+        expect(await screen.findByTestId("devices-role-g1")).toHaveTextContent(
+          "Guest",
         );
       } finally {
         webMode();

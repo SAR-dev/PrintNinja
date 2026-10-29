@@ -182,6 +182,8 @@ const implemented: Record<string, Handler> = {
     last_seen_at: new Date().toISOString(),
     can_print: true,
     account_id: "user-1",
+    role: "owner",
+    expires_at: null,
   }),
   set_paired_can_print: (args) => ({
     id: String(args["id"] ?? ""),
@@ -192,6 +194,8 @@ const implemented: Record<string, Handler> = {
     last_seen_at: new Date().toISOString(),
     can_print: Boolean(args["can_print"] ?? true),
     account_id: "user-1",
+    role: "owner",
+    expires_at: null,
   }),
   // Print via PC: the dialog round-trips in the browser against this
   // canned PC. The real POST/poll/history path is covered in Rust
@@ -209,6 +213,17 @@ const implemented: Record<string, Handler> = {
     code: null,
     pc_name: "Studio PC",
   }),
+  create_pairing_invite: () => ({
+    id: "inv-1",
+    expires_at: new Date(Date.now() + 86400000).toISOString(),
+    uses_left: null,
+    can_print: true,
+    created_at: new Date().toISOString(),
+    created_by: "user-1",
+    code: "12345678",
+  }),
+  list_pairing_invites: () => [],
+  revoke_pairing_invite: () => null,
   // Canned provider for the Devices UI "test" button: proves the pairing
   // form round-trips in the browser. Real capability/render behavior is
   // covered by the Rust suites (api_routes.rs, peer_consume.rs).

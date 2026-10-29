@@ -226,6 +226,8 @@ pub(crate) struct DeviceAuth {
     pub can_print: bool,
     pub account_id: Option<String>,
     pub service_url: Option<String>,
+    pub role: String,
+    pub expires_at: Option<String>,
 }
 
 pub(crate) fn lookup_device(state: &ApiState, presented: &str) -> Option<DeviceAuth> {
@@ -237,7 +239,7 @@ pub(crate) fn lookup_device(state: &ApiState, presented: &str) -> Option<DeviceA
         guard
             .connection()
             .query_row(
-                "SELECT id, can_print, account_id, service_url
+                "SELECT id, can_print, account_id, service_url, role, expires_at
                  FROM paired_devices WHERE token_hash = ?1",
                 [&hash],
                 |r| {
@@ -246,6 +248,8 @@ pub(crate) fn lookup_device(state: &ApiState, presented: &str) -> Option<DeviceA
                         can_print: r.get(1)?,
                         account_id: r.get(2)?,
                         service_url: r.get(3)?,
+                        role: r.get(4)?,
+                        expires_at: r.get(5)?,
                     })
                 },
             )
@@ -279,9 +283,14 @@ pub(crate) fn pc_account(conn: &rusqlite::Connection) -> Option<(String, String)
 /// Whether this pair is still good for `device`: claimed under the PC's
 /// current account, and the PC still signed in to it. A sign-out or an
 /// account switch disables existing pairs — they must be redone (§3.6).
-/// Callers answer the generic 401 either way, so the phone cannot tell a
-/// disabled pair from a revoked one; both mean "pair again".
+/// Guest pairs (docs/GUEST_PAIRING.md) skip this entirely: they were
+/// never claimed under an account, only expiry governs them (checked
+/// separately). Callers answer the generic 401 either way, so the phone
+/// cannot tell a disabled pair from a revoked one; both mean "pair again".
 fn pair_account_current(state: &ApiState, device: &DeviceAuth) -> bool {
+    if device.role == "guest" {
+        return true;
+    }
     state
         .db
         .lock()
@@ -291,6 +300,18 @@ fn pair_account_current(state: &ApiState, device: &DeviceAuth) -> bool {
             device.account_id.as_deref() == Some(user.as_str())
                 && device.service_url.as_deref() == Some(url.as_str())
         })
+}
+
+/// Whether a guest pair already ran out its invite: a past `expires_at`
+/// fails closed (unparseable too — only hand-edited rows do that).
+fn pair_unexpired(device: &DeviceAuth) -> bool {
+    match device.expires_at.as_deref() {
+        // Owners (and legacy rows) never expire.
+        None => true,
+        Some(exp) => exp
+            .parse::<chrono::DateTime<chrono::Utc>>()
+            .is_ok_and(|t| t > chrono::Utc::now()),
+    }
 }
 
 /// Throttled `last_seen_at` touch (at most one write per 30 s per
@@ -429,7 +450,8 @@ pub async fn require_peer_auth(
     };
     // A sign-out or account switch disables the pair (§3.6): generic 401,
     // like a revocation. Renders too — a disabled pair renders nothing.
-    if !pair_account_current(&state, &device) {
+    // Expired guests fail the same way (docs/GUEST_PAIRING.md).
+    if !pair_unexpired(&device) || !pair_account_current(&state, &device) {
         return unauthorized();
     }
     touch_last_seen(&state, presented);
@@ -489,8 +511,9 @@ pub async fn require_paired_or_local(
             .into_response();
     }
     // A sign-out or account switch disables the pair (§3.6): generic 401,
-    // like a revocation — the phone pairs again.
-    if !pair_account_current(&state, &device) {
+    // like a revocation — the phone pairs again. Expired guests fail the
+    // same way (docs/GUEST_PAIRING.md).
+    if !pair_unexpired(&device) || !pair_account_current(&state, &device) {
         return unauthorized();
     }
     // Stamp the caller's device for handlers: `POST /v1/print` records it

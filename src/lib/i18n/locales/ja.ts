@@ -821,6 +821,21 @@ const ja: Translation = {
     devices_can_print: "印刷を許可",
     devices_account_same: "同じアカウント",
     devices_account_other: "別のアカウント — 再ペアリング",
+    devices_invite: "ゲストを招待",
+    devices_invite_hint:
+      "ゲストはコードでペアリングします — アカウントもウィンドウも不要です。有効期限が切れると使えなくなります。",
+    devices_invite_hours: "有効期限（時間）",
+    devices_invite_uses: "最大使用回数（空欄で無制限）",
+    devices_invite_mint: "招待を作成",
+    devices_invite_code_once:
+      "今コピーしてください — 表示されるのは今回のみです。",
+    devices_invite_another: "別途作成",
+    devices_invite_empty: "招待はまだありません。",
+    devices_invite_expires: "期限 {date}",
+    devices_invite_uses_left: "残り{count}回",
+    devices_invite_unlimited: "無制限",
+    devices_invite_revoke: "取り消し",
+    devices_guest: "ゲスト",
     devices_account_signed_in: "{{handle}} としてサインイン中",
     devices_account_signed_out:
       "サインインしていません — ペアリングするにはサインインしてください。",
