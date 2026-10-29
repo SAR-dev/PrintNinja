@@ -1,7 +1,7 @@
 # Android "Print via PC" and Paired-Only LAN Access
 
 Branch reviewed: `develop` at `ef161c6` (v0.12.1)
-Status: **Final, decisions confirmed** (section 8)
+Status: **Final, decisions confirmed** (section 8) — **implemented in v0.15.0** (PRs #5 and #6: §§3.1–3.7 plus the §4 UI items; §3.5's phone side is the `remote_print` command + dialog, no Kotlin changes were needed).
 Method: code reading only (app, plugin and `server/`), nothing built or run. All earlier open checks are now verified.
 
 **Scope rule (decided): no backfill.** This is a development-phase project and the database can be reset, so nothing in this plan migrates, converts or repairs existing data. New columns go straight into the schema.
