@@ -381,7 +381,7 @@ describe("Print via PC", () => {
     viaPcBackend({ pairs: [] });
     renderPage();
     expect(await screen.findByTestId("print-via-pc-banner")).toHaveTextContent(
-      /Settings/,
+      /Automation/,
     );
     const print = await screen.findByRole("button", { name: /^Print$/ });
     await waitFor(() => expect(print).toBeDisabled());

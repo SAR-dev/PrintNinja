@@ -33,8 +33,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const PAIRS_KEY = "render_pairs";
+
+/** First-enable confirm, once per device (a UI decision, not a setting). */
+const SHARE_CONFIRM_KEY = "printninja-share-confirm-seen";
 
 /** How long the PC panel keeps regenerating an expired code by itself. */
 const PAIRING_AUTO_REGEN_MS = 5 * 60 * 1000;
@@ -125,6 +136,7 @@ function PcSection() {
   const [devices, setDevices] = useState<PairedDevice[]>([]);
   const [myAccountId, setMyAccountId] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmShare, setConfirmShare] = useState(false);
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -221,6 +233,36 @@ function PcSection() {
     } finally {
       setBusy(false);
     }
+  };
+
+  // First enable asks once: this is the only share switch (the server
+  // panel stages nothing), so the confirm lives here.
+  const onShareChange = (v: boolean) => {
+    if (!v) {
+      void toggleSharing(false);
+      return;
+    }
+    let seen = false;
+    try {
+      seen = localStorage.getItem(SHARE_CONFIRM_KEY) === "true";
+    } catch {
+      /* private mode: ask every time */
+    }
+    if (!seen) {
+      setConfirmShare(true);
+      return;
+    }
+    void toggleSharing(true);
+  };
+
+  const confirmShareOn = () => {
+    try {
+      localStorage.setItem(SHARE_CONFIRM_KEY, "true");
+    } catch {
+      /* private mode: the dialog just comes back next time */
+    }
+    setConfirmShare(false);
+    void toggleSharing(true);
   };
 
   const enableLan = async () => {
@@ -419,9 +461,29 @@ function PcSection() {
           data-testid="devices-share-toggle"
           checked={sharing}
           disabled={busy}
-          onCheckedChange={(v) => void toggleSharing(v)}
+          onCheckedChange={(v) => onShareChange(v)}
         />
       </div>
+      <Dialog open={confirmShare} onOpenChange={setConfirmShare}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {t("settings_page.api_share_confirm_title")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("settings_page.api_share_confirm_body")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmShare(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={confirmShareOn}>
+              {t("settings_page.api_share_confirm_ok")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <p className="text-xs text-muted-foreground">
         {t("settings_page.devices_provider_hint")}
       </p>

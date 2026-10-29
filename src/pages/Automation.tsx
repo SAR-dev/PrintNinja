@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { ApiServerPanel } from "@/components/automation/ApiServerPanel";
 import { TrustedSourcesPanel } from "@/components/automation/TrustedSourcesPanel";
 import { DevicesCard } from "@/components/DevicesCard";
+import { PrintViaPcCard } from "@/components/PrintViaPcCard";
 import { PageHeader } from "@/components/PageHeader";
 import { isAndroid } from "@/lib/platform";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -94,6 +95,7 @@ export function AutomationPage() {
         </TabsContent>
         <TabsContent value="phones" className="mt-0 space-y-4">
           <DevicesCard />
+          <PrintViaPcCard />
         </TabsContent>
         <TabsContent value="links" className="mt-0 space-y-4">
           <TrustedSourcesPanel />
