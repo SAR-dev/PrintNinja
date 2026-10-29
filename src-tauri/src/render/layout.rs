@@ -467,7 +467,10 @@ mod tests {
         assert!(out.contains("data-design=\"1\" data-page=\"0\""), "{out}");
         // Design height, the frame's top on the sheet, and how far one page
         // moves the frame (the design's height on the paper).
-        assert!(out.contains("data-dh=\"100\" data-oy=\"0\" data-step=\"87.5\""), "{out}");
+        assert!(
+            out.contains("data-dh=\"100\" data-oy=\"0\" data-step=\"87.5\""),
+            "{out}"
+        );
         assert!(out.contains("window.__pnLoaded"), "{out}");
         assert_eq!(out.matches("<script>").count(), 1, "{out}");
         assert!(out.contains("window.__pnPaginate"), "{out}");
