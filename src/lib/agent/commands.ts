@@ -219,6 +219,9 @@ export interface AgentCommands {
   clear_paired_devices: [{}, number];
   /** Rename a paired phone (empty clears the override). */
   rename_paired_device: [{ id: string; name: string }, PairedDevice];
+  /** Allow or forbid printing for one paired phone. Render-only phones
+   * keep rendering; the main routes refuse them. */
+  set_paired_can_print: [{ id: string; can_print: boolean }, PairedDevice];
   /** Pair this phone with a PC using its 8-character code. */
   pair_with_code: [{ code: string; host?: string; port?: number }, RenderPair];
   // Shared rendering: this device as a consumer (buys renders).

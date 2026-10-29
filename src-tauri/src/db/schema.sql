@@ -98,7 +98,11 @@ CREATE TABLE IF NOT EXISTS paired_devices (
     platform TEXT NOT NULL DEFAULT '',
     token_hash TEXT NOT NULL UNIQUE,
     paired_at TEXT NOT NULL,
-    last_seen_at TEXT NOT NULL
+    last_seen_at TEXT NOT NULL,
+    -- Whether this phone may use the main routes (print, printers,
+    -- templates, jobs). Render-only phones keep the peer routes; those
+    -- never consult this flag. A fresh pair can always print.
+    can_print INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_paired_devices_token ON paired_devices(token_hash);
 

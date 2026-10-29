@@ -314,10 +314,13 @@ pub async fn claim(
                     .into_response();
             }
         };
+        // can_print is deliberately untouched on re-pair: like the PC's
+        // rename, the operator's printing choice survives. Fresh rows get
+        // 1 from the column default above.
         if let Err(e) = guard.connection().execute(
             "INSERT INTO paired_devices
-                 (id, name, display_name, platform, token_hash, paired_at, last_seen_at)
-             VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?5)
+                 (id, name, display_name, platform, token_hash, paired_at, last_seen_at, can_print)
+             VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?5, 1)
              ON CONFLICT(id) DO UPDATE SET
                name = excluded.name,
                platform = excluded.platform,

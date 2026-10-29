@@ -407,6 +407,7 @@ pub fn run() {
             commands::api::revoke_paired_device,
             commands::api::clear_paired_devices,
             commands::api::rename_paired_device,
+            commands::api::set_paired_can_print,
             commands::api::pair_with_code,
             commands::api::peer_capabilities,
             commands::api::peer_render_request,

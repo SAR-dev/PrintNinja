@@ -255,6 +255,7 @@ describe("Automation → Phones and server", () => {
         platform: string;
         paired_at: string;
         last_seen_at: string;
+        can_print: boolean;
       }>,
     };
     mockBackend(async (cmd: string, args?: Record<string, unknown>) => {
@@ -315,6 +316,13 @@ describe("Automation → Phones and server", () => {
           const row = state.devices.find((d) => d.id === id);
           if (!row) throw new Error("not found");
           row.display_name = name || null;
+          return { ...row };
+        }
+        case "set_paired_can_print": {
+          const id = String(args?.["id"] ?? "");
+          const row = state.devices.find((d) => d.id === id);
+          if (!row) throw new Error("not found");
+          row.can_print = args?.["can_print"] === true;
           return { ...row };
         }
         default:
@@ -502,6 +510,7 @@ describe("Automation → Phones and server", () => {
             platform: "android",
             paired_at: new Date().toISOString(),
             last_seen_at: new Date().toISOString(),
+            can_print: true,
           },
         ];
         openApi();
@@ -531,6 +540,7 @@ describe("Automation → Phones and server", () => {
             platform: "android",
             paired_at: new Date().toISOString(),
             last_seen_at: new Date().toISOString(),
+            can_print: true,
           },
         ];
         openApi();
@@ -561,6 +571,7 @@ describe("Automation → Phones and server", () => {
             platform: "android",
             paired_at: new Date().toISOString(),
             last_seen_at: new Date().toISOString(),
+            can_print: true,
           },
         ];
         openApi();
@@ -588,6 +599,43 @@ describe("Automation → Phones and server", () => {
         );
         await waitFor(() =>
           expect(screen.queryByTestId("devices-paired-p1")).toBeNull(),
+        );
+      } finally {
+        webMode();
+      }
+    });
+
+    it("toggles printing for one phone without touching the others", async () => {
+      appMode();
+      try {
+        const be = pcBackend({ enabled: true });
+        be.devices = [
+          {
+            id: "p1",
+            name: "Android phone",
+            display_name: null,
+            platform: "android",
+            paired_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+            can_print: true,
+          },
+        ];
+        openApi();
+        await screen.findByText("Android phone");
+        const toggle = await screen.findByTestId("devices-can-print-p1");
+        expect(toggle).toHaveAttribute("aria-checked", "true");
+        fireEvent.click(toggle);
+        await waitFor(() =>
+          expect(invoke).toHaveBeenCalledWith("set_paired_can_print", {
+            id: "p1",
+            can_print: false,
+          }),
+        );
+        await waitFor(() =>
+          expect(screen.getByTestId("devices-can-print-p1")).toHaveAttribute(
+            "aria-checked",
+            "false",
+          ),
         );
       } finally {
         webMode();

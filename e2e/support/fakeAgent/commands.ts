@@ -180,6 +180,16 @@ const implemented: Record<string, Handler> = {
     platform: "android",
     paired_at: new Date().toISOString(),
     last_seen_at: new Date().toISOString(),
+    can_print: true,
+  }),
+  set_paired_can_print: (args) => ({
+    id: String(args["id"] ?? ""),
+    name: "Phone",
+    display_name: null,
+    platform: "android",
+    paired_at: new Date().toISOString(),
+    last_seen_at: new Date().toISOString(),
+    can_print: Boolean(args["can_print"] ?? true),
   }),
   // Canned provider for the Devices UI "test" button: proves the pairing
   // form round-trips in the browser. Real capability/render behavior is

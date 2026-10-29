@@ -446,3 +446,24 @@ async fn hello_and_claim_work_over_a_live_loopback_server() {
         .expect("caps reachable");
     assert_eq!(caps.status(), reqwest::StatusCode::OK);
 }
+
+/// A fresh claim can always print: `can_print` defaults true, and only
+/// an explicit toggle changes it (re-pairing keeps the stored choice).
+#[tokio::test]
+async fn claim_defaults_can_print_to_true() {
+    let (db, window) = setup();
+    open_window(&window, "K7QM4XPD", Instant::now());
+    let (status, _) = post_claim(router(&db, &window), claim_body("K7QM4XPD", "phone-9")).await;
+    assert_eq!(status, StatusCode::OK);
+    let can_print: i64 = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT can_print FROM paired_devices WHERE id = 'phone-9'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(can_print, 1, "fresh pairs print");
+}

@@ -791,6 +791,7 @@ const ja: Translation = {
     devices_cleared: "すべてのスマートフォンを削除しました。",
     devices_removed: "スマートフォンを削除しました。",
     devices_rename: "名前を変更",
+    devices_can_print: "印刷を許可",
     devices_rename_save: "保存",
     devices_remove_yes: "削除",
     devices_cancel: "キャンセル",

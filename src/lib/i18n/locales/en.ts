@@ -774,6 +774,7 @@ const en = {
     devices_cleared: "All phones removed.",
     devices_removed: "Phone removed.",
     devices_rename: "Rename",
+    devices_can_print: "Can print",
     devices_rename_save: "Save",
     devices_remove_yes: "Remove",
     devices_cancel: "Cancel",
