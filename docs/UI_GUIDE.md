@@ -70,6 +70,10 @@ adding a second library for the same job. Join class names with `cn()` from `src
 - Once the app has opened, the gate never blocks on the network. If the server drops, printing
   and local editing carry on. Only a 401 or an explicit sign-out brings the sign-in screen
   back, and the app stays mounted but hidden, so unsaved edits are still there after signing in.
+- Because the tree survives logout→login, mount-time session reads go stale: any component
+  showing who is signed in must reload on `printninja:session-started` (broadcast by the
+  login/register funnel, the mirror of `session-ended`). Forgetting this shows the old
+  session after signing in again.
 - **Onboarding** is for operators only: three steps and two buttons, "Start printing" (opens
   `/print`) and "Set up this workstation" (opens `/settings?section=setup`). Printer, template
   and sharing setup is an admin job and lives in the Settings checklist.
