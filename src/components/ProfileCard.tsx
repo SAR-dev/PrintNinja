@@ -70,6 +70,11 @@ export function ProfileCard() {
     void load();
   }, [load]);
 
+  // The shell stays mounted across logout→login (AuthGate hides rather
+  // than unmounts), so a mount-time read would show the old session
+  // forever. Reload when a new session starts.
+  useEffect(() => share.onSessionStarted(() => void load()), [load]);
+
   const signOut = async () => {
     setBusy(true);
     try {

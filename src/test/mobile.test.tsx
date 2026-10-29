@@ -23,6 +23,7 @@ import { useHistoryStore, type HistoryJob } from "@/lib/store/historyStore";
 const shareMock = vi.hoisted(() => ({
   getServiceUrl: vi.fn(async () => null as string | null),
   getSessionToken: vi.fn(async () => null as string | null),
+  onSessionStarted: () => () => {},
   hasUnpublishedChanges: (t: {
     remote_id: string | null;
     published_at: string | null;

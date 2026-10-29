@@ -17,6 +17,10 @@ const client = vi.hoisted(() => ({
   fetchMe: vi.fn(),
   logout: vi.fn(),
   changePassword: vi.fn(),
+  onSessionStarted: vi.fn((cb: () => void) => {
+    window.addEventListener("printninja:session-started", cb);
+    return () => window.removeEventListener("printninja:session-started", cb);
+  }),
 }));
 vi.mock("@/lib/share/client", () => client);
 
@@ -57,6 +61,26 @@ describe("Profile section", () => {
     ).toBeInTheDocument();
     // The password form moved here from the Share section.
     expect(screen.getByLabelText("Current password")).toBeInTheDocument();
+  });
+
+  it("reloads when a new session starts without remounting", async () => {
+    // The shell hides rather than unmounts across logout→login, so a
+    // mount-time read would show the old session forever. Regression:
+    // logging in again must refresh the already-mounted card.
+    client.getSessionToken.mockResolvedValue(null);
+    renderCard();
+    expect(await screen.findByText(/not signed in/i)).toBeInTheDocument();
+
+    client.getSessionToken.mockResolvedValue("fresh-tok");
+    client.fetchMe.mockResolvedValue({
+      id: "u9",
+      handle: "sam",
+      created_at: "2026-03-01T10:00:00.000Z",
+    });
+    window.dispatchEvent(new CustomEvent("printninja:session-started"));
+    expect(await screen.findByTestId("profile-handle")).toHaveTextContent(
+      "sam",
+    );
   });
 
   it("signs out in one click and says so", async () => {

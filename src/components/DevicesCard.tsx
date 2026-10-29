@@ -28,7 +28,7 @@ import {
   parsePairs,
 } from "@/lib/pairing";
 import { isWebMode, readSetting, writeSetting } from "@/lib/settings";
-import { fetchMe, getShareUserId } from "@/lib/share/client";
+import { fetchMe, getShareUserId, onSessionStarted } from "@/lib/share/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -193,6 +193,9 @@ function PcSection() {
     void load();
     void loadDevices();
   }, [load, loadDevices]);
+  // Same staleness as ProfileCard: the shell hides rather than unmounts
+  // across logout→login, so re-read the account side on a new session.
+  useEffect(() => onSessionStarted(() => void loadDevices()), [loadDevices]);
   // The server can be started or stopped from the API card above or the
   // Explorer; keep the LAN warning in step with it.
   useApiStatusChanged(load);
@@ -1004,6 +1007,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
       cancelledRef.current = true;
     };
   }, [load]);
+  useEffect(() => onSessionStarted(() => void load()), [load]);
 
   const savePairs = async (next: RenderPair[]) => {
     setPairs(next);
