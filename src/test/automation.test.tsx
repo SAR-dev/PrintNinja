@@ -272,6 +272,7 @@ describe("Automation → Phones and server", () => {
         created_by: string | null;
       }>,
       inviteSeq: 0,
+      failPairingOnce: false,
     };
     mockBackend(async (cmd: string, args?: Record<string, unknown>) => {
       switch (cmd) {
@@ -298,6 +299,10 @@ describe("Automation → Phones and server", () => {
           return null;
         case "start_pairing":
           if (!state.enabled) throw new Error("render sharing is not enabled");
+          if (state.failPairingOnce) {
+            state.failPairingOnce = false;
+            throw new Error("regeneration failed");
+          }
           state.window = { ...PAIRING };
           return state.window;
         case "cancel_pairing":
@@ -534,6 +539,29 @@ describe("Automation → Phones and server", () => {
         await screen.findByTestId("devices-pairing-code");
         fireEvent.click(screen.getByTestId("devices-new-code"));
         await waitFor(() => expect(calls("start_pairing")).toHaveLength(2));
+      } finally {
+        webMode();
+      }
+    });
+
+    it("offers a new code after the window lapses with no pairing", async () => {
+      // Regression: the expired branch used to show "get a new one" with
+      // no button to get one — the only recovery was closing the panel.
+      appMode();
+      try {
+        const be = pcBackend({ enabled: true });
+        openApi();
+        fireEvent.click(await screen.findByTestId("devices-pair-phone"));
+        await screen.findByTestId("devices-pairing-code");
+        // The window lapses unclaimed and the automatic replacement
+        // fails, so the panel lands on the expired state.
+        be.failPairingOnce = true;
+        be.window = null;
+        await waitFor(() =>
+          expect(screen.queryByTestId("devices-pairing-code")).toBeNull(),
+        );
+        fireEvent.click(await screen.findByTestId("devices-new-code"));
+        await screen.findByTestId("devices-pairing-code");
       } finally {
         webMode();
       }

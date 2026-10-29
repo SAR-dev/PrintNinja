@@ -776,7 +776,7 @@ const en = {
     devices_pair_phone: "Pair a phone",
     devices_pair_phone_hide: "Hide pairing code",
     devices_code_hint:
-      "On the phone: Settings → Shared rendering → type this code. It expires after a short time; a new one appears by itself.",
+      "On the phone: Settings → Shared rendering → type this code. It expires after a short time; a new one appears by itself for a few minutes, then use New code.",
     devices_code_expires: "Expires in {{count}} seconds",
     devices_code_gone:
       "This code is used or expired. Get a new one to keep pairing.",

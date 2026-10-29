@@ -636,9 +636,22 @@ function PcSection() {
                   </div>
                 </>
               ) : (
-                <p className="text-center text-sm text-muted-foreground">
-                  {t("settings_page.devices_code_gone")}
-                </p>
+                <>
+                  <p className="text-center text-sm text-muted-foreground">
+                    {t("settings_page.devices_code_gone")}
+                  </p>
+                  <div className="flex justify-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      data-testid="devices-new-code"
+                      disabled={busy}
+                      onClick={() => void newCode()}
+                    >
+                      {t("settings_page.devices_new_code")}
+                    </Button>
+                  </div>
+                </>
               )}
             </div>
           )}
