@@ -718,6 +718,10 @@ pub fn ensure_template_content_schema(conn: &Connection) -> rusqlite::Result<()>
                     timings_json TEXT
                 );",
             )?;
+            // NOTE: no `requested_by_device_id` here. This rebuild only runs
+            // for databases old enough to still carry `template_version_id`,
+            // which predate that column — there is nothing to copy. Fresh
+            // databases get it from `schema.sql` (no-backfill rule, §8).
             conn.execute(
                 "INSERT INTO print_jobs_new
                     (id, batch_id, record_index, template_id, printer_id, source, source_url, status, error,

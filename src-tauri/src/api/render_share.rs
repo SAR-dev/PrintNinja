@@ -203,6 +203,196 @@ fn sharing_on(state: &ApiState) -> bool {
         .is_ok_and(|v| v == "true")
 }
 
+/// What the gate learned about the caller: `None` on loopback (the PC's
+/// own UI and local scripts, which need no device), `Some(id)` for a
+/// paired phone over LAN. `POST /v1/print` reads it to stamp
+/// `requested_by_device_id` on the job row (Release B §3.4).
+#[derive(Clone, Debug)]
+pub(crate) struct AuthedDevice {
+    pub device_id: Option<String>,
+}
+
+/// One hashed lookup answering every gate question at once (Release A
+/// §3.1 plus §3.3 and §3.6): who is this token, may they use the main
+/// routes, and which account claimed them? Length-guarded first so a megabyte Authorization header never reaches
+/// the hash. Anything about *why* it fails stays out of the message —
+/// callers answer 401 either way, so a scanner learns nothing.
+///
+/// Render-only phones (`can_print` false) come back with `can_print`
+/// false: they keep the peer routes, which never consult the flag, while
+/// the main gate refuses them.
+pub(crate) struct DeviceAuth {
+    pub device_id: String,
+    pub can_print: bool,
+    pub account_id: Option<String>,
+    pub service_url: Option<String>,
+}
+
+pub(crate) fn lookup_device(state: &ApiState, presented: &str) -> Option<DeviceAuth> {
+    if presented.is_empty() || presented.len() > 256 {
+        return None;
+    }
+    let hash = crate::api::pair_code::token_hash(presented);
+    state.db.lock().ok().and_then(|guard| {
+        guard
+            .connection()
+            .query_row(
+                "SELECT id, can_print, account_id, service_url
+                 FROM paired_devices WHERE token_hash = ?1",
+                [&hash],
+                |r| {
+                    Ok(DeviceAuth {
+                        device_id: r.get(0)?,
+                        can_print: r.get(1)?,
+                        account_id: r.get(2)?,
+                        service_url: r.get(3)?,
+                    })
+                },
+            )
+            .ok()
+    })
+}
+
+/// This PC's own account: the `share_user_id` saved at sign-in plus the
+/// service URL it belongs to (Release C §3.6). `None` while signed out —
+/// and a signed-out PC honours no pair, on any route.
+pub(crate) fn pc_account(conn: &rusqlite::Connection) -> Option<(String, String)> {
+    let user: String = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'share_user_id'",
+            [],
+            |r| r.get(0),
+        )
+        .ok()
+        .filter(|s: &String| !s.trim().is_empty())?;
+    let url: String = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'share_service_url'",
+            [],
+            |r| r.get(0),
+        )
+        .ok()
+        .filter(|s: &String| !s.trim().is_empty())?;
+    Some((user, url))
+}
+
+/// Whether this pair is still good for `device`: claimed under the PC's
+/// current account, and the PC still signed in to it. A sign-out or an
+/// account switch disables existing pairs — they must be redone (§3.6).
+/// Callers answer the generic 401 either way, so the phone cannot tell a
+/// disabled pair from a revoked one; both mean "pair again".
+fn pair_account_current(state: &ApiState, device: &DeviceAuth) -> bool {
+    state
+        .db
+        .lock()
+        .ok()
+        .and_then(|guard| pc_account(guard.connection()))
+        .is_some_and(|(user, url)| {
+            device.account_id.as_deref() == Some(user.as_str())
+                && device.service_url.as_deref() == Some(url.as_str())
+        })
+}
+
+/// Throttled `last_seen_at` touch (at most one write per 30 s per
+/// device): shared by both gates so every authenticated request does
+/// not pay a write.
+pub(crate) fn touch_last_seen(state: &ApiState, presented: &str) {
+    let hash = crate::api::pair_code::token_hash(presented);
+    if let Ok(guard) = state.db.lock() {
+        let _ = guard.connection().execute(
+            "UPDATE paired_devices SET last_seen_at = datetime('now')
+             WHERE token_hash = ?1
+               AND (last_seen_at IS NULL
+                    OR (strftime('%s','now') - strftime('%s',last_seen_at)) > 30)",
+            [&hash],
+        );
+    }
+}
+
+/// Failed-token attempts remembered per source address (Release A §3.1).
+/// Process-global like `status::SUPPORT`: the server is one process, and
+/// tests use distinct addresses to stay isolated from each other.
+static AUTH_FAILURES: std::sync::LazyLock<
+    std::sync::Mutex<
+        std::collections::HashMap<std::net::IpAddr, std::collections::VecDeque<std::time::Instant>>,
+    >,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+/// Failures remembered per address: more than this many inside the
+/// window answers 429 until the window slides past.
+const AUTH_FAIL_MAX: usize = 10;
+const AUTH_FAIL_WINDOW_SECS: u64 = 60;
+/// Bound on tracked addresses: a rotating-source flood cannot grow the
+/// map without bound; quiet entries are reaped once past this size.
+const AUTH_FAIL_MAX_ADDRS: usize = 512;
+
+fn prune_failures(
+    queue: &mut std::collections::VecDeque<std::time::Instant>,
+    now: std::time::Instant,
+) {
+    while queue
+        .front()
+        .is_some_and(|t| now.duration_since(*t).as_secs() > AUTH_FAIL_WINDOW_SECS)
+    {
+        queue.pop_front();
+    }
+}
+
+/// True when `ip` failed too often too recently: answer 429 without
+/// touching the database.
+pub(crate) fn auth_throttled(ip: &std::net::IpAddr) -> bool {
+    let Ok(mut guard) = AUTH_FAILURES.lock() else {
+        return false;
+    };
+    let now = std::time::Instant::now();
+    match guard.get_mut(ip) {
+        Some(queue) => {
+            prune_failures(queue, now);
+            queue.len() >= AUTH_FAIL_MAX
+        }
+        None => false,
+    }
+}
+
+/// Record one failed attempt from `ip`.
+pub(crate) fn note_auth_failure(ip: &std::net::IpAddr) {
+    let Ok(mut guard) = AUTH_FAILURES.lock() else {
+        return;
+    };
+    if guard.len() >= AUTH_FAIL_MAX_ADDRS {
+        let now = std::time::Instant::now();
+        guard.retain(|_, queue| {
+            prune_failures(queue, now);
+            !queue.is_empty()
+        });
+    }
+    let queue = guard.entry(*ip).or_default();
+    prune_failures(queue, std::time::Instant::now());
+    queue.push_back(std::time::Instant::now());
+    while queue.len() > AUTH_FAIL_MAX * 2 {
+        queue.pop_front();
+    }
+}
+
+/// Extract a Bearer token or return an empty string when there is none.
+fn bearer_token(req: &Request) -> &str {
+    req.headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or("")
+}
+
+/// Generic 401 body: identical whatever the reason, so a scanner learns
+/// nothing about whether a token exists.
+fn unauthorized() -> Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(serde_json::json!({ "error": "bad or missing pairing token" })),
+    )
+        .into_response()
+}
+
 /// Bearer gate for the peer endpoints. Disabled sharing answers 403 so
 /// a scanner learns nothing about whether a token exists; a wrong or
 /// missing token on enabled sharing answers 401.
@@ -213,6 +403,7 @@ fn sharing_on(state: &ApiState) -> bool {
 /// `render_secret` is no longer accepted (plan §5.5, §10).
 pub async fn require_peer_auth(
     State(state): State<ApiState>,
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
     req: Request,
     next: Next,
 ) -> Response {
@@ -223,54 +414,92 @@ pub async fn require_peer_auth(
         )
             .into_response();
     };
-    let presented = req
-        .headers()
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .unwrap_or("");
-    if presented.is_empty() || presented.len() > 256 {
+    if auth_throttled(&addr.ip()) {
         return (
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({ "error": "bad or missing pairing token" })),
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(serde_json::json!({ "error": "too many failed attempts; slow down" })),
         )
             .into_response();
     }
-    let hash = crate::api::pair_code::token_hash(presented);
-    let known = state
-        .db
-        .lock()
-        .ok()
-        .and_then(|guard| {
-            let n: i64 = guard
-                .connection()
-                .query_row(
-                    "SELECT COUNT(*) FROM paired_devices WHERE token_hash = ?1",
-                    [&hash],
-                    |r| r.get(0),
-                )
-                .ok()?;
-            Some(n > 0)
-        })
-        .unwrap_or(false);
-    if !known {
+    let presented = bearer_token(&req);
+    let device = lookup_device(&state, presented);
+    let Some(device) = device else {
+        note_auth_failure(&addr.ip());
+        return unauthorized();
+    };
+    // A sign-out or account switch disables the pair (§3.6): generic 401,
+    // like a revocation. Renders too — a disabled pair renders nothing.
+    if !pair_account_current(&state, &device) {
+        return unauthorized();
+    }
+    touch_last_seen(&state, presented);
+    next.run(req).await
+}
+
+/// Gate for every non-pairing route (Release A §3.1, paired-only LAN).
+///
+/// Loopback callers (the PC's own UI and local scripts, including the
+/// API explorer's Rust proxy) pass through unchanged. Anything else must
+/// present a paired-device Bearer token; failures answer 401 with the
+/// same generic text whatever the reason, and repeated failures from one
+/// address answer 429. A pair claimed under another account — or after
+/// the PC signed out — answers that same 401 (§3.6). Sharing off refuses
+/// non-loopback with 403, like the peer gate. Pairing introduction
+/// (`/v1/pair/hello`, `/v1/pair/claim`) lives on its own sub-router and
+/// is exempt here — it has its own guards.
+pub async fn require_paired_or_local(
+    State(state): State<ApiState>,
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    mut req: Request,
+    next: Next,
+) -> Response {
+    if addr.ip().is_loopback() {
+        req.extensions_mut()
+            .insert(AuthedDevice { device_id: None });
+        return next.run(req).await;
+    }
+    if !sharing_on(&state) {
         return (
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({ "error": "bad or missing pairing token" })),
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({ "error": "sharing is disabled on this device" })),
         )
             .into_response();
     }
-    // Throttle `last_seen_at`: at most one write per 30 s per device, so
-    // every render does not pay a write.
-    if let Ok(guard) = state.db.lock() {
-        let _ = guard.connection().execute(
-            "UPDATE paired_devices SET last_seen_at = datetime('now')
-             WHERE token_hash = ?1
-               AND (last_seen_at IS NULL
-                    OR (strftime('%s','now') - strftime('%s',last_seen_at)) > 30)",
-            [&hash],
-        );
+    if auth_throttled(&addr.ip()) {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(serde_json::json!({ "error": "too many failed attempts; slow down" })),
+        )
+            .into_response();
     }
+    let presented = bearer_token(&req);
+    let device = lookup_device(&state, presented);
+    let Some(device) = device else {
+        note_auth_failure(&addr.ip());
+        return unauthorized();
+    };
+    // Render-only phones (can_print false) keep the peer routes, which
+    // never consult the flag — but every route behind this gate refuses
+    // them here.
+    if !device.can_print {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({ "error": "printing is not allowed for this device" })),
+        )
+            .into_response();
+    }
+    // A sign-out or account switch disables the pair (§3.6): generic 401,
+    // like a revocation — the phone pairs again.
+    if !pair_account_current(&state, &device) {
+        return unauthorized();
+    }
+    // Stamp the caller's device for handlers: `POST /v1/print` records it
+    // on the job row (Release B §3.4). The touch runs first so no borrow
+    // of the request is live across the extensions insert.
+    touch_last_seen(&state, presented);
+    req.extensions_mut().insert(AuthedDevice {
+        device_id: Some(device.device_id),
+    });
     next.run(req).await
 }
 

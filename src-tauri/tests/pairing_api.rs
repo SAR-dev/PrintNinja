@@ -47,6 +47,19 @@ fn setup() -> (Db, Window) {
                 [],
             )
             .unwrap();
+        // This PC is signed in (§3.6): claims without a matching phone
+        // account are refused. Tests that need a signed-out PC delete
+        // these rows after setup.
+        guard
+            .connection()
+            .execute(
+                "INSERT INTO settings (key, value) VALUES
+                     ('share_user_id', 'user-1'),
+                     ('share_service_url', 'https://share.test')
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [],
+            )
+            .unwrap();
     }
     (db.clone(), Arc::new(Mutex::new(None)))
 }
@@ -76,6 +89,8 @@ fn claim_body(code: &str, device_id: &str) -> serde_json::Value {
         "device_id": device_id,
         "device_name": "Test Phone",
         "platform": "android",
+        "account_id": "user-1",
+        "service_url": "https://share.test",
     })
 }
 
@@ -127,7 +142,9 @@ async fn get_caps(app: axum::Router, token: Option<&str>) -> StatusCode {
         builder = builder.header("authorization", format!("Bearer {t}"));
     }
     let res = app
-        .oneshot(builder.body(axum::body::Body::empty()).unwrap())
+        .oneshot(with_loopback(
+            builder.body(axum::body::Body::empty()).unwrap(),
+        ))
         .await
         .unwrap();
     res.status()
@@ -443,4 +460,106 @@ async fn hello_and_claim_work_over_a_live_loopback_server() {
         .await
         .expect("caps reachable");
     assert_eq!(caps.status(), reqwest::StatusCode::OK);
+}
+
+/// A fresh claim can always print: `can_print` defaults true, and only
+/// an explicit toggle changes it (re-pairing keeps the stored choice).
+#[tokio::test]
+async fn claim_defaults_can_print_to_true() {
+    let (db, window) = setup();
+    open_window(&window, "K7QM4XPD", Instant::now());
+    let (status, _) = post_claim(router(&db, &window), claim_body("K7QM4XPD", "phone-9")).await;
+    assert_eq!(status, StatusCode::OK);
+    let can_print: i64 = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT can_print FROM paired_devices WHERE id = 'phone-9'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(can_print, 1, "fresh pairs print");
+}
+
+// ── same-account pairing (Release C §3.6) ──────────────────────────
+
+/// A phone that sends no account is told to sign in first — and the code
+/// is not burned: signing in and retrying on the same window succeeds.
+#[tokio::test]
+async fn claim_without_phone_account_is_400_and_keeps_the_window() {
+    let (db, window) = setup();
+    open_window(&window, "K7QM4XPD", Instant::now());
+    let mut bare = claim_body("K7QM4XPD", "phone-1");
+    bare.as_object_mut().unwrap().remove("account_id");
+    bare.as_object_mut().unwrap().remove("service_url");
+    let (status, body) = post_claim(router(&db, &window), bare).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "phone_sign_in_required");
+    assert_eq!(paired_count(&db), 0, "no row on refusal");
+
+    let (status, _) = post_claim(router(&db, &window), claim_body("K7QM4XPD", "phone-1")).await;
+    assert_eq!(status, StatusCode::OK, "same code works after sign-in");
+}
+
+/// A PC that is signed out refuses every claim until it signs in.
+#[tokio::test]
+async fn claim_refuses_when_pc_signed_out() {
+    let (db, window) = setup();
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute(
+            "DELETE FROM settings WHERE key IN ('share_user_id', 'share_service_url')",
+            [],
+        )
+        .unwrap();
+    open_window(&window, "K7QM4XPD", Instant::now());
+    let (status, body) = post_claim(router(&db, &window), claim_body("K7QM4XPD", "phone-1")).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"], "pc_sign_in_required");
+    assert_eq!(paired_count(&db), 0, "no row on refusal");
+}
+
+/// A phone on another account (or another server) is refused.
+#[tokio::test]
+async fn claim_refuses_different_account() {
+    let (db, window) = setup();
+    open_window(&window, "K7QM4XPD", Instant::now());
+    let mut other = claim_body("K7QM4XPD", "phone-1");
+    other["account_id"] = serde_json::json!("user-2");
+    let (status, body) = post_claim(router(&db, &window), other).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"], "different_account");
+
+    open_window(&window, "BBBBBBBB", Instant::now());
+    let mut elsewhere = claim_body("BBBBBBBB", "phone-1");
+    elsewhere["service_url"] = serde_json::json!("https://other.example");
+    let (status, body) = post_claim(router(&db, &window), elsewhere).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"], "different_account");
+    assert_eq!(paired_count(&db), 0, "no row on refusal");
+}
+
+/// The claim stores the verified account on the row for the gate's
+/// later re-checks.
+#[tokio::test]
+async fn claim_stores_account_on_row() {
+    let (db, window) = setup();
+    open_window(&window, "K7QM4XPD", Instant::now());
+    let (status, _) = post_claim(router(&db, &window), claim_body("K7QM4XPD", "phone-1")).await;
+    assert_eq!(status, StatusCode::OK);
+    let (account, url): (Option<String>, Option<String>) = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT account_id, service_url FROM paired_devices WHERE id = 'phone-1'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(account.as_deref(), Some("user-1"));
+    assert_eq!(url.as_deref(), Some("https://share.test"));
 }

@@ -337,6 +337,7 @@ pub async fn test_printer(
         test: Some(true),
         source: Some("test".into()),
         idempotency_key: None,
+        requested_by_device_id: None,
     };
 
     let res = crate::commands::print::print_html(app, db, queue, req).await?;

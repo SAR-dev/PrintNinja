@@ -722,8 +722,16 @@ const ja: Translation = {
     sync_unconfigured: "未設定",
     sync_sign_in_first:
       "キャッシュを更新するには、共有サービスにサインインしてください。",
-    api_lan_warning:
-      "LANアクセスが有効です。同じネットワーク上の誰でも、印刷の実行やテンプレート・ジョブ・メトリクスの閲覧ができます。",
+    api_share_paired: "ペア設定済みのデバイスと共有",
+    api_share_paired_warning:
+      "ペア設定済みのデバイスのみ接続できます。それ以外のネットワークからのアクセスには応答しません。",
+    api_advanced: "詳細設定",
+    api_advanced_bind_hint:
+      "バインドの手動設定。通常は上記の共有スイッチが自動的に設定します。",
+    api_share_confirm_title: "ペア設定済みのデバイスと共有しますか？",
+    api_share_confirm_body:
+      "ペア設定済みのスマートフォンが、このPCのプリンターで印刷できるようになります。",
+    api_share_confirm_ok: "共有する",
     api_title: "ローカルREST API",
     api_port: "ポート",
     api_lan: "LANアクセスを許可",
@@ -731,7 +739,7 @@ const ja: Translation = {
     api_starting: "起動しています…",
     api_stop: "サーバーを停止",
     api_autostart: "アプリ起動時にサーバーを起動",
-    api_autostart_hint: "上記のポートとLANの設定を使用します。",
+    api_autostart_hint: "ポートと共有の設定を使用します。",
     api_background_hint:
       "バックグラウンドでも実行され続けます。サーバー稼働中は、固定通知にこのアドレスが表示されます。",
     api_curl_title: "curlの例",
@@ -783,6 +791,9 @@ const ja: Translation = {
     devices_cleared: "すべてのスマートフォンを削除しました。",
     devices_removed: "スマートフォンを削除しました。",
     devices_rename: "名前を変更",
+    devices_can_print: "印刷を許可",
+    devices_account_same: "同じアカウント",
+    devices_account_other: "別のアカウント — 再ペアリング",
     devices_rename_save: "保存",
     devices_remove_yes: "削除",
     devices_cancel: "キャンセル",

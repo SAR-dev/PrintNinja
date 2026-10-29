@@ -3,8 +3,10 @@
 //! A real axum server is bound to an ephemeral port and driven with
 //! `reqwest`, so routing/middleware bugs surface here instead of at runtime.
 
+use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
 use printninja_lib::db::Database;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 
@@ -496,14 +498,31 @@ async fn a_print_without_data_is_not_a_validation_error() {
 /// the real pipeline instead of only inserting a "queued" row.
 fn router(db: &Db) -> axum::Router {
     let cache = std::env::temp_dir().join(format!("printninja_api_cache_{}", uuid::Uuid::new_v4()));
-    printninja_lib::api::routes::router_with_state(
+    let inner = printninja_lib::api::routes::router_with_state(
         printninja_lib::api::routes::ApiState::without_window(
             db.clone(),
             std::sync::Arc::new(printninja_lib::queue::PrintQueue::new()),
             cache,
         ),
         false,
-    )
+    );
+    // In-process requests carry no socket address; give them the loopback
+    // one the live server's `into_make_service_with_connect_info`
+    // provides. Tests that need a remote source insert their own
+    // `ConnectInfo`, which this keeps.
+    axum::Router::new()
+        .merge(inner)
+        .layer(axum::middleware::from_fn(
+            |mut req: Request<axum::body::Body>, next: axum::middleware::Next| async move {
+                if req.extensions().get::<ConnectInfo<SocketAddr>>().is_none() {
+                    req.extensions_mut().insert(ConnectInfo(SocketAddr::new(
+                        IpAddr::V4(Ipv4Addr::LOCALHOST),
+                        50000,
+                    )));
+                }
+                next.run(req).await
+            },
+        ))
 }
 
 // ───────────────────────────────────────────────────────────────
@@ -776,7 +795,7 @@ async fn openapi_documents_the_print_response_codes() {
     let responses = spec["paths"]["/v1/print"]["post"]["responses"]
         .as_object()
         .expect("documented responses");
-    for code in ["200", "400", "404", "500"] {
+    for code in ["200", "400", "404", "409", "500"] {
         assert!(responses.contains_key(code), "missing documented {code}");
     }
 
@@ -990,11 +1009,25 @@ fn seed_sharing(db: &Db, token: &str) -> String {
         [],
     )
     .unwrap();
+    // This PC is signed in (§3.6): the gate re-checks every LAN token
+    // against this account.
+    c.execute(
+        "INSERT INTO settings (key, value) VALUES
+             ('share_user_id', 'user-1'),
+             ('share_service_url', 'https://share.test')
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [],
+    )
+    .unwrap();
     c.execute(
         "INSERT INTO paired_devices
-             (id, name, display_name, platform, token_hash, paired_at, last_seen_at)
-         VALUES ('phone-1', 'Test Phone', NULL, 'android', ?1, datetime('now'), datetime('now'))
-         ON CONFLICT(id) DO UPDATE SET token_hash = excluded.token_hash",
+             (id, name, display_name, platform, token_hash, paired_at, last_seen_at,
+              account_id, service_url)
+         VALUES ('phone-1', 'Test Phone', NULL, 'android', ?1, datetime('now'), datetime('now'),
+                 'user-1', 'https://share.test')
+         ON CONFLICT(id) DO UPDATE SET token_hash = excluded.token_hash,
+                                        account_id = excluded.account_id,
+                                        service_url = excluded.service_url",
         [&hash],
     )
     .unwrap();
@@ -1245,4 +1278,731 @@ async fn render_serves_pdf_from_a_real_browser() {
             .collect::<String>()
     );
     assert!(body["render_ms"].is_number(), "{body}");
+}
+
+// ───────────────────────────────────────────────────────────────
+// paired-only LAN (Release A §3.1): require_paired_or_local
+// ───────────────────────────────────────────────────────────────
+
+/// GET with an explicit source address and optional bearer, bypassing
+/// the loopback default the `router()` helper installs.
+async fn lan_get(
+    app: axum::Router,
+    uri: &str,
+    ip: std::net::Ipv4Addr,
+    token: Option<&str>,
+) -> StatusCode {
+    let mut builder = Request::builder().uri(uri);
+    if let Some(t) = token {
+        builder = builder.header("authorization", format!("Bearer {t}"));
+    }
+    let mut req = builder.body(axum::body::Body::empty()).unwrap();
+    req.extensions_mut()
+        .insert(ConnectInfo(SocketAddr::new(IpAddr::V4(ip), 50000)));
+    app.oneshot(req).await.unwrap().status()
+}
+
+/// Distinct 10/8 sources per test: the failure memory is process-global,
+/// so tests must not spend each other's budgets.
+fn lan_ip(n: u8) -> std::net::Ipv4Addr {
+    std::net::Ipv4Addr::new(10, 99, 0, n)
+}
+
+#[tokio::test]
+async fn lan_with_valid_token_reaches_guarded_routes() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-1");
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(11),
+            Some("gate-token-1")
+        )
+        .await,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn lan_without_token_is_401_even_on_health() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-2");
+    // Health included: only the pairing introduction stays open.
+    assert_eq!(
+        lan_get(router(&db), "/v1/health", lan_ip(12), None).await,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        lan_get(router(&db), "/v1/printers", lan_ip(12), None).await,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
+async fn lan_with_wrong_token_is_401() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-3");
+    assert_eq!(
+        lan_get(router(&db), "/v1/printers", lan_ip(13), Some("wrong")).await,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
+async fn removed_token_fails_on_its_next_request() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-4");
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(14),
+            Some("gate-token-4")
+        )
+        .await,
+        StatusCode::OK
+    );
+    {
+        let guard = db.lock().unwrap();
+        guard
+            .connection()
+            .execute("DELETE FROM paired_devices WHERE id = 'phone-1'", [])
+            .unwrap();
+    }
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(14),
+            Some("gate-token-4")
+        )
+        .await,
+        StatusCode::UNAUTHORIZED,
+        "revocation takes effect on the next request"
+    );
+}
+
+#[tokio::test]
+async fn sharing_off_refuses_lan_but_loopback_still_passes() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-5");
+    {
+        let guard = db.lock().unwrap();
+        guard
+            .connection()
+            .execute(
+                "UPDATE settings SET value = 'false' WHERE key = 'render_share_enabled'",
+                [],
+            )
+            .unwrap();
+    }
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(15),
+            Some("gate-token-5")
+        )
+        .await,
+        StatusCode::FORBIDDEN,
+        "a valid token means nothing with sharing off"
+    );
+    // The PC's own UI and scripts are unaffected: loopback passes with no token.
+    let res = router(&db)
+        .oneshot(
+            Request::builder()
+                .uri("/v1/printers")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn repeated_failures_are_rate_limited() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-6");
+    let ip = lan_ip(16);
+    for _ in 0..10 {
+        assert_eq!(
+            lan_get(router(&db), "/v1/printers", ip, Some("wrong")).await,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    assert_eq!(
+        lan_get(router(&db), "/v1/printers", ip, Some("wrong")).await,
+        StatusCode::TOO_MANY_REQUESTS,
+        "the 11th failure inside a minute is throttled"
+    );
+    // A different source is unaffected by one address's budget.
+    assert_eq!(
+        lan_get(router(&db), "/v1/printers", lan_ip(17), Some("wrong")).await,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
+async fn render_only_phone_keeps_peer_routes_but_loses_main_routes() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-8");
+    {
+        let guard = db.lock().unwrap();
+        guard
+            .connection()
+            .execute(
+                "UPDATE paired_devices SET can_print = 0 WHERE id = 'phone-1'",
+                [],
+            )
+            .unwrap();
+    }
+    // Rendering still works: the peer gate never consults can_print.
+    let (status, _) = get_capabilities(router(&db), Some("gate-token-8")).await;
+    assert_eq!(status, StatusCode::OK);
+    // Every main route refuses instead.
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(18),
+            Some("gate-token-8")
+        )
+        .await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        lan_get(router(&db), "/v1/health", lan_ip(18), Some("gate-token-8")).await,
+        StatusCode::FORBIDDEN
+    );
+}
+
+// ───────────────────────────────────────────────────────────────
+// print-via-PC job attribution + remote limits (Release B §3.4)
+// ───────────────────────────────────────────────────────────────
+
+/// POST with an explicit source address and optional bearer, like
+/// `lan_get` but with a JSON body.
+async fn lan_post(
+    app: axum::Router,
+    uri: &str,
+    ip: std::net::Ipv4Addr,
+    token: Option<&str>,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header("content-type", "application/json");
+    if let Some(t) = token {
+        builder = builder.header("authorization", format!("Bearer {t}"));
+    }
+    let mut req = builder
+        .body(axum::body::Body::from(body.to_string()))
+        .unwrap();
+    req.extensions_mut()
+        .insert(ConnectInfo(SocketAddr::new(IpAddr::V4(ip), 50000)));
+    let res = app.oneshot(req).await.unwrap();
+    let status = res.status();
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
+fn print_body() -> serde_json::Value {
+    serde_json::json!({
+        "template": "Receipt",
+        "printer": "Desk",
+        "data": {"order": {"id": 7}}
+    })
+}
+
+async fn get_body(app: axum::Router, uri: &str) -> (StatusCode, serde_json::Value) {
+    let res = app
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = res.status();
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
+/// A LAN print from a paired phone stamps the job with the phone's id,
+/// and both job endpoints report it. The print itself fails on CI (no
+/// spooler at 1.2.3.4) — the row and its attribution are the point.
+#[tokio::test]
+async fn lan_print_stamps_requesting_device_on_job_and_endpoints() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "attr-token-1");
+
+    let (status, _) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(19),
+        Some("attr-token-1"),
+        print_body(),
+    )
+    .await;
+    assert_ne!(status, StatusCode::UNAUTHORIZED, "paired token must pass");
+    assert_ne!(status, StatusCode::FORBIDDEN, "phone may print");
+
+    let (id, by): (i64, Option<String>) = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT id, requested_by_device_id FROM print_jobs ORDER BY id DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(by.as_deref(), Some("phone-1"), "job stamped with the phone");
+
+    let (status, body) = get_body(router(&db), &format!("/v1/jobs/{id}")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["requested_by_device_id"], "phone-1");
+    assert!(body.get("source").is_some(), "existing shape kept");
+
+    let (status, body) = get_body(router(&db), "/v1/jobs").await;
+    assert_eq!(status, StatusCode::OK);
+    let listed = body["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|j| j["id"] == id)
+        .expect("job listed");
+    assert_eq!(listed["requested_by_device_id"], "phone-1");
+}
+
+/// A loopback print (the PC's own UI/scripts) leaves the stamp empty.
+#[tokio::test]
+async fn loopback_print_leaves_requested_by_empty() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+
+    let res = router(&db)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/print")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(print_body().to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_ne!(res.status(), StatusCode::UNAUTHORIZED);
+
+    let by: Option<String> = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT requested_by_device_id FROM print_jobs ORDER BY id DESC LIMIT 1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(by, None, "local prints carry no device");
+
+    let (id,): (i64,) = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT id FROM print_jobs ORDER BY id DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?,)),
+        )
+        .unwrap();
+    let (_, body) = get_body(router(&db), &format!("/v1/jobs/{id}")).await;
+    assert!(body["requested_by_device_id"].is_null());
+}
+
+/// Over-max copies are refused with 400 before any job row exists — and
+/// a huge count cannot wrap through the old `as u32` cast into 1 copy.
+#[tokio::test]
+async fn print_rejects_copies_over_max_without_creating_a_job() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "attr-token-2");
+
+    for copies in [101u64, 1u64 << 40] {
+        let (status, body) = lan_post(
+            router(&db),
+            "/v1/print",
+            lan_ip(20),
+            Some("attr-token-2"),
+            serde_json::json!({
+                "template": "Receipt",
+                "printer": "Desk",
+                "data": {},
+                "settings": {"copies": copies}
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "copies={copies}");
+        assert!(
+            body["error"].as_str().unwrap_or("").contains("copies"),
+            "message names the limit: {body}"
+        );
+    }
+    let n: i64 = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row("SELECT COUNT(*) FROM print_jobs", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 0, "refused requests create no job");
+}
+
+/// An inline `data` payload over ~1 MiB is refused with 400 before any
+/// job row exists; big payloads go through `data_url` instead. Past the
+/// 2 MiB JSON body cap the framework answers 413 first — also no job.
+#[tokio::test]
+async fn print_rejects_oversize_data_without_creating_a_job() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "attr-token-3");
+
+    // Between the 1 MiB handler limit and the 2 MiB body cap: the
+    // handler refuses with a message naming `data`.
+    let (status, body) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(21),
+        Some("attr-token-3"),
+        serde_json::json!({
+            "template": "Receipt",
+            "printer": "Desk",
+            "data": {"blob": "x".repeat(1_500_000)}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body["error"].as_str().unwrap_or("").contains("data"),
+        "message names the limit: {body}"
+    );
+    // Past the body cap: the framework refuses before the handler runs.
+    let (status, _) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(21),
+        Some("attr-token-3"),
+        serde_json::json!({
+            "template": "Receipt",
+            "printer": "Desk",
+            "data": {"blob": "x".repeat(2 * 1024 * 1024)}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    let n: i64 = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row("SELECT COUNT(*) FROM print_jobs", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 0, "refused requests create no job");
+}
+
+// ───────────────────────────────────────────────────────────────
+// template version check (Release B §3.7)
+// ───────────────────────────────────────────────────────────────
+
+/// A synced template the version check can resolve: `server_id` is the
+/// cross-device identity, `server_revision` the compared version.
+fn seed_versioned_template(db: &Db) {
+    let guard = db.lock().unwrap();
+    guard
+        .connection()
+        .execute(
+            "INSERT INTO templates (name, page_w_mm, page_h_mm, orientation, html, css,
+                                    server_id, server_revision, sync_state)
+             VALUES ('Versioned', 120, 200, 'portrait', '<p>v</p>', '',
+                     'srv-1', 7, 'synced')",
+            [],
+        )
+        .unwrap();
+}
+
+fn versioned_body(revision: Option<i64>) -> serde_json::Value {
+    let mut data = serde_json::json!({
+        "template": "Versioned",
+        "template_server_id": "srv-1",
+        "printer": "Desk",
+        "data": {}
+    });
+    if let Some(rev) = revision {
+        data["template_server_revision"] = rev.into();
+    }
+    data
+}
+
+fn job_count(db: &Db) -> i64 {
+    db.lock()
+        .unwrap()
+        .connection()
+        .query_row("SELECT COUNT(*) FROM print_jobs", [], |r| r.get(0))
+        .unwrap()
+}
+
+/// A matching revision prints (row created, revision recorded) and the
+/// job endpoint reports which revision ran.
+#[tokio::test]
+async fn version_match_prints_and_records_revision() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_versioned_template(&db);
+    seed_sharing(&db, "ver-token-1");
+
+    let (status, _) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(22),
+        Some("ver-token-1"),
+        versioned_body(Some(7)),
+    )
+    .await;
+    assert_ne!(status, StatusCode::UNAUTHORIZED);
+    assert_ne!(status, StatusCode::CONFLICT, "matching revision must pass");
+
+    let (id, rev): (i64, Option<i64>) = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT id, template_revision FROM print_jobs ORDER BY id DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(rev, Some(7), "job records the revision that ran");
+    let (_, body) = get_body(router(&db), &format!("/v1/jobs/{id}")).await;
+    assert_eq!(body["template_revision"], 7);
+}
+
+/// A `server_id` the PC never saw is 409 `template_missing`, with no job.
+#[tokio::test]
+async fn unknown_server_id_is_409_missing() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "ver-token-2");
+
+    let (status, body) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(23),
+        Some("ver-token-2"),
+        serde_json::json!({
+            "template": "Versioned",
+            "template_server_id": "srv-nope",
+            "template_server_revision": 1,
+            "printer": "Desk",
+            "data": {}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["code"], "template_missing");
+    assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+/// A differing revision is 409 `template_stale` carrying both revisions.
+#[tokio::test]
+async fn stale_revision_is_409_with_both_revisions() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_versioned_template(&db);
+    seed_sharing(&db, "ver-token-3");
+
+    let (status, body) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(24),
+        Some("ver-token-3"),
+        versioned_body(Some(6)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["code"], "template_stale");
+    assert_eq!(body["client_revision"], 6);
+    assert_eq!(body["pc_revision"], 7);
+    assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+/// The PC's own copy with unsynced local edits is refused: it would print
+/// content the server and the phone do not have.
+#[tokio::test]
+async fn dirty_pc_copy_is_refused() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_versioned_template(&db);
+    seed_sharing(&db, "ver-token-4");
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute(
+            "UPDATE templates SET sync_state = 'dirty' WHERE server_id = 'srv-1'",
+            [],
+        )
+        .unwrap();
+
+    let (status, body) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(25),
+        Some("ver-token-4"),
+        versioned_body(Some(7)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["code"], "template_stale");
+    assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+/// A renamed template is still found by `server_id`: the name is not a
+/// fallback, so the stale name in the request does not matter.
+#[tokio::test]
+async fn renamed_template_found_by_server_id() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_versioned_template(&db);
+    seed_sharing(&db, "ver-token-5");
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute(
+            "UPDATE templates SET name = 'Renamed' WHERE server_id = 'srv-1'",
+            [],
+        )
+        .unwrap();
+
+    let (status, _) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(26),
+        Some("ver-token-5"),
+        versioned_body(Some(7)),
+    )
+    .await;
+    assert_ne!(status, StatusCode::CONFLICT, "server_id wins over the name");
+    assert_ne!(status, StatusCode::NOT_FOUND, "no name fallback attempted");
+    assert_eq!(job_count(&db), 1);
+}
+
+/// A `server_id` with no revision to compare (never-synced phone copy) is
+/// 409 `template_missing`: sync first, then retry.
+#[tokio::test]
+async fn missing_client_revision_is_409_missing() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_versioned_template(&db);
+    seed_sharing(&db, "ver-token-6");
+
+    let (status, body) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(27),
+        Some("ver-token-6"),
+        versioned_body(None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["code"], "template_missing");
+    assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+// ───────────────────────────────────────────────────────────────
+// same-account re-check (Release C §3.6)
+// ───────────────────────────────────────────────────────────────
+
+/// A PC account switch disables existing pairs on every route: the phone
+/// must pair again under the new account.
+#[tokio::test]
+async fn lan_token_dies_when_pc_switches_account() {
+    let db = setup();
+    seed_sharing(&db, "acct-token-1");
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(28),
+            Some("acct-token-1")
+        )
+        .await,
+        StatusCode::OK
+    );
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute(
+            "UPDATE settings SET value = 'user-2' WHERE key = 'share_user_id'",
+            [],
+        )
+        .unwrap();
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(28),
+            Some("acct-token-1")
+        )
+        .await,
+        StatusCode::UNAUTHORIZED,
+        "pairs claimed under another account must be redone"
+    );
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/capabilities",
+            lan_ip(28),
+            Some("acct-token-1")
+        )
+        .await,
+        StatusCode::UNAUTHORIZED,
+        "renders stop too, not just prints"
+    );
+}
+
+/// A signed-out PC honours no pair.
+#[tokio::test]
+async fn lan_token_dies_when_pc_signs_out() {
+    let db = setup();
+    seed_sharing(&db, "acct-token-2");
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute(
+            "DELETE FROM settings WHERE key IN ('share_user_id', 'share_service_url')",
+            [],
+        )
+        .unwrap();
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(29),
+            Some("acct-token-2")
+        )
+        .await,
+        StatusCode::UNAUTHORIZED
+    );
 }
