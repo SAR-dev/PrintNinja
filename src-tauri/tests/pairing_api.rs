@@ -169,6 +169,7 @@ async fn claim_succeeds_token_works_and_device_is_listed() {
     let (status, hello) = get_hello(router(&db, &window)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(hello["protocol"], 1);
+    assert_eq!(hello["window_open"], true);
     assert!(hello["provider_id"].is_string());
     assert!(hello["port"].is_number());
 
@@ -200,9 +201,12 @@ async fn claim_succeeds_token_works_and_device_is_listed() {
         .unwrap();
     assert_eq!(name, "Test Phone");
 
-    // Single use: the window is closed, hello is 403 again.
-    let (status, _) = get_hello(router(&db, &window)).await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    // Single use: the window is closed, so the code is refused — but
+    // hello still answers (discovery is not gated on a window, or guest
+    // invites would be undiscoverable).
+    let (status, hello) = get_hello(router(&db, &window)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(hello["window_open"], false);
     let (status, _) = post_claim(router(&db, &window), claim_body("K7QM4XPD", "phone-2")).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
@@ -211,13 +215,15 @@ async fn claim_succeeds_token_works_and_device_is_listed() {
 
 #[tokio::test]
 async fn no_window_expired_wrong_locked_and_disabled() {
-    // No window: hello and claim are both 403 with the same wording.
+    // No window: the owner code is refused, but hello still answers —
+    // a guest invite is claimed with no window open.
     let (db, window) = setup();
     let (status, hello) = get_hello(router(&db, &window)).await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(hello["window_open"], false);
     let (status, claim) = post_claim(router(&db, &window), claim_body("K7QM4XPD", "phone-1")).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(hello["error"], claim["error"]);
+    assert_eq!(claim["error"], "pairing is not available on this device");
 
     // Expired window: 410. (Opened further back than the default
     // 90 s TTL; the env override is unset in tests.)
@@ -634,6 +640,23 @@ async fn invite_claim_needs_no_window_no_account() {
     assert_eq!(account, None, "guests store no account");
     assert_eq!(can_print, 1);
     assert_eq!(expires.as_deref(), Some("2030-01-01T00:00:00Z"));
+}
+
+/// Discovery for invites: hello answers with no window open, so the
+/// phone's subnet probe finds the PC. Regression: hello used to 403
+/// without a window, and invites were undiscoverable ("could not find
+/// your PC") unless the address was typed by hand.
+#[tokio::test]
+async fn hello_discovers_a_windowless_pc_for_invites() {
+    let (db, window) = setup();
+    seed_invite(&db, "12345678", "2030-01-01T00:00:00Z", None, true);
+    let (status, hello) = get_hello(router(&db, &window)).await;
+    assert_eq!(status, StatusCode::OK, "{hello}");
+    assert_eq!(hello["window_open"], false);
+    assert!(hello["provider_id"].is_string());
+    // …and the invite found that way still redeems.
+    let (status, reply) = post_claim(router(&db, &window), guest_body("12345678", "guest-9")).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
 }
 
 /// A render-only invite stamps can_print false.
