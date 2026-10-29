@@ -26,7 +26,7 @@ import {
   parsePairs,
 } from "@/lib/pairing";
 import { isWebMode, readSetting, writeSetting } from "@/lib/settings";
-import { getShareUserId } from "@/lib/share/client";
+import { fetchMe, getShareUserId } from "@/lib/share/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -716,7 +716,13 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
   const [formError, setFormError] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [address, setAddress] = useState("");
+  // The account this phone pairs as (§3.6): shown so a "different
+  // account" refusal names something the user recognizes. Null while
+  // signed out or unreachable — the claim says "sign in first" then.
+  const [accountHandle, setAccountHandle] = useState<string | null>(null);
+  const [accountChecked, setAccountChecked] = useState(false);
   const codeInputRef = useRef<HTMLInputElement>(null);
+  const cancelledRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -724,10 +730,22 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
     } catch {
       /* backend unavailable */
     }
+    try {
+      const me = await fetchMe();
+      if (!cancelledRef.current) setAccountHandle(me.handle);
+    } catch {
+      /* signed out or offline: the hint below says so */
+    } finally {
+      if (!cancelledRef.current) setAccountChecked(true);
+    }
   }, []);
 
   useEffect(() => {
+    cancelledRef.current = false;
     void load();
+    return () => {
+      cancelledRef.current = true;
+    };
   }, [load]);
 
   const savePairs = async (next: RenderPair[]) => {
@@ -924,6 +942,18 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
         <Label htmlFor="devices-code">
           {t("settings_page.devices_code_entry_label")}
         </Label>
+        {accountChecked && (
+          <p
+            data-testid="devices-account-line"
+            className="text-xs text-muted-foreground"
+          >
+            {accountHandle
+              ? t("settings_page.devices_account_signed_in", {
+                  handle: accountHandle,
+                })
+              : t("settings_page.devices_account_signed_out")}
+          </p>
+        )}
         <div className="flex gap-2">
           <Input
             id="devices-code"

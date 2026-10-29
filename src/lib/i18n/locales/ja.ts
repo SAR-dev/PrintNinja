@@ -803,6 +803,9 @@ const ja: Translation = {
     devices_can_print: "印刷を許可",
     devices_account_same: "同じアカウント",
     devices_account_other: "別のアカウント — 再ペアリング",
+    devices_account_signed_in: "{{handle}} としてサインイン中",
+    devices_account_signed_out:
+      "サインインしていません — ペアリングするにはサインインしてください。",
     via_pc_title: "PC経由で印刷",
     via_pc_hint:
       "このスマートフォンで印刷する代わりに、ペアリング済みのPCに印刷ジョブを送信します。フォールバックはありません。PCに到達できない場合、ジョブは失敗します。",
