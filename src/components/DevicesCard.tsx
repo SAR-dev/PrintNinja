@@ -5,6 +5,7 @@ import { Trash2, Plus } from "lucide-react";
 import { agent } from "@/lib/agent/commands";
 import type {
   PairedDevice,
+  PairingInvite,
   PairingState,
   PeerCapabilities,
   RenderPair,
@@ -138,6 +139,12 @@ function PcSection() {
   const [myAccountId, setMyAccountId] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmShare, setConfirmShare] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [invites, setInvites] = useState<PairingInvite[]>([]);
+  const [inviteHours, setInviteHours] = useState("24");
+  const [inviteUses, setInviteUses] = useState("");
+  const [inviteCanPrint, setInviteCanPrint] = useState(true);
+  const [mintedCode, setMintedCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -168,6 +175,11 @@ function PcSection() {
       setDevices(await agent("list_paired_devices", {}));
     } catch {
       /* backend unavailable */
+    }
+    try {
+      setInvites(await agent("list_pairing_invites", {}));
+    } catch {
+      /* old backend without invites */
     }
     try {
       setMyAccountId(await getShareUserId());
@@ -264,6 +276,43 @@ function PcSection() {
     }
     setConfirmShare(false);
     void toggleSharing(true);
+  };
+
+  const mintInvite = async () => {
+    setBusy(true);
+    try {
+      const hours = Math.max(1, Math.floor(Number(inviteHours) || 24));
+      const uses =
+        inviteUses.trim() === ""
+          ? null
+          : Math.max(1, Math.floor(Number(inviteUses) || 1));
+      const created = await agent("create_pairing_invite", {
+        expires_in_hours: hours,
+        max_uses: uses,
+        can_print: inviteCanPrint,
+      });
+      setMintedCode(created.code);
+      setInviteHours("24");
+      setInviteUses("");
+      setInviteCanPrint(true);
+      await loadDevices();
+    } catch (e) {
+      notifyError(describeError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revokeInvite = async (id: string) => {
+    setBusy(true);
+    try {
+      await agent("revoke_pairing_invite", { id });
+      await loadDevices();
+    } catch (e) {
+      notifyError(describeError(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const enableLan = async () => {
@@ -529,6 +578,19 @@ function PcSection() {
                 {t("settings_page.devices_pair_phone_hide")}
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="devices-invite"
+              disabled={busy}
+              onClick={() => {
+                setMintedCode(null);
+                setShowInvite((v) => !v);
+                if (!showInvite) void loadDevices();
+              }}
+            >
+              {t("settings_page.devices_invite")}
+            </Button>
           </div>
 
           {showPair && (
@@ -574,6 +636,126 @@ function PcSection() {
                 <p className="text-center text-sm text-muted-foreground">
                   {t("settings_page.devices_code_gone")}
                 </p>
+              )}
+            </div>
+          )}
+
+          {showInvite && (
+            <div className="space-y-3 rounded-md border p-3">
+              <p className="text-xs text-muted-foreground">
+                {t("settings_page.devices_invite_hint")}
+              </p>
+              {mintedCode ? (
+                <>
+                  <p
+                    className="text-center font-mono text-4xl font-bold tracking-widest"
+                    data-testid="devices-invite-code"
+                  >
+                    {mintedCode}
+                  </p>
+                  <p className="text-center text-xs text-muted-foreground">
+                    {t("settings_page.devices_invite_code_once")}
+                  </p>
+                  <div className="flex justify-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => setMintedCode(null)}
+                    >
+                      {t("settings_page.devices_invite_another")}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="devices-invite-hours">
+                      {t("settings_page.devices_invite_hours")}
+                    </Label>
+                    <Input
+                      id="devices-invite-hours"
+                      data-testid="devices-invite-hours"
+                      type="number"
+                      min="1"
+                      value={inviteHours}
+                      onChange={(e) => setInviteHours(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="devices-invite-uses">
+                      {t("settings_page.devices_invite_uses")}
+                    </Label>
+                    <Input
+                      id="devices-invite-uses"
+                      data-testid="devices-invite-uses"
+                      type="number"
+                      min="1"
+                      placeholder="∞"
+                      value={inviteUses}
+                      onChange={(e) => setInviteUses(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="devices-invite-can-print"
+                      data-testid="devices-invite-can-print"
+                      checked={inviteCanPrint}
+                      onCheckedChange={setInviteCanPrint}
+                    />
+                    <Label htmlFor="devices-invite-can-print">
+                      {t("settings_page.devices_can_print")}
+                    </Label>
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      size="sm"
+                      data-testid="devices-invite-mint"
+                      disabled={busy}
+                      onClick={() => void mintInvite()}
+                    >
+                      {t("settings_page.devices_invite_mint")}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {invites.length > 0 ? (
+                <ul className="space-y-1">
+                  {invites.map((inv) => (
+                    <li
+                      key={inv.id}
+                      data-testid={`devices-invite-${inv.id}`}
+                      className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs"
+                    >
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        {t("settings_page.devices_invite_expires", {
+                          date: new Date(inv.expires_at).toLocaleString(),
+                        })}{" "}
+                        ·{" "}
+                        {inv.uses_left == null
+                          ? t("settings_page.devices_invite_unlimited")
+                          : t("settings_page.devices_invite_uses_left", {
+                              count: inv.uses_left,
+                            })}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        data-testid={`devices-invite-revoke-${inv.id}`}
+                        disabled={busy}
+                        onClick={() => void revokeInvite(inv.id)}
+                      >
+                        {t("settings_page.devices_invite_revoke")}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                !mintedCode && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings_page.devices_invite_empty")}
+                  </p>
+                )
               )}
             </div>
           )}
@@ -661,7 +843,19 @@ function PcSection() {
                               when: timeAgo(d.last_seen_at, t),
                             })}
                           </span>
-                          {d.account_id ? (
+                          {d.role === "guest" ? (
+                            <span className="mt-1 flex items-center gap-1">
+                              <Badge
+                                variant="secondary"
+                                data-testid={`devices-role-${d.id}`}
+                              >
+                                {t("settings_page.devices_guest")}
+                                {d.expires_at
+                                  ? ` · ${new Date(d.expires_at).toLocaleDateString()}`
+                                  : ""}
+                              </Badge>
+                            </span>
+                          ) : d.account_id ? (
                             <span className="mt-1 flex items-center gap-1">
                               <Badge
                                 variant={

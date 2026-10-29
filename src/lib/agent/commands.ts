@@ -19,6 +19,8 @@ import type {
   PrintResponse,
   ProfileRow,
   PairedDevice,
+  PairingInvite,
+  NewPairingInvite,
   PairingState,
   PeerCapabilities,
   PeerRenderArgs,
@@ -232,6 +234,19 @@ export interface AgentCommands {
   /** Allow or forbid printing for one paired phone. Render-only phones
    * keep rendering; the main routes refuse them. */
   set_paired_can_print: [{ id: string; can_print: boolean }, PairedDevice];
+  /** Mint a guest invite code (shown once, never stored). */
+  create_pairing_invite: [
+    {
+      expires_in_hours?: number | null;
+      max_uses?: number | null;
+      can_print?: boolean | null;
+    },
+    NewPairingInvite,
+  ];
+  /** Active and spent guest invites, newest first. No codes. */
+  list_pairing_invites: [{}, PairingInvite[]];
+  /** Delete an invite. Pairs it already minted keep their own expiry. */
+  revoke_pairing_invite: [{ id: string }, null];
   /** Pair this phone with a PC using its 8-character code. */
   pair_with_code: [{ code: string; host?: string; port?: number }, RenderPair];
   // Shared rendering: this device as a consumer (buys renders).
