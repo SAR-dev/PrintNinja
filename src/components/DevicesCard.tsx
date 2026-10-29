@@ -203,6 +203,9 @@ function PcSection() {
         } catch {
           /* nothing open */
         }
+        // Sharing off means loopback-only (Release A §3.2): the bind
+        // follows, so a stopped-then-started server listens locally.
+        await writeSetting("api_lan_access", "false");
       }
       await load();
     } catch (e) {

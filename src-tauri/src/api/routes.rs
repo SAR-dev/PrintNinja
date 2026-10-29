@@ -53,14 +53,16 @@ impl ApiState {
 /// Registering the same path twice makes axum shadow the first method,
 /// silently dropping GET or DELETE.
 pub fn router_with_state(state: ApiState, lan_access: bool) -> Router {
-    let mut cors = tower_http::cors::CorsLayer::new()
+    // Browser origins are never allowed: the app's own UI reaches this
+    // server through the Rust `api_request` proxy (loopback allow-list),
+    // and paired phones call from native code — so no legitimate caller
+    // needs CORS, and a wildcard would let any web page on the LAN probe
+    // the API (Release A §3.1). `lan_access` still decides the bind
+    // address in the launcher; it no longer changes CORS here.
+    let _ = lan_access;
+    let cors = tower_http::cors::CorsLayer::new()
         .allow_methods(tower_http::cors::Any)
         .allow_headers(tower_http::cors::Any);
-
-    if lan_access {
-        // Operator opted into LAN access: allow browser origins.
-        cors = cors.allow_origin(tower_http::cors::Any);
-    }
 
     // The peer endpoints live on their own sub-router: they need the
     // pairing-secret gate, and the render body can be megabytes, so the
@@ -104,6 +106,14 @@ pub fn router_with_state(state: ApiState, lan_access: bool) -> Router {
         .route("/v1/metrics", get(metrics))
         .route("/v1/metrics/prometheus", get(metrics_prometheus))
         .route("/v1/openapi.json", get(openapi))
+        // Paired-only LAN (Release A §3.1): every route above needs a
+        // loopback source or a paired-device token. `route_layer` covers
+        // only these routes — the peer/pair routers merged below keep
+        // their own gates.
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::api::render_share::require_paired_or_local,
+        ))
         .with_state(state)
         // Per-request spans (method, path, status, latency): the only way
         // to join a slow print across middleware and handler in the logs.

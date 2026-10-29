@@ -17,6 +17,17 @@ import {
 } from "@/lib/apiServer";
 import { describeError } from "@/lib/errors";
 import { isWebMode, readSetting, writeSetting } from "@/lib/settings";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+/** First-enable confirm, once per device (a UI decision, not a setting). */
+const SHARE_CONFIRM_KEY = "printninja-share-confirm-seen";
 
 /**
  * The one place that owns the local API server: status, port, LAN
@@ -31,6 +42,8 @@ export function ApiServerPanel({
   const { t } = useTranslation();
   const [apiPort, setApiPort] = useState("17717");
   const [lanAccess, setLanAccess] = useState(false);
+  const [sharePaired, setSharePaired] = useState(false);
+  const [confirmShare, setConfirmShare] = useState(false);
   const [apiAutostart, setApiAutostart] = useState(false);
   const [apiStatus, setApiStatus] = useState<ApiStatus | null>(null);
   const [starting, setStarting] = useState(false);
@@ -65,13 +78,15 @@ export function ApiServerPanel({
   useEffect(() => {
     void loadApiStatus();
     (async () => {
-      const [port, lan, autostart] = await Promise.all([
+      const [port, lan, autostart, share] = await Promise.all([
         readSetting("api_port"),
         readSetting("api_lan_access"),
         readSetting("api_autostart"),
+        readSetting("render_share_enabled"),
       ]);
       if (port) setApiPort(port);
       if (lan) setLanAccess(lan === "true");
+      if (share) setSharePaired(share === "true");
       if (autostart) setApiAutostart(autostart === "true");
     })();
   }, [loadApiStatus]);
@@ -105,6 +120,49 @@ export function ApiServerPanel({
     }
   };
 
+  /** One switch for sharing (Release A §3.2): on means LAN bind plus
+   * paired tokens accepted; off means loopback only with every token
+   * refused. Both settings are staged for the next server start — the
+   * switch is disabled while the server runs, like the LAN switch was.
+   * The Devices card writes the same two keys when toggled there, so the
+   * two switches can never disagree for long (a focus refresh re-reads).
+   */
+  const persistShare = async (v: boolean) => {
+    try {
+      await writeSetting("api_lan_access", String(v));
+      await agent("set_render_sharing", { enabled: v });
+    } catch (e) {
+      toast.error(describeError(e));
+    }
+  };
+
+  const onShareChange = (v: boolean) => {
+    setSharePaired(v);
+    if (v) {
+      let seen = false;
+      try {
+        seen = localStorage.getItem(SHARE_CONFIRM_KEY) === "true";
+      } catch {
+        /* private mode: ask every time */
+      }
+      if (!seen) {
+        setConfirmShare(true);
+        return;
+      }
+    }
+    void persistShare(v);
+  };
+
+  const confirmShareOn = () => {
+    try {
+      localStorage.setItem(SHARE_CONFIRM_KEY, "true");
+    } catch {
+      /* private mode: the dialog just comes back next time */
+    }
+    setConfirmShare(false);
+    void persistShare(true);
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -119,7 +177,7 @@ export function ApiServerPanel({
             <p className="text-xs text-muted-foreground">
               {apiStatus?.running
                 ? `${apiStatus.address}:${apiStatus.port}`
-                : `Default: ${lanAccess ? "0.0.0.0" : "127.0.0.1"}:${apiPort}`}
+                : `Port ${apiPort}`}
             </p>
           </div>
           <Badge variant={apiStatus?.running ? "success" : "secondary"}>
@@ -155,15 +213,15 @@ export function ApiServerPanel({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Switch
-              id="lan-access"
-              checked={lanAccess}
+              id="share-paired"
+              data-testid="settings-share-paired"
+              checked={sharePaired}
               disabled={apiStatus?.running}
-              onCheckedChange={(v) => {
-                setLanAccess(v);
-                writeSetting("api_lan_access", String(v));
-              }}
+              onCheckedChange={onShareChange}
             />
-            <Label htmlFor="lan-access">{t("settings_page.api_lan")}</Label>
+            <Label htmlFor="share-paired">
+              {t("settings_page.api_share_paired")}
+            </Label>
           </div>
           {apiStatus?.running ? (
             <Button variant="destructive" onClick={stopApi}>
@@ -178,11 +236,34 @@ export function ApiServerPanel({
           )}
         </div>
 
-        {lanAccess && (
+        {sharePaired && (
           <p className="text-xs text-warning">
-            {t("settings_page.api_lan_warning")}
+            {t("settings_page.api_share_paired_warning")}
           </p>
         )}
+
+        <details>
+          <summary className="cursor-pointer text-sm text-muted-foreground">
+            {t("settings_page.api_advanced")}
+          </summary>
+          <div className="space-y-3 pt-3">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="lan-access"
+                checked={lanAccess}
+                disabled={apiStatus?.running}
+                onCheckedChange={(v) => {
+                  setLanAccess(v);
+                  writeSetting("api_lan_access", String(v));
+                }}
+              />
+              <Label htmlFor="lan-access">{t("settings_page.api_lan")}</Label>
+            </div>
+            <p className="-mt-1 text-xs text-muted-foreground">
+              {t("settings_page.api_advanced_bind_hint")}
+            </p>
+          </div>
+        </details>
 
         <div className="flex items-center gap-2">
           <Switch
@@ -214,6 +295,33 @@ export function ApiServerPanel({
           {t("automation.open_explorer")}
         </Button>
       </CardContent>
+
+      <Dialog open={confirmShare} onOpenChange={setConfirmShare}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {t("settings_page.api_share_confirm_title")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("settings_page.api_share_confirm_body")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConfirmShare(false);
+                setSharePaired(false);
+              }}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={confirmShareOn}>
+              {t("settings_page.api_share_confirm_ok")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

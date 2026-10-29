@@ -3,8 +3,10 @@
 //! A real axum server is bound to an ephemeral port and driven with
 //! `reqwest`, so routing/middleware bugs surface here instead of at runtime.
 
+use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
 use printninja_lib::db::Database;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 
@@ -496,14 +498,31 @@ async fn a_print_without_data_is_not_a_validation_error() {
 /// the real pipeline instead of only inserting a "queued" row.
 fn router(db: &Db) -> axum::Router {
     let cache = std::env::temp_dir().join(format!("printninja_api_cache_{}", uuid::Uuid::new_v4()));
-    printninja_lib::api::routes::router_with_state(
+    let inner = printninja_lib::api::routes::router_with_state(
         printninja_lib::api::routes::ApiState::without_window(
             db.clone(),
             std::sync::Arc::new(printninja_lib::queue::PrintQueue::new()),
             cache,
         ),
         false,
-    )
+    );
+    // In-process requests carry no socket address; give them the loopback
+    // one the live server's `into_make_service_with_connect_info`
+    // provides. Tests that need a remote source insert their own
+    // `ConnectInfo`, which this keeps.
+    axum::Router::new()
+        .merge(inner)
+        .layer(axum::middleware::from_fn(
+            |mut req: Request<axum::body::Body>, next: axum::middleware::Next| async move {
+                if req.extensions().get::<ConnectInfo<SocketAddr>>().is_none() {
+                    req.extensions_mut().insert(ConnectInfo(SocketAddr::new(
+                        IpAddr::V4(Ipv4Addr::LOCALHOST),
+                        50000,
+                    )));
+                }
+                next.run(req).await
+            },
+        ))
 }
 
 // ───────────────────────────────────────────────────────────────
@@ -1245,4 +1264,168 @@ async fn render_serves_pdf_from_a_real_browser() {
             .collect::<String>()
     );
     assert!(body["render_ms"].is_number(), "{body}");
+}
+
+// ───────────────────────────────────────────────────────────────
+// paired-only LAN (Release A §3.1): require_paired_or_local
+// ───────────────────────────────────────────────────────────────
+
+/// GET with an explicit source address and optional bearer, bypassing
+/// the loopback default the `router()` helper installs.
+async fn lan_get(
+    app: axum::Router,
+    uri: &str,
+    ip: std::net::Ipv4Addr,
+    token: Option<&str>,
+) -> StatusCode {
+    let mut builder = Request::builder().uri(uri);
+    if let Some(t) = token {
+        builder = builder.header("authorization", format!("Bearer {t}"));
+    }
+    let mut req = builder.body(axum::body::Body::empty()).unwrap();
+    req.extensions_mut()
+        .insert(ConnectInfo(SocketAddr::new(IpAddr::V4(ip), 50000)));
+    app.oneshot(req).await.unwrap().status()
+}
+
+/// Distinct 10/8 sources per test: the failure memory is process-global,
+/// so tests must not spend each other's budgets.
+fn lan_ip(n: u8) -> std::net::Ipv4Addr {
+    std::net::Ipv4Addr::new(10, 99, 0, n)
+}
+
+#[tokio::test]
+async fn lan_with_valid_token_reaches_guarded_routes() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-1");
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(11),
+            Some("gate-token-1")
+        )
+        .await,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn lan_without_token_is_401_even_on_health() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-2");
+    // Health included: only the pairing introduction stays open.
+    assert_eq!(
+        lan_get(router(&db), "/v1/health", lan_ip(12), None).await,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        lan_get(router(&db), "/v1/printers", lan_ip(12), None).await,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
+async fn lan_with_wrong_token_is_401() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-3");
+    assert_eq!(
+        lan_get(router(&db), "/v1/printers", lan_ip(13), Some("wrong")).await,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
+async fn removed_token_fails_on_its_next_request() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-4");
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(14),
+            Some("gate-token-4")
+        )
+        .await,
+        StatusCode::OK
+    );
+    {
+        let guard = db.lock().unwrap();
+        guard
+            .connection()
+            .execute("DELETE FROM paired_devices WHERE id = 'phone-1'", [])
+            .unwrap();
+    }
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(14),
+            Some("gate-token-4")
+        )
+        .await,
+        StatusCode::UNAUTHORIZED,
+        "revocation takes effect on the next request"
+    );
+}
+
+#[tokio::test]
+async fn sharing_off_refuses_lan_but_loopback_still_passes() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-5");
+    {
+        let guard = db.lock().unwrap();
+        guard
+            .connection()
+            .execute(
+                "UPDATE settings SET value = 'false' WHERE key = 'render_share_enabled'",
+                [],
+            )
+            .unwrap();
+    }
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(15),
+            Some("gate-token-5")
+        )
+        .await,
+        StatusCode::FORBIDDEN,
+        "a valid token means nothing with sharing off"
+    );
+    // The PC's own UI and scripts are unaffected: loopback passes with no token.
+    let res = router(&db)
+        .oneshot(
+            Request::builder()
+                .uri("/v1/printers")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn repeated_failures_are_rate_limited() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-6");
+    let ip = lan_ip(16);
+    for _ in 0..10 {
+        assert_eq!(
+            lan_get(router(&db), "/v1/printers", ip, Some("wrong")).await,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    assert_eq!(
+        lan_get(router(&db), "/v1/printers", ip, Some("wrong")).await,
+        StatusCode::TOO_MANY_REQUESTS,
+        "the 11th failure inside a minute is throttled"
+    );
+    // A different source is unaffected by one address's budget.
+    assert_eq!(
+        lan_get(router(&db), "/v1/printers", lan_ip(17), Some("wrong")).await,
+        StatusCode::UNAUTHORIZED
+    );
 }

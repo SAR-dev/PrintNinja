@@ -127,7 +127,9 @@ async fn get_caps(app: axum::Router, token: Option<&str>) -> StatusCode {
         builder = builder.header("authorization", format!("Bearer {t}"));
     }
     let res = app
-        .oneshot(builder.body(axum::body::Body::empty()).unwrap())
+        .oneshot(with_loopback(
+            builder.body(axum::body::Body::empty()).unwrap(),
+        ))
         .await
         .unwrap();
     res.status()
