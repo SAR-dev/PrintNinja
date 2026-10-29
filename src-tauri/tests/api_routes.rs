@@ -2008,7 +2008,7 @@ async fn lan_token_dies_when_pc_signs_out() {
 }
 
 // ───────────────────────────────────────────────────────────────
-// guest pairs (docs/GUEST_PAIRING.md)
+// guest pairs (ARCHITECTURE §9)
 // ───────────────────────────────────────────────────────────────
 
 /// Insert a guest row directly (the claim path is covered in pairing_api).

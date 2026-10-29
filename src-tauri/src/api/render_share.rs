@@ -283,7 +283,7 @@ pub(crate) fn pc_account(conn: &rusqlite::Connection) -> Option<(String, String)
 /// Whether this pair is still good for `device`: claimed under the PC's
 /// current account, and the PC still signed in to it. A sign-out or an
 /// account switch disables existing pairs — they must be redone (§3.6).
-/// Guest pairs (docs/GUEST_PAIRING.md) skip this entirely: they were
+/// Guest pairs (ARCHITECTURE §9) skip this entirely: they were
 /// never claimed under an account, only expiry governs them (checked
 /// separately). Callers answer the generic 401 either way, so the phone
 /// cannot tell a disabled pair from a revoked one; both mean "pair again".
@@ -450,7 +450,7 @@ pub async fn require_peer_auth(
     };
     // A sign-out or account switch disables the pair (§3.6): generic 401,
     // like a revocation. Renders too — a disabled pair renders nothing.
-    // Expired guests fail the same way (docs/GUEST_PAIRING.md).
+    // Expired guests fail the same way (ARCHITECTURE §9).
     if !pair_unexpired(&device) || !pair_account_current(&state, &device) {
         return unauthorized();
     }
@@ -512,7 +512,7 @@ pub async fn require_paired_or_local(
     }
     // A sign-out or account switch disables the pair (§3.6): generic 401,
     // like a revocation — the phone pairs again. Expired guests fail the
-    // same way (docs/GUEST_PAIRING.md).
+    // same way (ARCHITECTURE §9).
     if !pair_unexpired(&device) || !pair_account_current(&state, &device) {
         return unauthorized();
     }

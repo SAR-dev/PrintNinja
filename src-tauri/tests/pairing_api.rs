@@ -582,7 +582,7 @@ async fn dashed_code_is_malformed_not_wrong() {
     assert_eq!(status, StatusCode::OK);
 }
 
-// ── guest invites (docs/GUEST_PAIRING.md) ──────────────────────────
+// ── guest invites (ARCHITECTURE §9) ───────────────────────────────
 
 /// Mint an invite straight into the DB (the command layer is thin).
 fn seed_invite(db: &Db, code: &str, expires_at: &str, uses_left: Option<i64>, can_print: bool) {
