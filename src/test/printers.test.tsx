@@ -247,3 +247,31 @@ describe("Printers page", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe("Print via PC notice", () => {
+  it("explains the idle list and offers the exit", async () => {
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "get_setting") {
+        if (args?.key === "print_via_pc") return "true";
+        return null;
+      }
+      if (cmd === "list_printers") return PRINTERS;
+      if (cmd === "enumerate_system_printers") return [];
+      return null;
+    });
+    renderPage();
+    expect(await screen.findByTestId("printers-via-pc-note")).toHaveTextContent(
+      /unused/,
+    );
+    fireEvent.click(screen.getByTestId("via-pc-exit"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("set_setting", {
+        key: "print_via_pc",
+        value: "false",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId("printers-via-pc-note")).toBeNull(),
+    );
+  });
+});

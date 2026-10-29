@@ -151,6 +151,8 @@ const ja: Translation = {
   },
   designer: {
     title: "デザイナー",
+    via_pc_note:
+      "PC経由印刷がオンの間、テンプレートはサーバーから同期されます — ここでは編集しません。",
     newTemplate: "新規テンプレート",
     settings: "設定",
     settings_description:
@@ -356,6 +358,9 @@ const ja: Translation = {
     via_pc_unreachable:
       "PCが応答しません — 電源が入っていて同じWi-Fiに接続されているか確認し、更新してください。",
     via_pc_no_pair: "自動化 → PCで印刷先のPCを選択してください。",
+    via_pc_exit: "このスマートフォンのプリンターを使う",
+    via_pc_exited:
+      "PC経由印刷をオフにしました — このスマートフォンで印刷します。",
     printed_via: "{{pc}}経由で印刷しました",
     sync_templates: "テンプレートを同期",
     synced_retry: "テンプレートを同期しました — 印刷を再試行してください。",
@@ -412,6 +417,8 @@ const ja: Translation = {
   },
   printers: {
     title: "プリンター設定",
+    via_pc_note:
+      "PC経由印刷がオンの間、ローカルプリンターは使われません — ジョブはPCのプリンターに送られます。",
     add_printer: "プリンターを追加",
     test_print: "テスト印刷",
     paper_width_mm: "用紙幅 (mm)",
