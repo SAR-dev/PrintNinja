@@ -744,6 +744,7 @@ mod tests {
             platform: "linux".into(),
             paired_at: String::new(),
             device_id: "phone".into(),
+            replaced_stale: false,
         }
     }
 

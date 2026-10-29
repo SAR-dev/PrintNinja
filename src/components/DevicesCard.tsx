@@ -19,8 +19,6 @@ import {
 } from "@/lib/apiServer";
 import {
   filterPairingInput,
-  formatPairingCode,
-  formatPairingCodeLive,
   isCompletePairingCode,
   normalizePairingCode,
   parsePairs,
@@ -1032,12 +1030,12 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
             id="devices-code"
             ref={codeInputRef}
             data-testid="devices-code-input"
-            placeholder="XYZX-YZZY"
+            placeholder="XXXXXXXX"
             autoComplete="off"
             autoCapitalize="characters"
             spellCheck={false}
             className="font-mono uppercase placeholder:opacity-50"
-            value={formatPairingCodeLive(code)}
+            value={code}
             onChange={(e) => {
               setCode(filterPairingInput(e.target.value));
               setFormError("");
@@ -1062,7 +1060,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
         {code && !complete && (
           <p className="text-xs text-muted-foreground">
             {t("settings_page.devices_code_hint_short", {
-              code: formatPairingCode(code),
+              code,
             })}
           </p>
         )}

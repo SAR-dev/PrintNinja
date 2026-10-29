@@ -30,10 +30,60 @@ export async function hasPairedProvider(): Promise<boolean> {
 }
 
 /**
- * Read the stored `render_pairs` JSON. Anything that is not a list of
- * objects with a string host and secret is dropped rather than trusted:
- * the setting can be edited by hand or left by an older version.
+ * Normalize a paired host for identity comparison: cosmetic differences
+ * (`PC.local` vs `pc.local`, `[::1]`, a trailing dot) must not fork one
+ * machine into two pairs.
  */
+export function normalizePairHost(host: string): string {
+  return host
+    .trim()
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.+$/, "")
+    .toLowerCase();
+}
+
+/** Address key: same key means the same endpoint, whatever the provider id. */
+export function pairAddressKey(host: string, port: number): string {
+  return `${normalizePairHost(host)}:${port}`;
+}
+
+export interface PhonePairMerge {
+  pairs: RenderPair[];
+  /** A differently-identified entry died (reset/reinstalled PC). */
+  replacedStale: boolean;
+}
+
+/**
+ * Merge a fresh pair into the stored list (mirrors Rust `merge_pair`):
+ * same provider (moved address) or same address (new provider id)
+ * replaces. The caller toasts when `replacedStale` is set.
+ */
+export function mergePhonePair(
+  pairs: RenderPair[],
+  next: RenderPair,
+): PhonePairMerge {
+  const key = pairAddressKey(next.host, next.port ?? 0);
+  let replacedStale = false;
+  const kept = pairs.filter((e) => {
+    const sameProvider =
+      !!next.provider_id && e.provider_id === next.provider_id;
+    const sameAddress = pairAddressKey(e.host, e.port ?? 0) === key;
+    const same = sameProvider || sameAddress;
+    if (same && e.provider_id !== next.provider_id) replacedStale = true;
+    return !same;
+  });
+  return { pairs: [...kept, next], replacedStale };
+}
+
+/** Groups sharing one normalized address (length > 1): the duplicates. */
+export function duplicatePairGroups(pairs: RenderPair[]): RenderPair[][] {
+  const by = new Map<string, RenderPair[]>();
+  for (const p of pairs) {
+    const k = pairAddressKey(p.host, p.port ?? 0);
+    by.set(k, [...(by.get(k) ?? []), p]);
+  }
+  return [...by.values()].filter((g) => g.length > 1);
+}
 export function parsePairs(raw: string | null): RenderPair[] {
   if (!raw) return [];
   try {
@@ -54,7 +104,7 @@ export function parsePairs(raw: string | null): RenderPair[] {
 /** Pairing-code alphabet: 32 symbols, no `0 O 1 I` (plan §3 decision 2). */
 export const PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-/** Uppercase, strip dashes and whitespace (the dash is cosmetic). */
+/** Uppercase, strip dashes and whitespace (tolerated in input, never shown). */
 export function normalizePairingCode(raw: string): string {
   return raw.toUpperCase().replace(/[-\s]/g, "");
 }
@@ -77,21 +127,4 @@ export function isCompletePairingCode(raw: string): boolean {
   return (
     n.length === 8 && n.split("").every((c) => PAIRING_ALPHABET.includes(c))
   );
-}
-
-/** Display form `K7QM-4XPD` for an 8-character code. */
-export function formatPairingCode(code: string): string {
-  const n = normalizePairingCode(code);
-  return n.length === 8 ? `${n.slice(0, 4)}-${n.slice(4)}` : code;
-}
-
-/**
- * Live display form for the pairing input: the hyphen appears as soon
- * as the first half is typed (`K7QM-4`), so the field always looks like
- * the code on the PC's screen. The stored value stays dashless —
- * `filterPairingInput` strips it on the way in.
- */
-export function formatPairingCodeLive(raw: string): string {
-  const n = normalizePairingCode(raw);
-  return n.length <= 4 ? n : `${n.slice(0, 4)}-${n.slice(4, 8)}`;
 }

@@ -157,7 +157,7 @@ const implemented: Record<string, Handler> = {
   },
   start_pairing: () => ({
     open: true,
-    code: "K7QM-4XPD",
+    code: "K7QM4XPD",
     expires_in: 30,
     host: "192.168.1.9",
     port: 17717,

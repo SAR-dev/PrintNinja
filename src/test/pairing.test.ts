@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import {
   filterPairingInput,
-  formatPairingCode,
-  formatPairingCodeLive,
   hasPairedProvider,
   isCompletePairingCode,
   normalizePairingCode,
@@ -114,17 +112,9 @@ describe("pairing codes", () => {
     expect(isCompletePairingCode("")).toBe(false);
   });
 
-  it("formats the display form with a dash", () => {
-    expect(formatPairingCode("K7QM4XPD")).toBe("K7QM-4XPD");
-  });
-
-  it("formats the live input with a progressive dash", () => {
-    expect(formatPairingCodeLive("")).toBe("");
-    expect(formatPairingCodeLive("K7")).toBe("K7");
-    expect(formatPairingCodeLive("K7QM")).toBe("K7QM");
-    expect(formatPairingCodeLive("K7QM4")).toBe("K7QM-4");
-    expect(formatPairingCodeLive("K7QM4XPD")).toBe("K7QM-4XPD");
-    // Stored values stay dashless; display-only normalization.
-    expect(formatPairingCodeLive("k7qm-4xpd!!")).toBe("K7QM-4XPD");
+  it("shows the plain code, with no display dash", () => {
+    // The dash is gone from every display; input tolerance for old
+    // habits stays in normalize/filter above.
+    expect(normalizePairingCode("K7QM4XPD")).toBe("K7QM4XPD");
   });
 });

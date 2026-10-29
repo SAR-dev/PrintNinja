@@ -215,7 +215,7 @@ describe("Automation → Phones and server", () => {
 
   const PAIRING = {
     open: true,
-    code: "K7QM-4XPD",
+    code: "K7QM4XPD",
     expires_in: 30,
     host: "192.168.1.9",
     port: 17717,
@@ -467,7 +467,7 @@ describe("Automation → Phones and server", () => {
         fireEvent.click(pairBtn);
         expect(
           await screen.findByTestId("devices-pairing-code"),
-        ).toHaveTextContent("K7QM-4XPD");
+        ).toHaveTextContent("K7QM4XPD");
         expect(
           screen.getByTestId("devices-pairing-countdown"),
         ).toHaveTextContent(/30/);
@@ -892,10 +892,9 @@ describe("Automation → Phones and server", () => {
         const submit = screen.getByTestId("devices-code-submit");
         expect(submit).toBeDisabled();
         // Lowercase, dashes and spaces are accepted; other characters
-        // never reach the field. Displayed uppercased with the hyphen,
-        // like the code on the PC's screen.
+        // never reach the field. Displayed uppercased with no hyphen.
         fireEvent.change(input, { target: { value: "k7qm-4xpd!!01" } });
-        expect(input).toHaveValue("K7QM-4XPD");
+        expect(input).toHaveValue("K7QM4XPD");
         expect(submit).toBeEnabled();
       } finally {
         webMode();
