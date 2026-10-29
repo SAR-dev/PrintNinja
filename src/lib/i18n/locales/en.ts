@@ -775,6 +775,8 @@ const en = {
     devices_removed: "Phone removed.",
     devices_rename: "Rename",
     devices_can_print: "Can print",
+    devices_account_same: "Same account",
+    devices_account_other: "Different account — pair again",
     devices_rename_save: "Save",
     devices_remove_yes: "Remove",
     devices_cancel: "Cancel",

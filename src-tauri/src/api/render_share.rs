@@ -212,9 +212,9 @@ pub(crate) struct AuthedDevice {
     pub device_id: Option<String>,
 }
 
-/// One hashed lookup answering both gate questions at once (Release A
-/// §3.1 plus §3.3): who is this token, and may they use the main routes?
-/// Length-guarded first so a megabyte Authorization header never reaches
+/// One hashed lookup answering every gate question at once (Release A
+/// §3.1 plus §3.3 and §3.6): who is this token, may they use the main
+/// routes, and which account claimed them? Length-guarded first so a megabyte Authorization header never reaches
 /// the hash. Anything about *why* it fails stays out of the message —
 /// callers answer 401 either way, so a scanner learns nothing.
 ///
@@ -224,6 +224,8 @@ pub(crate) struct AuthedDevice {
 pub(crate) struct DeviceAuth {
     pub device_id: String,
     pub can_print: bool,
+    pub account_id: Option<String>,
+    pub service_url: Option<String>,
 }
 
 pub(crate) fn lookup_device(state: &ApiState, presented: &str) -> Option<DeviceAuth> {
@@ -235,17 +237,60 @@ pub(crate) fn lookup_device(state: &ApiState, presented: &str) -> Option<DeviceA
         guard
             .connection()
             .query_row(
-                "SELECT id, can_print FROM paired_devices WHERE token_hash = ?1",
+                "SELECT id, can_print, account_id, service_url
+                 FROM paired_devices WHERE token_hash = ?1",
                 [&hash],
                 |r| {
                     Ok(DeviceAuth {
                         device_id: r.get(0)?,
                         can_print: r.get(1)?,
+                        account_id: r.get(2)?,
+                        service_url: r.get(3)?,
                     })
                 },
             )
             .ok()
     })
+}
+
+/// This PC's own account: the `share_user_id` saved at sign-in plus the
+/// service URL it belongs to (Release C §3.6). `None` while signed out —
+/// and a signed-out PC honours no pair, on any route.
+pub(crate) fn pc_account(conn: &rusqlite::Connection) -> Option<(String, String)> {
+    let user: String = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'share_user_id'",
+            [],
+            |r| r.get(0),
+        )
+        .ok()
+        .filter(|s: &String| !s.trim().is_empty())?;
+    let url: String = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'share_service_url'",
+            [],
+            |r| r.get(0),
+        )
+        .ok()
+        .filter(|s: &String| !s.trim().is_empty())?;
+    Some((user, url))
+}
+
+/// Whether this pair is still good for `device`: claimed under the PC's
+/// current account, and the PC still signed in to it. A sign-out or an
+/// account switch disables existing pairs — they must be redone (§3.6).
+/// Callers answer the generic 401 either way, so the phone cannot tell a
+/// disabled pair from a revoked one; both mean "pair again".
+fn pair_account_current(state: &ApiState, device: &DeviceAuth) -> bool {
+    state
+        .db
+        .lock()
+        .ok()
+        .and_then(|guard| pc_account(guard.connection()))
+        .is_some_and(|(user, url)| {
+            device.account_id.as_deref() == Some(user.as_str())
+                && device.service_url.as_deref() == Some(url.as_str())
+        })
 }
 
 /// Throttled `last_seen_at` touch (at most one write per 30 s per
@@ -377,8 +422,14 @@ pub async fn require_peer_auth(
             .into_response();
     }
     let presented = bearer_token(&req);
-    if lookup_device(&state, presented).is_none() {
+    let device = lookup_device(&state, presented);
+    let Some(device) = device else {
         note_auth_failure(&addr.ip());
+        return unauthorized();
+    };
+    // A sign-out or account switch disables the pair (§3.6): generic 401,
+    // like a revocation. Renders too — a disabled pair renders nothing.
+    if !pair_account_current(&state, &device) {
         return unauthorized();
     }
     touch_last_seen(&state, presented);
@@ -391,10 +442,11 @@ pub async fn require_peer_auth(
 /// API explorer's Rust proxy) pass through unchanged. Anything else must
 /// present a paired-device Bearer token; failures answer 401 with the
 /// same generic text whatever the reason, and repeated failures from one
-/// address answer 429. Sharing off refuses non-loopback with 403, like
-/// the peer gate. Pairing introduction (`/v1/pair/hello`,
-/// `/v1/pair/claim`) lives on its own sub-router and is exempt here —
-/// it has its own guards.
+/// address answer 429. A pair claimed under another account — or after
+/// the PC signed out — answers that same 401 (§3.6). Sharing off refuses
+/// non-loopback with 403, like the peer gate. Pairing introduction
+/// (`/v1/pair/hello`, `/v1/pair/claim`) lives on its own sub-router and
+/// is exempt here — it has its own guards.
 pub async fn require_paired_or_local(
     State(state): State<ApiState>,
     axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
@@ -435,6 +487,11 @@ pub async fn require_paired_or_local(
             Json(serde_json::json!({ "error": "printing is not allowed for this device" })),
         )
             .into_response();
+    }
+    // A sign-out or account switch disables the pair (§3.6): generic 401,
+    // like a revocation — the phone pairs again.
+    if !pair_account_current(&state, &device) {
+        return unauthorized();
     }
     // Stamp the caller's device for handlers: `POST /v1/print` records it
     // on the job row (Release B §3.4). The touch runs first so no borrow
