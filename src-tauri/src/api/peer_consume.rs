@@ -141,6 +141,12 @@ pub struct RenderPair {
     /// This phone's id, as the PC has it in `paired_devices.id`.
     #[serde(default)]
     pub device_id: String,
+    /// True when this claim replaced a differently-identified entry for
+    /// the same address (the PC was reset or reinstalled and minted a
+    /// new provider id): the phone announces it instead of leaving a
+    /// dead row behind.
+    #[serde(default)]
+    pub replaced_stale: bool,
 }
 
 /// The finished document the pipeline hands to a peer: stage 1–3 output.
@@ -922,6 +928,7 @@ mod peer_consume_tests {
             platform: String::new(),
             paired_at: String::new(),
             device_id: String::new(),
+            replaced_stale: false,
         }
     }
 

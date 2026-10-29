@@ -169,7 +169,13 @@ fn lookup_template(
 
 fn print_client(timeout_secs: u64) -> AppResult<reqwest::Client> {
     reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_millis(400))
+        // The peer path's connect timeout, not the pairing probe's: this
+        // dials one known PC, and a hasty connect fails on slow phone
+        // Wi-Fi where the Test button (same address, patient dial)
+        // succeeds. Same address, same outcome.
+        .connect_timeout(std::time::Duration::from_millis(
+            crate::api::peer_consume::PEER_CONNECT_TIMEOUT_MS,
+        ))
         .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()
         .map_err(|e| AppError::Internal(format!("http client failed: {e}")))
@@ -738,6 +744,7 @@ mod tests {
             platform: "linux".into(),
             paired_at: String::new(),
             device_id: "phone".into(),
+            replaced_stale: false,
         }
     }
 

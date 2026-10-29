@@ -292,6 +292,21 @@ export function ApiExplorerPanel({
         </Badge>
       </div>
 
+      {/* Same curl example the server tab used to carry: this tab is
+          where "try it" lives now. Port follows the live server. */}
+      <Card>
+        <CardContent className="space-y-1 pt-4">
+          <p className="text-xs font-medium">
+            {t("settings_page.api_curl_title")}
+          </p>
+          <pre className="text-[11px] overflow-x-auto whitespace-pre-wrap break-all">{`curl -X POST http://127.0.0.1:${
+            status?.port ?? 17717
+          }/v1/print \\
+  -H "Content-Type: application/json" \\
+  -d '{"template":"Receipt","printer":"Front Desk","data":{"order":1042}}'`}</pre>
+        </CardContent>
+      </Card>
+
       {!status?.running ? (
         <Card>
           <CardHeader>
