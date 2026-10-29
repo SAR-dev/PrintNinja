@@ -385,6 +385,21 @@ function PcSection() {
     }
   };
 
+  const setCanPrint = async (id: string, canPrint: boolean) => {
+    setBusy(true);
+    try {
+      const updated = await agent("set_paired_can_print", {
+        id,
+        can_print: canPrint,
+      });
+      setDevices((prev) => prev.map((d) => (d.id === id ? updated : d)));
+    } catch (e) {
+      toast.error(describeError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -577,6 +592,19 @@ function PcSection() {
                           </span>
                         </span>
                         <span className="flex shrink-0 items-center gap-1">
+                          <Label
+                            htmlFor={`devices-can-print-${d.id}`}
+                            className="text-xs text-muted-foreground"
+                          >
+                            {t("settings_page.devices_can_print")}
+                          </Label>
+                          <Switch
+                            id={`devices-can-print-${d.id}`}
+                            data-testid={`devices-can-print-${d.id}`}
+                            checked={d.can_print}
+                            disabled={busy}
+                            onCheckedChange={(v) => void setCanPrint(d.id, v)}
+                          />
                           <Button
                             variant="ghost"
                             size="sm"

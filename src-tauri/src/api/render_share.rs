@@ -321,6 +321,32 @@ fn bearer_token(req: &Request) -> &str {
         .unwrap_or("")
 }
 
+/// Whether the device behind `presented` may use the main routes:
+/// paired AND allowed to print. Render-only phones (`can_print` false)
+/// keep the peer routes, which never consult this flag. Unknown tokens
+/// read false too, but callers 401 those first.
+pub(crate) fn can_device_print(state: &ApiState, presented: &str) -> bool {
+    if presented.is_empty() || presented.len() > 256 {
+        return false;
+    }
+    let hash = crate::api::pair_code::token_hash(presented);
+    state
+        .db
+        .lock()
+        .ok()
+        .and_then(|guard| {
+            guard
+                .connection()
+                .query_row(
+                    "SELECT can_print FROM paired_devices WHERE token_hash = ?1",
+                    [&hash],
+                    |r| r.get::<_, bool>(0),
+                )
+                .ok()
+        })
+        .unwrap_or(false)
+}
+
 /// Generic 401 body: identical whatever the reason, so a scanner learns
 /// nothing about whether a token exists.
 fn unauthorized() -> Response {
@@ -405,6 +431,16 @@ pub async fn require_paired_or_local(
     if !is_known_token(&state, presented) {
         note_auth_failure(&addr.ip());
         return unauthorized();
+    }
+    // Render-only phones (can_print false) keep the peer routes, which
+    // never consult the flag — but every route behind this gate refuses
+    // them here.
+    if !can_device_print(&state, presented) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({ "error": "printing is not allowed for this device" })),
+        )
+            .into_response();
     }
     touch_last_seen(&state, presented);
     next.run(req).await

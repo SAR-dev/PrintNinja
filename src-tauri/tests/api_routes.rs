@@ -1429,3 +1429,37 @@ async fn repeated_failures_are_rate_limited() {
         StatusCode::UNAUTHORIZED
     );
 }
+
+#[tokio::test]
+async fn render_only_phone_keeps_peer_routes_but_loses_main_routes() {
+    let db = setup();
+    seed_sharing(&db, "gate-token-8");
+    {
+        let guard = db.lock().unwrap();
+        guard
+            .connection()
+            .execute(
+                "UPDATE paired_devices SET can_print = 0 WHERE id = 'phone-1'",
+                [],
+            )
+            .unwrap();
+    }
+    // Rendering still works: the peer gate never consults can_print.
+    let (status, _) = get_capabilities(router(&db), Some("gate-token-8")).await;
+    assert_eq!(status, StatusCode::OK);
+    // Every main route refuses instead.
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/printers",
+            lan_ip(18),
+            Some("gate-token-8")
+        )
+        .await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        lan_get(router(&db), "/v1/health", lan_ip(18), Some("gate-token-8")).await,
+        StatusCode::FORBIDDEN
+    );
+}

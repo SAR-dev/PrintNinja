@@ -719,6 +719,8 @@ pub struct PairedDeviceRow {
     pub platform: String,
     pub paired_at: String,
     pub last_seen_at: String,
+    /// Whether this phone may use the main routes. Render-only when false.
+    pub can_print: bool,
 }
 
 #[tauri::command]
@@ -727,7 +729,7 @@ pub fn list_paired_devices(db: State<DbState>) -> AppResult<Vec<PairedDeviceRow>
         .lock()
         .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     let mut stmt = guard.connection().prepare(
-        "SELECT id, name, display_name, platform, paired_at, last_seen_at
+        "SELECT id, name, display_name, platform, paired_at, last_seen_at, can_print
          FROM paired_devices ORDER BY paired_at DESC",
     )?;
     let rows = stmt
@@ -739,6 +741,7 @@ pub fn list_paired_devices(db: State<DbState>) -> AppResult<Vec<PairedDeviceRow>
                 platform: row.get(3)?,
                 paired_at: row.get(4)?,
                 last_seen_at: row.get(5)?,
+                can_print: row.get(6)?,
             })
         })?
         .filter_map(Result::ok)
@@ -811,7 +814,7 @@ pub fn rename_paired_device(
         }
     }
     Ok(conn.query_row(
-        "SELECT id, name, display_name, platform, paired_at, last_seen_at
+        "SELECT id, name, display_name, platform, paired_at, last_seen_at, can_print
          FROM paired_devices WHERE id = ?1",
         [&id],
         |row| {
@@ -822,6 +825,52 @@ pub fn rename_paired_device(
                 platform: row.get(3)?,
                 paired_at: row.get(4)?,
                 last_seen_at: row.get(5)?,
+                can_print: row.get(6)?,
+            })
+        },
+    )?)
+}
+
+/// Allow or forbid printing for one paired phone. Render-only phones
+/// keep rendering (the peer gate never consults this flag); the main
+/// routes refuse them with 403. Unknown ids 404 like the rename below.
+#[tauri::command(rename_all = "snake_case")]
+pub fn set_paired_can_print(
+    db: State<DbState>,
+    id: String,
+    can_print: bool,
+) -> AppResult<PairedDeviceRow> {
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let conn = guard.connection();
+    let exists: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM paired_devices WHERE id = ?1",
+            [&id],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    if exists == 0 {
+        return Err(AppError::NotFound(format!("paired phone '{id}' not found")));
+    }
+    conn.execute(
+        "UPDATE paired_devices SET can_print = ?1 WHERE id = ?2",
+        rusqlite::params![can_print as i64, id],
+    )?;
+    Ok(conn.query_row(
+        "SELECT id, name, display_name, platform, paired_at, last_seen_at, can_print
+         FROM paired_devices WHERE id = ?1",
+        [&id],
+        |row| {
+            Ok(PairedDeviceRow {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                display_name: row.get(2)?,
+                platform: row.get(3)?,
+                paired_at: row.get(4)?,
+                last_seen_at: row.get(5)?,
+                can_print: row.get(6)?,
             })
         },
     )?)
