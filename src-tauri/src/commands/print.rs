@@ -1516,13 +1516,29 @@ fn begin_job(db: &DbState, req: &PrintRequest, copies: i64, page_mm: (f64, f64))
         .as_ref()
         .and_then(|d| serde_json::to_string(d).ok());
 
+    // The template revision that printed (Release B §3.7): read off the
+    // template row, so every path — UI, API, replayed claim — records
+    // exactly which revision ran. Raw-HTML prints and missing rows stay NULL.
+    let template_revision: Option<i64> = req
+        .template_id
+        .and_then(|tid| {
+            conn.query_row(
+                "SELECT server_revision FROM templates WHERE id = ?1",
+                [tid],
+                |r| r.get::<_, Option<i64>>(0),
+            )
+            .ok()
+        })
+        .flatten();
+
     match conn.execute(
         "INSERT INTO print_jobs
            (template_id, printer_id, source, source_url,
             status, copies, settings_json, rendered_html, is_test,
-            started_at, idempotency_key, data_json, requested_by_device_id)
+            started_at, idempotency_key, data_json, requested_by_device_id,
+            template_revision)
          VALUES (?1, ?2, ?3, ?4, 'printing', ?5, ?6, '', ?7,
-                 datetime('now'), ?8, ?9, ?10)",
+                 datetime('now'), ?8, ?9, ?10, ?11)",
         rusqlite::params![
             req.template_id,
             printer_id,
@@ -1534,6 +1550,7 @@ fn begin_job(db: &DbState, req: &PrintRequest, copies: i64, page_mm: (f64, f64))
             req.idempotency_key,
             data_json,
             req.requested_by_device_id,
+            template_revision,
         ],
     ) {
         Ok(_) => Ok(conn.last_insert_rowid()),

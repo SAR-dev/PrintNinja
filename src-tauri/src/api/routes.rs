@@ -124,6 +124,7 @@ pub fn router_with_state(state: ApiState, lan_access: bool) -> Router {
 }
 
 use axum::response::IntoResponse;
+use rusqlite::OptionalExtension;
 
 // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -210,6 +211,14 @@ async fn list_templates(State(state): State<ApiState>) -> Result<Json<Value>, Ap
 #[derive(Deserialize)]
 struct PrintJobRequest {
     template: Option<String>,
+    /// The template's synced identity (Release B §3.7): the phone sends
+    /// the `server_id` plus the `server_revision` it rendered against, as
+    /// well as the name. The PC resolves by `server_id` — never by name
+    /// fallback — and refuses a missing or mismatched revision with 409
+    /// instead of printing the wrong thing. Absent for legacy callers,
+    /// which keep the name lookup.
+    template_server_id: Option<String>,
+    template_server_revision: Option<i64>,
     printer: String,
     data: Option<Value>,
     data_url: Option<String>,
@@ -228,6 +237,93 @@ struct PrintJobRequest {
 /// pre-DB limit check and the pipeline agree on where the number comes from.
 fn settings_copies(settings: &Value) -> u64 {
     settings.get("copies").and_then(|c| c.as_u64()).unwrap_or(1)
+}
+
+/// Name lookup for legacy callers: there is no HTML body in an API
+/// request, so without a template there would be nothing to render.
+fn resolve_template_by_name(
+    conn: &rusqlite::Connection,
+    name: Option<&str>,
+) -> Result<i64, ApiRejection> {
+    match name.filter(|n| !n.is_empty()) {
+        Some(n) => conn
+            .query_row(
+                "SELECT id FROM templates WHERE name = ?1 COLLATE NOCASE AND sync_state <> 'deleted_pending'",
+                [n],
+                |r| r.get(0),
+            )
+            .map_err(|_| ApiRejection::NotFound(format!("Template '{n}' not found"))),
+        None => Err(ApiRejection::BadRequest(
+            "`template` or `template_server_id` is required (the API has no inline HTML body)"
+                .into(),
+        )),
+    }
+}
+
+/// Version-checked lookup for synced callers (Release B §3.7): the phone
+/// sends the `server_id` plus the `server_revision` it holds, as well as
+/// the name. The PC finds its copy by `server_id` — never by name, so a
+/// renamed template still resolves and a same-named different template
+/// can never be picked — and compares revisions.
+///
+/// Answered 409 with a machine-readable `code`, never a silent wrong
+/// print: `template_missing` when the PC has no such template (or the
+/// phone sent no revision to compare — a never-synced template), and
+/// `template_stale` when the revisions differ or the PC's own copy has
+/// unsynced local edits the server and the phone do not have.
+fn resolve_template_by_version(
+    conn: &rusqlite::Connection,
+    server_id: &str,
+    client_revision: Option<i64>,
+) -> Result<i64, ApiRejection> {
+    let row: Option<(i64, Option<i64>, String)> = conn
+        .query_row(
+            "SELECT id, server_revision, sync_state FROM templates
+             WHERE server_id = ?1 AND sync_state <> 'deleted_pending'",
+            [server_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()
+        .map_err(ApiRejection::from)?;
+    let Some((id, pc_revision, sync_state)) = row else {
+        return Err(ApiRejection::Conflict(
+            format!("template '{server_id}' is not on this PC; sync templates first, then retry"),
+            "template_missing",
+            json!({ "template_server_id": server_id }),
+        ));
+    };
+    let Some(client_revision) = client_revision else {
+        return Err(ApiRejection::Conflict(
+            "this template never synced, so there is no revision to compare; sync templates first, then retry".into(),
+            "template_missing",
+            json!({ "template_server_id": server_id }),
+        ));
+    };
+    if sync_state != "synced" {
+        return Err(ApiRejection::Conflict(
+            "this PC's copy has unsynced local edits; sync templates first, then retry".into(),
+            "template_stale",
+            json!({
+                "template_server_id": server_id,
+                "client_revision": client_revision,
+                "pc_revision": pc_revision,
+            }),
+        ));
+    }
+    if pc_revision != Some(client_revision) {
+        return Err(ApiRejection::Conflict(
+            format!(
+                "template '{server_id}' is out of date on this PC; sync templates first, then retry"
+            ),
+            "template_stale",
+            json!({
+                "template_server_id": server_id,
+                "client_revision": client_revision,
+                "pc_revision": pc_revision,
+            }),
+        ));
+    }
+    Ok(id)
 }
 
 async fn print_job(
@@ -284,25 +380,14 @@ async fn print_job(
         let guard = db.lock().map_err(ApiRejection::from)?;
         let conn = guard.connection();
 
-        let template_id: Option<i64> = match &req.template {
-            Some(name) if !name.is_empty() => Some(
-                conn.query_row(
-                    "SELECT id FROM templates WHERE name = ?1 COLLATE NOCASE AND sync_state <> 'deleted_pending'",
-                    [name],
-                    |r| r.get(0),
-                )
-                .map_err(|_| ApiRejection::NotFound(format!("Template '{}' not found", name)))?,
-            ),
-            _ => None,
-        };
-
-        // A template is required: there is no HTML body in an API request,
-        // so without one there would be nothing to render.
-        let template_id = template_id.ok_or_else(|| {
-            ApiRejection::BadRequest(
-                "`template` is required (the API has no inline HTML body)".into(),
-            )
-        })?;
+        // A synced caller names the exact revision (Release B §3.7).
+        // A legacy caller sends only the name and keeps the old lookup.
+        let template_id =
+            if let Some(server_id) = req.template_server_id.as_deref().filter(|s| !s.is_empty()) {
+                resolve_template_by_version(conn, server_id, req.template_server_revision)?
+            } else {
+                resolve_template_by_name(conn, req.template.as_deref())?
+            };
 
         // Fail early with 404 rather than after a pointless render.
         let known: i64 = conn
@@ -319,7 +404,7 @@ async fn print_job(
             )));
         }
 
-        Some(template_id)
+        template_id
     };
 
     // Run the real pipeline. This used to insert a row with
@@ -353,7 +438,7 @@ async fn print_job(
             .get("http_method")
             .and_then(|v| v.as_str())
             .map(str::to_string),
-        template_id,
+        template_id: Some(template_id),
         data: req.data.clone(),
         data_url: req.data_url.clone(),
         test: req.test,
@@ -408,7 +493,7 @@ async fn get_job(
     let mut stmt = conn
         .prepare(
             "SELECT id, status, error, duration_ms, copies, source, created_at,
-                    requested_by_device_id
+                    requested_by_device_id, template_revision
              FROM print_jobs WHERE id = ?1",
         )
         .map_err(ApiRejection::from)?;
@@ -428,6 +513,7 @@ async fn get_job(
         "source": row.get::<_, String>(5)?,
         "created_at": row.get::<_, String>(6)?,
         "requested_by_device_id": row.get::<_, Option<String>>(7)?,
+        "template_revision": row.get::<_, Option<i64>>(8)?,
     })))
 }
 
@@ -438,7 +524,8 @@ async fn list_jobs(State(state): State<ApiState>) -> Result<Json<Value>, ApiReje
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, status, source, copies, created_at, requested_by_device_id
+            "SELECT id, status, source, copies, created_at, requested_by_device_id,
+                    template_revision
              FROM print_jobs ORDER BY id DESC LIMIT 200",
         )
         .map_err(ApiRejection::from)?;
@@ -452,6 +539,7 @@ async fn list_jobs(State(state): State<ApiState>) -> Result<Json<Value>, ApiReje
                 "copies": row.get::<_, i64>(3)?,
                 "created_at": row.get::<_, String>(4)?,
                 "requested_by_device_id": row.get::<_, Option<String>>(5)?,
+                "template_revision": row.get::<_, Option<i64>>(6)?,
             }))
         })
         .map_err(ApiRejection::from)?
@@ -656,6 +744,22 @@ impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, crate::db::Database>>
 
 impl IntoResponse for ApiRejection {
     fn into_response(self) -> Response {
+        // A version conflict carries a machine-readable `code` plus the
+        // revisions, so the phone can offer Sync instead of a dead end.
+        if let AppError::Conflict {
+            message,
+            code,
+            details,
+        } = &self.0
+        {
+            let mut body = serde_json::Map::with_capacity(4);
+            body.insert("error".to_string(), json!(message));
+            body.insert("code".to_string(), json!(code));
+            if let Some(extra) = details.as_object() {
+                body.extend(extra.clone());
+            }
+            return (StatusCode::CONFLICT, Json(Value::Object(body))).into_response();
+        }
         let (status, msg) = match &self.0 {
             AppError::NotFound(m) => (StatusCode::NOT_FOUND, m.clone()),
             AppError::Validation(m) => (StatusCode::BAD_REQUEST, m.clone()),
@@ -673,5 +777,13 @@ impl ApiRejection {
     #[allow(non_snake_case)]
     fn BadRequest(m: String) -> Self {
         ApiRejection(AppError::Validation(m))
+    }
+    #[allow(non_snake_case)]
+    fn Conflict(m: String, code: &str, details: Value) -> Self {
+        ApiRejection(AppError::Conflict {
+            message: m,
+            code: code.to_string(),
+            details,
+        })
     }
 }

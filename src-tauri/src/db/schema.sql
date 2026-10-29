@@ -84,7 +84,12 @@ CREATE TABLE IF NOT EXISTS print_jobs (
     -- local prints (UI, scripts, tests). Set by `POST /v1/print` from the
     -- authenticated device; the PC's history reads it as "printed for
     -- <phone name>". Revoking the phone NULLs it, keeping the row.
-    requested_by_device_id TEXT REFERENCES paired_devices(id) ON DELETE SET NULL
+    requested_by_device_id TEXT REFERENCES paired_devices(id) ON DELETE SET NULL,
+    -- The template's `server_revision` that printed (Release B §3.7),
+    -- read off the template row when the job opens. NULL for raw-HTML
+    -- prints and rows that predate it. History shows exactly which
+    -- revision printed.
+    template_revision INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS settings (
