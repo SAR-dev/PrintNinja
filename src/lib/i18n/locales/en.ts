@@ -2,6 +2,7 @@ const en = {
   common: {
     save: "Save",
     cancel: "Cancel",
+    loading: "Loading…",
     delete: "Delete",
     edit: "Edit",
     close: "Close",
@@ -1121,6 +1122,7 @@ const en = {
     tab_server: "API server",
     tab_explorer: "Try the API",
     tab_phones: "Phones",
+    tab_computer: "Computer",
     tab_links: "Deep links",
     server_title: "Local API server",
     open_explorer: "Try the API",

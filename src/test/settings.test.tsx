@@ -290,7 +290,7 @@ describe("Settings database reset", () => {
       });
       renderPage();
       open("Retention");
-      fireEvent.click(screen.getByTestId("settings-reset-database"));
+      fireEvent.click(await screen.findByTestId("settings-reset-database"));
       expect(
         await screen.findByText("Erase everything on this PC?"),
       ).toBeInTheDocument();
@@ -307,7 +307,7 @@ describe("Settings database reset", () => {
   it("does nothing when the confirmation is cancelled", async () => {
     renderPage();
     open("Retention");
-    fireEvent.click(screen.getByTestId("settings-reset-database"));
+    fireEvent.click(await screen.findByTestId("settings-reset-database"));
     expect(
       await screen.findByText("Erase everything on this PC?"),
     ).toBeInTheDocument();
