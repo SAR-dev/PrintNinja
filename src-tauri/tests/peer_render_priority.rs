@@ -35,13 +35,28 @@ fn setup_sharing(token: &str) -> Db {
                 [],
             )
             .unwrap();
+        // Signed-in PC (§3.6): the gate re-checks every token against this.
+        guard
+            .connection()
+            .execute(
+                "INSERT INTO settings (key, value) VALUES
+                     ('share_user_id', 'user-1'),
+                     ('share_service_url', 'https://share.test')
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [],
+            )
+            .unwrap();
         guard
             .connection()
             .execute(
                 "INSERT INTO paired_devices
-                     (id, name, display_name, platform, token_hash, paired_at, last_seen_at)
-                 VALUES ('phone-1', 'Test Phone', NULL, 'android', ?1, datetime('now'), datetime('now'))
-                 ON CONFLICT(id) DO UPDATE SET token_hash = excluded.token_hash",
+                     (id, name, display_name, platform, token_hash, paired_at, last_seen_at,
+                      account_id, service_url)
+                 VALUES ('phone-1', 'Test Phone', NULL, 'android', ?1, datetime('now'), datetime('now'),
+                         'user-1', 'https://share.test')
+                 ON CONFLICT(id) DO UPDATE SET token_hash = excluded.token_hash,
+                                                account_id = excluded.account_id,
+                                                service_url = excluded.service_url",
                 [&hash],
             )
             .unwrap();
