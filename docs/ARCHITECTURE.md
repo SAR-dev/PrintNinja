@@ -126,6 +126,27 @@ design from producing an unbounded document. When design and paper are the
 same size and margins are zero, the scale is exactly one and the design sits
 precisely where it was authored.
 
+### Pagination: content taller than the design
+
+A design's Height is the height of **one page**, and a record whose content
+is taller than that is not clipped: the rest continues on further pages of
+that height, each placed on the sheet exactly as the first is. How tall the
+content is only the browser knows, so it is measured once, by laying the
+finished document out at the design's own width and height and reading its
+scroll height (with a one pixel tolerance). A record that needs `n` pages is
+shown in a frame `n` pages tall, moved up by `k` pages and clipped to one for
+page `k`. Template `h-full` / `min-h-screen` elements therefore stretch over
+all `n` pages, so a footer pinned to the bottom lands on the last page.
+
+This too exists twice: the PDF measures and adds pages with a small script in
+the print document (`PAGINATE_SCRIPT` in `render/layout.rs`, awaited by the
+CDP renderer after web fonts load; a one-shot browser adds them from the
+frames' `load` events), and the Designer canvas and Print preview use
+`lib/render/paginate.ts`. Pages are cut at exact multiples of the Height, not
+at line or block boundaries. A record whose frames the script cannot read
+stays one page. Raster (ZPL/ESC-POS) output rasterizes the first sheet only,
+as before.
+
 Placement is the one piece of logic that exists twice — once in the browser
 for the preview and once in the backend for the real output. Both are pinned
 to a single shared table of expected results, so a change to one that isn't

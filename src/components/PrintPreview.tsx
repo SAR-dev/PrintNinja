@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { computePrintLayout, type Margins } from "@/lib/render/printLayout";
-
-/** CSS pixels per millimetre at 96 dpi (same constant the Designer canvas uses). */
-const MM_TO_PX = 3.7795;
+import {
+  MAX_PAGES_PER_DESIGN,
+  MM_TO_PX,
+  pageWindow,
+} from "@/lib/render/paginate";
+import { useDesignPageCounts } from "@/lib/hooks/useDesignPageCounts";
 
 /** Space around the sheets inside the scroll area (Tailwind p-4, both sides). */
 const PAD_X = 32;
@@ -73,16 +76,45 @@ export function PrintPreview({
     [fitMode, designW, designH, paperW, paperH, top, right, bottom, left],
   );
 
+  // A design's Height is one page; content taller than that continues on
+  // further pages of the same height (see lib/render/paginate.ts), each placed
+  // on the sheet exactly as page one is.
+  const designWpx = designW * MM_TO_PX;
+  const designHpx = designH * MM_TO_PX;
+  const pageCounts = useDesignPageCounts(
+    pages,
+    designWpx,
+    designHpx,
+    Math.max(1, Math.floor(MAX_PAGES_PER_DESIGN / layout.placements.length)),
+  );
+
   const sheets = useMemo(() => {
-    const out: { doc: string; offsetX: number; offsetY: number }[] = [];
-    for (const doc of pages) {
-      for (const p of layout.placements) {
-        if (out.length >= MAX_PREVIEW_SHEETS) return out;
-        out.push({ doc, offsetX: p.offsetX, offsetY: p.offsetY });
+    const out: {
+      doc: string;
+      offsetX: number;
+      offsetY: number;
+      /** Which page of the record this sheet shows, of how many. */
+      page: number;
+      pages: number;
+    }[] = [];
+    for (let i = 0; i < pages.length; i++) {
+      const n = pageCounts[i] ?? 1;
+      for (let k = 0; k < n; k++) {
+        for (const p of layout.placements) {
+          if (out.length >= MAX_PREVIEW_SHEETS) return out;
+          out.push({
+            doc: pages[i],
+            offsetX: p.offsetX,
+            // Page k sits one page (as drawn on the paper) higher up the frame.
+            offsetY: p.offsetY - k * layout.drawH,
+            page: k,
+            pages: n,
+          });
+        }
       }
     }
     return out;
-  }, [pages, layout]);
+  }, [pages, pageCounts, layout]);
 
   const paperWpx = paperW * MM_TO_PX;
   const paperHpx = paperH * MM_TO_PX;
@@ -139,10 +171,15 @@ export function PrintPreview({
                   top: sheet.offsetY * MM_TO_PX,
                   // The frame is the design's own size, like the Designer
                   // canvas; only the transform scales it onto the paper.
-                  width: designW * MM_TO_PX,
-                  height: designH * MM_TO_PX,
+                  // With several pages it is that many pages tall and
+                  // clipped to the one this sheet shows.
+                  width: designWpx,
+                  height: designHpx * sheet.pages,
                   transform: `scale(${layout.scale})`,
                   transformOrigin: "top left",
+                  clipPath:
+                    pageWindow(sheet.page, sheet.pages, designHpx, "px")
+                      .clipPath || undefined,
                 }}
               />
             </div>

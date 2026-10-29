@@ -388,15 +388,19 @@ impl<'a> Page<'a> {
             }
         }
 
-        // Web fonts decide the layout; the old one-shot path got this from
-        // headless rendering's own settle time.
+        // Web fonts decide the layout, and the layout decides how many pages a
+        // record takes. The print document (render/layout.rs) adds a record's
+        // later pages from its measured height, so: add them, let the fonts of
+        // every frame settle (each design page lives in its own iframe, and its
+        // web fonts load in that frame, not in this document), then measure
+        // again, because a font can change the height, and wait for any pages
+        // that added or dropped. A document without the script has no
+        // `__pnPaginate` and only waits for fonts, as it always did.
         conn.call(
             s,
             "Runtime.evaluate",
             json!({
-                // Each design page lives in its own iframe (render/layout.rs),
-                // and its web fonts load in that frame, not in this document.
-                "expression": "Promise.all([document.fonts ? document.fonts.ready : 0].concat(Array.from(document.querySelectorAll('iframe')).map(f => { try { const d = f.contentDocument; return d && d.fonts ? d.fonts.ready : 0; } catch (e) { return 0; } }))).then(() => true)",
+                "expression": "(async () => { const fonts = () => Promise.all([document.fonts ? document.fonts.ready : 0].concat(Array.from(document.querySelectorAll('iframe')).map(f => { try { const d = f.contentDocument; return d && d.fonts ? d.fonts.ready : 0; } catch (e) { return 0; } }))); const pn = window.__pnPaginate; if (pn) await pn(); await fonts(); if (pn) { await pn(); await fonts(); } return true; })()",
                 "awaitPromise": true,
                 "returnByValue": true
             }),

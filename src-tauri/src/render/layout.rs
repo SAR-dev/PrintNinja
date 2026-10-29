@@ -140,6 +140,81 @@ pub fn escape_srcdoc(doc: &str) -> String {
     doc.replace('&', "&amp;").replace('"', "&quot;")
 }
 
+/// Content-driven pagination, run by the print document itself.
+///
+/// The Height of a design is the height of one page. When a record's content
+/// is taller (a long item list, say), the rest continues on further pages of
+/// that height instead of being clipped. How tall the content is only the
+/// browser knows, so the sheets this module writes are page 1 of each record
+/// and this script, once a record's frame has loaded, measures it and adds
+/// pages 2..n: the frame grows to `n` pages tall, and each page shows its own
+/// window of it (`clip-path`) at the same place on the sheet as page 1. The
+/// Print page preview does the same in `src/lib/render/paginate.ts`.
+///
+/// `window.__pnPaginate()` re-measures and returns a promise that settles when
+/// every added frame has loaded. The CDP renderer awaits it (after web fonts,
+/// which change the height) before it prints; a one-shot browser gets the
+/// pages added from the frames' own `load` events, which run before the
+/// document's `load`. Without script access to the frames (`contentDocument`
+/// is null) a record stays one page, as it was before pagination existed.
+const PAGINATE_SCRIPT: &str = r#"(function(){
+var MM=96/25.4,CAP=200,state={};
+function r(v){return Math.round(v*1e4)/1e4}
+function num(f,a){return parseFloat(f.getAttribute(a))}
+function bases(i){return Array.prototype.slice.call(document.querySelectorAll('.pn-sheet[data-design="'+i+'"][data-page="0"]'))}
+function height(f){
+ try{
+  var d=f.contentDocument;
+  if(!d||!d.documentElement)return 0;
+  f.style.height=r(num(f,'data-dh'))+'mm';
+  return Math.max(d.documentElement.scrollHeight,d.body?d.body.scrollHeight:0);
+ }catch(e){return 0}
+}
+function place(f,k,n){
+ var dh=num(f,'data-dh');
+ f.style.height=r(dh*n)+'mm';
+ f.style.top=r(num(f,'data-oy')-k*num(f,'data-step'))+'mm';
+ f.style.clipPath=n>1?'inset('+r(k*dh)+'mm 0 '+r((n-k-1)*dh)+'mm 0)':'';
+}
+function paginate(i){
+ var base=bases(i);
+ if(!base.length)return Promise.resolve();
+ var f0=base[0].querySelector('iframe');
+ var n=Math.ceil((height(f0)-1)/(num(f0,'data-dh')*MM));
+ n=Math.max(1,Math.min(n||1,Math.floor(CAP/base.length)||1));
+ if(state[i]&&state[i].n===n){place(f0,0,n);return state[i].p}
+ Array.prototype.forEach.call(document.querySelectorAll('.pn-sheet[data-design="'+i+'"]:not([data-page="0"])'),function(e){e.remove()});
+ base.forEach(function(s){place(s.querySelector('iframe'),0,n)});
+ var last=base[base.length-1],loads=[];
+ for(var k=1;k<n;k++){
+  base.forEach(function(s){
+   var c=s.cloneNode(true),f=c.querySelector('iframe');
+   c.setAttribute('data-page',String(k));
+   place(f,k,n);
+   loads.push(new Promise(function(res){f.addEventListener('load',function(){res()},{once:true})}));
+   last.insertAdjacentElement('afterend',c);
+   last=c;
+  });
+ }
+ var p=Promise.all(loads);
+ state[i]={n:n,p:p};
+ return p;
+}
+function designs(){
+ var seen={},out=[];
+ Array.prototype.forEach.call(document.querySelectorAll('.pn-sheet[data-page="0"]'),function(s){var i=s.getAttribute('data-design');if(!seen[i]){seen[i]=1;out.push(i)}});
+ return out;
+}
+window.__pnLoaded=function(f){
+ var s=f.closest('.pn-sheet');
+ if(!s||s.getAttribute('data-page')!=='0')return;
+ f.setAttribute('data-l','1');
+ var i=s.getAttribute('data-design');
+ if(bases(i).every(function(b){return b.querySelector('iframe').getAttribute('data-l')==='1'}))paginate(i);
+};
+window.__pnPaginate=function(){return Promise.all(designs().map(paginate)).then(function(){return true})};
+})();"#;
+
 /// Build the printable document: one `.pn-sheet` per sheet, each exactly the
 /// paper size, holding the design pages as scaled `<iframe>`s.
 ///
@@ -181,12 +256,12 @@ html,body{{margin:0;padding:0;background:#fff}}\n\
         ph = fmt(paper_h),
     ));
 
-    for doc in design_docs {
+    for (i, doc) in design_docs.iter().enumerate() {
         let srcdoc = escape_srcdoc(doc);
         for p in &layout.placements {
             out.push_str(&format!(
-                "<div class=\"pn-sheet\"><div class=\"pn-content\" style=\"left:{cx}mm;top:{cy}mm;width:{cw}mm;height:{ch}mm\">\
-<iframe class=\"pn-design\" scrolling=\"no\" style=\"left:{ox}mm;top:{oy}mm;width:{dw}mm;height:{dh}mm;transform:scale({s})\" srcdoc=\"{srcdoc}\"></iframe>\
+                "<div class=\"pn-sheet\" data-design=\"{i}\" data-page=\"0\"><div class=\"pn-content\" style=\"left:{cx}mm;top:{cy}mm;width:{cw}mm;height:{ch}mm\">\
+<iframe class=\"pn-design\" scrolling=\"no\" style=\"left:{ox}mm;top:{oy}mm;width:{dw}mm;height:{dh}mm;transform:scale({s})\" data-dh=\"{dh}\" data-oy=\"{oy}\" data-step=\"{step}\" onload=\"window.__pnLoaded&&window.__pnLoaded(this)\" srcdoc=\"{srcdoc}\"></iframe>\
 </div></div>\n",
                 cx = fmt(layout.content_x),
                 cy = fmt(layout.content_y),
@@ -196,10 +271,14 @@ html,body{{margin:0;padding:0;background:#fff}}\n\
                 oy = fmt(p.offset_y),
                 dw = fmt(design_w),
                 dh = fmt(design_h),
+                step = fmt(layout.draw_h),
                 s = fmt(layout.scale),
             ));
         }
     }
+    out.push_str("<script>");
+    out.push_str(PAGINATE_SCRIPT);
+    out.push_str("</script>\n");
     out.push_str("</body>\n</html>\n");
     out
 }
@@ -377,6 +456,30 @@ mod tests {
         let out = sheets_document(&docs, "fit-width", 80.0, 400.0, 210.0, 297.0, M5, false);
         assert!(out.matches("class=\"pn-sheet\"").count() >= 2, "{out}");
         assert!(out.contains("top:-287mm"), "{out}");
+    }
+
+    #[test]
+    fn every_sheet_carries_what_the_pagination_script_needs() {
+        let docs = vec!["<p>a</p>".to_string(), "<p>b</p>".to_string()];
+        let out = sheets_document(&docs, "fit-width", 80.0, 100.0, 80.0, 100.0, M5, false);
+        // Page 1 of record 0 and 1; the script adds the rest.
+        assert!(out.contains("data-design=\"0\" data-page=\"0\""), "{out}");
+        assert!(out.contains("data-design=\"1\" data-page=\"0\""), "{out}");
+        // Design height, the frame's top on the sheet, and how far one page
+        // moves the frame (the design's height on the paper).
+        assert!(out.contains("data-dh=\"100\" data-oy=\"0\" data-step=\"87.5\""), "{out}");
+        assert!(out.contains("window.__pnLoaded"), "{out}");
+        assert_eq!(out.matches("<script>").count(), 1, "{out}");
+        assert!(out.contains("window.__pnPaginate"), "{out}");
+    }
+
+    #[test]
+    fn a_design_that_fits_is_written_exactly_as_before_pagination() {
+        let docs = vec!["<p>a</p>".to_string()];
+        let out = sheets_document(&docs, "fit-page", 102.0, 102.0, 210.0, 297.0, M5, false);
+        // No clip and no extra height until the script has measured something.
+        assert!(!out.contains("clip-path:"), "{out}");
+        assert!(out.contains("left:"), "{out}");
     }
 
     #[test]

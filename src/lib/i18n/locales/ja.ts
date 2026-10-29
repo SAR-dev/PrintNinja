@@ -199,6 +199,7 @@ const ja: Translation = {
     template_error: "テンプレートエラー:",
     canvas_preview: "キャンバスプレビュー",
     canvas_size: "{{w}} × {{h}} mm",
+    page_n_of: "{{n}} / {{total}} ページ",
     helpers_insert: "ヘルパーをクリックすると、カーソル位置に挿入されます:",
     helpers_available: "使用できるヘルパー:",
     helper_insert: "{{helper}}ヘルパーを挿入",
