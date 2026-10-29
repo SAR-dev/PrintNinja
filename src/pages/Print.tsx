@@ -34,6 +34,7 @@ import {
   isPrintViaPc,
   listPhonePairs,
   resolvePhonePair,
+  setPrintViaPcDevice,
 } from "@/lib/printViaPc";
 import type { PcPrinterInfo, RenderPair } from "@/lib/agent/types";
 import { cacheNow } from "@/lib/sync/useSyncStatus";
@@ -101,14 +102,25 @@ export function PrintPage() {
   const { status: pcStatus } = usePcStatus();
   const pcUnpaired = pcStatus.state === "down" && pcStatus.kind === "unpaired";
 
-  const refreshPcPrinters = async () => {
+  const refreshPcPrinters = async (pairId?: string | null) => {
     try {
-      const r = await fetchPcPrinters(viaPcDevice, true);
+      const r = await fetchPcPrinters(pairId ?? viaPcDevice, true);
       setPcPrinters(r.printers);
       setPcCached(r.cached);
       setPcFailed(false);
     } catch (e) {
       setPcFailed(true);
+      notifyError(describeError(e));
+    }
+  };
+
+  // Choosing here resolves the block in place: no trip to Automation.
+  const pickViaPcDevice = async (id: string) => {
+    try {
+      await setPrintViaPcDevice(id);
+      setViaPcDevice(id);
+      await refreshPcPrinters(id);
+    } catch (e) {
       notifyError(describeError(e));
     }
   };
@@ -660,10 +672,41 @@ export function PrintPage() {
             className="flex items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-danger"
           >
             <XCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
-            <p className="min-w-0 flex-1 text-sm font-medium">
-              {t("print.via_pc_no_pair")}
-            </p>
-            <ExitViaPcButton onExited={() => setViaPc(false)} />
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="text-sm font-medium">{t("print.via_pc_no_pair")}</p>
+              <p className="text-xs">{t("print.via_pc_choose_hint")}</p>
+              <div className="flex items-center gap-2">
+                <Label
+                  htmlFor="print-via-pc-picker"
+                  className="shrink-0 text-xs"
+                >
+                  {t("settings_page.via_pc_device")}
+                </Label>
+                <Select value="" onValueChange={(v) => void pickViaPcDevice(v)}>
+                  <SelectTrigger
+                    id="print-via-pc-picker"
+                    data-testid="print-via-pc-picker"
+                    aria-label={t("settings_page.via_pc_device")}
+                    className="min-w-0 flex-1"
+                  >
+                    <SelectValue
+                      placeholder={t("settings_page.via_pc_device_placeholder")}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pairs.map((p) => (
+                      <SelectItem
+                        key={p.provider_id || p.id}
+                        value={p.provider_id || p.id}
+                      >
+                        {p.name || p.host}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <ExitViaPcButton onExited={() => setViaPc(false)} />
+              </div>
+            </div>
           </div>
         ))}
 
