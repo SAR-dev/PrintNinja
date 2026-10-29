@@ -74,6 +74,13 @@ adding a second library for the same job. Join class names with `cn()` from `src
   showing who is signed in must reload on `printninja:session-started` (broadcast by the
   login/register funnel, the mirror of `session-ended`). Forgetting this shows the old
   session after signing in again.
+- **Guest entry.** `SignInScreen` offers "Continue as guest": no account, no
+  session, the app opens session-less (an unpaired phone lands on
+  `PairingGate`, where an invite code pairs over LAN). Remembered in
+  localStorage across restarts; any real sign-in clears it, so the next
+  session end returns to the sign-in screen. Share-dependent views keep
+  their existing signed-out states — nothing branches on guest mode
+  except the gate.
 - **Onboarding** is for operators only: three steps and two buttons, "Start printing" (opens
   `/print`) and "Set up this workstation" (opens `/settings?section=setup`). Printer, template
   and sharing setup is an admin job and lives in the Settings checklist.

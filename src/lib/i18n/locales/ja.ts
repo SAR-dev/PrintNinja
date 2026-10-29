@@ -65,6 +65,9 @@ const ja: Translation = {
     registering: "アカウントを作成しています…",
     switch_to_register: "初めての方はこちら: アカウントを作成",
     switch_to_sign_in: "アカウントをお持ちの方はこちら: サインイン",
+    continue_as_guest: "ゲストとして続ける",
+    guest_hint:
+      "アカウントなしでWi-Fi経由でPCとペアリングします。サーバーを使うときは設定からいつでもサインインできます。",
     session_expired:
       "セッションが終了しました。作業を続けるには、もう一度サインインしてください。このPCでの編集内容は保持されています。",
     unreachable_inline:

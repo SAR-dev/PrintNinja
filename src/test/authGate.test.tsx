@@ -9,7 +9,7 @@ import {
 import axe from "axe-core";
 import "@/lib/i18n";
 import { AuthGate } from "@/components/AuthGate";
-import { endSession, unpublishTemplate } from "@/lib/share/client";
+import { endSession, login, unpublishTemplate } from "@/lib/share/client";
 import {
   checkSession,
   defaultServiceUrl,
@@ -370,6 +370,39 @@ describe("sign-in gate", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
     expect(await screen.findByText("The app")).toBeVisible();
     expect(localStorage.getItem(TOKEN_KEY)).toBe("new");
+  });
+
+  it("continues as guest without an account and remembers it", async () => {
+    renderGate();
+    await screen.findByLabelText("Password");
+    fireEvent.click(screen.getByRole("button", { name: "Continue as guest" }));
+
+    // No server contact, no session — the app opens session-less.
+    expect(await screen.findByText("The app")).toBeVisible();
+    expect(calls).toEqual([]);
+    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem("printninja-guest-mode")).toBe("true");
+  });
+
+  it("skips sign-in at startup for a returning guest", async () => {
+    localStorage.setItem("printninja-guest-mode", "true");
+    renderGate();
+
+    expect(await screen.findByText("The app")).toBeVisible();
+    expect(screen.queryByLabelText("Password")).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it("a real sign-in ends guest mode", async () => {
+    localStorage.setItem(URL_KEY, SERVER);
+    localStorage.setItem("printninja-guest-mode", "true");
+    handler = (url) =>
+      url === `${SERVER}/v2/auth/login`
+        ? json({ token: "fresh", user: { id: "u1", handle: "sam" } })
+        : json({}, 404);
+    await login("sam", "correct horse");
+    expect(localStorage.getItem(TOKEN_KEY)).toBe("fresh");
+    expect(localStorage.getItem("printninja-guest-mode")).toBeNull();
   });
 });
 

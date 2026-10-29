@@ -63,6 +63,9 @@ const en = {
     registering: "Creating account...",
     switch_to_register: "New here? Create an account",
     switch_to_sign_in: "Already have an account? Sign in",
+    continue_as_guest: "Continue as guest",
+    guest_hint:
+      "Pair with a PC over Wi-Fi without an account. Sign in anytime from Settings to use the server.",
     session_expired:
       "Your session ended. Sign in again to keep working. Your edits on this PC are kept.",
     unreachable_inline:
