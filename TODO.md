@@ -11,6 +11,10 @@ Conventions used below:
 - **Timing source of truth:** open the finished job in History — every
   job carries its per-stage breakdown (fetch / template / layout /
   render / send / history / total). No logcat needed for these.
+- **Backend log without a terminal:** Settings → Diagnostics →
+  Download App Log (size-rotated file, newest chunk last). On desktop
+  the same lines go to stdout (`RUST_LOG=debug` for sub-stage detail);
+  on Android the file is the only practical source.
 - **A/B builds:** the v0.9.0 APK (GitHub releases) is the "before".
   Install it next to the current build to compare the same printer/job.
 - **Where to record numbers:** paste the tables into the tracking
