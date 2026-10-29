@@ -724,7 +724,7 @@ pub struct PairedDeviceRow {
     pub last_seen_at: String,
     /// Whether this phone may use the main routes. Render-only when false.
     pub can_print: bool,
-    /// Account both devices were signed in to at claim time (§3.6).
+    /// Account both devices were signed in to at claim time (ARCHITECTURE §9).
     /// `None` predates the check — and guests never have one.
     pub account_id: Option<String>,
     /// `owner` or `guest` (ARCHITECTURE §9). Guests pair by invite.
@@ -1253,7 +1253,7 @@ async fn claim_at(
     if status == reqwest::StatusCode::NOT_FOUND {
         return Err("Update PrintNinja on your PC, then pair again.".into());
     }
-    // Account refusals (§3.6) share 403 with "not open": the body's `code`
+    // Account refusals (ARCHITECTURE §9) share 403 with "not open": the body's `code`
     // tells them apart. Read it before the generic branch below.
     if status == reqwest::StatusCode::FORBIDDEN {
         let code = res
@@ -1325,7 +1325,7 @@ pub async fn pair_with_code(
             .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
         phone_device_id(guard.connection()).map_err(|e| AppError::Internal(e.to_string()))?
     };
-    // Same-account pairing (§3.6) plus guests (ARCHITECTURE §9):
+    // Same-account pairing (ARCHITECTURE §9) plus guests (ARCHITECTURE §9):
     // the phone always sends whatever account it has — possibly none —
     // and the PC decides. Requiring sign-in here would lock out guests
     // before the server ever sees the code.

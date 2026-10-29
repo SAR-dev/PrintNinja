@@ -239,7 +239,7 @@ function PcSection() {
         } catch {
           /* nothing open */
         }
-        // Sharing off means loopback-only (Release A §3.2): the bind
+        // Sharing off means loopback-only (ARCHITECTURE §9): the bind
         // follows, so a stopped-then-started server listens locally.
         await writeSetting("api_lan_access", "false");
       }
@@ -976,7 +976,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
   const [formError, setFormError] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [address, setAddress] = useState("");
-  // The account this phone pairs as (§3.6): shown so a "different
+  // The account this phone pairs as (ARCHITECTURE §9): shown so a "different
   // account" refusal names something the user recognizes. Null while
   // signed out or unreachable — the claim says "sign in first" then.
   const [accountHandle, setAccountHandle] = useState<string | null>(null);

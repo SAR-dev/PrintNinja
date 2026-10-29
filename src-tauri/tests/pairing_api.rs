@@ -47,7 +47,7 @@ fn setup() -> (Db, Window) {
                 [],
             )
             .unwrap();
-        // This PC is signed in (§3.6): claims without a matching phone
+        // This PC is signed in (ARCHITECTURE §9): claims without a matching phone
         // account are refused. Tests that need a signed-out PC delete
         // these rows after setup.
         guard
@@ -484,7 +484,7 @@ async fn claim_defaults_can_print_to_true() {
     assert_eq!(can_print, 1, "fresh pairs print");
 }
 
-// ── same-account pairing (Release C §3.6) ──────────────────────────
+// ── same-account pairing (ARCHITECTURE §9) ──────────────────────────
 
 /// A phone that sends no account is told to sign in first — and the code
 /// is not burned: signing in and retrying on the same window succeeds.

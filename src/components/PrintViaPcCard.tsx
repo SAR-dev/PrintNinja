@@ -23,7 +23,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 
 /**
- * Settings → Share: "Print via PC" (Release B §3.5). Android only — the
+ * Settings → Share: "Print via PC" (ARCHITECTURE §9). Android only — the
  * desktop prints locally, so nothing renders there.
  *
  * On, the print dialog sends the job to the chosen paired PC instead of
