@@ -136,7 +136,8 @@ export function SettingsPage() {
   // Declared up here: the palette effect below already depends on it.
   const [ready, setReady] = useState(false);
 
-  // Palette deep-link (`?section=&field=`): scroll the control into view  // and flash it. The ring is temporary — it only orients, the control
+  // Palette deep-link (`?section=&field=`): scroll the control into view
+  // and flash it. The ring is temporary — it only orients, the control
   // itself is unchanged.
   const field = searchParams.get("field");
   useEffect(() => {
