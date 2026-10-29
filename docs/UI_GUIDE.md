@@ -307,14 +307,23 @@ Every screen that loads data handles four states, each saying what happened and 
 | Error | Inline message with a retry action, for example "Can’t reach the share service" with "Try again" |
 | Offline or not configured | Say so and point to the fix ("Add a share service address in Settings"). Local features keep working. |
 
-**Toasts** (`sonner`, from `toast`) confirm the result of an action the person just took.
-The `Toaster` is mounted once in `src/main.tsx`; do not mount another.
+**Toasts** go through `src/lib/notify.ts` — nothing imports `sonner`
+directly (a guard test enforces it). The `Toaster` is mounted once in
+`src/main.tsx`; do not mount another.
 
-- Success: repeat the verb ("Template exported", "Version 3 saved", "Unpublished").
+- Success: repeat the verb ("Template exported", "Version 3 saved",
+  "Unpublished"). 3 s; info 4 s; errors wait for dismissal (swipe, ✕,
+  or their action button), never auto-vanish.
+- At most two visible; repeats replace by id. One summarized toast
+  beats a loop of them.
 - Error: say what failed, not just "Error" ("Template name required"). When an exception
   has a useful message, show it.
 - Toasts disappear, so never put the only copy of important information in one. Errors that
   need a decision stay on the page.
+- Phones sit bottom-center above the bottom nav (plus the Print bar on
+  `/print`) via `--toast-offset-bottom`, which Layout measures from the
+  real chrome. Open question, verify on a device: how the offset should
+  react when the keyboard is open (probably hide toasts below it).
 
 **Inline messages** use `role="alert"` and the `danger` or `destructive` text colour. A
 blocking problem inside a panel can use a `danger-soft` background with a `danger` border

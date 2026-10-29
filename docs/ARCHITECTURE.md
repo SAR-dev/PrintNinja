@@ -456,14 +456,28 @@ sign-out, or an account switch takes effect on the next request.
 
 ### Guests
 
-Owners prove who they are; guests prove they hold a time-boxed invite
-(docs/GUEST_PAIRING.md). The PC mints invite codes (expiry, optional
-max uses, print preset); a guest pairs with the code alone — no
-account, no window. Guest rows carry `role = 'guest'` and the invite
-expiry instead of an account, and both gates refuse them past expiry
-with the same generic 401. The account recheck never applies to
-guests: there is nothing to compare, so only expiry governs. Templates
-stay read-only structurally — the API serves names, never bodies.
+Owners prove who they are; guests prove they hold a time-boxed invite.
+The PC mints invite codes (expiry, optional max uses, print preset); a
+guest pairs with the code alone — no account, no window. Guest rows
+carry `role = 'guest'` and the invite expiry instead of an account,
+and both gates refuse them past expiry with the same generic 401. The
+account recheck never applies to guests: there is nothing to compare,
+so only expiry governs. Templates stay read-only structurally — the API
+serves names, never bodies.
+
+Decided, kept here so the plan file could go:
+
+- Identity: invite code only. The invite *is* the credential (entropy +
+  expiry + max-uses + 5-guess lockout); an account UUID was never doing
+  that work, and guests are the users least able to bear sign-in friction.
+- Scope per invite (render-only or print), stamped onto the fresh row,
+  still togglable per phone afterwards. All templates by name.
+- Defaults: 24 h, multi-use, print allowed; the owner narrows at mint.
+- Expired/exhausted invites answer 410 at claim ("ask for a new one");
+  spent pairs fail like revocations. Re-pairing follows the credential
+  just used (owner window promotes, invite demotes).
+- No per-template grants, no kiosk mode, no auto-merging guest rows by
+  device name (names collide across physical phones).
 
 ### Printing via a PC
 

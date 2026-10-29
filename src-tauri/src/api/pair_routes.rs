@@ -242,7 +242,7 @@ fn spend_invite(state: &ApiState, invite: &Invite) {
     }
 }
 
-/// Claim with a guest invite (docs/GUEST_PAIRING.md): no window, no
+/// Claim with a guest invite (ARCHITECTURE §9): no window, no
 /// account, just the invite. Mints the same per-device token; the row
 /// is `role = 'guest'` with the invite's expiry and print preset.
 fn claim_with_invite(
@@ -410,7 +410,7 @@ pub async fn claim(
     let platform = req.platform.unwrap_or_default();
     let platform: String = platform.trim().chars().take(32).collect();
 
-    // Guest invites (docs/GUEST_PAIRING.md) are tried before the window:
+    // Guest invites (ARCHITECTURE §9) are tried before the window:
     // they work with no window open, and a miss falls through to the
     // owner flow below untouched (no attempts spent either way).
     if let Some(invite) = lookup_invite(&state, &normalized) {
