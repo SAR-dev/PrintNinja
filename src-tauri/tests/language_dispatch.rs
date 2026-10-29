@@ -112,6 +112,7 @@ fn print_request(printer: &str) -> PrintRequest {
         test: None,
         source: Some("ui".to_string()),
         idempotency_key: None,
+        requested_by_device_id: None,
     }
 }
 

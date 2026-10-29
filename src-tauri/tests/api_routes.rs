@@ -1463,3 +1463,248 @@ async fn render_only_phone_keeps_peer_routes_but_loses_main_routes() {
         StatusCode::FORBIDDEN
     );
 }
+
+// ───────────────────────────────────────────────────────────────
+// print-via-PC job attribution + remote limits (Release B §3.4)
+// ───────────────────────────────────────────────────────────────
+
+/// POST with an explicit source address and optional bearer, like
+/// `lan_get` but with a JSON body.
+async fn lan_post(
+    app: axum::Router,
+    uri: &str,
+    ip: std::net::Ipv4Addr,
+    token: Option<&str>,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header("content-type", "application/json");
+    if let Some(t) = token {
+        builder = builder.header("authorization", format!("Bearer {t}"));
+    }
+    let mut req = builder
+        .body(axum::body::Body::from(body.to_string()))
+        .unwrap();
+    req.extensions_mut()
+        .insert(ConnectInfo(SocketAddr::new(IpAddr::V4(ip), 50000)));
+    let res = app.oneshot(req).await.unwrap();
+    let status = res.status();
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
+fn print_body() -> serde_json::Value {
+    serde_json::json!({
+        "template": "Receipt",
+        "printer": "Desk",
+        "data": {"order": {"id": 7}}
+    })
+}
+
+async fn get_body(app: axum::Router, uri: &str) -> (StatusCode, serde_json::Value) {
+    let res = app
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = res.status();
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
+/// A LAN print from a paired phone stamps the job with the phone's id,
+/// and both job endpoints report it. The print itself fails on CI (no
+/// spooler at 1.2.3.4) — the row and its attribution are the point.
+#[tokio::test]
+async fn lan_print_stamps_requesting_device_on_job_and_endpoints() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "attr-token-1");
+
+    let (status, _) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(19),
+        Some("attr-token-1"),
+        print_body(),
+    )
+    .await;
+    assert_ne!(status, StatusCode::UNAUTHORIZED, "paired token must pass");
+    assert_ne!(status, StatusCode::FORBIDDEN, "phone may print");
+
+    let (id, by): (i64, Option<String>) = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT id, requested_by_device_id FROM print_jobs ORDER BY id DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(by.as_deref(), Some("phone-1"), "job stamped with the phone");
+
+    let (status, body) = get_body(router(&db), &format!("/v1/jobs/{id}")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["requested_by_device_id"], "phone-1");
+    assert!(body.get("source").is_some(), "existing shape kept");
+
+    let (status, body) = get_body(router(&db), "/v1/jobs").await;
+    assert_eq!(status, StatusCode::OK);
+    let listed = body["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|j| j["id"] == id)
+        .expect("job listed");
+    assert_eq!(listed["requested_by_device_id"], "phone-1");
+}
+
+/// A loopback print (the PC's own UI/scripts) leaves the stamp empty.
+#[tokio::test]
+async fn loopback_print_leaves_requested_by_empty() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+
+    let res = router(&db)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/print")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(print_body().to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_ne!(res.status(), StatusCode::UNAUTHORIZED);
+
+    let by: Option<String> = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT requested_by_device_id FROM print_jobs ORDER BY id DESC LIMIT 1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(by, None, "local prints carry no device");
+
+    let (id,): (i64,) = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT id FROM print_jobs ORDER BY id DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?,)),
+        )
+        .unwrap();
+    let (_, body) = get_body(router(&db), &format!("/v1/jobs/{id}")).await;
+    assert!(body["requested_by_device_id"].is_null());
+}
+
+/// Over-max copies are refused with 400 before any job row exists — and
+/// a huge count cannot wrap through the old `as u32` cast into 1 copy.
+#[tokio::test]
+async fn print_rejects_copies_over_max_without_creating_a_job() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "attr-token-2");
+
+    for copies in [101u64, 1u64 << 40] {
+        let (status, body) = lan_post(
+            router(&db),
+            "/v1/print",
+            lan_ip(20),
+            Some("attr-token-2"),
+            serde_json::json!({
+                "template": "Receipt",
+                "printer": "Desk",
+                "data": {},
+                "settings": {"copies": copies}
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "copies={copies}");
+        assert!(
+            body["error"].as_str().unwrap_or("").contains("copies"),
+            "message names the limit: {body}"
+        );
+    }
+    let n: i64 = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row("SELECT COUNT(*) FROM print_jobs", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 0, "refused requests create no job");
+}
+
+/// An inline `data` payload over ~1 MiB is refused with 400 before any
+/// job row exists; big payloads go through `data_url` instead. Past the
+/// 2 MiB JSON body cap the framework answers 413 first — also no job.
+#[tokio::test]
+async fn print_rejects_oversize_data_without_creating_a_job() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "attr-token-3");
+
+    // Between the 1 MiB handler limit and the 2 MiB body cap: the
+    // handler refuses with a message naming `data`.
+    let (status, body) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(21),
+        Some("attr-token-3"),
+        serde_json::json!({
+            "template": "Receipt",
+            "printer": "Desk",
+            "data": {"blob": "x".repeat(1_500_000)}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body["error"].as_str().unwrap_or("").contains("data"),
+        "message names the limit: {body}"
+    );
+    // Past the body cap: the framework refuses before the handler runs.
+    let (status, _) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(21),
+        Some("attr-token-3"),
+        serde_json::json!({
+            "template": "Receipt",
+            "printer": "Desk",
+            "data": {"blob": "x".repeat(2 * 1024 * 1024)}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    let n: i64 = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row("SELECT COUNT(*) FROM print_jobs", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 0, "refused requests create no job");
+}

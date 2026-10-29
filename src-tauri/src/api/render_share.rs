@@ -203,32 +203,49 @@ fn sharing_on(state: &ApiState) -> bool {
         .is_ok_and(|v| v == "true")
 }
 
-/// Bearer-token verification shared by both gates below: hash the
-/// presented token and look it up in `paired_devices` (Release A §3.1).
+/// What the gate learned about the caller: `None` on loopback (the PC's
+/// own UI and local scripts, which need no device), `Some(id)` for a
+/// paired phone over LAN. `POST /v1/print` reads it to stamp
+/// `requested_by_device_id` on the job row (Release B §3.4).
+#[derive(Clone, Debug)]
+pub(crate) struct AuthedDevice {
+    pub device_id: Option<String>,
+}
+
+/// One hashed lookup answering both gate questions at once (Release A
+/// §3.1 plus §3.3): who is this token, and may they use the main routes?
 /// Length-guarded first so a megabyte Authorization header never reaches
 /// the hash. Anything about *why* it fails stays out of the message —
 /// callers answer 401 either way, so a scanner learns nothing.
-pub(crate) fn is_known_token(state: &ApiState, presented: &str) -> bool {
+///
+/// Render-only phones (`can_print` false) come back with `can_print`
+/// false: they keep the peer routes, which never consult the flag, while
+/// the main gate refuses them.
+pub(crate) struct DeviceAuth {
+    pub device_id: String,
+    pub can_print: bool,
+}
+
+pub(crate) fn lookup_device(state: &ApiState, presented: &str) -> Option<DeviceAuth> {
     if presented.is_empty() || presented.len() > 256 {
-        return false;
+        return None;
     }
     let hash = crate::api::pair_code::token_hash(presented);
-    state
-        .db
-        .lock()
-        .ok()
-        .and_then(|guard| {
-            let n: i64 = guard
-                .connection()
-                .query_row(
-                    "SELECT COUNT(*) FROM paired_devices WHERE token_hash = ?1",
-                    [&hash],
-                    |r| r.get(0),
-                )
-                .ok()?;
-            Some(n > 0)
-        })
-        .unwrap_or(false)
+    state.db.lock().ok().and_then(|guard| {
+        guard
+            .connection()
+            .query_row(
+                "SELECT id, can_print FROM paired_devices WHERE token_hash = ?1",
+                [&hash],
+                |r| {
+                    Ok(DeviceAuth {
+                        device_id: r.get(0)?,
+                        can_print: r.get(1)?,
+                    })
+                },
+            )
+            .ok()
+    })
 }
 
 /// Throttled `last_seen_at` touch (at most one write per 30 s per
@@ -321,32 +338,6 @@ fn bearer_token(req: &Request) -> &str {
         .unwrap_or("")
 }
 
-/// Whether the device behind `presented` may use the main routes:
-/// paired AND allowed to print. Render-only phones (`can_print` false)
-/// keep the peer routes, which never consult this flag. Unknown tokens
-/// read false too, but callers 401 those first.
-pub(crate) fn can_device_print(state: &ApiState, presented: &str) -> bool {
-    if presented.is_empty() || presented.len() > 256 {
-        return false;
-    }
-    let hash = crate::api::pair_code::token_hash(presented);
-    state
-        .db
-        .lock()
-        .ok()
-        .and_then(|guard| {
-            guard
-                .connection()
-                .query_row(
-                    "SELECT can_print FROM paired_devices WHERE token_hash = ?1",
-                    [&hash],
-                    |r| r.get::<_, bool>(0),
-                )
-                .ok()
-        })
-        .unwrap_or(false)
-}
-
 /// Generic 401 body: identical whatever the reason, so a scanner learns
 /// nothing about whether a token exists.
 fn unauthorized() -> Response {
@@ -386,7 +377,7 @@ pub async fn require_peer_auth(
             .into_response();
     }
     let presented = bearer_token(&req);
-    if !is_known_token(&state, presented) {
+    if lookup_device(&state, presented).is_none() {
         note_auth_failure(&addr.ip());
         return unauthorized();
     }
@@ -407,10 +398,12 @@ pub async fn require_peer_auth(
 pub async fn require_paired_or_local(
     State(state): State<ApiState>,
     axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
-    req: Request,
+    mut req: Request,
     next: Next,
 ) -> Response {
     if addr.ip().is_loopback() {
+        req.extensions_mut()
+            .insert(AuthedDevice { device_id: None });
         return next.run(req).await;
     }
     if !sharing_on(&state) {
@@ -428,21 +421,28 @@ pub async fn require_paired_or_local(
             .into_response();
     }
     let presented = bearer_token(&req);
-    if !is_known_token(&state, presented) {
+    let device = lookup_device(&state, presented);
+    let Some(device) = device else {
         note_auth_failure(&addr.ip());
         return unauthorized();
-    }
+    };
     // Render-only phones (can_print false) keep the peer routes, which
     // never consult the flag — but every route behind this gate refuses
     // them here.
-    if !can_device_print(&state, presented) {
+    if !device.can_print {
         return (
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({ "error": "printing is not allowed for this device" })),
         )
             .into_response();
     }
+    // Stamp the caller's device for handlers: `POST /v1/print` records it
+    // on the job row (Release B §3.4). The touch runs first so no borrow
+    // of the request is live across the extensions insert.
     touch_last_seen(&state, presented);
+    req.extensions_mut().insert(AuthedDevice {
+        device_id: Some(device.device_id),
+    });
     next.run(req).await
 }
 
