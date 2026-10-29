@@ -2,7 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ServerUnreachableScreen } from "@/components/ServerUnreachableScreen";
 import { SignInScreen } from "@/components/SignInScreen";
-import { getServiceUrl, onSessionEnded } from "@/lib/share/client";
+import {
+  getServiceUrl,
+  isGuestMode,
+  onSessionEnded,
+  setGuestMode,
+} from "@/lib/share/client";
 import {
   checkSession,
   canOpenOffline,
@@ -75,9 +80,22 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     setGate({ kind: "signin", url: result.url, expired: false });
   }, []);
 
+  // Entering without an account (guest invite pairing needs no session).
+  // Remembered across restarts; a real sign-in clears it again.
+  const enterAsGuest = useCallback(() => {
+    setGuestMode(true);
+    setGate({ kind: "ready" });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     void checkSession().then((result) => {
+      // A returning guest skips the sign-in screen: there is still no
+      // session, and pairing stays LAN-only inside.
+      if (!cancelled && result.state === "signed_out" && isGuestMode()) {
+        setGate({ kind: "ready" });
+        return;
+      }
       if (!cancelled) apply(result);
     });
     return () => {
@@ -143,6 +161,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           initialUrl={gate.url}
           notice={gate.expired ? t("auth.session_expired") : undefined}
           onSignedIn={() => setGate({ kind: "ready" })}
+          onGuest={enterAsGuest}
         />
       )}
 

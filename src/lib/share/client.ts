@@ -132,6 +132,29 @@ export function onSessionStarted(cb: () => void): () => void {
   return () => window.removeEventListener(SESSION_STARTED_EVENT, cb);
 }
 
+const GUEST_MODE_KEY = "printninja-guest-mode";
+
+/** Session-less entry: the person skipped sign-in to pair over LAN
+ * (guest invite or owner code typed on the PC side need no account on
+ * this device). Device-local UI state, so plain localStorage — it must
+ * work in web mode too, and it is read synchronously at startup. */
+export function isGuestMode(): boolean {
+  try {
+    return localStorage.getItem(GUEST_MODE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function setGuestMode(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(GUEST_MODE_KEY, "true");
+    else localStorage.removeItem(GUEST_MODE_KEY);
+  } catch {
+    /* private mode; guest lasts until reload */
+  }
+}
+
 /** Forget the stored token and account id, and send the app back to
  * sign-in. A device with no stored id simply signs in again (ARCHITECTURE §9). */
 export async function endSession(
@@ -186,6 +209,9 @@ async function authRequest(
   // The account this session belongs to, for the same-account pairing
   // check (ARCHITECTURE §9). Stored with the URL it belongs to (already in settings).
   await setShareUserId(data.user.id);
+  // A real sign-in always ends a guest visit: the next session end
+  // returns to the sign-in screen, not to session-less mode.
+  setGuestMode(false);
   window.dispatchEvent(new CustomEvent(SESSION_STARTED_EVENT));
   return data;
 }
