@@ -125,6 +125,9 @@ const job = (over: Partial<HistoryJob>): HistoryJob => ({
   finished_at: "2026-01-02T10:00:02Z",
   duration_ms: 2000,
   timings_json: null,
+  requested_by_device_id: null,
+  template_revision: null,
+  printed_by: null,
   ...over,
 });
 

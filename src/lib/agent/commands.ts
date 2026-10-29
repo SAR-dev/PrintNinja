@@ -23,6 +23,9 @@ import type {
   PeerCapabilities,
   PeerRenderArgs,
   PeerRenderResult,
+  RemotePrintArgs,
+  RemotePrintResult,
+  RemotePrintersResult,
   RenderPair,
   QueuedUseRow,
   RenderShareStatus,
@@ -139,6 +142,13 @@ export interface AgentCommands {
   // Printing
   print_html: [{ req: PrintHtmlReq }, PrintResponse];
   spike_test_print: [{}, PrintResponse];
+  /** Print one job through a paired PC instead of the local pipeline. */
+  remote_print: [{ args: RemotePrintArgs }, RemotePrintResult];
+  /** The paired PC's printers (live, else the last good list). */
+  remote_printers: [
+    { pair_id?: string | null; refresh?: boolean | null },
+    RemotePrintersResult,
+  ];
   // Fonts
   list_fonts: [{}, FontRow[]];
   upload_font: [UploadFontReq, FontRow];
