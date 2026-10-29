@@ -412,7 +412,9 @@ const ja: Translation = {
     preview_empty_template:
       "このテンプレートは空です。デザイナーで開いて保存してください。",
     preview_data_failed:
-      "URLからデータを読み込めませんでした（{{error}}）。サンプルデータを表示しています。",
+      "URLからデータを読み込めませんでした（{{error}}）。サンプルデータを表示しています。印刷時にはサーバー側でURLを読み込むため、印刷は成功することがあります。",
+    preview_data_timeout:
+      "URLの応答に時間がかかりすぎました。サンプルデータを表示しています。印刷時にはサーバー側でURLを読み込むため、印刷は成功することがあります。",
     preview_empty_data: "データが空の配列のため、印刷するものがありません。",
     preview_truncated:
       "{{total}}ページ中、最初の{{shown}}ページを表示しています。印刷にはすべて含まれます。",
@@ -1250,6 +1252,15 @@ const ja: Translation = {
     endpoint_print: "テンプレートをレンダリングして印刷",
     endpoint_print_desc:
       "実際に印刷します。テンプレートとプリンターは必須、データは任意です。再試行しうるリクエストにはIdempotency-Keyを付けて、二重印刷を防いでください。",
+    endpoint_hello: "ペアリングの紹介",
+    endpoint_hello_desc:
+      "完全公開：このPCの名前とレンダリング可否を返します。パラメーターもトークンも不要です。",
+    endpoint_claim: "ペアリングコードの利用",
+    endpoint_claim_desc:
+      "完全公開ですが知識で保護されています：8文字のオーナーコード（90秒のウィンドウ）またはゲスト招待と、この呼び出し元の情報を送ります。デバイスごとのトークンを返します。",
+    claim_warning:
+      "このPCとデバイスがペアリングされます。スマートフォンタブに表示され、そこから削除できます。",
+    example_claim: "例: 利用ボディ",
   },
   errors: {
     kind_database: "データベースエラー: {{detail}}",

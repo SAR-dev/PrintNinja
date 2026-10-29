@@ -64,6 +64,9 @@ beforeEach(() => {
     orientation: "portrait",
     paperW: null,
     paperH: null,
+    dataUrl: "",
+    httpMethod: "GET",
+    useTestData: false,
   });
   invoke.mockImplementation(async (cmd: string) => {
     if (cmd === "list_printers" || cmd === "enumerate_system_printers")
@@ -587,6 +590,71 @@ describe("unpaired phone on the Print page", () => {
       );
     } finally {
       ua.mockRestore();
+    }
+  });
+
+  it("debounces data-URL preview fetches while typing", async () => {
+    const fetchMock = vi.fn(
+      async (_url: string): Promise<Response> =>
+        new Response(JSON.stringify({ hello: "world" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      renderPage();
+      await screen.findByTitle("Print preview");
+      const input = screen.getByLabelText("Data URL");
+      fireEvent.change(input, { target: { value: "https://a.example/1" } });
+      fireEvent.change(input, { target: { value: "https://a.example/12" } });
+      fireEvent.change(input, { target: { value: "https://a.example/123" } });
+      // Still settling: no request yet, so typing never POSTs per keystroke.
+      expect(fetchMock).not.toHaveBeenCalled();
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1), {
+        timeout: 3000,
+      });
+      expect(fetchMock.mock.calls[0][0]).toBe("https://a.example/123");
+    } finally {
+      vi.unstubAllGlobals();
+      usePrintStore.setState({ dataUrl: "" });
+    }
+  });
+
+  it("says a slow data URL may still print", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new DOMException("The operation was aborted.", "AbortError");
+      }),
+    );
+    try {
+      usePrintStore.setState({ dataUrl: "https://slow.example/data" });
+      renderPage();
+      expect(
+        await screen.findByText(/took too long to answer/),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/may still work/)).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+      usePrintStore.setState({ dataUrl: "" });
+    }
+  });
+
+  it("says a failed data URL may still print server-side", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    try {
+      usePrintStore.setState({ dataUrl: "https://down.example/data" });
+      renderPage();
+      expect(
+        await screen.findByText(/Could not load data from the URL/),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/may still work/)).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+      usePrintStore.setState({ dataUrl: "" });
     }
   });
 });
