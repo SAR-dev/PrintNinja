@@ -398,6 +398,15 @@ it. The phone types the code; while a window is open the PC answers a
 discovery hello, and the phone otherwise probes its own /24 for it, with
 a typed address as fallback.
 
+Both devices must be signed in to the same account on the same server:
+the claim carries the phone's account id and service URL, the PC
+compares them with its own, and a mismatch (or a signed-out side) is
+refused before the code is spent. The verified account is stored on the
+pair row, and every later request re-checks it against the PC's current
+account — signing out or switching account disables existing pairs, and
+they must be redone. An account id is an identifier, not a secret: it
+never replaces the token or the one-time code.
+
 The code is only the introduction: claiming it mints a per-device token
 (the PC stores just its hash in a `paired_devices` registry), and the
 window closes. One active code at a time; five wrong guesses close the
@@ -427,6 +436,56 @@ Three rules keep this safe:
 The code is an introduction, not proof of identity, and traffic is
 plain HTTP on the local network. Pinned encryption is a planned
 hardening, not part of this design.
+
+### Who may use the API
+
+The render routes (`/v1/render`, `/v1/capabilities`) always needed a
+paired-device token. Since v0.15.0 the main routes (`/v1/print`,
+`/v1/printers`, `/v1/templates`, `/v1/jobs*`, `/v1/metrics*`,
+`/v1/openapi.json`) do too: loopback callers (the PC's own UI and local
+scripts) pass unchanged, but any LAN caller must present its
+per-device Bearer token. Unknown tokens get the same generic 401
+whatever the reason, and repeated failures from one address get 429.
+There is no API key and no CORS wildcard — scripts that need the API
+run on the PC itself.
+
+Each phone additionally carries a print permission (`can_print`, on by
+default, toggled per phone on the PC). Render-only phones keep the
+render routes; every main route refuses them with 403. A removal, a
+sign-out, or an account switch takes effect on the next request.
+
+### Printing via a PC
+
+Rendering borrows the PC's engine; printing via a PC borrows its
+printers. On Android, "Print via PC" reroutes the print dialog from the
+local pipeline to `POST /v1/print` on the chosen paired PC: template
+name plus the sync identity (`server_id`, `server_revision`), the PC's
+printer name, data, and settings. The PC prints with the same pipeline
+as its own UI — including the per-printer queue — and the phone polls
+`GET /v1/jobs/{id}` for the outcome.
+
+Three rules govern it:
+
+- **No fallback.** While the flag is on the phone calls no local
+  transport at all. An unreachable PC or a rejected token fails the job
+  with the reason ("PC not reachable", "removed on the PC"); printing
+  locally means turning the flag off. Retries reuse the caller's
+  `Idempotency-Key`, so a timeout never prints twice.
+- **The template must match.** The PC resolves by `server_id`, never by
+  name, and compares revisions: a missing template is 409
+  `template_missing`, a different revision (or unsynced local edits on
+  the PC's copy) is 409 `template_stale` with both revisions, and the
+  phone offers Sync instead of printing wrongly. Legacy name-only
+  callers keep the old lookup.
+- **Remote jobs are bounded.** Inline `data` over ~1 MiB and copies over
+  100 are refused before any job row exists; the pipeline itself rejects
+  over-max copies and records, so no caller can make a printer eat an
+  unbounded batch.
+
+Both histories tell the story: the PC's job row carries
+`requested_by_device_id` (shown as "from \<phone\>" until a revocation
+clears it), and the phone writes its own row marked "printed by \<PC\>"
+with the revision that ran.
 
 ### Choosing a PC and asking it
 
