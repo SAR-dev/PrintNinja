@@ -56,6 +56,15 @@ describe("describeError", () => {
       "PDFのレンダリングが 75 秒でタイムアウトしました",
     );
   });
+
+  it("explains the server's generic 403 instead of leaking 'Not allowed'", async () => {
+    // A save that PUTs to a template id owned by a different account.
+    expect(describeError(new Error("Not allowed"))).toContain(
+      "different account",
+    );
+    await setLanguage("ja");
+    expect(describeError(new Error("Not allowed"))).toContain("別のアカウント");
+  });
   it("labels an unmapped variant and keeps the raw detail", async () => {
     await setLanguage("ja");
     expect(describeError({ Internal: "disk exploded" })).toBe(

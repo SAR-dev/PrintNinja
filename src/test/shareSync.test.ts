@@ -324,7 +324,7 @@ describe("overwriteWithMine", () => {
 });
 
 describe("createTemplateOnServer", () => {
-  it("PUTs the starter copy, then caches the row synced at that revision", async () => {
+  it("PUTs the new copy, then caches the row synced at that revision", async () => {
     client.putRemoteTemplate.mockResolvedValue({ ...REMOTE, revision: 1 });
     invoke.mockImplementation(async (cmd: string) => {
       if (cmd === "create_template") return { id: 12 };

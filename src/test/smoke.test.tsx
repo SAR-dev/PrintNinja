@@ -15,8 +15,8 @@ import { DesignerPage } from "@/pages/Designer";
 // The shell and every page read settings and lists over IPC on mount. Without a
 // stub each of those calls fails in jsdom, and `src/lib/invoke` logs the failure
 // to console.error, which the "without errors" test below then fails on. The
-// answers are the ones a fresh install gives: no printers, no jobs, and the
-// starter templates seeded as a real row.
+// answers are the ones a fresh install gives: no printers, no jobs, no
+// templates at all.
 const TEMPLATE_ROW = {
   id: 1,
   name: "Receipt",
@@ -41,7 +41,7 @@ const EMPTY_LISTS = new Set([
 ]);
 const invoke = vi.fn(async (cmd: string) => {
   if (EMPTY_LISTS.has(cmd)) return [];
-  // Each seeded starter needs its own id, or the lists render duplicate React keys.
+  // Each created template needs its own id, or the lists render duplicate React keys.
   if (cmd === "create_template")
     return { ...TEMPLATE_ROW, id: nextTemplateId() };
   if (cmd === "get_template")

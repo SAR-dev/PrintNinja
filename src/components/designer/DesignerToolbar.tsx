@@ -1,6 +1,7 @@
 import { Plus, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
@@ -10,6 +11,11 @@ interface Props {
   /** Offline: the server owns the copies, so there is nowhere to save. */
   saveDisabled?: boolean;
   saveTitle?: string;
+  /** The open template's name, edited in place; the rename lands on the
+   * next Save through the existing flow. Mobile keeps the Page Setup
+   * field instead — this is the desktop shortcut. */
+  templateName: string;
+  onTemplateNameChange: (name: string) => void;
   remoteId: string | null;
   publishedAt: string | null;
   /** Saved (community) copies are read-only: save and visibility are hidden. */
@@ -29,6 +35,8 @@ export function DesignerToolbar({
   onSave,
   saveDisabled = false,
   saveTitle,
+  templateName,
+  onTemplateNameChange,
   remoteId,
   publishedAt,
   readOnly = false,
@@ -44,6 +52,15 @@ export function DesignerToolbar({
         <Plus className="h-4 w-4" aria-hidden="true" />
         {t("designer.newTemplate")}
       </Button>
+      {!readOnly && (
+        <Input
+          value={templateName}
+          onChange={(e) => onTemplateNameChange(e.target.value)}
+          disabled={busy}
+          aria-label={t("designer.template_name")}
+          className="h-8 w-44"
+        />
+      )}
       {!readOnly && (
         <Button
           variant="outline"

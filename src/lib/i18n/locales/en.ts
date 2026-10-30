@@ -214,6 +214,9 @@ const en = {
     portrait: "Portrait",
     landscape: "Landscape",
     templates: "Templates",
+    no_templates_yet: "No templates yet",
+    no_templates_hint:
+      "Make one to start designing — it begins as a private copy on the server.",
     width_mm: "Width (mm)",
     height_mm: "Height (mm)",
     presets: "Presets",
@@ -310,7 +313,7 @@ const en = {
     toast_overwrote: "Overwrote the server copy",
     toast_moved_again: "The server copy moved again — reload and try once more",
     toast_name_required: "Template name required",
-    toast_name_exists: "Template already exists",
+    toast_name_exists: "Template name taken",
     toast_offline_create:
       "Offline — connect to create a template on the server",
     toast_created_server: 'Template "{{name}}" created on the server',
@@ -1342,6 +1345,8 @@ const en = {
     cups_http: "CUPS returned HTTP {{status}}",
     ipp_http: "The IPP server returned HTTP {{status}}",
     cups_refused: "CUPS refused the request: status {{status}}",
+    not_allowed:
+      "Not allowed — this template belongs to a different account. Sign in with the account that owns it and try again.",
     unknown_printer_type: "Unknown printer type `{{type}}`",
     pdf_timeout: "PDF rendering timed out after {{seconds}} s",
   },

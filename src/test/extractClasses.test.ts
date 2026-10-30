@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { t } from "i18next";
 import "@/lib/i18n";
 import { extractClasses } from "@/lib/templates/extractClasses";
-import { STARTER_TEMPLATES } from "@/lib/templates/defaultTemplate";
+import { DEFAULT_TEMPLATE_HTML } from "@/lib/templates/defaultTemplate";
 
 describe("extractClasses: literals", () => {
   it("collects plain classes, unique and sorted", () => {
@@ -214,14 +214,11 @@ describe("extractClasses: robustness", () => {
   });
 });
 
-describe("extractClasses: bundled starter templates", () => {
-  it.each(STARTER_TEMPLATES.map((t) => [t.name, t.html] as const))(
-    "%s has classes and no warnings",
-    (_name, html) => {
-      const { candidates, warnings } = extractClasses(html);
-      expect(candidates.length).toBeGreaterThan(5);
-      expect(candidates).toContain("text-[10px]");
-      expect(warnings).toEqual([]);
-    },
-  );
+describe("extractClasses: bundled example content", () => {
+  it("the new-template example has classes and no warnings", () => {
+    const { candidates, warnings } = extractClasses(DEFAULT_TEMPLATE_HTML);
+    expect(candidates.length).toBeGreaterThan(5);
+    expect(candidates).toContain("text-[10px]");
+    expect(warnings).toEqual([]);
+  });
 });

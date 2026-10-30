@@ -1,4 +1,5 @@
-/** HTML of the one bundled template, Shipping Label 4x6. */
+/** HTML of the bundled example, Shipping Label 4x6. Every new template
+ * starts from it, and the README's template-design section walks it. */
 export const DEFAULT_TEMPLATE_HTML = `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
@@ -158,17 +159,20 @@ export const DEFAULT_MOCK_DATA = {
   },
 };
 
-// The single bundled starter template, seeded on first run and shown in the
-// Designer's template list. It is also the Designer's fallback when the
-// database is empty or the app runs without a backend.
-export const STARTER_TEMPLATES = [
-  {
-    name: "Shipping Label 4x6",
-    page_w_mm: 102,
-    page_h_mm: 152,
-    orientation: "portrait" as const,
+// Nothing is seeded on first run: the Designer opens with a template list
+// that is genuinely empty until the person makes one. A new template starts
+// from this bundled example, so there is always real content to learn from.
+export const NEW_TEMPLATE_PAGE_W_MM = 102;
+export const NEW_TEMPLATE_PAGE_H_MM = 152;
+
+/** The starting content of a newly created template: the bundled shipping
+ * label example at thermal-paper size, with a README to edit down. */
+export function newTemplateContent(name: string) {
+  return {
+    page_w_mm: NEW_TEMPLATE_PAGE_W_MM,
+    page_h_mm: NEW_TEMPLATE_PAGE_H_MM,
     html: DEFAULT_TEMPLATE_HTML,
     css: DEFAULT_TEMPLATE_CSS,
-    readme: defaultTemplateReadme("Shipping Label 4x6"),
-  },
-];
+    readme: defaultTemplateReadme(name),
+  };
+}

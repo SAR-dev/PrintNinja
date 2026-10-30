@@ -21,8 +21,9 @@ import "@/lib/i18n";
 import { EditorView } from "@uiw/react-codemirror";
 import { DesignerPage } from "@/pages/Designer";
 
-// The page reads templates and versions over IPC on mount; answer as a fresh
-// install does (see smoke.test.tsx).
+// The page reads templates and versions over IPC on mount. These tests
+// cover the editing workspace, so answer with one real row (an empty
+// account shows the New-template empty state instead — see smoke).
 const TEMPLATE_ROW = {
   id: 1,
   name: "Receipt",
@@ -34,18 +35,17 @@ const TEMPLATE_ROW = {
   compiled_css: "",
   compiled_key: "",
 };
-let templateId = 0;
 const EMPTY_LISTS = new Set([
-  "list_templates",
   "list_fonts",
   "list_printers",
   "list_datasets",
   "list_profiles",
 ]);
-const invoke = vi.fn(async (...args: any[]): Promise<any> => {
+const invoke = vi.fn(defaultImpl);
+async function defaultImpl(...args: any[]): Promise<any> {
   const cmd = args[0] as string;
   if (EMPTY_LISTS.has(cmd)) return [];
-  if (cmd === "create_template") return { ...TEMPLATE_ROW, id: ++templateId };
+  if (cmd === "list_templates") return [{ ...TEMPLATE_ROW }];
   if (cmd === "get_template")
     return {
       ...TEMPLATE_ROW,
@@ -57,7 +57,7 @@ const invoke = vi.fn(async (...args: any[]): Promise<any> => {
       withdrawn: false,
     };
   return null;
-});
+}
 vi.mock("@tauri-apps/api/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tauri-apps/api/core")>();
   return { ...actual, invoke: (...a: unknown[]) => invoke(...a) };
@@ -133,6 +133,30 @@ const openTab = (name: string) => {
 
 describe("Designer page layout on a phone", () => {
   beforeEach(() => setViewport("phone"));
+
+  it("shows an empty state with a New action when the account has no templates", async () => {
+    invoke.mockImplementation(async (...args: any[]): Promise<any> => {
+      const cmd = args[0] as string;
+      if (EMPTY_LISTS.has(cmd)) return [];
+      if (cmd === "list_templates") return [];
+      return null;
+    });
+    try {
+      renderDesigner();
+      // The workspace waits: no canvas, no tabs, just the way forward.
+      expect(await screen.findByText("No templates yet")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("tablist", { name: "Designer views" }),
+      ).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "New Template" }));
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Template name", { selector: "input" }),
+      ).toBeInTheDocument();
+    } finally {
+      invoke.mockImplementation(defaultImpl);
+    }
+  });
 
   it("offers Canvas, Code, README and Sample data, and no Visual or Preview tab", async () => {
     renderDesigner();

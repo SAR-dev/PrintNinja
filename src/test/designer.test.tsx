@@ -74,6 +74,7 @@ beforeEach(() => window.localStorage.clear());
 describe("DesignerToolbar", () => {
   const base = {
     templateName: "Label",
+    onTemplateNameChange: (() => {}) as (name: string) => void,
     remoteId: null as string | null,
     publishedAt: null as string | null,
     readOnly: false as boolean,
@@ -96,6 +97,37 @@ describe("DesignerToolbar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(onNew).toHaveBeenCalled();
     expect(onSave).toHaveBeenCalled();
+  });
+
+  it("edits the template name in place beside Save", () => {
+    const onTemplateNameChange = vi.fn();
+    render(
+      <DesignerToolbar
+        {...base}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+        onVisibilityChange={vi.fn()}
+        onTemplateNameChange={onTemplateNameChange}
+      />,
+    );
+    const name = screen.getByRole("textbox", { name: "Template name" });
+    expect(name).toHaveValue("Label");
+    fireEvent.change(name, { target: { value: "Renamed" } });
+    expect(onTemplateNameChange).toHaveBeenCalledWith("Renamed");
+  });
+
+  it("hides the name field and Save for read-only saved copies", () => {
+    render(
+      <DesignerToolbar
+        {...base}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+        onVisibilityChange={vi.fn()}
+        readOnly
+      />,
+    );
+    expect(screen.queryByRole("textbox", { name: "Template name" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 
   it("has no Import or Export actions", () => {

@@ -1,4 +1,4 @@
-import { FileText } from "lucide-react";
+import { FileText, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   Accordion,
@@ -34,6 +34,9 @@ interface Props<
   templates: T[];
   currentTemplateId: number | null;
   loadTemplate: (tpl: T) => void;
+  /** Open the New-template dialog. Shown as the empty state when there
+   * is no template to list yet. */
+  onNew?: () => void;
   templateName: string;
   setTemplateName: (v: string) => void;
   pageWidth: number;
@@ -67,6 +70,7 @@ export function ControlsAccordion<
   templates,
   currentTemplateId,
   loadTemplate,
+  onNew,
   templateName,
   setTemplateName,
   pageWidth,
@@ -87,6 +91,46 @@ export function ControlsAccordion<
   const open = openSections
     ? { value: openSections, onValueChange: onOpenSectionsChange }
     : { defaultValue: defaultOpen };
+  // The list grouped into Mine / Saved. Built outside the JSX: a
+  // block-body arrow inside a nested ternary does not parse as TSX.
+  const templateGroups = (
+    [
+      ["own", "templates.tab_mine"],
+      ["saved", "templates.tab_saved"],
+    ] as const
+  ).map(([origin, labelKey]) => {
+    const group = templates.filter((tpl) =>
+      origin === "saved" ? tpl.origin === "saved" : tpl.origin !== "saved",
+    );
+    if (group.length === 0) return null;
+    return (
+      <div key={origin} className="space-y-1">
+        <p className="px-2 text-xs font-medium text-muted-foreground">
+          {t(labelKey)}
+        </p>
+        {group.map((tpl) => {
+          const active = tpl.id === currentTemplateId;
+          return (
+            <button
+              key={tpl.id}
+              type="button"
+              onClick={() => loadTemplate(tpl)}
+              aria-current={active ? "true" : undefined}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors [@media(pointer:coarse)]:min-h-11",
+                active
+                  ? "bg-accent font-medium text-accent-foreground"
+                  : "hover:bg-muted",
+              )}
+            >
+              <FileText className="h-4 w-4 shrink-0" />
+              <span className="truncate">{tpl.name}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  });
   return (
     <Accordion
       type="multiple"
@@ -96,46 +140,26 @@ export function ControlsAccordion<
       <AccordionItem value="templates">
         <AccordionTrigger>{t("designer.templates")}</AccordionTrigger>
         <AccordionContent className="space-y-3">
-          {(
-            [
-              ["own", "templates.tab_mine"],
-              ["saved", "templates.tab_saved"],
-            ] as const
-          ).map(([origin, labelKey]) => {
-            const group = templates.filter((tpl) =>
-              origin === "saved"
-                ? tpl.origin === "saved"
-                : tpl.origin !== "saved",
-            );
-            if (group.length === 0) return null;
-            return (
-              <div key={origin} className="space-y-1">
-                <p className="px-2 text-xs font-medium text-muted-foreground">
-                  {t(labelKey)}
-                </p>
-                {group.map((tpl) => {
-                  const active = tpl.id === currentTemplateId;
-                  return (
-                    <button
-                      key={tpl.id}
-                      type="button"
-                      onClick={() => loadTemplate(tpl)}
-                      aria-current={active ? "true" : undefined}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors [@media(pointer:coarse)]:min-h-11",
-                        active
-                          ? "bg-accent font-medium text-accent-foreground"
-                          : "hover:bg-muted",
-                      )}
-                    >
-                      <FileText className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{tpl.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
+          {templates.length === 0 ? (
+            <div className="space-y-2 px-1 py-1">
+              <p className="text-xs text-muted-foreground">
+                {t("designer.no_templates_yet")}
+              </p>
+              {onNew && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={onNew}
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  {t("designer.newTemplate")}
+                </Button>
+              )}
+            </div>
+          ) : (
+            templateGroups
+          )}
         </AccordionContent>
       </AccordionItem>
 

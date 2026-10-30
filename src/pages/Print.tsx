@@ -49,8 +49,8 @@ import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { notifySuccess, notifyError } from "@/lib/notify";
 import { usePrintStore } from "@/lib/store/printStore";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
-import { ensureStarterTemplates } from "@/lib/templates/seedTemplates";
-import type { StarterTemplate } from "@/lib/templates/seedTemplates";
+import { listTemplates } from "@/lib/templates/listTemplates";
+import type { TemplateListRow } from "@/lib/templates/listTemplates";
 import { compileTemplateCss } from "@/lib/templates/compileTemplateCss";
 import { PrintPreview } from "@/components/PrintPreview";
 import { resolvePaper } from "@/lib/render/printLayout";
@@ -66,7 +66,7 @@ export function PrintPage() {
   const { t } = useTranslation();
   const store = usePrintStore();
   const { printers, refresh: refreshSystemPrinters } = useSystemPrinters();
-  const [templates, setTemplates] = useState<StarterTemplate[]>([]);
+  const [templates, setTemplates] = useState<TemplateListRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   // One complete design document per record, laid out as in the Designer.
@@ -216,14 +216,13 @@ export function PrintPage() {
         // updates the list the dropdown shows.
         const [p, tpl] = await Promise.all([
           refreshSystemPrinters().catch(() => []),
-          ensureStarterTemplates(),
+          listTemplates().catch(() => []),
         ]);
         if (cancelled) return;
         setTemplates(tpl);
         const { printerId, templateId } = usePrintStore.getState();
         if (p.length > 0 && !printerId)
           usePrintStore.getState().setPrinterId(p[0].name);
-        // A hidden starter may still be the stored selection.
         if (
           tpl.length > 0 &&
           !tpl.some((x) => String(x.id) === String(templateId))
