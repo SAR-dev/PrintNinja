@@ -1167,6 +1167,7 @@ const ja: Translation = {
     action_delete_title: "サーバーとこのコンピューターから削除",
     action_print: "印刷",
     action_remove: "削除",
+    action_clone: "複製",
     status_not_on_server: "サーバーにありません",
     status_private: "非公開",
     status_changes: "未保存の変更あり",
@@ -1206,6 +1207,7 @@ const ja: Translation = {
     toast_tap_retry: "タップして再試行",
     toast_retry: "再試行",
     toast_removed_saved: "保存済みから削除しました",
+    toast_cloned: "「{{name}}」として複製しました。「自分」で確認できます",
     no_share_title: "共有サービスが設定されていません",
     no_share_hint:
       "他のユーザーが公開したテンプレートを見るには、設定で共有サービスのアドレスを追加してください。",
