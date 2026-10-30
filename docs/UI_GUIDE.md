@@ -148,8 +148,8 @@ the code editor. "Reprint last job" asks for confirmation before it prints.
 
 | Route | Page | Main building blocks |
 |---|---|---|
-| `/` and `/template/:id` | Designer | `PageHeader` with `DesignerToolbar` (New, Import, Export); `TemplateSyncBar` (Save, Refresh, Publish, Unpublish) under the title row; At `lg` and up a three-region workspace that fills the viewport: `ControlsAccordion` (Templates, Page Setup, Versions, Helpers), `EditorPane` (tabs **HTML**, **CSS**, **README**, **Sample data**) and `CanvasWorkspace` (toolbar with Fit/zoom, then `CanvasPane`), the last two split by a draggable `ResizableHandle`. Below `lg`: a collapsed `ControlsAccordion`, then tabs **Canvas**, **Code** (`CodeEditors`), **README** and **Sample data** |
-| `/templates` | Templates | Tabs **Mine**, **Saved**, **Community**. Mine and Saved are `DataTable`s; Community is a card gallery with sort and a preview dialog |
+| `/` and `/template/:id` | Designer | `PageHeader` with `DesignerToolbar` (New, template-name field, Save, Public/Private switch with sync id; read-only copies hide Save and the switch, phones use `DesignerOverflowMenu`); at `lg` and up a workspace that fills the viewport: `ControlsAccordion` (Templates, Page Setup, Helpers, Custom input), `EditorPane` (tabs **HTML**, **CSS**, **README**, **Sample data**) and `CanvasWorkspace` (toolbar with Fit/zoom, then `CanvasPane`), the last two split by a draggable `ResizableHandle`. Below `lg`: a Settings sheet, then tabs **Canvas**, **Code** (`CodeEditors`), **README** and **Sample data**. An empty account holds `Loading…`, then an `EmptyState` with the New action; every new template starts from the bundled label example |
+| `/templates` | Templates | Tabs **Mine**, **Saved**, **Community**. Mine and Saved are `DataTable`s (phones use cards with a row menu); Community is a card gallery with sort and a preview dialog. Saved rows offer Print, Clone (your own timestamped copy under Mine) and Remove; Community rows offer a save star |
 | `/print` | Print | "Print job" card (printer, template, copies, options such as grayscale and test data), a live preview, and a banner that says "Print sent" or "Print failed" |
 | `/printers` | Printers | `DataTable` of printers with their status; "Add printer" opens a side sheet |
 | `/history` | History | `DataTable` of jobs with `JobStatusBadge`; reprint, retry and delete, one at a time or in bulk, with a confirmation |
@@ -278,7 +278,7 @@ Add new states there, not in pages.
 | A state | `StatusBadge` / `JobStatusBadge` |
 | "Are you sure?" | `ConfirmDialog`, naming the thing ("Delete template “Shipping label”?") |
 | Nothing here yet | `EmptyState`, saying what happened and what to do next |
-| Template sync state with the server | `TemplateSyncBar` |
+| Template sync state with the server | Visibility switch + sync id in `DesignerToolbar`; refresh control in the shell header and `SyncStatusCard` (Settings) |
 | Logo with fallback | `AppLogo` |
 | First-run, sign-in and unreachable screens | `Onboarding`, `SignInScreen`, `ServerUnreachableScreen` (rendered by `AuthGate` and `App`) |
 | Setup progress | `SetupChecklist` (Settings → Setup) |
