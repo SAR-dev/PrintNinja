@@ -144,9 +144,7 @@ describe("Designer page layout on a phone", () => {
     });
     try {
       renderDesigner();
-      expect(await screen.findByRole("status")).toHaveTextContent(
-        "Loading…",
-      );
+      expect(await screen.findByRole("status")).toHaveTextContent("Loading…");
       expect(screen.queryByText("No templates yet")).not.toBeInTheDocument();
       expect(
         screen.queryByRole("tablist", { name: "Designer views" }),
