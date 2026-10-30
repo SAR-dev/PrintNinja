@@ -189,6 +189,31 @@ fn template_rename_onto_another_name_is_refused() {
     write_template_meta(&conn, &meta(a.id, "alpha")).unwrap();
 }
 
+#[test]
+fn saved_mirror_keeps_the_author_title_verbatim() {
+    let (_state, conn) = test_db();
+    write_template(&conn, &new_template("Label")).unwrap();
+    // Same title as an own row: allowed — mirrors are references, and
+    // the sync identity (not the name) is what refresh and print use.
+    let mirror = write_template(
+        &conn,
+        &CreateTemplateRequest {
+            server_id: Some("srv-m".to_string()),
+            server_revision: Some(1),
+            base_revision: Some(1),
+            sync_state: Some("synced".to_string()),
+            kind: Some("saved".to_string()),
+            owner_handle: Some("ana".to_string()),
+            ..new_template("Label")
+        },
+    )
+    .expect("mirror keeps the title");
+    assert_eq!(mirror.name, "Label");
+    // Own rows still refuse the clash.
+    let err = write_template(&conn, &new_template("label")).unwrap_err();
+    assert!(err.to_string().contains("already exists"), "{err}");
+}
+
 // ───────────────────────────────────────────────────────────────
 // per-template compiled CSS
 // ───────────────────────────────────────────────────────────────

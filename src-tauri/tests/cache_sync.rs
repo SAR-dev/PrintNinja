@@ -813,6 +813,35 @@ fn server_data(id: &str, body: &str, revision: i64) -> serde_json::Value {
     })
 }
 
+/// A saved mirror follows the author's publishes: same server_id, new
+/// name/body/revision land on the mirror row (read-only, still synced).
+#[test]
+fn saved_mirror_follows_author_publishes() {
+    let conn = Connection::open_in_memory().unwrap();
+    printninja_lib::db::init(&conn).unwrap();
+    conn.execute(
+        "INSERT INTO templates (name, page_w_mm, page_h_mm, orientation, readme, summary, html, css, server_id, server_revision, base_revision, sync_state, kind, origin, origin_owner)
+         VALUES ('Old title', 210, 297, 'portrait', '', '', '<p>v1</p>', '', 'srv-m', 1, 1, 'synced', 'saved', 'saved', 'ana')",
+        [],
+    )
+    .unwrap();
+    let mut data = server_data("srv-m", "<p>v2</p>", 2);
+    data["name"] = serde_json::json!("New title");
+    apply_one(&conn, data);
+    let (name, html, rev, state, kind): (String, String, i64, String, String) = conn
+        .query_row(
+            "SELECT name, html, server_revision, sync_state, kind FROM templates WHERE server_id = 'srv-m'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+        )
+        .unwrap();
+    assert_eq!(name, "New title");
+    assert_eq!(html, "<p>v2</p>");
+    assert_eq!(rev, 2);
+    assert_eq!(state, "synced");
+    assert_eq!(kind, "saved", "mirror stays a mirror");
+}
+
 #[test]
 fn first_pull_adopts_matching_content_without_a_new_version() {
     use printninja_lib::commands::cache::get_sync_state;

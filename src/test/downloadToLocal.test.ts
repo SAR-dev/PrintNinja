@@ -64,12 +64,12 @@ describe("downloadToLocal name clashes", () => {
     expect(created[0]).toMatchObject({ name: "Label", server_id: REMOTE.id });
   });
 
-  it("suffixes on a clash, case-insensitively", async () => {
-    const created = mockBackend([localRow("Label"), localRow("label (2)")]);
+  it("keeps the author's title verbatim on a clash: mirrors are references", async () => {
+    const created = mockBackend([localRow("Label")]);
     const res = await downloadToLocal(REMOTE.id, "saved", "ana");
-    expect(res.name).toBe("Label (3)");
+    expect(res).toEqual({ id: 9, created: true, name: "Label" });
     expect(created[0]).toMatchObject({
-      name: "Label (3)",
+      name: "Label",
       server_id: REMOTE.id,
       kind: "saved",
     });

@@ -165,16 +165,25 @@ pub fn write_template(conn: &Connection, req: &CreateTemplateRequest) -> AppResu
 
     let tx = conn.unchecked_transaction()?;
 
-    let exists: i64 = tx.query_row(
-        "SELECT COUNT(*) FROM templates WHERE name = ?1 COLLATE NOCASE AND sync_state <> 'deleted_pending'",
-        [name],
-        |r| r.get(0),
-    )?;
-    if exists > 0 {
-        return Err(AppError::Validation(format!(
-            "A template named '{}' already exists",
-            name
-        )));
+    let kind = req.kind.clone().unwrap_or_else(|| "own".to_string());
+    if !["own", "saved"].contains(&kind.as_str()) {
+        return Err(AppError::Validation(format!("Invalid kind '{kind}'")));
+    }
+    // Unique names, except saved mirrors: a mirror keeps the author's
+    // title verbatim (it is a reference, not a new template), and the
+    // sync identity — not the name — is what refresh and print use.
+    if kind != "saved" {
+        let exists: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM templates WHERE name = ?1 COLLATE NOCASE AND sync_state <> 'deleted_pending'",
+            [name],
+            |r| r.get(0),
+        )?;
+        if exists > 0 {
+            return Err(AppError::Validation(format!(
+                "A template named '{}' already exists",
+                name
+            )));
+        }
     }
 
     // Sync bookkeeping (Phase 3): brand-new local rows are dirty with a
@@ -189,10 +198,8 @@ pub fn write_template(conn: &Connection, req: &CreateTemplateRequest) -> AppResu
             "Invalid sync_state '{sync_state}'"
         )));
     }
-    let kind = req.kind.clone().unwrap_or_else(|| "own".to_string());
-    if !["own", "saved"].contains(&kind.as_str()) {
-        return Err(AppError::Validation(format!("Invalid kind '{kind}'")));
-    }
+    // `kind` parsed and validated above (the saved-mirror exemption
+    // needs it before the name check).
     let server_id = req
         .server_id
         .clone()
