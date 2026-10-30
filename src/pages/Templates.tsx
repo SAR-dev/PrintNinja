@@ -6,6 +6,7 @@ import {
   Bookmark,
   BookmarkCheck,
   CloudUpload,
+  CopyPlus,
   Eye,
   MoreHorizontal,
   Pencil,
@@ -60,6 +61,7 @@ import * as share from "@/lib/share/client";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { downloadToLocal } from "@/lib/share/sync";
 import {
+  cloneSavedTemplate,
   deleteTemplateEverywhere,
   saveRowToServer,
   takeServerCopy,
@@ -346,6 +348,33 @@ export function TemplatesPage() {
     }
   };
 
+  // Clone a saved mirror into your own private template. Server-first
+  // like every creation: share-unconfigured or signed-out means there is
+  // nowhere to create, so the button reports instead of queuing.
+  const handleClone = async (tpl: TemplateRow) => {
+    if (syncing != null) return;
+    const url = await share.getServiceUrl();
+    if (!url) {
+      notifyError(t("templates.toast_share_unconfigured"));
+      return;
+    }
+    const token = await share.getSessionToken();
+    if (!token) {
+      notifyError(t("templates.toast_signin_required"));
+      return;
+    }
+    setSyncing(tpl.id);
+    try {
+      const created = await cloneSavedTemplate(tpl);
+      notifySuccess(t("templates.toast_cloned", { name: created.name }));
+      await loadMine();
+    } catch (e) {
+      notifyError(describeError(e));
+    } finally {
+      setSyncing(null);
+    }
+  };
+
   // Opens the Print page with this template selected.
   const handleUse = async (tpl: TemplateRow, isSavedCopy: boolean) => {
     // For saved copies, queue a use count locally; the sync engine sends
@@ -531,6 +560,13 @@ export function TemplatesPage() {
               <DropdownMenuItem onSelect={() => handleUse(tpl, true)}>
                 <Printer className="h-4 w-4" aria-hidden="true" />
                 {t("templates.action_print")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={syncing != null}
+                onSelect={() => void handleClone(tpl)}
+              >
+                <CopyPlus className="h-4 w-4" aria-hidden="true" />
+                {t("templates.action_clone")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setRemoveTarget(tpl)}
@@ -792,6 +828,14 @@ export function TemplatesPage() {
               <Button size="sm" onClick={() => handleUse(tpl, true)}>
                 <Printer className="h-4 w-4" aria-hidden="true" />
                 {t("templates.action_print")}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={syncing != null}
+                onClick={() => void handleClone(tpl)}
+              >
+                {t("templates.action_clone")}
               </Button>
               <Button
                 size="sm"

@@ -38,6 +38,10 @@ const sync = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/share/sync", () => sync);
 const save = vi.hoisted(() => ({
+  cloneSavedTemplate: vi.fn(async (t: { name: string }) => ({
+    id: 10,
+    name: `${t.name} (1761889844)`,
+  })),
   saveRowToServer: vi.fn(async () => ({
     remoteId: "new-uuid",
     revision: 1,
@@ -153,6 +157,10 @@ beforeEach(() => {
   share.saveRemoteTemplate.mockResolvedValue(undefined);
   share.unsaveRemoteTemplate.mockResolvedValue(undefined);
   sync.downloadToLocal.mockResolvedValue({ id: 9, created: true });
+  save.cloneSavedTemplate.mockResolvedValue({
+    id: 10,
+    name: "Saved A (1761889844)",
+  });
   save.saveRowToServer.mockResolvedValue({
     remoteId: "new-uuid",
     revision: 1,
@@ -406,6 +414,39 @@ describe("Templates page", () => {
     expect(
       invoke.mock.calls.some((c) => c[0] === "cache_forget_template"),
     ).toBe(false);
+  });
+
+  it("clones a saved copy into your own templates", async () => {
+    share.getServiceUrl.mockResolvedValue("http://127.0.0.1:9");
+    share.getSessionToken.mockResolvedValue("tok");
+    renderPage();
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: /Saved/ }));
+    const row = (await screen.findByText("Saved A")).closest("tr")!;
+    const listsBefore = invoke.mock.calls.filter(
+      (c) => c[0] === "list_templates",
+    ).length;
+    fireEvent.click(within(row).getByRole("button", { name: "Clone" }));
+    await waitFor(() =>
+      expect(save.cloneSavedTemplate).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 4, name: "Saved A" }),
+      ),
+    );
+    // The lists reload so the clone shows under Mine.
+    await waitFor(() =>
+      expect(
+        invoke.mock.calls.filter((c) => c[0] === "list_templates").length,
+      ).toBeGreaterThan(listsBefore),
+    );
+  });
+
+  it("refuses to clone without a share service", async () => {
+    share.getServiceUrl.mockResolvedValue(null);
+    renderPage();
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: /Saved/ }));
+    const row = (await screen.findByText("Saved A")).closest("tr")!;
+    fireEvent.click(within(row).getByRole("button", { name: "Clone" }));
+    await waitFor(() => expect(share.getServiceUrl).toHaveBeenCalled());
+    expect(save.cloneSavedTemplate).not.toHaveBeenCalled();
   });
 
   it("has no Get from server button: mirrors arrive through the pull", async () => {

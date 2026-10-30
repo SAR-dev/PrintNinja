@@ -195,11 +195,12 @@ export async function createTemplateOnServer(input: {
   html: string;
   css: string;
   readme?: string;
+  summary?: string;
 }): Promise<TemplateRow> {
   const remote = await putRemoteTemplate({
     id: crypto.randomUUID(),
     name: input.name,
-    summary: "",
+    summary: input.summary ?? "",
     page_w_mm: input.page_w_mm,
     page_h_mm: input.page_h_mm,
     language: "html" as const,
@@ -232,6 +233,58 @@ export async function createTemplateOnServer(input: {
     },
   });
   return created;
+}
+
+/**
+ * Clone a saved (community) mirror into your own private template:
+ * identical content, a timestamped name, and a README line naming the
+ * source. Server-first like every creation — offline there is no clone.
+ * The name is `{mirror} ({unix seconds})`; a same-second double clone
+ * 409s, and the retry falls back to milliseconds. `now` is injectable
+ * for tests.
+ */
+export async function cloneSavedTemplate(
+  mirror: Pick<
+    TemplateRow,
+    | "name"
+    | "summary"
+    | "page_w_mm"
+    | "page_h_mm"
+    | "orientation"
+    | "html"
+    | "css"
+    | "readme"
+    | "origin_owner"
+  >,
+  opts?: { now?: () => number },
+): Promise<TemplateRow> {
+  const now = opts?.now ?? Date.now;
+  const author = mirror.origin_owner?.trim() ? mirror.origin_owner : null;
+  const source = `Cloned from ${author ? `@${author}'s ` : ""}"${mirror.name}".`;
+  const readme = mirror.readme ? `${mirror.readme}\n\n${source}` : source;
+  const content = {
+    page_w_mm: mirror.page_w_mm,
+    page_h_mm: mirror.page_h_mm,
+    orientation: mirror.orientation,
+    html: mirror.html ?? "",
+    css: mirror.css ?? "",
+    summary: mirror.summary ?? "",
+    readme,
+  };
+  try {
+    return await createTemplateOnServer({
+      ...content,
+      name: `${mirror.name} (${Math.floor(now() / 1000)})`,
+    });
+  } catch (e) {
+    if (e instanceof ApiError && e.code === "template_name_taken") {
+      return await createTemplateOnServer({
+        ...content,
+        name: `${mirror.name} (${now()})`,
+      });
+    }
+    throw e;
+  }
 }
 
 /**

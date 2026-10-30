@@ -1137,6 +1137,7 @@ const en = {
     action_delete_title: "Delete from the server and this computer",
     action_print: "Print",
     action_remove: "Remove",
+    action_clone: "Clone",
     status_not_on_server: "Not on the server",
     status_private: "Private",
     status_changes: "Changes not saved",
@@ -1176,6 +1177,7 @@ const en = {
     toast_tap_retry: "Tap to retry",
     toast_retry: "Retry",
     toast_removed_saved: "Removed from Saved",
+    toast_cloned: 'Cloned as "{{name}}" — find it under Mine',
     no_share_title: "Share service not set up",
     no_share_hint:
       "Add a share service address in Settings to browse templates published by others.",
