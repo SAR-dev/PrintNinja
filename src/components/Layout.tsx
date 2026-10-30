@@ -13,6 +13,7 @@ import { AppLogo } from "@/components/AppLogo";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PcStatusBanner } from "@/components/PcStatusBanner";
+import { RenderEngineNotice } from "@/components/RenderEngineNotice";
 import { ShortcutsDialog } from "@/components/ShortcutsDialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import { UpdateBadge } from "@/components/UpdateBadge";
@@ -219,6 +220,7 @@ function ShellIndicators({ status }: { status: ShellStatus }) {
   const where = api ? `${api.address}:${api.port}` : "";
   return (
     <>
+      <RenderEngineNotice />
       {api?.running &&
         (api.lan_access ? (
           <Link

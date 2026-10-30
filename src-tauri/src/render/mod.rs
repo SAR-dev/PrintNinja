@@ -368,20 +368,31 @@ impl PdfRenderer {
     }
 }
 
+/// Executable names tried on Linux, in order, in every `PATH` directory.
+#[cfg(target_os = "linux")]
+const CHROMIUM_CANDIDATES: &[&str] = &[
+    "chromium",
+    "chromium-browser",
+    "google-chrome",
+    "google-chrome-stable",
+    "microsoft-edge",
+    "microsoft-edge-stable",
+];
+
+/// Where Edge is looked for on Windows.
+#[cfg(windows)]
+const EDGE_PATHS: [&str; 2] = [
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+];
+
 /// Where the system Chromium lives on Linux, in PATH order.
 /// `PRINTNINJA_CHROMIUM_BIN` overrides everything (tests, containers
 /// with a non-PATH browser). Missing everywhere is a loud error naming
 /// every name that was tried, not a placeholder render.
 #[cfg(target_os = "linux")]
 fn find_chromium() -> Result<std::path::PathBuf> {
-    const CANDIDATES: &[&str] = &[
-        "chromium",
-        "chromium-browser",
-        "google-chrome",
-        "google-chrome-stable",
-        "microsoft-edge",
-        "microsoft-edge-stable",
-    ];
+    const CANDIDATES: &[&str] = CHROMIUM_CANDIDATES;
     if let Some(bin) = std::env::var_os("PRINTNINJA_CHROMIUM_BIN") {
         let path = std::path::PathBuf::from(&bin);
         if path.is_file() {
@@ -634,10 +645,6 @@ async fn run_chromium(chromium: &std::path::Path, args: &[String]) -> Result<std
 /// names the render in the error so the operator knows what failed.
 #[cfg(windows)]
 fn find_edge(purpose: &str) -> Result<&'static str> {
-    const EDGE_PATHS: [&str; 2] = [
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-    ];
     EDGE_PATHS
         .iter()
         .copied()
@@ -649,6 +656,98 @@ fn find_edge(purpose: &str) -> Result<&'static str> {
                 EDGE_PATHS.join(", ")
             )
         })
+}
+
+/// Whether this machine has the browser the renderer needs, for the UI.
+///
+/// Windows prints through Edge (`msedge.exe`), Linux through a system
+/// Chromium-family browser; neither is bundled. When it is missing the UI
+/// shows a modal with the exact steps to fix it, instead of the first print
+/// failing with a one-line error. Platforms that never render locally
+/// (Android buys every render from a paired PC) report `available: true`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RenderEngineStatus {
+    /// `"windows"`, `"linux"` or `"other"`.
+    pub platform: &'static str,
+    pub available: bool,
+    /// The browser that will be used, when one was found.
+    pub path: Option<String>,
+    /// Every place or name that was tried, for the "what was checked" list.
+    pub searched: Vec<String>,
+    /// Linux only: `ID` and `ID_LIKE` from `/etc/os-release`, lowercase, so
+    /// the UI can show the right package manager.
+    pub distro: Vec<String>,
+    /// Linux only: `PRETTY_NAME`, shown in the modal.
+    pub distro_name: Option<String>,
+    /// Linux only: running from an AppImage (which never bundles a browser).
+    pub appimage: bool,
+}
+
+pub fn render_engine_status() -> RenderEngineStatus {
+    #[cfg(windows)]
+    {
+        let found = find_edge("PDF rendering").ok();
+        RenderEngineStatus {
+            platform: "windows",
+            available: found.is_some(),
+            path: found.map(str::to_string),
+            searched: EDGE_PATHS.iter().map(|p| p.to_string()).collect(),
+            distro: Vec::new(),
+            distro_name: None,
+            appimage: false,
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let found = find_chromium().ok();
+        let (distro, distro_name) = linux_distro();
+        RenderEngineStatus {
+            platform: "linux",
+            available: found.is_some(),
+            path: found.map(|p| p.display().to_string()),
+            searched: CHROMIUM_CANDIDATES.iter().map(|n| n.to_string()).collect(),
+            distro,
+            distro_name,
+            appimage: std::env::var_os("APPIMAGE").is_some(),
+        }
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        RenderEngineStatus {
+            platform: "other",
+            available: true,
+            path: None,
+            searched: Vec::new(),
+            distro: Vec::new(),
+            distro_name: None,
+            appimage: false,
+        }
+    }
+}
+
+/// `(ID + ID_LIKE, PRETTY_NAME)` of the running distribution.
+#[cfg(target_os = "linux")]
+fn linux_distro() -> (Vec<String>, Option<String>) {
+    parse_os_release(&std::fs::read_to_string("/etc/os-release").unwrap_or_default())
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_os_release(text: &str) -> (Vec<String>, Option<String>) {
+    let mut ids = Vec::new();
+    let mut pretty = None;
+    for line in text.lines() {
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let value = value.trim().trim_matches('"').trim_matches('\'');
+        match key.trim() {
+            "ID" => ids.insert(0, value.to_lowercase()),
+            "ID_LIKE" => ids.extend(value.split_whitespace().map(str::to_lowercase)),
+            "PRETTY_NAME" => pretty = Some(value.to_string()),
+            _ => {}
+        }
+    }
+    (ids, pretty)
 }
 
 /// Start headless Edge once, in the background, so the first real print does
@@ -839,7 +938,13 @@ pub fn sweep_leftover_edge_profiles(dir: &std::path::Path, min_age: std::time::D
         // Throwaway one-shot profiles, plus the retired name of the
         // persistent profile (renamed to `browser-cdp-profile` when Linux
         // support landed — the active one is never swept).
-        if name != "edge-cdp-profile" && !name.starts_with("edge-profile-") {
+        // `browser-cdp-profile-<id>` are the fresh profiles the persistent
+        // browser falls back to when the main one is in use; the main
+        // `browser-cdp-profile` itself is never swept.
+        if name != "edge-cdp-profile"
+            && !name.starts_with("edge-profile-")
+            && !name.starts_with("browser-cdp-profile-")
+        {
             continue;
         }
         // Unknown age → leave it alone; only clearly stale profiles go.
@@ -949,6 +1054,16 @@ mod tests {
     /// fresh one may belong to a render in flight (e.g. a second app
     /// instance starting mid-print).
     #[test]
+    fn os_release_gives_the_distro_family() {
+        let (ids, name) = parse_os_release(
+            "NAME=\"Linux Mint\"\nPRETTY_NAME=\"Linux Mint 22\"\nID=linuxmint\nID_LIKE=\"ubuntu debian\"\n",
+        );
+        assert_eq!(ids, ["linuxmint", "ubuntu", "debian"]);
+        assert_eq!(name.as_deref(), Some("Linux Mint 22"));
+        assert_eq!(parse_os_release(""), (Vec::new(), None));
+    }
+
+    #[test]
     fn the_startup_sweep_only_takes_stale_edge_profiles() {
         let dir = std::env::temp_dir().join(format!("pn-sweep-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(dir.join("edge-profile-crashed")).unwrap();
@@ -957,6 +1072,8 @@ mod tests {
         std::fs::create_dir_all(dir.join("edge-cdp-profile")).unwrap();
         // The active persistent profile is never swept, whatever its age.
         std::fs::create_dir_all(dir.join("browser-cdp-profile")).unwrap();
+        // ...but the fresh fallback profiles of a crashed run are stale.
+        std::fs::create_dir_all(dir.join("browser-cdp-profile-1a2b3c4d")).unwrap();
         // Content is irrelevant to the sweep; deliberately not a PDF header
         // magic: `print_correctness`'s P5 tripwire greps this whole file and
         // only placeholder-PDF bytes may not appear in it.
@@ -975,6 +1092,7 @@ mod tests {
         assert!(!dir.join("edge-profile-live").exists());
         assert!(!dir.join("edge-cdp-profile").exists());
         assert!(dir.join("browser-cdp-profile").exists());
+        assert!(!dir.join("browser-cdp-profile-1a2b3c4d").exists());
         assert!(dir.join("last-render.pdf").exists());
 
         // A cache dir that does not exist yet (first run) is a no-op.
