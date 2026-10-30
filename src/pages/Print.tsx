@@ -928,18 +928,8 @@ export function PrintPage() {
           </Button>
         </div>
       )}
-      {store.status === "printing" && (
-        <div
-          role="status"
-          className="flex items-center gap-3 rounded-lg border border-info/30 bg-info-soft px-4 py-3 text-info"
-        >
-          <div
-            className="h-5 w-5 rounded-full border-2 border-current border-t-transparent motion-safe:animate-spin"
-            aria-hidden="true"
-          />
-          <p className="text-sm font-medium">{t("print.printing")}</p>
-        </div>
-      )}
+      {/* While printing the buttons say so and disable: no separate
+          progress box — it duplicated the button state below the fold. */}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(340px,420px)_1fr]">
         {/* Left: choose and print */}

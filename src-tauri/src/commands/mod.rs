@@ -10,6 +10,7 @@ pub mod print;
 pub mod printer;
 pub mod profile;
 pub mod remote_print;
+pub mod render_engine;
 pub mod reset;
 pub mod settings;
 pub mod template;

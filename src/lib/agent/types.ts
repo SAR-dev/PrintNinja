@@ -382,6 +382,25 @@ export interface SaveProfileReq {
   settings_json: string;
 }
 
+/**
+ * Whether the browser the renderer needs is installed: Edge on Windows, a
+ * Chromium-family browser on Linux. Mirrors `RenderEngineStatus` in
+ * src-tauri/src/render/mod.rs.
+ */
+export interface RenderEngineStatus {
+  platform: "windows" | "linux" | "other";
+  available: boolean;
+  /** The browser that will be used, when one was found. */
+  path: string | null;
+  /** Locations (Windows) or executable names (Linux) that were tried. */
+  searched: string[];
+  /** Linux: `ID` then `ID_LIKE` from /etc/os-release, lowercase. */
+  distro: string[];
+  distro_name: string | null;
+  /** Linux: running from an AppImage (never bundles a browser). */
+  appimage: boolean;
+}
+
 export interface ApiStatus {
   running: boolean;
   address: string;
