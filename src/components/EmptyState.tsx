@@ -32,10 +32,7 @@ export function EmptyState({
         {Icon ? (
           <Icon className="h-6 w-6 text-muted-foreground max-md:h-8 max-md:w-8 max-md:text-accent-foreground" />
         ) : (
-          <AppLogo
-            src={logo}
-            className="h-6 w-6 max-md:h-8 max-md:w-8"
-          />
+          <AppLogo src={logo} className="h-6 w-6 max-md:h-8 max-md:w-8" />
         )}
       </div>
       <h2 className="text-base font-medium max-md:font-semibold">{title}</h2>
