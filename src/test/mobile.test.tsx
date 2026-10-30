@@ -24,6 +24,7 @@ const shareMock = vi.hoisted(() => ({
   getServiceUrl: vi.fn(async () => null as string | null),
   getSessionToken: vi.fn(async () => null as string | null),
   onSessionStarted: () => () => {},
+  onSessionEnded: () => () => {},
   hasUnpublishedChanges: (t: {
     remote_id: string | null;
     published_at: string | null;

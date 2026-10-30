@@ -24,6 +24,7 @@ vi.mock("@/lib/share/client", () => ({
   login: async () => ({}),
   logout: async () => {},
   onSessionStarted: () => () => {},
+  onSessionEnded: () => () => {},
 }));
 
 import { SettingsPage } from "@/pages/Settings";

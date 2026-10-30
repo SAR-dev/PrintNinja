@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { onSessionStarted } from "@/lib/share/client";
 import { createSyncScheduler, type SyncState } from "@/lib/sync/scheduler";
 import {
   productionApi,
@@ -14,7 +15,9 @@ const INITIAL: SyncState = {
   lastError: null,
 };
 
-let current: { refreshNow: () => Promise<void> } | null = null;
+let current: {
+  refreshNow: (opts?: { force?: boolean }) => Promise<void>;
+} | null = null;
 
 /**
  * Refresh the local cache from the server now. This is the only sync
@@ -45,7 +48,13 @@ export function useSyncStatus(deps?: {
     schedulerRef.current = scheduler;
     current = scheduler;
     scheduler.start();
+    // The shell stays mounted across logout→login. Pull the new account's
+    // data now instead of waiting for the next focus or 5-minute tick.
+    const offStarted = onSessionStarted(
+      () => void scheduler.refreshNow({ force: true }),
+    );
     return () => {
+      offStarted();
       scheduler.stop();
       if (current === scheduler) {
         current = null;
