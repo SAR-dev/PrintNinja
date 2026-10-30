@@ -7,6 +7,7 @@ const ja: Translation = {
     loading: "読み込み中…",
     delete: "削除",
     edit: "編集",
+    view: "表示",
     close: "閉じる",
     search: "検索",
     add: "追加",

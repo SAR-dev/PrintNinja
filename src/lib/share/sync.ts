@@ -33,6 +33,8 @@ export interface DownloadResult {
   id: number;
   /** False when the template was already on this PC. */
   created: boolean;
+  /** Title the row actually saved under (suffixed on a name clash). */
+  name: string;
 }
 
 /** The templates a signed-in user can put on a new PC: their own, and saved ones. */
@@ -59,7 +61,18 @@ export async function downloadToLocal(
   const already = (existing ?? []).find(
     (t) => t.remote_id === remoteId || t.server_id === remoteId,
   );
-  if (already) return { id: already.id, created: false };
+  if (already) return { id: already.id, created: false, name: already.name };
+
+  // Unique names per device: a clash (own row, or a half-saved earlier
+  // attempt) would refuse the whole save, so suffix first. Sync identity
+  // stays explicit via server_id, so renaming is sync-safe.
+  const taken = new Set(
+    (existing ?? []).map((t) => t.name.trim().toLowerCase()),
+  );
+  let name = remote.name;
+  for (let n = 2; taken.has(name.trim().toLowerCase()) && n <= 100; n++) {
+    name = `${remote.name} (${n})`;
+  }
 
   let created;
   try {
@@ -68,7 +81,7 @@ export async function downloadToLocal(
     // pull refreshes it instead of duplicating it.
     created = await agent("create_template", {
       req: {
-        name: remote.name,
+        name,
         page_w_mm: Math.round(remote.page_w_mm),
         page_h_mm: Math.round(remote.page_h_mm),
         orientation:
@@ -112,5 +125,5 @@ export async function downloadToLocal(
       },
     });
   }
-  return { id: created.id, created: true };
+  return { id: created.id, created: true, name };
 }

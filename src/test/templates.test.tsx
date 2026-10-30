@@ -214,6 +214,16 @@ describe("Templates page", () => {
     );
   });
 
+  it("opens a saved row in Designer (read-only) on click", async () => {
+    renderPage();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /^Saved/ }));
+    await screen.findByText("Saved A");
+    fireEvent.click(screen.getByText("Saved A").closest("tr")!);
+    await waitFor(() =>
+      expect(screen.getByTestId("where")).toHaveTextContent("/template/4"),
+    );
+  });
+
   it("Save pushes the local copy to the server", async () => {
     renderPage();
     await screen.findByText("Shipping label");

@@ -307,7 +307,7 @@ export function TemplatesPage() {
         notifySuccess(t("templates.toast_already_saved"));
         return;
       }
-      notifySuccess(t("templates.toast_saved_local", { name: serverTpl.name }));
+      notifySuccess(t("templates.toast_saved_local", { name: result.name }));
       await loadMine();
     } catch (e) {
       notifyError(describeError(e), {
@@ -519,6 +519,12 @@ export function TemplatesPage() {
           {cardMenu(
             tpl.name,
             <>
+              <DropdownMenuItem
+                onSelect={() => navigate(`/template/${tpl.id}`)}
+              >
+                <Eye className="h-4 w-4" aria-hidden="true" />
+                {t("common.view")}
+              </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={syncing != null}
                 onSelect={() => setRefreshTarget(tpl)}
@@ -894,6 +900,7 @@ export function TemplatesPage() {
             columns={savedColumns}
             data={saved}
             getRowId={(r) => String(r.id)}
+            onRowActivate={(r) => navigate(`/template/${r.id}`)}
             sorting={savedSorting}
             onSortingChange={setSavedSorting}
             renderCard={savedCard}
