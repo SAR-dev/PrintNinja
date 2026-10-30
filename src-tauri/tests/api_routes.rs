@@ -1822,6 +1822,13 @@ async fn unknown_server_id_is_409_missing() {
     .await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["code"], "template_missing");
+    assert_eq!(body["side"], "pc", "the gap is on the PC, not the phone");
+    assert!(
+        body["error"]
+            .as_str()
+            .is_some_and(|m| m.contains("sync templates on the PC")),
+        "names where to sync: {body}",
+    );
     assert_eq!(job_count(&db), 0, "refused requests create no job");
 }
 
@@ -1846,6 +1853,62 @@ async fn stale_revision_is_409_with_both_revisions() {
     assert_eq!(body["client_revision"], 6);
     assert_eq!(body["pc_revision"], 7);
     assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+/// `GET /v1/pc-templates` lists synced rows with their sync identity
+/// (never bodies); local-only and dirty rows stay out, since the check
+/// would refuse them.
+#[tokio::test]
+async fn pc_templates_lists_only_printable_rows() {
+    async fn get(router: axum::Router, token: Option<&str>) -> (StatusCode, serde_json::Value) {
+        let mut builder = Request::builder().uri("/v1/pc-templates");
+        if let Some(t) = token {
+            builder = builder.header("authorization", format!("Bearer {t}"));
+        }
+        let mut req = builder.body(axum::body::Body::empty()).unwrap();
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::new(IpAddr::V4(lan_ip(25)), 50000)));
+        let res = router.oneshot(req).await.unwrap();
+        let status = res.status();
+        let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+        )
+    }
+
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_versioned_template(&db);
+    // Local-only and dirty rows: names the phone must never offer.
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute_batch(
+            "INSERT INTO templates (name, html, server_id, server_revision, sync_state)
+             VALUES ('Private', '<p>p</p>', 'srv-private', NULL, 'dirty');
+             INSERT INTO templates (name, html, server_id, server_revision, sync_state)
+             VALUES ('Stale', '<p>s</p>', 'srv-stale', 2, 'dirty');",
+        )
+        .unwrap();
+    seed_sharing(&db, "ver-token-7");
+
+    let (status, _) = get(router(&db), None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "LAN needs the token");
+    let (status, body) = get(router(&db), Some("ver-token-7")).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let names: Vec<&str> = body["templates"]
+        .as_array()
+        .expect("templates array")
+        .iter()
+        .map(|t| t["name"].as_str().expect("name"))
+        .collect();
+    assert_eq!(names, vec!["Versioned"], "only the synced row: {body}");
+    assert_eq!(body["templates"][0]["server_id"], "srv-1");
+    assert_eq!(body["templates"][0]["server_revision"], 7);
+    assert!(body["templates"][0].get("html").is_none(), "never bodies");
 }
 
 /// The PC's own copy with unsynced local edits is refused: it would print

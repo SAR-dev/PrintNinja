@@ -315,6 +315,7 @@ describe("Print via PC", () => {
     opts: {
       pairs?: unknown[];
       printers?: unknown[];
+      pcTemplates?: unknown[];
       cached?: boolean;
       print?: unknown;
     } = {},
@@ -334,6 +335,13 @@ describe("Print via PC", () => {
             { name: "PC Printer", printer_type: "ipp", language: "pdf" },
           ],
           cached: opts.cached ?? false,
+        };
+      if (cmd === "pc_templates")
+        return {
+          templates: opts.pcTemplates ?? [
+            { name: "PC Receipt", server_id: "srv-pc-1", server_revision: 3 },
+          ],
+          cached: false,
         };
       if (cmd === "remote_print") return opts.print ?? remoteOk;
       return null;
@@ -360,7 +368,12 @@ describe("Print via PC", () => {
         "remote_print",
         expect.objectContaining({
           args: expect.objectContaining({
-            template_id: 7,
+            // Via-PC identity comes from the PC's own listing, not the
+            // phone's row: matched by construction.
+            template_id: undefined,
+            template_name: "PC Receipt",
+            template_server_id: "srv-pc-1",
+            template_server_revision: 3,
             printer_name: "PC Printer",
             copies: 1,
           }),
@@ -380,6 +393,22 @@ describe("Print via PC", () => {
     expect(await screen.findByTestId("print-via-pc-banner")).toHaveTextContent(
       /cached/,
     );
+  });
+
+  it("lists the PC's templates while via-PC is on", async () => {
+    viaPcBackend({
+      pcTemplates: [
+        { name: "PC Receipt", server_id: "srv-pc-1", server_revision: 3 },
+        { name: "PC Label", server_id: "srv-pc-2", server_revision: 1 },
+      ],
+    });
+    renderPage();
+    await screen.findByTestId("print-via-pc-banner");
+    // The picker offers the PC's rows (snapped to the first), not the
+    // phone's starter template.
+    const picker = await screen.findByLabelText("Template");
+    await waitFor(() => expect(picker).toHaveTextContent("PC Receipt"));
+    expect(picker).not.toHaveTextContent("Shipping label");
   });
 
   it("blocks with a banner when no PC is chosen", async () => {
@@ -474,6 +503,32 @@ describe("Print via PC", () => {
     expect(first.idempotency_key).toBeTruthy();
     expect(second.idempotency_key).toBe(first.idempotency_key);
   });
+
+  it("names the PC and offers no phone sync when the template is missing there", async () => {
+    // template_missing is a PC-side gap: syncing this phone cannot
+    // create the PC's row, so the button would be a dead end.
+    viaPcBackend({
+      print: {
+        success: false,
+        status: "failed",
+        pc_job_id: null,
+        duration_ms: 5,
+        error:
+          "template 'srv-9' is not on Studio PC; sync templates on the PC, then retry",
+        code: "template_missing",
+        pc_name: "Studio PC",
+      },
+    });
+    renderPage();
+    const print = await screen.findByRole("button", { name: /^Print$/ });
+    await waitFor(() => expect(print).toBeEnabled());
+    fireEvent.click(print);
+
+    expect(
+      await screen.findByText(/sync templates on the PC/),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("print-sync-templates")).toBeNull();
+  });
 });
 
 describe("Print via PC failure states", () => {
@@ -501,6 +556,8 @@ describe("Print via PC failure states", () => {
       if (cmd === "list_printers" || cmd === "enumerate_system_printers")
         return [{ id: "1", name: "Dock Zebra" }];
       if (cmd === "remote_printers")
+        throw new Error("Studio PC is blocked or unreachable");
+      if (cmd === "pc_templates")
         throw new Error("Studio PC is blocked or unreachable");
       return null;
     });
@@ -530,6 +587,7 @@ describe("Print via PC exit", () => {
       if (cmd === "list_printers" || cmd === "enumerate_system_printers")
         return [{ id: "1", name: "Dock Zebra" }];
       if (cmd === "remote_printers") return { printers: [], cached: false };
+      if (cmd === "pc_templates") return { templates: [], cached: false };
       return null;
     });
   }

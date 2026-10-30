@@ -364,6 +364,8 @@ const ja: Translation = {
     via_pc_banner:
       "{{pc}}で印刷中 — ジョブはそのPCのプリンターで実行されます。",
     via_pc_cached: "プリンター一覧はキャッシュです。PCに到達できません。",
+    via_pc_templates_cached:
+      "テンプレート一覧はキャッシュです。PCに到達できません。",
     via_pc_unreachable:
       "PCが応答しません — 電源が入っていて同じWi-Fiに接続されているか確認し、更新してください。",
     via_pc_no_pair: "印刷先のPCを選択してください。",
@@ -411,6 +413,8 @@ const ja: Translation = {
     preview_live: "ライブデータURL",
     preview_subtitle: "{{name}}、{{w}} × {{h}} mm、{{source}}",
     preview_empty: "テンプレートを選択するとプレビューが表示されます。",
+    preview_pc_template:
+      "このテンプレートは{{pc}}上にあり、プレビュー元のローカルコピーがありません。印刷は可能です。",
     preview_collapse: "プレビューを折りたたむ",
     preview_expand: "プレビューを表示",
     preview_region: "印刷プレビュー",
@@ -1110,6 +1114,8 @@ const ja: Translation = {
       "コミュニティのテンプレートを保存すると、オフラインでも使えるコピーが手元に残ります。",
     empty_saved_action: "コミュニティを見る",
     col_size: "ページサイズ",
+    col_sync_id: "同期ID",
+    local_only: "ローカルのみ",
     action_save_server: "{{name}}をサーバーに保存",
     action_save_server_title: "サーバーに保存",
     action_refresh_server: "{{name}}をサーバーから更新",

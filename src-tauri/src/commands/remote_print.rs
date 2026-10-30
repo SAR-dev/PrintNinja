@@ -35,7 +35,16 @@ const PRINTERS_CACHE_TTL_SECS: i64 = 5 * 60;
 /// name and sync identity the PC needs.
 #[derive(Debug, Clone, Deserialize)]
 pub struct RemotePrintArgs {
-    pub template_id: i64,
+    /// This phone's local row, for preview identity and history. Absent
+    /// when printing a PC-listed template with no local counterpart —
+    /// history then stores NULL.
+    pub template_id: Option<i64>,
+    /// Explicit template identity from the PC's own listing (via-PC
+    /// template picker). Skips the local lookup; the version check still
+    /// runs on the PC against these values.
+    pub template_name: Option<String>,
+    pub template_server_id: Option<String>,
+    pub template_server_revision: Option<i64>,
     /// The PC's printer, by the name its `GET /v1/printers` reports.
     pub printer_name: String,
     pub data: Option<serde_json::Value>,
@@ -83,6 +92,141 @@ pub struct PcPrinterInfo {
     pub printer_type: String,
     #[serde(default)]
     pub language: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PcTemplateInfo {
+    pub name: String,
+    pub server_id: String,
+    pub server_revision: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PcTemplatesResult {
+    pub templates: Vec<PcTemplateInfo>,
+    /// True when the PC did not answer and this is the last good list.
+    pub cached: bool,
+}
+
+/// The paired PC's printable templates, for the print dialog. Same
+/// live-else-cached shape as [`remote_printers`]: when via-PC printing
+/// is on, the dialog lists these instead of the phone's own rows, so
+/// the version check matches by construction.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn pc_templates(
+    db: State<'_, DbState>,
+    pair_id: Option<String>,
+    refresh: Option<bool>,
+) -> AppResult<PcTemplatesResult> {
+    let (pair, cached_raw) = {
+        let guard = db
+            .lock()
+            .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+        let pairs = load_pairs(guard.connection());
+        let stored_default = setting(guard.connection(), "print_via_pc_device");
+        let pair = select_pair(&pairs, pair_id.as_deref().or(stored_default.as_deref()))?;
+        let cached_raw = setting(guard.connection(), "print_via_pc_templates");
+        (pair, cached_raw)
+    };
+
+    let cached: Option<(i64, String, Vec<PcTemplateInfo>)> = cached_raw.and_then(|s| {
+        let v: serde_json::Value = serde_json::from_str(&s).ok()?;
+        Some((
+            v.get("at").and_then(|a| a.as_i64()).unwrap_or(0),
+            v.get("pair")
+                .and_then(|p| p.as_str())
+                .unwrap_or("")
+                .to_string(),
+            serde_json::from_value(v.get("templates").cloned()?).ok()?,
+        ))
+    });
+    let now = chrono::Utc::now().timestamp();
+    if refresh != Some(true) {
+        if let Some((at, whose, list)) = &cached {
+            if whose == &pair.provider_id && now - at < PRINTERS_CACHE_TTL_SECS {
+                return Ok(PcTemplatesResult {
+                    templates: list.clone(),
+                    cached: false,
+                });
+            }
+        }
+    }
+
+    let base = pair_base(&pair).map_err(AppError::Validation)?;
+    let client = print_client(PRINTERS_TIMEOUT_SECS)?;
+    let send = client
+        .get(format!("{base}/v1/pc-templates"))
+        .header("Authorization", format!("Bearer {}", pair.secret))
+        .send()
+        .await;
+    let mut live: Option<Vec<PcTemplateInfo>> = None;
+    let mut unreachable: Option<String> = None;
+    match send {
+        Ok(res) => match res.error_for_status() {
+            Ok(res) => match res.json::<serde_json::Value>().await {
+                Ok(v) => {
+                    match serde_json::from_value::<Vec<PcTemplateInfo>>(
+                        v.get("templates")
+                            .cloned()
+                            .unwrap_or(serde_json::Value::Null),
+                    ) {
+                        Ok(list) => live = Some(list),
+                        Err(e) => {
+                            unreachable = Some(format!(
+                                "{} sent a template list this app could not read ({e})",
+                                pair.name
+                            ));
+                        }
+                    }
+                }
+                Err(e) => {
+                    unreachable = Some(format!(
+                        "{} sent an unreadable template list: {e}",
+                        pair.name
+                    ));
+                }
+            },
+            Err(e) => {
+                unreachable = Some(describe_no_answer_for(
+                    &pair.name, &pair.host, pair.port, &e,
+                ));
+            }
+        },
+        Err(e) => {
+            unreachable = Some(describe_no_answer_for(
+                &pair.name, &pair.host, pair.port, &e,
+            ));
+        }
+    }
+    match live {
+        Some(templates) => {
+            if let Ok(guard) = db.lock() {
+                let _ = guard.connection().execute(
+                    "INSERT INTO settings (key, value) VALUES ('print_via_pc_templates', ?1)
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    [serde_json::json!({
+                        "at": now,
+                        "pair": pair.provider_id,
+                        "templates": templates,
+                    })
+                    .to_string()],
+                );
+            }
+            Ok(PcTemplatesResult {
+                templates,
+                cached: false,
+            })
+        }
+        None => cached
+            .filter(|(_, whose, _)| whose == &pair.provider_id)
+            .map(|(_, _, list)| PcTemplatesResult {
+                templates: list,
+                cached: true,
+            })
+            .ok_or_else(|| {
+                AppError::Internal(unreachable.unwrap_or_else(|| "The PC did not answer.".into()))
+            }),
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -272,11 +416,12 @@ async fn poll_job(
 #[allow(clippy::too_many_arguments)]
 fn record_remote_job(
     conn: &rusqlite::Connection,
-    template_id: i64,
+    template_id: Option<i64>,
     template_revision: Option<i64>,
     copies: u32,
     pc_printer: &str,
     pc_name: &str,
+    remote_template: Option<&str>,
     data: &Option<serde_json::Value>,
     idempotency_key: &str,
     is_test: bool,
@@ -284,11 +429,14 @@ fn record_remote_job(
     error: Option<&str>,
     duration_ms: i64,
 ) -> AppResult<()> {
-    let settings = serde_json::json!({
+    let mut settings = serde_json::json!({
         "copies": copies,
         "remote_printer": pc_printer,
-    })
-    .to_string();
+    });
+    if let Some(name) = remote_template {
+        settings["remote_template"] = serde_json::json!(name);
+    }
+    let settings = settings.to_string();
     let data_json = data.as_ref().and_then(|d| serde_json::to_string(d).ok());
     conn.execute(
         "INSERT INTO print_jobs
@@ -334,7 +482,7 @@ pub async fn remote_print_inner(
     // One scoped lock, released before any network round trip: holding it
     // across the send would stall every other command, and the history
     // write below takes it again.
-    let (pair, base, template_name, server_id, server_revision) = {
+    let (pair, base, template_name, server_id, server_revision, local_template_id) = {
         let guard = db
             .lock()
             .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
@@ -350,9 +498,53 @@ pub async fn remote_print_inner(
             args.pair_id.as_deref().or(stored_default.as_deref()),
         )?;
         let base = pair_base(&pair).map_err(AppError::Validation)?;
-        let (template_name, server_id, server_revision) =
-            lookup_template(guard.connection(), args.template_id)?;
-        (pair, base, template_name, server_id, server_revision)
+        // A PC-listed template carries the PC's own identity: no local
+        // row needed, and history links one only when it exists.
+        if let Some(sid) = args.template_server_id.clone().filter(|s| !s.is_empty()) {
+            let name = args
+                .template_name
+                .clone()
+                .filter(|n| !n.is_empty())
+                .ok_or_else(|| {
+                    AppError::Validation("A PC-listed template needs its name.".into())
+                })?;
+            let local = match args.template_id {
+                Some(id) => {
+                    let same: Option<i64> = guard
+                        .connection()
+                        .query_row(
+                            "SELECT id FROM templates WHERE id = ?1 AND server_id = ?2",
+                            rusqlite::params![id, sid],
+                            |r| r.get(0),
+                        )
+                        .ok();
+                    same
+                }
+                None => None,
+            };
+            (
+                pair,
+                base,
+                name,
+                Some(sid),
+                args.template_server_revision,
+                local,
+            )
+        } else {
+            let id = args
+                .template_id
+                .ok_or_else(|| AppError::Validation("Choose a template first.".into()))?;
+            let (template_name, server_id, server_revision) =
+                lookup_template(guard.connection(), id)?;
+            (
+                pair,
+                base,
+                template_name,
+                server_id,
+                server_revision,
+                Some(id),
+            )
+        }
     };
 
     let copies = check_copies(args.copies.unwrap_or(1))?;
@@ -476,11 +668,12 @@ pub async fn remote_print_inner(
                     db.lock()
                         .map_err(|_| AppError::Internal("DB lock poisoned".into()))?
                         .connection(),
-                    args.template_id,
+                    local_template_id,
                     server_revision,
                     copies,
                     &args.printer_name,
                     &pair.name,
+                    Some(template_name.as_str()),
                     &data,
                     &key,
                     is_test,
@@ -509,11 +702,12 @@ pub async fn remote_print_inner(
             db.lock()
                 .map_err(|_| AppError::Internal("DB lock poisoned".into()))?
                 .connection(),
-            args.template_id,
+            local_template_id,
             server_revision,
             copies,
             &args.printer_name,
             &pair.name,
+            Some(template_name.as_str()),
             &data,
             &key,
             is_test,
@@ -542,11 +736,12 @@ pub async fn remote_print_inner(
             db.lock()
                 .map_err(|_| AppError::Internal("DB lock poisoned".into()))?
                 .connection(),
-            args.template_id,
+            local_template_id,
             server_revision,
             copies,
             &args.printer_name,
             &pair.name,
+            Some(template_name.as_str()),
             &data,
             &key,
             is_test,
@@ -572,11 +767,12 @@ pub async fn remote_print_inner(
             db.lock()
                 .map_err(|_| AppError::Internal("DB lock poisoned".into()))?
                 .connection(),
-            args.template_id,
+            local_template_id,
             server_revision,
             copies,
             &args.printer_name,
             &pair.name,
+            Some(template_name.as_str()),
             &data,
             &key,
             is_test,
@@ -592,11 +788,12 @@ pub async fn remote_print_inner(
         db.lock()
             .map_err(|_| AppError::Internal("DB lock poisoned".into()))?
             .connection(),
-        args.template_id,
+        local_template_id,
         server_revision,
         copies,
         &args.printer_name,
         &pair.name,
+        Some(template_name.as_str()),
         &data,
         &key,
         is_test,
@@ -836,11 +1033,12 @@ mod tests {
         let data = Some(serde_json::json!({"order": 1}));
         record_remote_job(
             conn,
-            7,
+            Some(7),
             Some(3),
             1,
             "Front Desk",
             "Studio PC",
+            Some("T"),
             &data,
             "key-1",
             false,
@@ -851,11 +1049,12 @@ mod tests {
         .expect("first attempt records");
         record_remote_job(
             conn,
-            7,
+            Some(7),
             Some(3),
             1,
             "Front Desk",
             "Studio PC",
+            Some("T"),
             &data,
             "key-1",
             false,

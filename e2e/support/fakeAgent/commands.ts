@@ -204,6 +204,12 @@ const implemented: Record<string, Handler> = {
     printers: [{ name: "PC Printer", printer_type: "ipp", language: "pdf" }],
     cached: false,
   }),
+  pc_templates: () => ({
+    templates: [
+      { name: "PC Receipt", server_id: "srv-pc-1", server_revision: 3 },
+    ],
+    cached: false,
+  }),
   remote_print: () => ({
     success: true,
     status: "success",

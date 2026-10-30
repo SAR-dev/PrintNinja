@@ -42,7 +42,14 @@ export function DesignerOverflowMenu({
         : t("designer.visibility_private");
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-muted-foreground">{status}</span>
+      <span className="text-xs text-muted-foreground">
+        {status}
+        {remoteId ? (
+          <span className="ml-1 font-mono" title={remoteId}>
+            {remoteId.slice(0, 8)}
+          </span>
+        ) : null}
+      </span>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" aria-label={t("nav.more")}>
