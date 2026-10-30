@@ -1909,7 +1909,11 @@ async fn pc_templates_lists_only_printable_rows() {
         .iter()
         .map(|t| t["name"].as_str().expect("name"))
         .collect();
-    assert_eq!(names, vec!["Mirror", "Versioned"], "synced rows incl. mirrors: {body}");
+    assert_eq!(
+        names,
+        vec!["Mirror", "Versioned"],
+        "synced rows incl. mirrors: {body}"
+    );
     assert_eq!(body["templates"][0]["server_id"], "srv-mirror");
     assert_eq!(body["templates"][0]["server_revision"], 3);
     assert!(body["templates"][0].get("html").is_none(), "never bodies");
