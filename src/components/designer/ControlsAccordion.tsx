@@ -28,7 +28,9 @@ export interface PagePreset {
   height: number;
 }
 
-interface Props<T extends { id: number; name: string; origin?: string | null }> {
+interface Props<
+  T extends { id: number; name: string; origin?: string | null },
+> {
   templates: T[];
   currentTemplateId: number | null;
   loadTemplate: (tpl: T) => void;
@@ -59,7 +61,9 @@ interface Props<T extends { id: number; name: string; origin?: string | null }> 
  * and custom input, as accordion sections. Several can be open at once.
  * (Sample data lives in the editor pane, after the HTML / CSS / README tabs.)
  */
-export function ControlsAccordion<T extends { id: number; name: string; origin?: string | null }>({
+export function ControlsAccordion<
+  T extends { id: number; name: string; origin?: string | null },
+>({
   templates,
   currentTemplateId,
   loadTemplate,
@@ -99,7 +103,9 @@ export function ControlsAccordion<T extends { id: number; name: string; origin?:
             ] as const
           ).map(([origin, labelKey]) => {
             const group = templates.filter((tpl) =>
-              origin === "saved" ? tpl.origin === "saved" : tpl.origin !== "saved",
+              origin === "saved"
+                ? tpl.origin === "saved"
+                : tpl.origin !== "saved",
             );
             if (group.length === 0) return null;
             return (
