@@ -134,6 +134,29 @@ const openTab = (name: string) => {
 describe("Designer page layout on a phone", () => {
   beforeEach(() => setViewport("phone"));
 
+  it("holds a loading state instead of flashing the workspace", async () => {
+    invoke.mockImplementation(async (...args: any[]): Promise<any> => {
+      const cmd = args[0] as string;
+      if (EMPTY_LISTS.has(cmd)) return [];
+      // The template list never answers: the page must wait, not guess.
+      if (cmd === "list_templates") return new Promise(() => {});
+      return null;
+    });
+    try {
+      renderDesigner();
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "Loading…",
+      );
+      expect(screen.queryByText("No templates yet")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("tablist", { name: "Designer views" }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Canvas preview")).not.toBeInTheDocument();
+    } finally {
+      invoke.mockImplementation(defaultImpl);
+    }
+  });
+
   it("shows an empty state with a New action when the account has no templates", async () => {
     invoke.mockImplementation(async (...args: any[]): Promise<any> => {
       const cmd = args[0] as string;
