@@ -5,6 +5,7 @@ const en = {
     loading: "Loading…",
     delete: "Delete",
     edit: "Edit",
+    view: "View",
     close: "Close",
     search: "Search",
     add: "Add",
