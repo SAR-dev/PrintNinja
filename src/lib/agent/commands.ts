@@ -25,11 +25,12 @@ import type {
   PeerCapabilities,
   PeerRenderArgs,
   PeerRenderResult,
+  PcTemplatesResult,
+  QueuedUseRow,
   RemotePrintArgs,
   RemotePrintResult,
   RemotePrintersResult,
   RenderPair,
-  QueuedUseRow,
   RenderShareStatus,
   ResetReport,
   SaveDatasetReq,
@@ -150,6 +151,11 @@ export interface AgentCommands {
   remote_printers: [
     { pair_id?: string | null; refresh?: boolean | null },
     RemotePrintersResult,
+  ];
+  /** The paired PC's printable templates (live, else the last good list). */
+  pc_templates: [
+    { pair_id?: string | null; refresh?: boolean | null },
+    PcTemplatesResult,
   ];
   // Fonts
   list_fonts: [{}, FontRow[]];

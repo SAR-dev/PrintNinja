@@ -58,6 +58,14 @@ impl Default for OpenApiSpec {
                             "200": { "description": "Templates, with a `count`" },                        }
                     }
                 },
+                "/v1/pc-templates": {
+                    "get": {
+                        "summary": "Printable templates for a paired phone",
+                        "description": "Synced rows only (name, `server_id`, `server_revision`) — never bodies. A phone printing via this PC lists these instead of its own rows, so the version check matches by construction.",
+                        "responses": {
+                            "200": { "description": "Printable templates, with a `count`" },                        }
+                    }
+                },
                 "/v1/metrics": {
                     "get": {
                         "summary": "Operational counters",

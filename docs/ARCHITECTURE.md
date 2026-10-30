@@ -490,6 +490,14 @@ printer name, data, and settings. The PC prints with the same pipeline
 as its own UI — including the per-printer queue — and the phone polls
 `GET /v1/jobs/{id}` for the outcome.
 
+While the flag is on, the template picker lists the PC's templates
+(`GET /v1/pc-templates`: synced rows only, names plus sync identity,
+never bodies) instead of the phone's own rows. The print sends that
+identity back, so the version check matches by construction; the
+phone's history links a local row only when one shares the id. A PC
+template with no local copy has no preview source — the dialog says
+so and still prints.
+
 Three rules govern it:
 
 - **No fallback.** While the flag is on the phone calls no local
