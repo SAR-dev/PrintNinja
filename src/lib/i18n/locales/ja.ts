@@ -420,7 +420,6 @@ const ja: Translation = {
     retry: "もう一度試す",
     blocker_printer: "印刷するにはプリンターを選択してください。",
     blocker_template: "印刷するにはテンプレートを選択してください。",
-    blocker_running: "別の印刷を実行中です。",
     blocker_copies: "部数は1以上にしてください。",
     blocker_loading: "プリンターとテンプレートを読み込んでいます…",
     pages: "ページ数",

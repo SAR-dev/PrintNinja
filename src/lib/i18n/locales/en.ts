@@ -408,7 +408,6 @@ const en = {
     retry: "Try again",
     blocker_printer: "Choose a printer to enable printing.",
     blocker_template: "Choose a template to enable printing.",
-    blocker_running: "A print is already running.",
     blocker_copies: "Copies must be at least 1.",
     blocker_loading: "Loading printers and templates…",
     pages: "Pages",
