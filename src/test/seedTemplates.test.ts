@@ -88,7 +88,8 @@ describe("ensureStarterTemplates", () => {
     );
     const rows = await ensureStarterTemplates();
 
-    expect(rows).toEqual(existing);
+    // Origin rides along (null for rows that predate it); nothing re-seeds.
+    expect(rows).toEqual([{ ...existing[0], origin: null }]);
     expect(
       invoke.mock.calls.filter((c) => c[0] === "create_template"),
     ).toHaveLength(0);

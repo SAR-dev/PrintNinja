@@ -197,7 +197,7 @@ describe("ControlsAccordion", () => {
     templates: [
       { id: 1, name: "Receipt" },
       { id: 2, name: "Label" },
-    ],
+    ] as Array<{ id: number; name: string; origin?: string | null }>,
     currentTemplateId: 2,
     loadTemplate: vi.fn(),
     templateName: "Label",
@@ -264,6 +264,19 @@ describe("ControlsAccordion", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /Receipt/ }));
     expect(p.loadTemplate).toHaveBeenCalledWith(p.templates[0]);
+  });
+
+  it("groups own and saved templates under separate headings", () => {
+    const p = props();
+    p.templates = [
+      { id: 1, name: "Receipt", origin: "own" },
+      { id: 2, name: "Label", origin: "saved" },
+    ];
+    render(<ControlsAccordion {...p} defaultOpen={ALL_OPEN} />);
+    expect(screen.getByText("Mine")).toBeInTheDocument();
+    expect(screen.getByText("Saved")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Receipt/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Label/ })).toBeInTheDocument();
   });
 
   it("applies a page preset and labels its fields", () => {
