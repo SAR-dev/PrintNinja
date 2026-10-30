@@ -1000,10 +1000,16 @@ export function DesignerPage() {
         </div>
       )}
 
-      {/* No templates yet: the one action is making one. The toolbar's
+      {/* The list is still loading: hold a neutral state so a new
+          account never flashes the full editor before the empty state.
+          No templates yet: the one action is making one. The toolbar's
           New button stays, but the nameless editor and canvas wait until
           there is something to edit. */}
-      {!templatesLoading && templates.length === 0 ? (
+      {templatesLoading ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          {t("common.loading")}
+        </p>
+      ) : templates.length === 0 ? (
         <Card>
           <EmptyState
             title={t("designer.no_templates_yet")}
