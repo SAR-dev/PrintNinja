@@ -31,6 +31,7 @@ import type {
   RemotePrintResult,
   RemotePrintersResult,
   RenderPair,
+  RenderEngineStatus,
   RenderShareStatus,
   ResetReport,
   SaveDatasetReq,
@@ -206,6 +207,9 @@ export interface AgentCommands {
   start_api_server: [{ port: number; lan_access: boolean }, string];
   stop_api_server: [{}, null];
   get_api_status: [{}, ApiStatus];
+  // Is the print browser (Edge / Chromium) installed? Drives the "install a
+  // browser" dialog; cheap enough to poll after the user installs one.
+  get_render_engine_status: [{}, RenderEngineStatus];
   // The Explorer's HTTP client. Requests go through Rust, not the WebView:
   // the page's fetch to 127.0.0.1 is cross-origin (no ACAO on a loopback
   // bind) and mixed content (Android refuses cleartext from https).

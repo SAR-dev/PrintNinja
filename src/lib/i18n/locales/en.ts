@@ -91,6 +91,47 @@ const en = {
     pair_required_body:
       "Printing on this phone always goes through a paired PC: the PC renders each page and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. Pair once below — it stays paired.",
   },
+  engine: {
+    badge: "Browser missing",
+    title_windows: "Microsoft Edge is not installed",
+    title_linux: "No Chromium-based browser found",
+    description:
+      "PrintNinja turns every label into a PDF with a browser, and does not bundle one. Until one is installed, printing will fail. It takes about a minute to fix.",
+    win_step_install: "Install Microsoft Edge",
+    win_install_hint:
+      "Download and run the installer from Microsoft. Choose the normal (all users) install.",
+    win_download: "Open the Edge download page",
+    win_winget_hint:
+      "Or, in PowerShell or Command Prompt (Windows 10 and 11 include winget):",
+    win_step_location: "Check where it was installed",
+    win_location_hint:
+      "PrintNinja looks for msedge.exe in exactly these places. A per-user install under AppData is not found.",
+    win_webview_note:
+      "The standalone WebView2 Runtime is not enough: PrintNinja starts msedge.exe itself.",
+    linux_step_install: "Install a Chromium-based browser",
+    linux_detected: "Detected: {{name}}. Run this in a terminal:",
+    linux_unknown_distro:
+      "Your distribution was not recognised. Install Chromium, Google Chrome or Microsoft Edge with your package manager:",
+    linux_avoid_snap:
+      "Avoid the Snap version of Chromium: its sandbox may not be able to read PrintNinja's cache folder.",
+    linux_download: "Open the Google Chrome download page",
+    linux_appimage:
+      "The AppImage never includes a browser. The .deb package pulls one in automatically.",
+    linux_step_path: "Make sure it can be found",
+    linux_path_hint:
+      "PrintNinja looks for these programs on your PATH, in this order:",
+    linux_override_hint:
+      "If your browser lives somewhere else, start PrintNinja with its full path:",
+    step_recheck: "Check again",
+    step_recheck_hint:
+      "Come back to this window and press Check again. It also re-checks by itself when you return.",
+    recheck: "Check again",
+    later: "Remind me later",
+    still_missing: "Still no browser found.",
+    found: "Browser found. Printing is ready.",
+    copy: "Copy command",
+    copied: "Copied",
+  },
   shell: {
     skip_to_content: "Skip to content",
     primary_nav: "Primary",
@@ -618,6 +659,7 @@ const en = {
     toast_load_failed: "Failed to load history: {{error}}",
   },
   status: {
+    engine_missing: "Browser missing",
     success: "Printed",
     failed: "Failed",
     queued: "Queued",

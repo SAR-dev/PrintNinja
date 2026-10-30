@@ -349,6 +349,16 @@ const implemented: Record<string, Handler> = {
   // Printers are device-local rows (never synced); profiles resolve
   // them by current name, so renames and deletes leave dormancy.
   list_printers: () => cache.library.listPrinters(),
+  // The e2e browser has no print engine to be missing.
+  get_render_engine_status: () => ({
+    platform: "other",
+    available: true,
+    path: null,
+    searched: [],
+    distro: [],
+    distro_name: null,
+    appimage: false,
+  }),
   add_printer: (args) => {
     const req = (args["req"] ?? args) as Record<string, unknown>;
     return cache.library.addPrinter({

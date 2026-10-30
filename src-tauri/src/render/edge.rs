@@ -43,7 +43,8 @@ pub struct EdgeRun {
     pub output: std::process::Output,
     /// Edge process start to exit, in milliseconds.
     pub edge_ms: u64,
-    /// Removing the throwaway profile afterwards (0 for the reusable one).
+    /// Time the job spent waiting on profile removal. Always 0 now: removal
+    /// runs in the background. Kept so the timing log line keeps its shape.
     pub cleanup_ms: u64,
     /// Whether the run used the reusable profile.
     pub warm: bool,
@@ -102,6 +103,10 @@ impl WarmUp {
                 Ok(Err(e)) => tracing::warn!(error = %e, "Edge warm-up could not start"),
                 Err(_) => tracing::warn!("Edge warm-up timed out; discarding the reusable profile"),
             }
+            // Stop telling jobs to wait for this warm-up *before* the slow
+            // removal: the profile is still locked (jobs take a throwaway one
+            // at once) but nobody queues behind the deletion.
+            self.warming.store(false, Ordering::SeqCst);
             remove_profile(&profile).await;
         }
         // `self` drops here: lock released, `warming` cleared.
@@ -153,13 +158,13 @@ impl EdgeLauncher {
         // one exception is the startup warm-up, which is nearly done and
         // leaves a profile that makes this job fast; wait for that, briefly.
         let guard = if self.warming.load(Ordering::SeqCst) {
-            tokio::time::timeout(WARM_UP_WAIT, self.warm.lock())
+            tokio::time::timeout(WARM_UP_WAIT, self.warm.clone().lock_owned())
                 .await
                 .ok()
         } else {
-            self.warm.try_lock().ok()
+            self.warm.clone().try_lock_owned().ok()
         };
-        if let Some(_guard) = guard {
+        if let Some(guard) = guard {
             let profile = cache_dir.join(WARM_PROFILE_DIR);
             let started = Instant::now();
             let result = spawn(edge, &profile, args).await;
@@ -184,21 +189,29 @@ impl EdgeLauncher {
                 ),
             }
             let _ = tokio::fs::remove_file(produced).await;
-            remove_profile(&profile).await;
+            // Off the print's critical path: Edge's helper processes can hold
+            // the profile for seconds after the main process exits, and the
+            // removal retries used to add all of that to this job. The guard
+            // moves into the task, so no job reuses the profile while it is
+            // being deleted (they take a throwaway one, as when it is busy).
+            tokio::spawn(async move {
+                remove_profile(&profile).await;
+                drop(guard);
+            });
         }
 
         let profile = cache_dir.join(format!("edge-profile-{}", uuid::Uuid::new_v4()));
         let started = Instant::now();
         let result = spawn(edge, &profile, args).await;
         let edge_ms = ms(started);
-        // Removed whether the run worked or not.
-        let cleanup = Instant::now();
-        remove_profile(&profile).await;
-        let cleanup_ms = ms(cleanup);
+        // Removed whether the run worked or not — but after the PDF is in
+        // hand, not before: the job never waits for Edge to let go of files.
+        // (An unremovable leftover is swept at the next start-up.)
+        tokio::spawn(async move { remove_profile(&profile).await });
         Ok(EdgeRun {
             output: result?,
             edge_ms,
-            cleanup_ms,
+            cleanup_ms: 0,
             warm: false,
         })
     }
@@ -228,22 +241,25 @@ async fn spawn(
 
 /// Best-effort removal of an Edge profile, with retries.
 ///
-/// Edge can still hold handles briefly after it exits; a single
-/// fire-and-forget `remove_dir_all` then left the whole profile in the
-/// cache dir — its certificate-transparency and trust material showed up
-/// as a stray `.pem` next to `last-render.pdf`, looking like the app had
-/// written a key file. Retry, and log if the profile really cannot go.
+/// Edge's helper processes (crashpad, GPU, utility) can hold handles for a
+/// few seconds after the main process exits (os error 32 on Windows). A
+/// single `remove_dir_all` then left the whole profile in the cache dir —
+/// its certificate-transparency and trust material showed up as a stray
+/// `.pem` next to `last-render.pdf`. So retry with a growing delay and log if
+/// the profile really cannot go.
+///
+/// Always call this from a background task, never from the print path: the
+/// worst case is about ten seconds. Anything left over is removed by
+/// `sweep_leftover_edge_profiles` at the next start-up.
 async fn remove_profile(dir: &Path) {
-    for attempt in 0..5u32 {
+    const ATTEMPTS: u32 = 8;
+    for attempt in 0..ATTEMPTS {
         match tokio::fs::remove_dir_all(dir).await {
             Ok(()) => return,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
-            Err(e) if attempt < 4 => {
+            Err(e) if attempt + 1 < ATTEMPTS => {
                 tracing::debug!(error = %e, "Edge still holds its profile; retrying removal");
-                tokio::time::sleep(std::time::Duration::from_millis(
-                    80 * u64::from(attempt + 1),
-                ))
-                .await;
+                tokio::time::sleep(Duration::from_millis(250 * u64::from(attempt + 1))).await;
             }
             Err(e) => {
                 tracing::warn!(
@@ -323,6 +339,19 @@ echo ok > "$out"
         }
     }
 
+    impl Rig {
+        /// Profile removal runs in the background now: wait until it is done
+        /// (no throwaway profile left, the reusable one not being deleted).
+        async fn settle(&self, launcher: &EdgeLauncher) {
+            for _ in 0..100 {
+                if self.throwaway_dirs().is_empty() && launcher.warm.try_lock().is_ok() {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }
+    }
+
     impl Drop for Rig {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.cache);
@@ -346,6 +375,7 @@ echo ok > "$out"
             2,
             "the second run saw the first's profile"
         );
+        rig.settle(&launcher).await;
         assert!(
             rig.throwaway_dirs().is_empty(),
             "no throwaway profile was made"
@@ -381,6 +411,7 @@ echo ok > "$out"
             2,
             "warm-up run + first job, one profile"
         );
+        rig.settle(&launcher).await;
         assert!(rig.throwaway_dirs().is_empty());
     }
 
@@ -403,6 +434,7 @@ echo ok > "$out"
             job.unwrap().warm,
             "the job waited and used the warm profile"
         );
+        rig.settle(&launcher).await;
         assert!(rig.throwaway_dirs().is_empty());
         let runs = std::fs::read_to_string(rig.cache.join(WARM_PROFILE_DIR).join("runs")).unwrap();
         assert_eq!(runs.lines().count(), 2);
@@ -449,6 +481,7 @@ echo ok > "$out"
         assert!(a.warm, "the first job took the reusable profile");
         assert!(!b.warm, "the second job did not wait for it");
         assert!(rig.cache.join("a.pdf").exists() && rig.cache.join("b.pdf").exists());
+        rig.settle(&launcher).await;
         assert!(
             rig.throwaway_dirs().is_empty(),
             "the throwaway profile is removed"
@@ -471,6 +504,7 @@ echo ok > "$out"
         assert!(!run.warm, "the result comes from the throwaway retry");
         assert!(run.output.status.success());
         assert!(rig.cache.join("a.pdf").exists());
+        rig.settle(&launcher).await;
         assert!(!warm.exists(), "the damaged profile is deleted");
         assert!(rig.throwaway_dirs().is_empty());
 
@@ -505,6 +539,7 @@ echo ok > "$out"
         assert!(!run.output.status.success());
         assert!(!run.warm);
         assert!(!rig.cache.join("a.pdf").exists());
+        rig.settle(&launcher).await;
         assert!(rig.throwaway_dirs().is_empty());
     }
 
@@ -517,6 +552,7 @@ echo ok > "$out"
             .run(&missing, &rig.cache, &[], &rig.cache.join("a.pdf"))
             .await;
         assert!(err.is_err());
+        rig.settle(&launcher).await;
         assert!(rig.throwaway_dirs().is_empty(), "nothing is left behind");
     }
 }
