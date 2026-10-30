@@ -227,18 +227,13 @@ describe("classes templates commonly use", () => {
     expect(COMMON.filter((c) => !has(css, c))).toEqual([]);
   });
 
-  it("emits a rule for every class in the bundled starter templates", async () => {
-    const { STARTER_TEMPLATES } = await import(
+  it("emits a rule for every class in the bundled example", async () => {
+    const { DEFAULT_TEMPLATE_HTML } = await import(
       "@/lib/templates/defaultTemplate"
     );
-    for (const t of STARTER_TEMPLATES) {
-      const { candidates } = extractClasses(t.html);
-      const { css } = await compileTemplateCss(t.html);
-      expect(candidates.length).toBeGreaterThan(20);
-      expect(
-        candidates.filter((c) => !has(css, c)),
-        t.name,
-      ).toEqual([]);
-    }
+    const { candidates } = extractClasses(DEFAULT_TEMPLATE_HTML);
+    const { css } = await compileTemplateCss(DEFAULT_TEMPLATE_HTML);
+    expect(candidates.length).toBeGreaterThan(20);
+    expect(candidates.filter((c) => !has(css, c))).toEqual([]);
   });
 });

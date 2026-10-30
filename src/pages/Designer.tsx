@@ -45,6 +45,7 @@ import { usePersistentState } from "@/lib/hooks/usePersistentState";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { agent } from "@/lib/agent/commands";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -79,13 +80,13 @@ import {
   DEFAULT_TEMPLATE_HTML,
   DEFAULT_TEMPLATE_CSS,
   DEFAULT_MOCK_DATA,
-  STARTER_TEMPLATES,
-  defaultTemplateReadme,
+  NEW_TEMPLATE_PAGE_W_MM,
+  NEW_TEMPLATE_PAGE_H_MM,
+  newTemplateContent,
 } from "@/lib/templates/defaultTemplate";
 import { useCompiledCss } from "@/lib/templates/useCompiledCss";
+import { listTemplates } from "@/lib/templates/listTemplates";
 import { formatCss, formatHtml } from "@/lib/utils/format";
-import { ensureStarterTemplates } from "@/lib/templates/seedTemplates";
-import { hideStarterWhenOthers } from "@/lib/templates/starterVisibility";
 import * as share from "@/lib/share/client";
 import { useShareStatus } from "@/lib/shell/useShareStatus";
 import { getLocalTemplate, isReadOnly } from "@/lib/share/sync";
@@ -124,13 +125,11 @@ export function DesignerPage() {
   const [newNameError, setNewNameError] = useState("");
   const [htmlCode, setHtmlCode] = useState(DEFAULT_TEMPLATE_HTML);
   const [cssCode, setCssCode] = useState(DEFAULT_TEMPLATE_CSS);
-  const [templateName, setTemplateName] = useState(STARTER_TEMPLATES[0].name);
-  const [pageWidth, setPageWidth] = useState(
-    STARTER_TEMPLATES[0]?.page_w_mm ?? 80,
-  );
-  const [pageHeight, setPageHeight] = useState(
-    STARTER_TEMPLATES[0]?.page_h_mm ?? 200,
-  );
+  // No template exists until one is opened or made: an empty Designer is
+  // the honest starting point, not a bundled example nobody asked for.
+  const [templateName, setTemplateName] = useState("");
+  const [pageWidth, setPageWidth] = useState(NEW_TEMPLATE_PAGE_W_MM);
+  const [pageHeight, setPageHeight] = useState(NEW_TEMPLATE_PAGE_H_MM);
   const [orientation, setOrientation] = useState<"portrait" | "landscape">(
     "portrait",
   );
@@ -215,8 +214,8 @@ export function DesignerPage() {
   const compiledCss = useCompiledCss(debouncedHtml);
 
   // Templates available in the designer — persisted in SQLite via
-  // `list_templates` / `create_template`. Starter templates are the
-  // fallback when the DB is empty (first launch) or in web mode.
+  // `list_templates` / `create_template`. Nothing is seeded: an empty
+  // list means no templates yet, and the accordion shows the New action.
   // Local working copies: content for the editor plus the server link
   // when the row came from a full template (nulls when it did not).
   const [templates, setTemplates] = useState<
@@ -239,8 +238,7 @@ export function DesignerPage() {
   const [currentTemplateId, setCurrentTemplateId] = useState<number | null>(
     null,
   );
-  const [_templatesLoading, setTemplatesLoading] = useState(true);
-  void _templatesLoading;
+  const [templatesLoading, setTemplatesLoading] = useState(true);
 
   // Template ids whose html/css in `templates` is already loaded into
   // the editor. `loadTemplate` writes content directly since rows carry
@@ -456,14 +454,34 @@ export function DesignerPage() {
     const serverId = row.server_id ?? row.remote_id;
     if (!serverId) return;
     setPending("visibility");
+    /** Write the publish state onto the local row too: the switch is the
+     * source of truth on screen, but after a relogin the row is rebuilt
+     * from the DB — state-only updates made this vanish back to private. */
+    const persistPublish = async (id: string, published: string | null) => {
+      setPublishedAt(published);
+      setRemoteId(id);
+      try {
+        await agent("set_publish_info", {
+          req: {
+            id: currentTemplateDbId,
+            remote_id: id,
+            published_at: published,
+          },
+        });
+      } catch {
+        /* offline race: the next pull repairs it from the server */
+      }
+    };
     try {
       let id = serverId;
       if (row.base_revision == null) {
         const content = await buildContent();
         const saved = await saveTemplateToServer(row, content);
         id = saved.remoteId;
-        setRemoteId(saved.remoteId);
-        setPublishedAt(saved.published ? saved.updatedAt : null);
+        await persistPublish(
+          saved.remoteId,
+          saved.published ? saved.updatedAt : null,
+        );
         setTemplates((prev) =>
           prev.map((t) =>
             t.id === currentTemplateDbId
@@ -485,11 +503,14 @@ export function DesignerPage() {
       }
       if (makePublic) {
         const remote = await share.publishRemoteTemplate(id);
-        setPublishedAt(remote.published_at ?? remote.updated_at ?? null);
+        await persistPublish(
+          id,
+          remote.published_at ?? remote.updated_at ?? null,
+        );
         notifySuccess(t("designer.toast_now_public"));
       } else {
         await share.unpublishRemoteTemplate(id);
-        setPublishedAt(null);
+        await persistPublish(id, null);
         notifySuccess(t("designer.toast_now_private"));
       }
       window.dispatchEvent(new Event("sync:pulled"));
@@ -566,14 +587,15 @@ export function DesignerPage() {
     }
     let keepDialogOpen = false;
     try {
+      const start = newTemplateContent(name);
       const created = await createTemplateOnServer({
         name,
-        page_w_mm: STARTER_TEMPLATES[0].page_w_mm,
-        page_h_mm: STARTER_TEMPLATES[0].page_h_mm,
-        orientation: STARTER_TEMPLATES[0].orientation,
-        html: DEFAULT_TEMPLATE_HTML,
-        css: DEFAULT_TEMPLATE_CSS,
-        readme: defaultTemplateReadme(name),
+        page_w_mm: start.page_w_mm,
+        page_h_mm: start.page_h_mm,
+        orientation: "portrait",
+        html: start.html,
+        css: start.css,
+        readme: start.readme,
       });
       const tpl = {
         id: created.id,
@@ -585,7 +607,7 @@ export function DesignerPage() {
         orientation: created.orientation,
       };
       contentLoaded.current.add(tpl.id);
-      setTemplates((prev) => hideStarterWhenOthers([...prev, tpl]));
+      setTemplates((prev) => [...prev, tpl]);
       loadTemplate(tpl);
       setCurrentTemplateDbId(tpl.id);
       notifySuccess(t("designer.toast_created_server", { name }));
@@ -602,14 +624,15 @@ export function DesignerPage() {
       const id = templates.length
         ? Math.max(...templates.map((t) => t.id)) + 1
         : 1;
+      const start = newTemplateContent(name);
       const tpl = {
         id,
         name,
-        html: DEFAULT_TEMPLATE_HTML,
-        css: DEFAULT_TEMPLATE_CSS,
-        page_w_mm: STARTER_TEMPLATES[0].page_w_mm,
-        page_h_mm: STARTER_TEMPLATES[0].page_h_mm,
-        orientation: STARTER_TEMPLATES[0].orientation,
+        html: start.html,
+        css: start.css,
+        page_w_mm: start.page_w_mm,
+        page_h_mm: start.page_h_mm,
+        orientation: "portrait",
       };
       contentLoaded.current.add(tpl.id);
       setTemplates((prev) => [...prev, tpl]);
@@ -632,80 +655,58 @@ export function DesignerPage() {
   const [editJson, setEditJson] = useState("");
   const [showEditDataset, setShowEditDataset] = useState(false);
 
-  // The active template's DB row id (created on first save / on load).
-  const [currentTemplateDbId, setCurrentTemplateDbId] = useState(1);
+  // The active template's DB row id (null until a template is opened or
+  // made — the Designer starts empty).
+  const [currentTemplateDbId, setCurrentTemplateDbId] = useState<number | null>(
+    null,
+  );
 
-  // Load template list from SQLite on mount; fall back to starters in web
-  // mode or on first launch when the table is empty.
+  // Load the template list from SQLite on mount. Nothing is seeded: an
+  // empty list means no templates yet, and the empty state offers the
+  // one action that matters — make one.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        // Seeds the bundled starters into SQLite on first run, so the Designer
-        // and the Print tab both see real rows instead of an empty list.
-        const rows = await ensureStarterTemplates();
+        const rows = await listTemplates();
         if (cancelled) return;
-        if (rows && rows.length > 0) {
-          const hydrated = rows.map((r) => ({
-            id: r.id,
-            name: r.name,
-            html: r.html || DEFAULT_TEMPLATE_HTML,
-            css: r.css || DEFAULT_TEMPLATE_CSS,
-            page_w_mm: r.page_w_mm,
-            page_h_mm: r.page_h_mm,
-            orientation: r.orientation,
-            origin: r.origin ?? null,
-          }));
-          setTemplates(hydrated);
-          setCurrentTemplateId(hydrated[0].id);
-          setTemplateName(hydrated[0].name);
-          setHtmlCode(formatHtml(hydrated[0].html));
-          setCssCode(formatCss(hydrated[0].css));
-          setPageWidth(hydrated[0].page_w_mm ?? 80);
-          setPageHeight(hydrated[0].page_h_mm ?? 200);
-          setOrientation(
-            (hydrated[0].orientation as "portrait" | "landscape") ?? "portrait",
-          );
-          setCurrentTemplateDbId(hydrated[0].id);
-          // Load README and publish info for the first template
-          try {
-            const full = await agent("get_template", { id: hydrated[0].id });
-            setReadme(full.readme ?? "");
-            setRemoteId(full.server_id ?? full.remote_id ?? null);
-            setPublishedAt(full.published_at ?? null);
-            setOrigin(full.origin === "saved" ? "saved" : "own");
-          } catch {
-            setReadme("");
-            setRemoteId(null);
-            setPublishedAt(null);
-          }
-        } else {
-          const starters = STARTER_TEMPLATES.map((t, i) => ({
-            id: i + 1,
-            name: t.name,
-            html: t.html,
-            css: t.css,
-            page_w_mm: t.page_w_mm,
-            page_h_mm: t.page_h_mm,
-            orientation: t.orientation,
-          }));
-          starters.forEach((t) => contentLoaded.current.add(t.id));
-          setTemplates(starters);
-          setCurrentTemplateId(starters[0].id);
+        const hydrated = rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          html: r.html || "",
+          css: r.css || "",
+          page_w_mm: r.page_w_mm,
+          page_h_mm: r.page_h_mm,
+          orientation: r.orientation,
+          origin: r.origin ?? null,
+        }));
+        setTemplates(hydrated);
+        const first = hydrated[0];
+        if (!first) return;
+        setCurrentTemplateId(first.id);
+        setTemplateName(first.name);
+        setHtmlCode(formatHtml(first.html));
+        setCssCode(formatCss(first.css));
+        setPageWidth(first.page_w_mm ?? NEW_TEMPLATE_PAGE_W_MM);
+        setPageHeight(first.page_h_mm ?? NEW_TEMPLATE_PAGE_H_MM);
+        setOrientation(
+          (first.orientation as "portrait" | "landscape") ?? "portrait",
+        );
+        setCurrentTemplateDbId(first.id);
+        // README and publish info live on the full row.
+        try {
+          const full = await agent("get_template", { id: first.id });
+          setReadme(full.readme ?? "");
+          setRemoteId(full.server_id ?? full.remote_id ?? null);
+          setPublishedAt(full.published_at ?? null);
+          setOrigin(full.origin === "saved" ? "saved" : "own");
+        } catch {
+          setReadme("");
+          setRemoteId(null);
+          setPublishedAt(null);
         }
       } catch {
-        const starters = STARTER_TEMPLATES.map((t, i) => ({
-          id: i + 1,
-          name: t.name,
-          html: t.html,
-          css: t.css,
-          page_w_mm: t.page_w_mm,
-          page_h_mm: t.page_h_mm,
-          orientation: t.orientation,
-        }));
-        starters.forEach((t) => contentLoaded.current.add(t.id));
-        setTemplates(starters);
-        setCurrentTemplateId(starters[0].id);
+        /* web mode / backend unavailable: the empty state applies */
       } finally {
         if (!cancelled) setTemplatesLoading(false);
       }
@@ -723,8 +724,8 @@ export function DesignerPage() {
   useEffect(() => {
     const onPulled = async () => {
       try {
-        const rows = await ensureStarterTemplates();
-        if (!rows || rows.length === 0) return;
+        const rows = await listTemplates();
+        if (rows.length === 0) return;
         setTemplates((prev) => {
           const byId = new Map(rows.map((r) => [r.id, r]));
           const next = prev.map((t) => {
@@ -755,8 +756,8 @@ export function DesignerPage() {
               next.push({
                 id: r.id,
                 name: r.name,
-                html: r.html || DEFAULT_TEMPLATE_HTML,
-                css: r.css || DEFAULT_TEMPLATE_CSS,
+                html: r.html || "",
+                css: r.css || "",
                 page_w_mm: r.page_w_mm,
                 page_h_mm: r.page_h_mm,
                 orientation: r.orientation,
@@ -764,8 +765,21 @@ export function DesignerPage() {
               });
             }
           }
-          return hideStarterWhenOthers(next);
+          return next;
         });
+        // Publish state is owned by the server, so a publish made on
+        // another PC lands here: refresh it for the open template.
+        const openId = currentTemplateDbIdRef.current;
+        if (openId != null) {
+          try {
+            const full = await agent("get_template", { id: openId });
+            setRemoteId(full.server_id ?? full.remote_id ?? null);
+            setPublishedAt(full.published_at ?? null);
+            setOrigin(full.origin === "saved" ? "saved" : "own");
+          } catch {
+            /* row gone or backend busy: keep the state we have */
+          }
+        }
       } catch {
         /* keep current list on failure */
       }
@@ -879,6 +893,7 @@ export function DesignerPage() {
     templates,
     currentTemplateId,
     loadTemplate,
+    onNew: () => setShowNewTemplateDialog(true),
     templateName,
     setTemplateName,
     pageWidth,
@@ -953,6 +968,8 @@ export function DesignerPage() {
             saveTitle={
               offline ? "Offline — connect to save to the server" : undefined
             }
+            templateName={templateName}
+            onTemplateNameChange={setTemplateName}
             remoteId={remoteId}
             publishedAt={publishedAt}
             readOnly={isReadOnly({ origin })}
@@ -983,7 +1000,21 @@ export function DesignerPage() {
         </div>
       )}
 
-      {isDesktop ? (
+      {/* No templates yet: the one action is making one. The toolbar's
+          New button stays, but the nameless editor and canvas wait until
+          there is something to edit. */}
+      {!templatesLoading && templates.length === 0 ? (
+        <Card>
+          <EmptyState
+            title={t("designer.no_templates_yet")}
+            description={t("designer.no_templates_hint")}
+            action={{
+              label: t("designer.newTemplate"),
+              onClick: () => setShowNewTemplateDialog(true),
+            }}
+          />
+        </Card>
+      ) : isDesktop ? (
         <div className="flex min-h-0 flex-1 gap-4">
           {controlsExpanded ? (
             <aside

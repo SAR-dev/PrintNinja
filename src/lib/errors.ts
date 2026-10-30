@@ -100,6 +100,10 @@ const PATTERNS: Array<[RegExp, string, string[]]> = [
   ],
   [/^Unknown printer type `(.+)`$/, "errors.unknown_printer_type", ["type"]],
   [/^PDF render timed out after (\d+)s$/, "errors.pdf_timeout", ["seconds"]],
+  // The server's generic 403 body (ForbiddenError's default): a save that
+  // PUTs to a template id owned by a different account. Name the cause so
+  // it does not surface as raw English.
+  [/^Not allowed$/, "errors.not_allowed", []],
 ];
 
 /** Variant → key used when the payload matches no known message. */

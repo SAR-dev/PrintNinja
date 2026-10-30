@@ -84,8 +84,8 @@ const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...a: unknown[]) => invoke(...a),
 }));
-vi.mock("@/lib/templates/seedTemplates", () => ({
-  ensureStarterTemplates: async () => [
+vi.mock("@/lib/templates/listTemplates", () => ({
+  listTemplates: async () => [
     {
       id: 7,
       name: "Shipping label",

@@ -7,8 +7,8 @@ const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...a: unknown[]) => invoke(...a),
 }));
-vi.mock("@/lib/templates/seedTemplates", () => ({
-  ensureStarterTemplates: async () => [
+vi.mock("@/lib/templates/listTemplates", () => ({
+  listTemplates: async () => [
     {
       id: 7,
       name: "Shipping label",
@@ -405,7 +405,7 @@ describe("Print via PC", () => {
     renderPage();
     await screen.findByTestId("print-via-pc-banner");
     // The picker offers the PC's rows (snapped to the first), not the
-    // phone's starter template.
+    // phone's own template.
     const picker = await screen.findByLabelText("Template");
     await waitFor(() => expect(picker).toHaveTextContent("PC Receipt"));
     expect(picker).not.toHaveTextContent("Shipping label");

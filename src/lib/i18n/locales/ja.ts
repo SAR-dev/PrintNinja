@@ -215,6 +215,9 @@ const ja: Translation = {
     portrait: "縦",
     landscape: "横",
     templates: "テンプレート",
+    no_templates_yet: "テンプレートはまだありません",
+    no_templates_hint:
+      "作成してデザインを始めましょう。サーバー上の非公開コピーとして始まります。",
     width_mm: "幅 (mm)",
     height_mm: "高さ (mm)",
     presets: "プリセット",
@@ -318,7 +321,7 @@ const ja: Translation = {
     toast_moved_again:
       "サーバーのコピーがさらに更新されました。再読み込みしてもう一度お試しください",
     toast_name_required: "テンプレート名を入力してください",
-    toast_name_exists: "同名のテンプレートが既にあります",
+    toast_name_exists: "そのテンプレート名は使用中です",
     toast_offline_create:
       "オフラインです。サーバーにテンプレートを作成するには接続してください",
     toast_created_server: "テンプレート「{{name}}」をサーバーに作成しました",
@@ -1378,6 +1381,8 @@ const ja: Translation = {
     cups_http: "CUPSがHTTP {{status}}を返しました",
     ipp_http: "IPPサーバーがHTTP {{status}}を返しました",
     cups_refused: "CUPSがリクエストを拒否しました: ステータス {{status}}",
+    not_allowed:
+      "許可されていません。このテンプレートは別のアカウントのものです。所有するアカウントでサインインしてからもう一度お試しください。",
     unknown_printer_type: "不明なプリンターの種類です: `{{type}}`",
     pdf_timeout: "PDFのレンダリングが {{seconds}} 秒でタイムアウトしました",
   },
