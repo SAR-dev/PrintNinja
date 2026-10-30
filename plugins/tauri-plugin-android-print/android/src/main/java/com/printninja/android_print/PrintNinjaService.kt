@@ -1,5 +1,6 @@
 package com.printninja.android_print
 
+import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,9 +10,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.Process
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import java.lang.ref.WeakReference
 
 /**
  * Foreground service that keeps the print queue and the local API
@@ -25,10 +30,15 @@ import androidx.core.content.ContextCompat
  * `src-tauri/src/commands/api.rs::launch_server`), and the text shows
  * the live address while it runs.
  *
- * Lifetime: started from MainActivity.onCreate (see
- * scripts/patch-android-service.mjs) and from the plugin's load(), so
- * the queue survives before any command runs. Stopped only from the
- * notification action or the plugin's stopBackgroundService command.
+ * The notification has two actions: **Open** brings the app to the
+ * front and **Close** shuts everything down (service, activity and the
+ * process, which takes the queue worker and API server with it). Tapping
+ * the notification body also opens the app.
+ *
+ * Lifetime: started by default from the plugin's load() at app launch
+ * (and again from the webview), so the queue survives before any command
+ * runs. Stopped only from the notification's Close action or the
+ * plugin's stopBackgroundService command.
  */
 class PrintNinjaService : Service() {
 
@@ -38,10 +48,16 @@ class PrintNinjaService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_STOP -> {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_CLOSE -> {
+                closeApp()
+                return START_NOT_STICKY
+            }
         }
         startForegroundWithNotification()
         // If the system kills us (memory pressure), restart: the queue
@@ -54,6 +70,28 @@ class PrintNinjaService : Service() {
     override fun onDestroy() {
         isRunning = false
         super.onDestroy()
+    }
+
+    /**
+     * The notification's Close action: drop the notification, stop the
+     * service, remove the activity from recents, then end the process.
+     * The queue worker and API server live in this process (Tauri's Rust
+     * side), so ending it is what actually "closes" PrintNinja. Queued
+     * jobs persist in SQLite and resume on the next launch.
+     */
+    private fun closeApp() {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        val activity = activityRef?.get()
+        activity?.runOnUiThread {
+            if (!activity.isFinishing) activity.finishAndRemoveTask()
+        }
+        // Short delay so the activity teardown and notification removal
+        // go out before the process disappears.
+        Handler(Looper.getMainLooper()).postDelayed(
+            { Process.killProcess(Process.myPid()) },
+            CLOSE_DELAY_MS,
+        )
     }
 
     private fun startForegroundWithNotification() {
@@ -75,8 +113,20 @@ class PrintNinjaService : Service() {
         const val CHANNEL_ID = "printninja-print-service"
         const val NOTIFICATION_ID = 1
         const val ACTION_STOP = "com.printninja.android_print.STOP_SERVICE"
+        const val ACTION_CLOSE = "com.printninja.android_print.CLOSE_APP"
         private const val REQUEST_OPEN = 1
-        private const val REQUEST_STOP = 2
+        private const val REQUEST_OPEN_ACTION = 3
+        private const val REQUEST_CLOSE = 4
+        private const val CLOSE_DELAY_MS = 300L
+
+        /** The app's activity, so Close can finish it. Weak: never leaks it. */
+        @Volatile
+        private var activityRef: WeakReference<Activity>? = null
+
+        /** Called by the plugin at load so the Close action can end the activity. */
+        fun attachActivity(activity: Activity) {
+            activityRef = WeakReference(activity)
+        }
 
         @Volatile
         var isRunning: Boolean = false
@@ -184,28 +234,31 @@ class PrintNinjaService : Service() {
         }
 
         private fun buildNotification(context: Context): Notification {
-            val openApp = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                ?.let {
-                    PendingIntent.getActivity(
-                        context, REQUEST_OPEN, it,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                    )
-                }
-            val stop = PendingIntent.getService(
-                context, REQUEST_STOP,
-                Intent(context, PrintNinjaService::class.java).setAction(ACTION_STOP),
+            val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            fun openIntent(requestCode: Int): PendingIntent? = launch?.let {
+                PendingIntent.getActivity(
+                    context, requestCode, Intent(it),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            }
+            val close = PendingIntent.getService(
+                context, REQUEST_CLOSE,
+                Intent(context, PrintNinjaService::class.java).setAction(ACTION_CLOSE),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             val (title, text) = notificationText(apiServerRunning, apiServerAddress)
-            return NotificationCompat.Builder(context, CHANNEL_ID)
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setContentTitle(title)
                 .setContentText(text)
                 .setSmallIcon(context.applicationInfo.icon)
-                .setContentIntent(openApp)
-                .addAction(0, "Stop", stop)
+                .setContentIntent(openIntent(REQUEST_OPEN))
                 .setOngoing(true)
                 .setSilent(true)
-                .build()
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            openIntent(REQUEST_OPEN_ACTION)?.let { builder.addAction(0, "Open", it) }
+            builder.addAction(0, "Close", close)
+            return builder.build()
         }
     }
 }

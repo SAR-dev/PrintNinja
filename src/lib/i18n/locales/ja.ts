@@ -713,7 +713,7 @@ const ja: Translation = {
     hint_diagnostics: "サポート用にログをエクスポート",
     background_title: "バックグラウンドで実行",
     background_hint:
-      "アプリをスワイプして閉じても印刷キューを動かし続けます。停止するには通知から操作してください。",
+      "既定で動作し、アプリをスワイプして閉じても印刷キューを動かし続けます。通知の「開く」「閉じる」で操作できます。",
     background_launch: "起動時に開始",
     background_minimized: "通知領域に最小化した状態で開始",
     background_minimized_hint: "最小化での開始には、起動時の開始が必要です。",
@@ -726,7 +726,7 @@ const ja: Translation = {
       "テンプレート、印刷履歴、プリンター、フォント、データセット、プロファイル、すべての設定がこのPCから完全に削除されます。アカウントはサーバーに残るため、再度サインインすると復元できます。",
     background_service: "印刷サービス",
     background_service_hint:
-      "アプリをスワイプして閉じても印刷キューを動かし続けます。停止するには通知から操作してください。",
+      "既定で動作し、アプリをスワイプして閉じても印刷キューを動かし続けます。通知の「開く」「閉じる」で操作できます。",
     background_running: "実行中",
     background_stopped: "停止中",
     background_battery: "バッテリーの最適化を無視",

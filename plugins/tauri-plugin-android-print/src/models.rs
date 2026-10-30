@@ -315,6 +315,22 @@ pub struct ApiServerState {
     pub address: Option<String>,
 }
 
+/// What `startBackgroundService` / `isBackgroundServiceRunning` resolve
+/// with on the Kotlin side: `{"running": bool}`, never a bare boolean.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunningResponse {
+    pub running: bool,
+}
+
+/// What `requestBatteryExemption` / `isBatteryExemptionGranted` resolve
+/// with on the Kotlin side: `{"granted": bool}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrantedResponse {
+    pub granted: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -474,5 +490,17 @@ mod tests {
         let json = r#"{"name":"p","host":"1.2.3.4","port":631,"kind":"ipp"}"#;
         let p: DiscoveredPrinter = serde_json::from_str(json).unwrap();
         assert!(p.resource_path.is_none());
+    }
+
+    #[test]
+    fn running_response_parses_the_object_kotlin_sends() {
+        let r: RunningResponse = serde_json::from_str(r#"{"running":true}"#).unwrap();
+        assert!(r.running);
+    }
+
+    #[test]
+    fn granted_response_parses_the_object_kotlin_sends() {
+        let r: GrantedResponse = serde_json::from_str(r#"{"granted":false}"#).unwrap();
+        assert!(!r.granted);
     }
 }
