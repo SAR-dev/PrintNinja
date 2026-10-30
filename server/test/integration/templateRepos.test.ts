@@ -23,8 +23,9 @@ import {
 // behaviors run twice, once against the in-memory fakes and once against
 // a real database. If a fake ever disagrees with the database, a test fails,
 // so the domain unit tests cannot pass on behaviour the real store does
-// not have. Ordering ties are exercised through the name sort (two rows
-// with one name); updated_at ties share the same id-asc tail.
+// not have. Names are unique per owner: no two rows share one, so every
+// ordering assertion uses distinct names; updated_at ties share the same
+// id-asc tail.
 
 interface Backend {
   templates: TemplateRepository;
@@ -44,7 +45,9 @@ const write = (
 ) => ({
   id,
   ownerId,
-  name: "Label",
+  // Unique per row: names are unique per owner since the templates
+  // migration, so a shared default would collide on the second create.
+  name: `Label ${id.slice(0, 8)}`,
   summary: "",
   pageWMm: 101.6,
   pageHMm: 152.4,
@@ -334,8 +337,10 @@ for (const name of ["fake", "prisma"] as const) {
     it("sorts used and name with id tie-breaks", async () => {
       const a = randomUUID();
       const b = randomUUID();
-      await be.templates.create(write(a, owner, { name: "Same" }), version);
-      await be.templates.create(write(b, owner, { name: "Same" }), version);
+      // Names are unique per owner: ties are impossible, so the test
+      // pins both orderings with distinct names instead.
+      await be.templates.create(write(a, owner, { name: "Same B" }), version);
+      await be.templates.create(write(b, owner, { name: "Same A" }), version);
       await be.templates.setPublished(a, new Date());
       await be.templates.setPublished(b, new Date());
       await be.templates.incrementUseCount(b, 2);
@@ -353,7 +358,7 @@ for (const name of ["fake", "prisma"] as const) {
         pageSize: 20,
         sort: "name",
       });
-      expect(named.items.map((t) => t.id)).toEqual(a < b ? [a, b] : [b, a]);
+      expect(named.items.map((t) => t.id)).toEqual([b, a]);
     });
 
     it("counts uses for published templates only", async () => {
