@@ -8,7 +8,7 @@ import org.junit.Test
 /**
  * Framework-free contract tests: the action strings and channel ids
  * are the integration surface (MainActivity patch, notification taps,
- * the Stop action). Renaming one silently breaks the handoff, so the
+ * the Open and Close actions). Renaming one silently breaks the handoff, so the
  * names are pinned here where plain JUnit can reach them.
  */
 class ServiceContractTest {
@@ -19,6 +19,15 @@ class ServiceContractTest {
             "com.printninja.android_print.STOP_SERVICE",
             PrintNinjaService.ACTION_STOP,
         )
+    }
+
+    @Test
+    fun closeActionIsNamespacedAndDistinctFromStop() {
+        assertEquals(
+            "com.printninja.android_print.CLOSE_APP",
+            PrintNinjaService.ACTION_CLOSE,
+        )
+        assertTrue(PrintNinjaService.ACTION_CLOSE != PrintNinjaService.ACTION_STOP)
     }
 
     @Test
