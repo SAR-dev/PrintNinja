@@ -13,6 +13,8 @@ export interface StarterTemplate {
   css: string;
   compiled_css: string;
   compiled_key: string;
+  /** Local origin when the row came from the DB (`own` / `saved`). */
+  origin?: string | null;
 }
 
 /**
@@ -33,6 +35,7 @@ const toStarter = (row: {
   css?: string;
   compiled_css?: string;
   compiled_key?: string;
+  origin?: string | null;
 }): StarterTemplate => ({
   id: row.id,
   name: row.name,
@@ -43,6 +46,7 @@ const toStarter = (row: {
   css: row.css ?? "",
   compiled_css: row.compiled_css ?? "",
   compiled_key: row.compiled_key ?? "",
+  origin: row.origin ?? null,
 });
 
 async function loadOrSeed(): Promise<StarterTemplate[]> {

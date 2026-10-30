@@ -28,7 +28,9 @@ export interface PagePreset {
   height: number;
 }
 
-interface Props<T extends { id: number; name: string }> {
+interface Props<
+  T extends { id: number; name: string; origin?: string | null },
+> {
   templates: T[];
   currentTemplateId: number | null;
   loadTemplate: (tpl: T) => void;
@@ -59,7 +61,9 @@ interface Props<T extends { id: number; name: string }> {
  * and custom input, as accordion sections. Several can be open at once.
  * (Sample data lives in the editor pane, after the HTML / CSS / README tabs.)
  */
-export function ControlsAccordion<T extends { id: number; name: string }>({
+export function ControlsAccordion<
+  T extends { id: number; name: string; origin?: string | null },
+>({
   templates,
   currentTemplateId,
   loadTemplate,
@@ -91,25 +95,45 @@ export function ControlsAccordion<T extends { id: number; name: string }>({
     >
       <AccordionItem value="templates">
         <AccordionTrigger>{t("designer.templates")}</AccordionTrigger>
-        <AccordionContent className="space-y-1">
-          {templates.map((tpl) => {
-            const active = tpl.id === currentTemplateId;
+        <AccordionContent className="space-y-3">
+          {(
+            [
+              ["own", "templates.tab_mine"],
+              ["saved", "templates.tab_saved"],
+            ] as const
+          ).map(([origin, labelKey]) => {
+            const group = templates.filter((tpl) =>
+              origin === "saved"
+                ? tpl.origin === "saved"
+                : tpl.origin !== "saved",
+            );
+            if (group.length === 0) return null;
             return (
-              <button
-                key={tpl.id}
-                type="button"
-                onClick={() => loadTemplate(tpl)}
-                aria-current={active ? "true" : undefined}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors [@media(pointer:coarse)]:min-h-11",
-                  active
-                    ? "bg-accent font-medium text-accent-foreground"
-                    : "hover:bg-muted",
-                )}
-              >
-                <FileText className="h-4 w-4 shrink-0" />
-                <span className="truncate">{tpl.name}</span>
-              </button>
+              <div key={origin} className="space-y-1">
+                <p className="px-2 text-xs font-medium text-muted-foreground">
+                  {t(labelKey)}
+                </p>
+                {group.map((tpl) => {
+                  const active = tpl.id === currentTemplateId;
+                  return (
+                    <button
+                      key={tpl.id}
+                      type="button"
+                      onClick={() => loadTemplate(tpl)}
+                      aria-current={active ? "true" : undefined}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors [@media(pointer:coarse)]:min-h-11",
+                        active
+                          ? "bg-accent font-medium text-accent-foreground"
+                          : "hover:bg-muted",
+                      )}
+                    >
+                      <FileText className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{tpl.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
         </AccordionContent>
