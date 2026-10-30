@@ -400,6 +400,7 @@ pub fn run() {
             commands::api::start_api_server,
             commands::api::stop_api_server,
             commands::api::get_api_status,
+            commands::render_engine::get_render_engine_status,
             commands::api::api_request,
             commands::api::get_render_status,
             commands::api::set_render_sharing,

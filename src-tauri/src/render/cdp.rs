@@ -476,6 +476,24 @@ fn parse_active_port(text: &str) -> Option<(u16, String)> {
     (port != 0 && path.starts_with('/')).then(|| (port, path.to_string()))
 }
 
+/// The browser process ended before it published a DevTools port. On Windows
+/// that is what Edge does when another Edge process still owns the profile
+/// directory: it hands its command line to that process and exits with 0.
+#[derive(Debug)]
+struct ExitedWhileStarting(String);
+
+impl std::fmt::Display for ExitedWhileStarting {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the browser exited while starting ({}); the profile may be in use by another browser",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for ExitedWhileStarting {}
+
 impl Browser {
     async fn launch(cfg: &Config) -> Result<Browser> {
         tokio::fs::create_dir_all(&cfg.profile)
@@ -511,9 +529,7 @@ impl Browser {
         let deadline = Instant::now() + LAUNCH_TIMEOUT;
         let (port, path) = loop {
             if let Some(status) = child.try_wait()? {
-                bail!(
-                    "the browser exited while starting ({status}); the profile may be in use by another browser"
-                );
+                return Err(ExitedWhileStarting(status.to_string()).into());
             }
             if let Some(found) = tokio::fs::read_to_string(&active)
                 .await
@@ -557,14 +573,20 @@ impl Browser {
     }
 
     async fn stop(&self) {
-        if self.conn.is_open() {
-            let _ = tokio::time::timeout(
-                Duration::from_secs(2),
-                self.conn.call(None, "Browser.close", json!({})),
-            )
-            .await;
-        }
         let mut child = self.child.lock().await;
+        if !self.conn.is_open() {
+            // The connection is gone (browser crashed, or the PC slept and
+            // the socket died): there is nobody to ask politely, and waiting
+            // for it to exit on its own only delays the restart — the next
+            // print used to pay up to 4 s for it.
+            let _ = child.kill().await;
+            return;
+        }
+        let _ = tokio::time::timeout(
+            Duration::from_secs(2),
+            self.conn.call(None, "Browser.close", json!({})),
+        )
+        .await;
         // `close` normally ends the process on its own; make sure.
         if tokio::time::timeout(Duration::from_secs(2), child.wait())
             .await
@@ -593,12 +615,29 @@ async fn reap_orphan(profile: &Path) {
                     conn.call(None, "Browser.close", json!({})),
                 )
                 .await;
-                // Let it release the profile.
-                tokio::time::sleep(Duration::from_millis(300)).await;
+                wait_for_profile_release(profile).await;
             }
         }
     }
     let _ = tokio::fs::remove_file(&file).await;
+}
+
+/// After `Browser.close`, the old browser's helper processes keep the profile
+/// for a moment; a fixed 300 ms was often too short, so the new browser
+/// handed off to the dying one and exited ("exited while starting").
+/// Chromium holds `lockfile` open (and deletes it on close) on Windows, so
+/// removing it succeeds — or finds nothing — exactly when the profile is
+/// free. Bounded: a stuck one must not delay start-up for more than ~4 s.
+async fn wait_for_profile_release(profile: &Path) {
+    let lock = profile.join("lockfile");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    for _ in 0..40 {
+        match tokio::fs::remove_file(&lock).await {
+            Ok(()) => return,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+            Err(_) => tokio::time::sleep(Duration::from_millis(100)).await,
+        }
+    }
 }
 
 // ── The shared handle ───────────────────────────────────────────────────
@@ -641,7 +680,29 @@ impl PersistentBrowser {
                 bail!("persistent browser failed to start recently; using one-shot rendering");
             }
         }
-        match Browser::launch(cfg).await {
+        let mut launched = Browser::launch(cfg).await;
+        // A browser that exits at once means something still owns this
+        // profile (an Edge left over from a crashed run, or one still
+        // shutting down). Start on a fresh profile right now instead of
+        // failing for RETRY_AFTER — every print in that minute would
+        // otherwise go through the slow one-shot path. The cost is one cold
+        // profile; stale ones are swept at the next start-up.
+        if matches!(&launched, Err(e) if e.downcast_ref::<ExitedWhileStarting>().is_some()) {
+            let mut alt = cfg.clone();
+            let suffix = uuid::Uuid::new_v4().simple().to_string();
+            alt.profile = cfg
+                .profile
+                .with_file_name(format!("{PERSISTENT_PROFILE_DIR}-{}", &suffix[..8]));
+            tracing::warn!(
+                profile = %alt.profile.display(),
+                "the persistent profile is in use; starting on a fresh one"
+            );
+            launched = Browser::launch(&alt).await;
+            if launched.is_err() {
+                let _ = tokio::fs::remove_dir_all(&alt.profile).await;
+            }
+        }
+        match launched {
             Ok(b) => {
                 let b = Arc::new(b);
                 st.failed_at = None;

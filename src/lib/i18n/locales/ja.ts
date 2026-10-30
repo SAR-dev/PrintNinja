@@ -93,6 +93,46 @@ const ja: Translation = {
     pair_required_body:
       "この電話での印刷は常にペアリングされたPCを経由します: PCが各ページをレンダリングし、電話が印刷するか — PC経由印刷がオンならPC自身のプリンターで印刷します。一度ペアリングすれば、そのまま保持されます。",
   },
+  engine: {
+    badge: "ブラウザー未検出",
+    title_windows: "Microsoft Edge がインストールされていません",
+    title_linux: "Chromium 系ブラウザーが見つかりません",
+    description:
+      "PrintNinja はブラウザーを使ってラベルをPDFに変換しますが、ブラウザーは同梱されていません。インストールするまで印刷は失敗します。対処は1分ほどで済みます。",
+    win_step_install: "Microsoft Edge をインストールする",
+    win_install_hint:
+      "Microsoft のインストーラーをダウンロードして実行してください。通常の（全ユーザー向け）インストールを選びます。",
+    win_download: "Edge のダウンロードページを開く",
+    win_winget_hint:
+      "または PowerShell かコマンド プロンプトで次を実行します（Windows 10/11 には winget が含まれています）:",
+    win_step_location: "インストール先を確認する",
+    win_location_hint:
+      "PrintNinja は次の場所にある msedge.exe だけを探します。AppData 配下のユーザー単位のインストールは検出されません。",
+    win_webview_note:
+      "WebView2 ランタイム単体では不十分です。PrintNinja は msedge.exe を自分で起動します。",
+    linux_step_install: "Chromium 系ブラウザーをインストールする",
+    linux_detected: "検出: {{name}}。ターミナルで次を実行してください:",
+    linux_unknown_distro:
+      "ディストリビューションを判別できませんでした。パッケージマネージャーで Chromium、Google Chrome、Microsoft Edge のいずれかをインストールしてください:",
+    linux_avoid_snap:
+      "Snap 版の Chromium は避けてください。サンドボックスにより PrintNinja のキャッシュフォルダーを読めない場合があります。",
+    linux_download: "Google Chrome のダウンロードページを開く",
+    linux_appimage:
+      "AppImage にはブラウザーが含まれません。.deb パッケージは自動的にインストールします。",
+    linux_step_path: "見つかる状態か確認する",
+    linux_path_hint: "PrintNinja は PATH 上の次のプログラムをこの順に探します:",
+    linux_override_hint:
+      "ブラウザーが別の場所にある場合は、フルパスを指定して PrintNinja を起動してください:",
+    step_recheck: "もう一度確認する",
+    step_recheck_hint:
+      "このウィンドウに戻って「もう一度確認」を押してください。ウィンドウに戻ったときも自動で再確認します。",
+    recheck: "もう一度確認",
+    later: "後で通知",
+    still_missing: "ブラウザーはまだ見つかりません。",
+    found: "ブラウザーが見つかりました。印刷できます。",
+    copy: "コマンドをコピー",
+    copied: "コピーしました",
+  },
   shell: {
     skip_to_content: "コンテンツへスキップ",
     primary_nav: "メインナビゲーション",
@@ -634,6 +674,7 @@ const ja: Translation = {
     toast_load_failed: "履歴の読み込みに失敗しました: {{error}}",
   },
   status: {
+    engine_missing: "ブラウザー未検出",
     success: "印刷済み",
     failed: "失敗",
     queued: "待機中",

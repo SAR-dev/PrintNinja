@@ -12,6 +12,7 @@ import {
   PencilLine,
   Share2,
   ShieldAlert,
+  TriangleAlert,
   Wifi,
   WifiOff,
   XCircle,
@@ -52,6 +53,12 @@ export const STATUS = {
     tone: "warning",
     icon: ShieldAlert,
     label: "Private network open",
+  },
+  // The print browser (Edge / Chromium) is not installed.
+  engine_missing: {
+    tone: "danger",
+    icon: TriangleAlert,
+    label: "Browser missing",
   },
   // Sync cache (section 6.9)
   synced: { tone: "success", icon: CheckCircle2, label: "Synced" },
