@@ -8,7 +8,7 @@ Thanks for helping. This page covers how to set up, what to run before you push,
 - `main` is the release branch. Release tags must point at a commit on `main`.
 - Keep commits small and focused: one change per commit, with a regression test for every bug fix.
 - Use conventional commit messages: `feat(print): …`, `fix(designer): …`, `docs: …`, `chore: …`.
-- There is no hosted CI. Run `pnpm check` before you push (add `--rust` when Rust changed, `pnpm check:full` before a release). See [`docs/CI.md`](docs/CI.md).
+- CI only runs on pull requests into `main`, pushes to `main` and release tags, so a push to `develop` is not checked for you. Run `pnpm check` before you push (add `--rust` when Rust changed, `pnpm check:full` before a release). See [`docs/CI.md`](docs/CI.md).
 
 ## Setup
 

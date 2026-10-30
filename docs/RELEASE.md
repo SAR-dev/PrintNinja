@@ -3,7 +3,7 @@
 This guide explains how to version, sign, and ship a new PrintNinja release.
 
 ## Prerequisites
-- **Windows**: Rust 1.90.0 (pinned in `rust-toolchain.toml`), Node 24.x (see `engines` in `package.json`), Visual Studio Build Tools (MSVC), `pnpm`
+- **Windows**: Rust 1.90.0 (pinned in `rust-toolchain.toml`), Node 22.x (see `engines` in `package.json`), Visual Studio Build Tools (MSVC), `pnpm`
 - **Android**: JDK 17, Android SDK (34), NDK 27+, `cargo ndk`
 - For signing locally: Windows code-signing certificate (`.pfx`) OR Android keystore
 
@@ -102,10 +102,12 @@ MSI yourself if you want (section 2) and replace the file on the draft release.
 
 ## 4. Build and publish the release
 
-There is no hosted CI. One script runs the checks, bumps the version, commits and tags, builds
-what the host OS allows and updates the draft GitHub release. Each machine builds what it can
-(Windows: MSI; Linux: deb/AppImage; any OS with an Android SDK: APK/AAB); run it on each OS and
-the draft collects everything.
+There are two ways to ship. Pushing a `v*` tag runs the hosted workflow
+(`.github/workflows/ci.yml`), which builds the MSI, deb, AppImage and APK/AAB and attaches them to a
+draft GitHub release (see `docs/CI.md`). The manual route is one script that runs the checks, bumps
+the version, commits and tags, builds what the host OS allows and updates the draft GitHub release.
+Each machine builds what it can (Windows: MSI; Linux: deb/AppImage; any OS with an Android SDK:
+APK/AAB); run it on each OS and the draft collects everything.
 
 ```bash
 node scripts/release-local.mjs 4.1.0            # dry run: everything but push + release

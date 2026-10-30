@@ -1,7 +1,9 @@
-# Checks, releases and scheduled jobs (no hosted CI)
+# Checks, releases and scheduled jobs
 
-The repo has no GitHub Actions workflows. Everything CI used to do runs on
-your own machine, with the commands below.
+One GitHub Actions workflow, `.github/workflows/ci.yml`, runs on pull requests
+into `main`, on pushes to `main` and on `v*` tags. Plain pushes to `develop`
+and other branches run nothing, so run the same checks yourself with the
+commands below before you open a pull request.
 
 ## Checks
 
@@ -48,6 +50,13 @@ pnpm 10, Rust 1.90 and `gh` logged in. Details: [`RELEASE.md`](RELEASE.md).
 `pnpm release patch|minor|major` only bumps, commits and tags; it builds
 nothing.
 
+Pushing a `v*` tag also starts the hosted release: `version-check` rejects any
+tag that is not on `main`, then `windows-build`, `linux-build` and
+`android-build` run and `github-release` attaches the MSI, deb, AppImage, APK
+and AAB to a draft release. A re-run reuses the draft and overwrites assets of
+the same name. `release-local.mjs` is the manual route for when you want to
+build on your own machines instead.
+
 The app's update badge follows the release: it queries
 `{VITE_UPDATE_API}/repos/{VITE_UPDATE_REPO}/releases/latest`, which
 defaults to this repo on `https://api.github.com`. Point it elsewhere
@@ -77,8 +86,12 @@ home server), send `GET $SERVICE_URL/v2/internal/cleanup` with the header
 
 ## Secrets
 
-Nothing lives in GitHub any more. Keep these in a password manager and
-export them in your shell when needed (template: `.secrets.example`):
+For local runs, keep these in a password manager and export them in your shell
+when needed (template: `.secrets.example`). The hosted workflow reads two of
+them, `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD`, from the
+repo's Actions secrets when it builds the APK on a tag. It also reads the
+Actions variable `VITE_DEFAULT_SHARE_URL` (empty in forks means no pre-fill)
+and uses the automatic `GITHUB_TOKEN` to publish the draft release.
 
 | Secret | Used by |
 |---|---|
@@ -86,5 +99,5 @@ export them in your shell when needed (template: `.secrets.example`):
 | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | `db:apply` against the live database |
 | `CRON_SECRET` | Vercel project env var; also needed if you call the cleanup endpoint by hand |
 
-`gh release create/upload` uses your own `gh auth login`, so no token has to
-be stored.
+Locally, `gh release create/upload` uses your own `gh auth login`, so no token
+has to be stored.
