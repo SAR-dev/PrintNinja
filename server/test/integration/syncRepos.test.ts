@@ -2,8 +2,12 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createSyncRepository } from "../../src/infra/db/sync.js";
 import type { SyncRepository } from "../../src/domain/syncPorts.js";
-import type { TemplateRepository } from "../../src/domain/templatePorts.js";
+import type {
+  SavedRepository,
+  TemplateRepository,
+} from "../../src/domain/templatePorts.js";
 import { createTemplateRepository } from "../../src/infra/db/templates.js";
+import { createSavedRepository } from "../../src/infra/db/saved.js";
 import { createFakeUsers } from "../fakes/index.js";
 import { createFakeTemplateRepos } from "../fakes/templates.js";
 import { startTestDatabase, truncateAll, type TestStack } from "./db.js";
@@ -16,6 +20,7 @@ import { startTestDatabase, truncateAll, type TestStack } from "./db.js";
 interface Backend {
   sync: SyncRepository;
   templates: TemplateRepository;
+  saved: SavedRepository;
   createUser(handle: string): Promise<string>;
   createTemplate(
     ownerId: string,
@@ -57,6 +62,7 @@ function fakeBackend(): Backend {
   return {
     sync: repos.sync,
     templates: repos.templates,
+    saved: repos.saved,
     createUser: async (handle: string) => {
       const id = randomUUID();
       await users.create({
@@ -84,6 +90,7 @@ function prismaBackend(): Backend {
   return {
     sync: createSyncRepository(db),
     templates,
+    saved: createSavedRepository(db),
     createUser: async (handle: string) => {
       const user = await db.user.create({
         data: {
@@ -190,6 +197,123 @@ for (const name of ["fake", "prisma"] as const) {
       expect([...seqs].sort((x, y) => (x < y ? -1 : 1))).toEqual(seqs);
 
       expect(await be.sync.tombstoneFloor(owner)).toBeGreaterThan(0n);
+    });
+
+    it("emits saved mirrors as saved upserts, never to the author", async () => {
+      const saver = await be.createUser(
+        `sync-saver-${randomUUID().slice(0, 8)}`,
+      );
+      const tpl = await be.createTemplate(owner, "shared");
+      await be.templates.setPublished(tpl.id, new Date());
+      await be.saved.save(saver, tpl.id);
+
+      const page = await be.sync.readSince(
+        saver,
+        { cursor: 0n, limit: 100, types: ["template"] },
+        8 * 1024 * 1024,
+      );
+      expect(page.changes).toHaveLength(1);
+      const [change] = page.changes;
+      expect(change.entity).toBe("template");
+      expect(change).toMatchObject({ origin: "saved" });
+      if (change.entity === "template" && "data" in change) {
+        expect(change.data.id).toBe(tpl.id);
+        expect(change.data.ownerHandle).not.toBe("");
+      }
+
+      // The author's own stream carries the original, not a mirror.
+      const own = await be.sync.readSince(
+        owner,
+        { cursor: 0n, limit: 100, types: ["template"] },
+        8 * 1024 * 1024,
+      );
+      expect(
+        own.changes.map((c) => ("origin" in c ? c.origin : "delete")),
+      ).toEqual(["own"]);
+    });
+
+    it("re-emits mirrors on author edits and tombstones on unsave, unpublish and delete", async () => {
+      const saver = await be.createUser(
+        `sync-saver-${randomUUID().slice(0, 8)}`,
+      );
+      const tpl = await be.createTemplate(owner, "shared");
+      await be.templates.setPublished(tpl.id, new Date());
+      await be.saved.save(saver, tpl.id);
+      const first = await be.sync.readSince(
+        saver,
+        { cursor: 0n, limit: 100, types: ["template"] },
+        8 * 1024 * 1024,
+      );
+      expect(first.changes).toHaveLength(1);
+
+      // Author edit re-emits the mirror with the new content.
+      const current = await be.templates.findById(tpl.id);
+      await be.templates.update(
+        { ...current!, body: "<div>v2</div>" },
+        current!.revision,
+        version,
+      );
+      const edited = await be.sync.readSince(
+        saver,
+        { cursor: first.nextCursor, limit: 100, types: ["template"] },
+        8 * 1024 * 1024,
+      );
+      expect(edited.changes).toHaveLength(1);
+      expect(edited.changes[0]).toMatchObject({
+        entity: "template",
+        origin: "saved",
+      });
+
+      // Unsave tombstones the mirror.
+      await be.saved.unsave(saver, tpl.id);
+      const unsaved = await be.sync.readSince(
+        saver,
+        { cursor: edited.nextCursor, limit: 100, types: ["template"] },
+        8 * 1024 * 1024,
+      );
+      expect(unsaved.changes).toEqual([
+        expect.objectContaining({ entity: "template", entityKey: tpl.id }),
+      ]);
+
+      // Re-save, then unpublish tombstones it again; republish restores it.
+      await be.saved.save(saver, tpl.id);
+      const resaved = await be.sync.readSince(
+        saver,
+        { cursor: unsaved.nextCursor, limit: 100, types: ["template"] },
+        8 * 1024 * 1024,
+      );
+      expect(resaved.changes).toHaveLength(1);
+      await be.templates.setPublished(tpl.id, null);
+      const withdrawn = await be.sync.readSince(
+        saver,
+        { cursor: resaved.nextCursor, limit: 100, types: ["template"] },
+        8 * 1024 * 1024,
+      );
+      expect(withdrawn.changes).toEqual([
+        expect.objectContaining({ entity: "template", entityKey: tpl.id }),
+      ]);
+      await be.templates.setPublished(tpl.id, new Date());
+      const back = await be.sync.readSince(
+        saver,
+        { cursor: withdrawn.nextCursor, limit: 100, types: ["template"] },
+        8 * 1024 * 1024,
+      );
+      expect(back.changes).toHaveLength(1);
+      expect(back.changes[0]).toMatchObject({
+        entity: "template",
+        origin: "saved",
+      });
+
+      // Delete tombstones the saver's mirror alongside the original.
+      await be.templates.deleteWithTombstone(tpl.id);
+      const deleted = await be.sync.readSince(
+        saver,
+        { cursor: back.nextCursor, limit: 100, types: ["template"] },
+        8 * 1024 * 1024,
+      );
+      expect(deleted.changes).toEqual([
+        expect.objectContaining({ entity: "template", entityKey: tpl.id }),
+      ]);
     });
 
     it("paginates by count with has_more and next_cursor", async () => {

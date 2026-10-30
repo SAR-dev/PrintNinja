@@ -5,7 +5,6 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   Bookmark,
   BookmarkCheck,
-  CloudDownload,
   CloudUpload,
   Eye,
   MoreHorizontal,
@@ -28,7 +27,6 @@ import {
 } from "@/components/ConflictDialog";
 import { DataTable } from "@/components/DataTable";
 import { EmptyState } from "@/components/EmptyState";
-import { GetFromServerDialog } from "@/components/GetFromServerDialog";
 import {
   Dialog,
   DialogContent,
@@ -79,7 +77,6 @@ export function TemplatesPage() {
   const [removeTarget, setRemoveTarget] = useState<TemplateRow | null>(null);
   const [refreshTarget, setRefreshTarget] = useState<TemplateRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TemplateRow | null>(null);
-  const [getOpen, setGetOpen] = useState(false);
   const [previewTpl, setPreviewTpl] = useState<ServerSummary | null>(null);
   const [previewHtml, setPreviewHtml] = useState("");
   const [previewError, setPreviewError] = useState("");
@@ -814,12 +811,10 @@ export function TemplatesPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title={t("nav.templates")} description={t("pages.templates")}>
-        <Button variant="outline" onClick={() => setGetOpen(true)}>
-          <CloudDownload className="h-4 w-4" aria-hidden="true" />
-          {t("templates.get_from_server")}
-        </Button>
-      </PageHeader>
+      <PageHeader
+        title={t("nav.templates")}
+        description={t("pages.templates")}
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
@@ -1095,15 +1090,6 @@ export function TemplatesPage() {
         onConfirm={async () => {
           if (refreshTarget) await handleRefresh(refreshTarget);
           setRefreshTarget(null);
-        }}
-      />
-
-      <GetFromServerDialog
-        open={getOpen}
-        onOpenChange={setGetOpen}
-        onDownloaded={() => {
-          void loadMine();
-          setActiveTab("mine");
         }}
       />
 

@@ -22,6 +22,7 @@ import {
 import {
   ForbiddenError,
   NotFoundError,
+  OwnTemplateSavedError,
   RateLimitedError,
   RemoteReferenceError,
   PayloadTooLargeError,
@@ -665,6 +666,20 @@ describe("saved", () => {
     await unsaveTemplate({ saved: r.saved }, OTHER_ID, id);
     await unsaveTemplate({ saved: r.saved }, OTHER_ID, id);
     expect(await r.saved.countByUser(OTHER_ID)).toBe(0);
+  });
+
+  it("refuses your own template: it is already yours, not a mirror", async () => {
+    const r = repos();
+    const tdeps = { templates: r.templates };
+    const sdeps = { templates: r.templates, saved: r.saved };
+    const id = write().id as string;
+    await putTemplate(r, write(), OWNER_ID);
+    await publishTemplate(tdeps, id, OWNER_ID, new Date());
+
+    await expect(saveTemplate(sdeps, OWNER_ID, id)).rejects.toBeInstanceOf(
+      OwnTemplateSavedError,
+    );
+    expect(await r.saved.countByUser(OWNER_ID)).toBe(0);
   });
 
   it("unpublishing hides saved rows without deleting them", async () => {

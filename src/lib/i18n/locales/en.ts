@@ -1096,7 +1096,6 @@ const en = {
     tab_mine: "Mine",
     tab_saved: "Saved",
     tab_community: "Community",
-    get_from_server: "Get from server",
     sort_label: "Sort",
     sort_aria: "Sort templates",
     sort_placeholder: "Sort",
@@ -1189,30 +1188,7 @@ const en = {
     empty_community_title: "No published templates yet",
     empty_community_hint: "Publish one from Designer to see it here.",
     page_size: "{{w}} × {{h}} mm",
-    server_title: "Get templates from the server",
-    server_description:
-      "Your templates and the ones you saved from Community, with their HTML, CSS and README.",
-    server_col_where: "Where",
     server_mine: "Yours",
-    server_col_from: "From",
-    server_col_visibility: "Visibility",
-    server_in_community: "In Community",
-    server_unreachable: "Can’t reach the server",
-    server_unreachable_hint:
-      "{{error}}. Templates already on this computer still print.",
-    server_retry: "Try again",
-    server_empty: "Nothing on the server yet",
-    server_empty_hint:
-      "Save a template to the server from Templates or the Designer, then it shows up here.",
-    server_adding: "Adding…",
-    server_add_selected: "Add selected",
-    server_add_count: "Add {{count}} to this PC",
-    server_added: "Added {{count}} template{{plural}} to this computer",
-    server_is: "is",
-    server_are: "are",
-    server_already:
-      "{{count}} template{{plural}} {{verb}} already on this computer",
-    server_failed: "{{count}} template{{plural}} failed",
   },
   automation: {
     tabs_aria: "Automation sections",
