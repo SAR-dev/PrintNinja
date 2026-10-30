@@ -132,3 +132,29 @@ describe("ensureStarterTemplates", () => {
     await expect(ensureStarterTemplates()).resolves.toEqual([]);
   });
 });
+
+describe("hideStarterWhenOthers", () => {
+  const starter = { id: 1, name: STARTER_TEMPLATES[0].name };
+  const mine = { id: 2, name: "My label" };
+
+  it("keeps the starter when it is the only template", async () => {
+    const { hideStarterWhenOthers } = await import(
+      "@/lib/templates/starterVisibility"
+    );
+    expect(hideStarterWhenOthers([starter])).toEqual([starter]);
+  });
+
+  it("hides the starter once another template exists", async () => {
+    const { hideStarterWhenOthers } = await import(
+      "@/lib/templates/starterVisibility"
+    );
+    expect(hideStarterWhenOthers([starter, mine])).toEqual([mine]);
+  });
+
+  it("returns an empty list unchanged", async () => {
+    const { hideStarterWhenOthers } = await import(
+      "@/lib/templates/starterVisibility"
+    );
+    expect(hideStarterWhenOthers([])).toEqual([]);
+  });
+});

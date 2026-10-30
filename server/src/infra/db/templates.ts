@@ -2,6 +2,7 @@ import {
   NotFoundError,
   RevisionConflictError,
   RevisionRequiredError,
+  TemplateNameTakenError,
 } from "../../domain/errors.js";
 import type {
   PageQuery,
@@ -87,9 +88,14 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
         return toView(template);
       } catch (error: unknown) {
         if (isUniqueViolation(error)) {
-          // A retried create racing the first: the row now
-          // exists, so the caller retries as an update.
-          throw new RevisionRequiredError();
+          // Two unique keys can fire: the id (a retried create racing
+          // the first; the row now exists, so the caller retries as an
+          // update) or the owner's name.
+          const row = await db.template.findUnique({
+            where: { id: input.id },
+            select: { id: true },
+          });
+          throw row ? new RevisionRequiredError() : new TemplateNameTakenError();
         }
         throw error;
       }
@@ -113,25 +119,35 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
         if (current.revision !== expectedRevision) {
           throw new RevisionConflictError(current.revision);
         }
-        const updated = await tx.template.update({
-          where: { id: input.id },
-          data: {
-            name: input.name,
-            summary: input.summary,
-            pageWMm: input.pageWMm,
-            pageHMm: input.pageHMm,
-            language: input.language,
-            body: input.body,
-            css: input.css,
-            readme: input.readme,
-            revision: version ? current.revision + 1 : current.revision,
-            changeSeq: seq,
-          },
-          include: {
-            owner: { select: { handle: true } },
-            _count: { select: { versions: true } },
-          },
-        });
+        let updated;
+        try {
+          updated = await tx.template.update({
+            where: { id: input.id },
+            data: {
+              name: input.name,
+              summary: input.summary,
+              pageWMm: input.pageWMm,
+              pageHMm: input.pageHMm,
+              language: input.language,
+              body: input.body,
+              css: input.css,
+              readme: input.readme,
+              revision: version ? current.revision + 1 : current.revision,
+              changeSeq: seq,
+            },
+            include: {
+              owner: { select: { handle: true } },
+              _count: { select: { versions: true } },
+            },
+          });
+        } catch (error: unknown) {
+          // The id cannot change here, so the only unique key that can
+          // fire is (owner, name). Throwing rolls the sequence bump back.
+          if (isUniqueViolation(error)) {
+            throw new TemplateNameTakenError();
+          }
+          throw error;
+        }
         if (version) {
           const max = await tx.templateVersion.aggregate({
             where: { templateId: input.id },
