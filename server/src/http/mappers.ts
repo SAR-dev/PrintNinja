@@ -171,6 +171,7 @@ export function toSyncChange(change: SyncChange): SyncChangeResponse {
     data: {
       ...toTemplate(change.data),
       head_version_no: change.headVersionNo,
+      origin: change.origin,
     },
   };
 }

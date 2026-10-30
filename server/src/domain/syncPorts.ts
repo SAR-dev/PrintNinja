@@ -6,10 +6,12 @@ import type {
   SettingView,
 } from "./libraryPorts.js";
 
-/** Sync change tracking (REFACTORING.md section 7). Only the signed-in
- * user's own records, now spanning templates and the Phase 4 library
- * (datasets, profiles, settings, fonts). Saved community templates use
- * the manifest, never this stream. */
+/** Sync change tracking (REFACTORING.md section 7). The signed-in
+ * user's own records, plus the community templates they saved, spanning
+ * templates and the Phase 4 library (datasets, profiles, settings,
+ * fonts). A saved mirror arrives as a template upsert with
+ * origin "saved": same server_id the manual download used, so pulls and
+ * downloads converge on one row. */
 
 export type SyncEntity =
   | "template"
@@ -21,6 +23,8 @@ export type SyncEntity =
 export interface SyncUpsert {
   seq: bigint;
   entity: "template";
+  /** Own rows land as editable originals; saved rows as read-only mirrors. */
+  origin: "own" | "saved";
   data: TemplateView;
   headVersionNo: number;
 }

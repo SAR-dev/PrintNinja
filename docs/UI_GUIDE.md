@@ -369,7 +369,7 @@ blocking problem inside a panel can use a `danger-soft` background with a `dange
 
 ## Dialogs and sheets
 
-- **Dialog** for a decision or a short task: confirm, rename, preview, "Get from server".
+- **Dialog** for a decision or a short task: confirm, rename, preview, template conflicts.
   Default width is `max-w-lg`; wide previews use `max-w-2xl` or `max-w-3xl`.
 - **Sheet** (slides in from the side) for a longer form that should keep the list visible
   behind it. The "Add printer" panel on the Printers page is the only use today.

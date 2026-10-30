@@ -35,59 +35,75 @@ export function createSyncRepository(db: DbClient) {
       const wantFonts = query.types.includes("font");
       const take = query.limit + 1;
 
-      const [templates, datasets, profiles, settings, fonts, tombstones] =
-        await Promise.all([
-          wantTemplates
-            ? db.template.findMany({
-                where: { ownerId: userId, changeSeq: { gt: query.cursor } },
-                include: {
-                  owner: { select: { handle: true } },
-                  _count: { select: { versions: true } },
-                },
-                orderBy: [{ changeSeq: "asc" }],
-                take,
-              })
-            : [],
-          wantDatasets
-            ? db.sampleDataset.findMany({
-                where: { ownerId: userId, changeSeq: { gt: query.cursor } },
-                orderBy: [{ changeSeq: "asc" }],
-                take,
-              })
-            : [],
-          wantProfiles
-            ? db.printerProfile.findMany({
-                where: { ownerId: userId, changeSeq: { gt: query.cursor } },
-                orderBy: [{ changeSeq: "asc" }],
-                take,
-              })
-            : [],
-          wantSettings
-            ? db.userSetting.findMany({
-                where: { userId, changeSeq: { gt: query.cursor } },
-                orderBy: [{ changeSeq: "asc" }],
-                take,
-              })
-            : [],
-          wantFonts
-            ? db.font.findMany({
-                where: { ownerId: userId, changeSeq: { gt: query.cursor } },
-                orderBy: [{ changeSeq: "asc" }],
-                take,
-              })
-            : [],
-          db.tombstone.findMany({
-            where: {
-              userId,
-              seq: { gt: query.cursor },
-              ...(query.types.length > 0
-                ? { entity: { in: query.types } }
-                : {}),
-            },
-            orderBy: [{ seq: "asc" }],
-            take,
-          }),
-        ]);
+      const [
+        templates,
+        saved,
+        datasets,
+        profiles,
+        settings,
+        fonts,
+        tombstones,
+      ] = await Promise.all([
+        wantTemplates
+          ? db.template.findMany({
+              where: { ownerId: userId, changeSeq: { gt: query.cursor } },
+              include: {
+                owner: { select: { handle: true } },
+                _count: { select: { versions: true } },
+              },
+              orderBy: [{ changeSeq: "asc" }],
+              take,
+            })
+          : [],
+        // Saved mirrors ride the saver's own stream: each save carries
+        // the saver's sequence, stamped on save and on every author
+        // edit or (re)publish. Unsave, unpublish and delete tombstone
+        // instead, so this only ever emits published mirrors.
+        wantTemplates
+          ? db.savedTemplate.findMany({
+              where: { userId, changeSeq: { gt: query.cursor } },
+              orderBy: [{ changeSeq: "asc" }],
+              take,
+            })
+          : [],
+        wantDatasets
+          ? db.sampleDataset.findMany({
+              where: { ownerId: userId, changeSeq: { gt: query.cursor } },
+              orderBy: [{ changeSeq: "asc" }],
+              take,
+            })
+          : [],
+        wantProfiles
+          ? db.printerProfile.findMany({
+              where: { ownerId: userId, changeSeq: { gt: query.cursor } },
+              orderBy: [{ changeSeq: "asc" }],
+              take,
+            })
+          : [],
+        wantSettings
+          ? db.userSetting.findMany({
+              where: { userId, changeSeq: { gt: query.cursor } },
+              orderBy: [{ changeSeq: "asc" }],
+              take,
+            })
+          : [],
+        wantFonts
+          ? db.font.findMany({
+              where: { ownerId: userId, changeSeq: { gt: query.cursor } },
+              orderBy: [{ changeSeq: "asc" }],
+              take,
+            })
+          : [],
+        db.tombstone.findMany({
+          where: {
+            userId,
+            seq: { gt: query.cursor },
+            ...(query.types.length > 0 ? { entity: { in: query.types } } : {}),
+          },
+          orderBy: [{ seq: "asc" }],
+          take,
+        }),
+      ]);
 
       // Per-stream overflow, decided before merging: each stream reads
       // limit+1, so a stream longer than limit has more rows beyond this
@@ -96,6 +112,7 @@ export function createSyncRepository(db: DbClient) {
       // limit, even with every stream exhausted.
       const streamHasMore = [
         templates.length > query.limit,
+        saved.length > query.limit,
         datasets.length > query.limit,
         profiles.length > query.limit,
         settings.length > query.limit,
@@ -105,11 +122,34 @@ export function createSyncRepository(db: DbClient) {
       const cap = <T>(rows: T[]): T[] =>
         rows.length > query.limit ? rows.slice(0, query.limit) : rows;
 
+      // The saved rows' templates, in one query: published mirrors of
+      // other authors only. Unpublished, deleted, or own templates never
+      // emit here — those states travel as tombstones (or need none).
+      const savedById = new Map<string, PrismaTemplate>();
+      {
+        const ids = [...new Set(cap(saved).map((row) => row.templateId))];
+        if (ids.length > 0) {
+          const rows = await db.template.findMany({
+            where: {
+              id: { in: ids },
+              publishedAt: { not: null },
+              ownerId: { not: userId },
+            },
+            include: {
+              owner: { select: { handle: true } },
+              _count: { select: { versions: true } },
+            },
+          });
+          for (const row of rows) savedById.set(row.id, row);
+        }
+      }
+
       type Candidate =
         | {
             seq: bigint;
             kind: "upsert";
             entity: "template";
+            origin: "own" | "saved";
             template: PrismaTemplate;
           }
         | {
@@ -142,8 +182,23 @@ export function createSyncRepository(db: DbClient) {
           seq: t.changeSeq,
           kind: "upsert" as const,
           entity: "template" as const,
+          origin: "own" as const,
           template: t,
         })),
+        ...cap(saved).flatMap((row) => {
+          const template = savedById.get(row.templateId);
+          return template
+            ? [
+                {
+                  seq: row.changeSeq,
+                  kind: "upsert" as const,
+                  entity: "template" as const,
+                  origin: "saved" as const,
+                  template,
+                },
+              ]
+            : [];
+        }),
         ...cap(datasets).map((d) => ({
           seq: d.changeSeq,
           kind: "upsert" as const,
@@ -303,6 +358,7 @@ export function createSyncRepository(db: DbClient) {
         changes.push({
           seq: candidate.seq,
           entity: "template",
+          origin: candidate.origin,
           data: toTemplateView(candidate.template),
           headVersionNo,
         });

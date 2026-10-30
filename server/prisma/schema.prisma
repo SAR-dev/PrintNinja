@@ -182,6 +182,11 @@ model SavedTemplate {
   userId     String   @map("user_id")
   templateId String   @map("template_id")
   addedAt    DateTime @default(now()) @map("added_at")
+  // The saver's sequence number: stamped on save and on every author
+  // edit/publish, so the sync feed can emit mirrors in the saver's own
+  // stream. Unsave and author unpublish/delete tombstone instead.
+  changeSeq  BigInt   @map("change_seq")
+
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // No relation to Template on purpose (plan section 7 shows one with
@@ -190,6 +195,7 @@ model SavedTemplate {
   // templateId is deliberately a bare UUID; joins are manual.
   @@id([userId, templateId])
   @@index([templateId])
+  @@index([userId, changeSeq])
   @@map("saved_templates")
 }
 

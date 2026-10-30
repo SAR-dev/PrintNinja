@@ -1,22 +1,19 @@
 import i18n from "@/lib/i18n";
 import { describeError } from "@/lib/errors";
 /**
- * Template reads — Get from server and the row helpers behind it.
+ * Template reads — the community star and the row helpers behind it.
  *
  * The server owns the copies. Saving and deleting go through
  * `./save` (manual, synchronous pushes); this module only reads:
- * listing what is available, downloading a copy, and the predicates the
- * UI needs. Nothing here runs while printing.
+ * downloading a copy right after it is starred, and the predicates the
+ * UI needs. The pull delivers everything else — own templates and saved
+ * mirrors both arrive through the sync stream, so there is no separate
+ * "get from server" listing anymore. Nothing here runs while printing.
  */
 import { agent } from "@/lib/agent/commands";
 import type { TemplateRow } from "@/lib/agent/types";
 import { compiledFields } from "@/lib/templates/compileTemplateCss";
-import {
-  fetchMyRemoteTemplates,
-  fetchRemoteTemplate,
-  fetchSavedRemoteTemplates,
-  type RemoteTemplateSummary,
-} from "./client";
+import { fetchRemoteTemplate } from "./client";
 
 export type LocalOrigin = "own" | "saved";
 
@@ -35,18 +32,6 @@ export interface DownloadResult {
   created: boolean;
   /** Title the row actually saved under (suffixed on a name clash). */
   name: string;
-}
-
-/** The templates a signed-in user can put on a new PC: their own, and saved ones. */
-export async function listAvailableRemoteTemplates(): Promise<{
-  mine: RemoteTemplateSummary[];
-  saved: RemoteTemplateSummary[];
-}> {
-  const [mine, saved] = await Promise.all([
-    fetchMyRemoteTemplates(),
-    fetchSavedRemoteTemplates(),
-  ]);
-  return { mine, saved };
 }
 
 /** Put a server template on this PC as a local copy, CSS and README included. */

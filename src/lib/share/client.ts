@@ -398,18 +398,6 @@ export async function fetchRemoteTemplate(id: string): Promise<RemoteTemplate> {
   }
 }
 
-/** The signed-in user's own templates, private and published. Pages through the v2 list. */
-export async function fetchMyRemoteTemplates(): Promise<
-  RemoteTemplateSummary[]
-> {
-  return fetchAllPages((page, pageSize) =>
-    callApi<{ items: RemoteTemplateSummary[]; has_more: boolean }>(apiDeps(), {
-      method: "GET",
-      path: `/v2/templates/mine?page=${page}&page_size=${pageSize}`,
-    }),
-  );
-}
-
 /** A community template as the v2 service lists it. */
 export type CommunitySummary =
   paths["/v2/community/templates"]["get"]["responses"][200]["content"]["application/json"]["items"][number];
@@ -429,36 +417,6 @@ export async function fetchCommunityTemplates(options: {
     path: `/v2/community/templates?${params.toString()}`,
   });
   return page.items;
-}
-
-/** The community templates the signed-in user has saved. */
-export async function fetchSavedRemoteTemplates(): Promise<
-  RemoteTemplateSummary[]
-> {
-  return fetchAllPages((page, pageSize) =>
-    callApi<{ items: RemoteTemplateSummary[]; has_more: boolean }>(apiDeps(), {
-      method: "GET",
-      path: `/v2/saved?page=${page}&page_size=${pageSize}`,
-    }),
-  );
-}
-
-async function fetchAllPages(
-  fetchPage: (
-    page: number,
-    pageSize: number,
-  ) => Promise<{ items: RemoteTemplateSummary[]; has_more: boolean }>,
-): Promise<RemoteTemplateSummary[]> {
-  const out: RemoteTemplateSummary[] = [];
-  let page = 1;
-  for (;;) {
-    const { items, has_more } = await fetchPage(page, 100);
-    out.push(...items);
-    if (!has_more) {
-      return out;
-    }
-    page += 1;
-  }
 }
 
 /** Keeps a community template in the user's Saved list. Idempotent. */

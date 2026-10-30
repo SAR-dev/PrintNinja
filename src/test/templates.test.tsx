@@ -35,7 +35,6 @@ const share = vi.hoisted(() => ({
 vi.mock("@/lib/share/client", () => share);
 const sync = vi.hoisted(() => ({
   downloadToLocal: vi.fn(async () => ({ id: 9, created: true })),
-  listAvailableRemoteTemplates: vi.fn(async () => ({ mine: [], saved: [] })),
 }));
 vi.mock("@/lib/share/sync", () => sync);
 const save = vi.hoisted(() => ({
@@ -154,7 +153,6 @@ beforeEach(() => {
   share.saveRemoteTemplate.mockResolvedValue(undefined);
   share.unsaveRemoteTemplate.mockResolvedValue(undefined);
   sync.downloadToLocal.mockResolvedValue({ id: 9, created: true });
-  sync.listAvailableRemoteTemplates.mockResolvedValue({ mine: [], saved: [] });
   save.saveRowToServer.mockResolvedValue({
     remoteId: "new-uuid",
     revision: 1,
@@ -410,63 +408,16 @@ describe("Templates page", () => {
     ).toBe(false);
   });
 
-  it("Get from server lists the account's templates and adds the chosen one", async () => {
-    sync.listAvailableRemoteTemplates.mockResolvedValue({
-      mine: [
-        {
-          id: "m1",
-          owner_id: "u1",
-          owner_handle: "ana",
-          name: "Invoice",
-          summary: "A4",
-          page_w_mm: 210,
-          page_h_mm: 297,
-          language: "html",
-          use_count: 0,
-          published_at: "2026-03-01 00:00:00",
-          updated_at: "2026-03-01 00:00:00",
-        },
-      ],
-      saved: [
-        {
-          id: "s1",
-          owner_id: "u2",
-          owner_handle: "bo",
-          name: "Community label",
-          summary: "",
-          page_w_mm: 80,
-          page_h_mm: 200,
-          language: "html",
-          use_count: 2,
-          published_at: "2026-03-01 00:00:00",
-          updated_at: "2026-03-01 00:00:00",
-        },
-      ],
-    } as any);
+  it("has no Get from server button: mirrors arrive through the pull", async () => {
     renderPage();
     await screen.findByText("Shipping label");
-    fireEvent.click(screen.getByRole("button", { name: /Get from server/ }));
-    expect(await screen.findByText("Invoice")).toBeInTheDocument();
-    expect(screen.getByText("Community label")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select row m1" }));
-    fireEvent.click(screen.getByRole("button", { name: /Add 1 to this PC/ }));
-
-    await waitFor(() =>
-      expect(sync.downloadToLocal).toHaveBeenCalledWith("m1", "own", "ana"),
-    );
-  });
-
-  it("says the server cannot be reached in Get from server", async () => {
-    sync.listAvailableRemoteTemplates.mockRejectedValueOnce(
-      new Error("Cannot reach the server at http://srv"),
-    );
-    renderPage();
-    await screen.findByText("Shipping label");
-    fireEvent.click(screen.getByRole("button", { name: /Get from server/ }));
+    // The manual listing is gone — a saved mirror in the local list (put
+    // there by a pull) is what the Saved tab shows.
     expect(
-      await screen.findByText("Can’t reach the server"),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /Get from server/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: /Saved/ }));
+    expect(await screen.findByText("Saved A")).toBeInTheDocument();
   });
 
   it("explains when no share service is configured", async () => {

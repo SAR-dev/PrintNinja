@@ -150,6 +150,11 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
           }
           throw error;
         }
+        // Every successful write moves the savers' mirrors — content edits
+        // and metadata-only PUTs alike (mirrors keep the author's title
+        // verbatim). Same transaction: a pull can never see the content
+        // without the stamps.
+        await stampSavers(tx, input.id, current.ownerId);
         if (version) {
           const max = await tx.templateVersion.aggregate({
             where: { templateId: input.id },
@@ -198,7 +203,7 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
                 firstPublishedAt: current.firstPublishedAt ?? publishedAt,
                 changeSeq: seq,
               };
-        return tx.template.update({
+        const updated = await tx.template.update({
           where: { id },
           data,
           include: {
@@ -206,6 +211,13 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
             _count: { select: { versions: true } },
           },
         });
+        if (publishedAt === null) {
+          // Mirrors go away with the publish; republishing re-emits them.
+          await tombstoneSavers(tx, id, current.ownerId);
+        } else {
+          await stampSavers(tx, id, current.ownerId);
+        }
+        return updated;
       });
       return template && toView(template);
     },
@@ -225,6 +237,9 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
             entityKey: id,
           },
         });
+        // Every saver's mirror goes too; the save rows survive so the
+        // manifest still reports the delete.
+        await tombstoneSavers(tx, id, current.ownerId);
         await tx.template.delete({ where: { id } });
         return { ownerId: current.ownerId };
       });
@@ -365,10 +380,62 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
   };
 }
 
+/** Savers of one template, in stable order, excluding the author. Fan-out
+ * locks one user_sync row per saver; a fixed order keeps concurrent
+ * author edits from deadlocking on each other's locks. The author is
+ * excluded: their own feed already carries the template, and a saver
+ * tombstone in their stream would delete their own copy locally. */
+async function saverIds(
+  tx: Prisma.TransactionClient,
+  templateId: string,
+  ownerId: string,
+): Promise<string[]> {
+  const rows = await tx.savedTemplate.findMany({
+    where: { templateId, userId: { not: ownerId } },
+    select: { userId: true },
+    orderBy: { userId: "asc" },
+  });
+  return rows.map((r) => r.userId);
+}
+
+/** An author edit or (re)publish moves every saver's mirror: stamp their
+ * rows with fresh sequence numbers so the next pull re-emits the copy. */
+async function stampSavers(
+  tx: Prisma.TransactionClient,
+  templateId: string,
+  ownerId: string,
+): Promise<void> {
+  for (const userId of await saverIds(tx, templateId, ownerId)) {
+    const seq = await bumpSeq(tx, userId);
+    await tx.savedTemplate.update({
+      where: { userId_templateId: { userId, templateId } },
+      data: { changeSeq: seq },
+    });
+  }
+}
+
+/** Unpublish and delete remove every saver's mirror: one tombstone per
+ * saver lands the delete in each saver's own stream. Saved rows survive
+ * (the manifest still reports them), so republishing restores the list. */
+async function tombstoneSavers(
+  tx: Prisma.TransactionClient,
+  templateId: string,
+  ownerId: string,
+): Promise<void> {
+  for (const userId of await saverIds(tx, templateId, ownerId)) {
+    const seq = await bumpSeq(tx, userId);
+    await tx.tombstone.create({
+      data: { userId, seq, entity: "template", entityKey: templateId },
+    });
+  }
+}
+
 /** Next sequence number for the user, row-locked. The user_sync row is
  * created at registration; upsert self-heals an import gap instead of
- * failing every write, handing the same first number (2n) either way. */
-async function bumpSeq(
+ * failing every write, handing the same first number (2n) either way.
+ * Exported for the saved repository: saves and saver fan-out live in
+ * the saver's sequence space, not the author's. */
+export async function bumpSeq(
   tx: Prisma.TransactionClient,
   userId: string,
 ): Promise<bigint> {

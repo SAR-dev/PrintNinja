@@ -43,7 +43,6 @@ vi.mock("@/lib/share/sync", async (importOriginal) => {
   return {
     ...actual,
     downloadToLocal: vi.fn(async () => ({ id: 9, created: true })),
-    listAvailableRemoteTemplates: vi.fn(async () => ({ mine: [], saved: [] })),
   };
 });
 const saveMock = vi.hoisted(() => ({

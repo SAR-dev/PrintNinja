@@ -1126,7 +1126,6 @@ const ja: Translation = {
     tab_mine: "自分",
     tab_saved: "保存済み",
     tab_community: "コミュニティ",
-    get_from_server: "サーバーから取得",
     sort_label: "並べ替え",
     sort_aria: "テンプレートを並べ替え",
     sort_placeholder: "並べ替え",
@@ -1219,30 +1218,7 @@ const ja: Translation = {
     empty_community_title: "公開されたテンプレートはまだありません",
     empty_community_hint: "デザイナーから公開すると、ここに表示されます。",
     page_size: "{{w}} × {{h}} mm",
-    server_title: "サーバーからテンプレートを取得",
-    server_description:
-      "あなたのテンプレートと、コミュニティから保存したテンプレートを、HTML、CSS、READMEとともに取得します。",
-    server_col_where: "場所",
     server_mine: "自分",
-    server_col_from: "作成者",
-    server_col_visibility: "公開設定",
-    server_in_community: "コミュニティに公開中",
-    server_unreachable: "サーバーに接続できません",
-    server_unreachable_hint:
-      "{{error}}。このコンピューターにあるテンプレートは引き続き印刷できます。",
-    server_retry: "もう一度試す",
-    server_empty: "サーバーにはまだ何もありません",
-    server_empty_hint:
-      "テンプレートまたはデザイナーからテンプレートをサーバーに保存すると、ここに表示されます。",
-    server_adding: "追加しています…",
-    server_add_selected: "選択したものを追加",
-    server_add_count: "{{count}}件をこのPCに追加",
-    server_added: "{{count}}件のテンプレートをこのコンピューターに追加しました",
-    server_is: "",
-    server_are: "",
-    server_already:
-      "{{count}}件のテンプレートは既にこのコンピューターにあります",
-    server_failed: "{{count}}件のテンプレートが失敗しました",
   },
   automation: {
     tabs_aria: "自動化のセクション",
