@@ -99,6 +99,7 @@ pub fn router_with_state(state: ApiState, lan_access: bool) -> Router {
         .route("/v1/health", get(health))
         .route("/v1/printers", get(list_printers))
         .route("/v1/templates", get(list_templates))
+        .route("/v1/pc-templates", get(list_pc_templates))
         .route("/v1/print", post(print_job))
         .route("/v1/jobs", get(list_jobs))
         .route("/v1/jobs/{id}", get(get_job).delete(cancel_job))
@@ -208,6 +209,43 @@ async fn list_templates(State(state): State<ApiState>) -> Result<Json<Value>, Ap
     Ok(Json(json!({ "templates": templates, "count": count })))
 }
 
+/// The templates a paired phone may print: synced rows only, names plus
+/// the sync identity — never bodies (ARCHITECTURE §9). A phone printing
+/// via this PC lists these instead of its own rows, so the version
+/// check matches by construction: dirty or local-only rows are refused
+/// by the check, so listing them would only produce 409s.
+async fn list_pc_templates(State(state): State<ApiState>) -> Result<Json<Value>, ApiRejection> {
+    let db = state.db;
+    let guard = db.lock().map_err(ApiRejection::from)?;
+    let conn = guard.connection();
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT t.name, t.server_id, t.server_revision
+             FROM templates t
+             WHERE t.sync_state = 'synced'
+               AND t.server_id IS NOT NULL
+               AND t.server_revision IS NOT NULL
+             ORDER BY t.name",
+        )
+        .map_err(ApiRejection::from)?;
+
+    let templates: Vec<Value> = stmt
+        .query_map([], |row| {
+            Ok(json!({
+                "name": row.get::<_, String>(0)?,
+                "server_id": row.get::<_, String>(1)?,
+                "server_revision": row.get::<_, Option<i64>>(2)?,
+            }))
+        })
+        .map_err(ApiRejection::from)?
+        .filter_map(Result::ok)
+        .collect();
+
+    let count = templates.len();
+    Ok(Json(json!({ "templates": templates, "count": count })))
+}
+
 #[derive(Deserialize)]
 struct PrintJobRequest {
     template: Option<String>,
@@ -275,6 +313,7 @@ fn resolve_template_by_version(
     conn: &rusqlite::Connection,
     server_id: &str,
     client_revision: Option<i64>,
+    pc_name: &str,
 ) -> Result<i64, ApiRejection> {
     let row: Option<(i64, Option<i64>, String)> = conn
         .query_row(
@@ -287,16 +326,18 @@ fn resolve_template_by_version(
         .map_err(ApiRejection::from)?;
     let Some((id, pc_revision, sync_state)) = row else {
         return Err(ApiRejection::Conflict(
-            format!("template '{server_id}' is not on this PC; sync templates first, then retry"),
+            format!(
+                "template '{server_id}' is not on {pc_name}; sync templates on the PC, then retry"
+            ),
             "template_missing",
-            json!({ "template_server_id": server_id }),
+            json!({ "template_server_id": server_id, "side": "pc" }),
         ));
     };
     let Some(client_revision) = client_revision else {
         return Err(ApiRejection::Conflict(
-            "this template never synced, so there is no revision to compare; sync templates first, then retry".into(),
+            "this template never synced, so there is no revision to compare; sync or publish it first, then retry".into(),
             "template_missing",
-            json!({ "template_server_id": server_id }),
+            json!({ "template_server_id": server_id, "side": "phone" }),
         ));
     };
     if sync_state != "synced" {
@@ -382,12 +423,14 @@ async fn print_job(
 
         // A synced caller names the exact revision (ARCHITECTURE §9).
         // A legacy caller sends only the name and keeps the old lookup.
-        let template_id =
-            if let Some(server_id) = req.template_server_id.as_deref().filter(|s| !s.is_empty()) {
-                resolve_template_by_version(conn, server_id, req.template_server_revision)?
-            } else {
-                resolve_template_by_name(conn, req.template.as_deref())?
-            };
+        let pc_name = crate::commands::api::device_name();
+        let template_id = if let Some(server_id) =
+            req.template_server_id.as_deref().filter(|s| !s.is_empty())
+        {
+            resolve_template_by_version(conn, server_id, req.template_server_revision, &pc_name)?
+        } else {
+            resolve_template_by_name(conn, req.template.as_deref())?
+        };
 
         // Fail early with 404 rather than after a pointless render.
         let known: i64 = conn

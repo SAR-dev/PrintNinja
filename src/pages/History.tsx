@@ -456,10 +456,21 @@ export function HistoryPage() {
         id: "template",
         header: t("templates.col_template"),
         meta: { className: "hidden lg:table-cell" },
-        cell: (c) =>
-          c.row.original.template_id != null
-            ? `Template #${c.row.original.template_id}`
-            : "—",
+        cell: (c) => {
+          const row = c.row.original;
+          if (row.template_id != null) return `Template #${row.template_id}`;
+          // Via-PC prints without a local counterpart name the PC's
+          // template in the row settings instead of linking one.
+          try {
+            const s = row.settings_json
+              ? (JSON.parse(row.settings_json) as { remote_template?: unknown })
+              : null;
+            if (s?.remote_template) return String(s.remote_template);
+          } catch {
+            /* not JSON; fall through */
+          }
+          return "—";
+        },
       },
       {
         id: "printer",

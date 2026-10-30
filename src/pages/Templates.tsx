@@ -619,6 +619,26 @@ export function TemplatesPage() {
           `${c.row.original.page_w_mm} × ${c.row.original.page_h_mm} mm`,
       },
       {
+        id: "sync",
+        header: t("templates.col_sync_id"),
+        meta: { className: "hidden lg:table-cell" },
+        cell: (c) => {
+          const sid = c.row.original.server_id ?? c.row.original.remote_id;
+          return sid ? (
+            <span
+              className="font-mono text-xs text-muted-foreground"
+              title={sid}
+            >
+              {sid.slice(0, 8)} · r{c.row.original.base_revision ?? "–"}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              {t("templates.local_only")}
+            </span>
+          );
+        },
+      },
+      {
         id: "updated",
         header: t("common.updated"),
         accessorFn: (r) => r.updated_at,

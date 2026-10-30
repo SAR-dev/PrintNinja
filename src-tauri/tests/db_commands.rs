@@ -166,6 +166,29 @@ fn template_meta_update_writes_content() {
     assert_eq!(compiled, "compiled");
 }
 
+#[test]
+fn template_rename_onto_another_name_is_refused() {
+    let (_state, conn) = test_db();
+    let a = write_template(&conn, &new_template("Alpha")).unwrap();
+    let b = write_template(&conn, &new_template("Beta")).unwrap();
+    let meta = |id: i64, name: &str| UpdateTemplateMetaRequest {
+        id,
+        name: name.to_string(),
+        page_w_mm: 100,
+        page_h_mm: 150,
+        summary: None,
+        html: None,
+        css: None,
+        compiled_css: None,
+        compiled_key: None,
+    };
+    // Onto another row's name (any case): refused, row untouched.
+    let err = write_template_meta(&conn, &meta(b.id, "ALPHA")).unwrap_err();
+    assert!(err.to_string().contains("already exists"), "{err}");
+    // Its own name (any case): fine.
+    write_template_meta(&conn, &meta(a.id, "alpha")).unwrap();
+}
+
 // ───────────────────────────────────────────────────────────────
 // per-template compiled CSS
 // ───────────────────────────────────────────────────────────────

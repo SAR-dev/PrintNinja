@@ -373,6 +373,7 @@ pub fn run() {
             commands::print::spike_test_print,
             commands::remote_print::remote_print,
             commands::remote_print::remote_printers,
+            commands::remote_print::pc_templates,
             commands::font::list_fonts,
             commands::font::upload_font,
             commands::font::delete_font,
