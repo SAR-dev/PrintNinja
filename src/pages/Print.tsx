@@ -223,7 +223,11 @@ export function PrintPage() {
         const { printerId, templateId } = usePrintStore.getState();
         if (p.length > 0 && !printerId)
           usePrintStore.getState().setPrinterId(p[0].name);
-        if (tpl.length > 0 && !templateId)
+        // A hidden starter may still be the stored selection.
+        if (
+          tpl.length > 0 &&
+          !tpl.some((x) => String(x.id) === String(templateId))
+        )
           usePrintStore.getState().setTemplateId(String(tpl[0].id));
       } catch (e) {
         console.error("Failed to load printers/templates:", e);

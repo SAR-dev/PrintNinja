@@ -1,6 +1,7 @@
 import { compiledFields } from "@/lib/templates/compileTemplateCss";
 import { agent } from "@/lib/agent/commands";
 import { STARTER_TEMPLATES } from "@/lib/templates/defaultTemplate";
+import { hideStarterWhenOthers } from "@/lib/templates/starterVisibility";
 
 export interface StarterTemplate {
   id: number;
@@ -46,7 +47,8 @@ const toStarter = (row: {
 
 async function loadOrSeed(): Promise<StarterTemplate[]> {
   const existing = await agent("list_templates", {});
-  if (existing && existing.length > 0) return existing.map(toStarter);
+  if (existing && existing.length > 0)
+    return hideStarterWhenOthers(existing.map(toStarter));
 
   const created: StarterTemplate[] = [];
   for (const t of STARTER_TEMPLATES) {

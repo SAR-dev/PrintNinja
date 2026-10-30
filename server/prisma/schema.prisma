@@ -169,6 +169,9 @@ model Template {
   owner       User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   versions    TemplateVersion[]
 
+  // One name per owner. The column is COLLATE NOCASE (see the init
+  // migration), so this index is case-insensitive too.
+  @@unique([ownerId, name])
   @@index([ownerId, changeSeq])
   @@index([ownerId, updatedAt])
   @@index([publishedAt, updatedAt])

@@ -46,6 +46,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { usePrintStore } from "@/lib/store/printStore";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
+import { hideStarterWhenOthers } from "@/lib/templates/starterVisibility";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -133,7 +134,7 @@ export function TemplatesPage() {
 
   const loadMine = useCallback(async () => {
     try {
-      const list = await agent("list_templates", {});
+      const list = hideStarterWhenOthers(await agent("list_templates", {}));
       setMine(list.filter((t) => t.origin === "own"));
       setSaved(list.filter((t) => t.origin === "saved"));
     } catch {

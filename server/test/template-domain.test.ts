@@ -27,6 +27,7 @@ import {
   PayloadTooLargeError,
   RevisionConflictError,
   RevisionRequiredError,
+  TemplateNameTakenError,
   ValidationError,
 } from "../src/domain/errors.js";
 import type {
@@ -194,11 +195,38 @@ describe("putTemplate", () => {
     );
   });
 
+  it("keeps names unique per owner, ignoring case and surrounding spaces", async () => {
+    const r = repos();
+    const A = "aaaaaaaa-1111-4111-8111-111111111111";
+    const B = "bbbbbbbb-1111-4111-8111-111111111111";
+    await putTemplate(r, write({ id: A, name: "Label" }), OWNER_ID);
+
+    // Create with a taken name (different case, padded) is refused.
+    await expect(
+      putTemplate(r, write({ id: B, name: "  label " }), OWNER_ID),
+    ).rejects.toBeInstanceOf(TemplateNameTakenError);
+
+    // Another owner may reuse the name.
+    await putTemplate(r, write({ id: B, name: "Label" }), OTHER_ID);
+
+    // Rename onto a sibling's name is refused; keeping your own is fine.
+    const C = "cccccccc-1111-4111-8111-111111111111";
+    await putTemplate(r, write({ id: C, name: "Receipt" }), OWNER_ID);
+    await expect(
+      putTemplate(r, write({ id: C, name: "LABEL", ifRevision: 1 }), OWNER_ID),
+    ).rejects.toBeInstanceOf(TemplateNameTakenError);
+    await putTemplate(
+      r,
+      write({ id: C, name: "RECEIPT", ifRevision: 1 }),
+      OWNER_ID,
+    );
+  });
+
   it("rejects remote references and over-cap fields", async () => {
     const r = repos();
     const remote = putTemplate(
       r,
-      write({ body: '<img src="http://x/y.png">' }),
+      write({ body: '<img src="http://x/y.png" alt="">' }),
       OWNER_ID,
     );
     await expect(remote).rejects.toBeInstanceOf(RemoteReferenceError);
