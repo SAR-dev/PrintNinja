@@ -223,7 +223,11 @@ export function PrintPage() {
         const { printerId, templateId } = usePrintStore.getState();
         if (p.length > 0 && !printerId)
           usePrintStore.getState().setPrinterId(p[0].name);
-        if (tpl.length > 0 && !templateId)
+        // A hidden starter may still be the stored selection.
+        if (
+          tpl.length > 0 &&
+          !tpl.some((x) => String(x.id) === String(templateId))
+        )
           usePrintStore.getState().setTemplateId(String(tpl[0].id));
       } catch (e) {
         console.error("Failed to load printers/templates:", e);
@@ -661,22 +665,22 @@ export function PrintPage() {
     (!viaPc || !!viaPcPair) &&
     !pcUnpaired;
   // An unpaired phone cannot print at all: say so first, with the way
-  // out. Everything else is secondary to re-pairing.
+  // out. Everything else is secondary to re-pairing. A running print is not
+  // a blocker: the button already reads "Printing…" and is disabled, and a
+  // line appearing under it mid-print made the action bar jump.
   const blocker = pcUnpaired
     ? t("print.pair_again_to_print")
     : !store.printerId
       ? t("print.blocker_printer")
       : !templateChosen
         ? t("print.blocker_template")
-        : store.status === "printing"
-          ? t("print.blocker_running")
-          : store.copies < 1
-            ? t("print.blocker_copies")
-            : viaPc && !viaPcPair
-              ? t("print.via_pc_no_pair")
-              : loading
-                ? t("print.blocker_loading")
-                : "";
+        : store.copies < 1
+          ? t("print.blocker_copies")
+          : viaPc && !viaPcPair
+            ? t("print.via_pc_no_pair")
+            : loading
+              ? t("print.blocker_loading")
+              : "";
   const field = "space-y-1.5";
 
   // Paper presets: physical sheets. "auto" means the template's design
@@ -1493,7 +1497,7 @@ export function PrintPage() {
           so there is exactly one "Print" lookup for tests. */}
       {isPhone && (
         <div
-          className="sticky bottom-0 z-10 -mx-4 border-t bg-card/95 px-4 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur md:hidden"
+          className="sticky bottom-0 z-10 -mx-4 border-t bg-card/95 px-4 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pt-2 backdrop-blur md:hidden"
           data-slot="action-bar"
           data-testid="print-action-bar"
         >

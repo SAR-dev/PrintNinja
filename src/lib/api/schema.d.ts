@@ -83,7 +83,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -161,7 +161,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -181,7 +181,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -201,7 +201,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -277,7 +277,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -297,7 +297,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -317,7 +317,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -371,7 +371,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -391,7 +391,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -450,7 +450,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -470,7 +470,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -533,7 +533,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -553,7 +553,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -573,7 +573,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -634,7 +634,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -654,7 +654,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -741,7 +741,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -761,7 +761,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -879,7 +879,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -899,7 +899,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -919,7 +919,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -939,7 +939,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -959,7 +959,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -979,7 +979,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1021,7 +1021,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1041,7 +1041,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1061,7 +1061,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1138,7 +1138,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1158,7 +1158,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1178,7 +1178,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1256,7 +1256,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1276,7 +1276,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1296,7 +1296,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1376,7 +1376,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1396,7 +1396,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1416,7 +1416,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1481,7 +1481,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1501,7 +1501,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1521,7 +1521,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1541,7 +1541,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1623,7 +1623,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1643,7 +1643,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1739,7 +1739,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1759,7 +1759,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1779,7 +1779,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1799,7 +1799,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1819,7 +1819,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1839,7 +1839,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1859,7 +1859,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1903,7 +1903,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1923,7 +1923,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -1943,7 +1943,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2042,7 +2042,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2062,7 +2062,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2082,7 +2082,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2102,7 +2102,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2122,7 +2122,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2142,7 +2142,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2186,7 +2186,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2206,7 +2206,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2226,7 +2226,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2309,7 +2309,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2329,7 +2329,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2349,7 +2349,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2369,7 +2369,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2413,7 +2413,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2433,7 +2433,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2453,7 +2453,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2549,7 +2549,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2569,7 +2569,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2589,7 +2589,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2609,7 +2609,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2629,7 +2629,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2649,7 +2649,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2693,7 +2693,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2713,7 +2713,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2733,7 +2733,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2797,7 +2797,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2817,7 +2817,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2872,7 +2872,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2892,7 +2892,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2912,7 +2912,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2932,7 +2932,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -2952,7 +2952,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3033,7 +3033,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3053,7 +3053,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3073,7 +3073,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3130,7 +3130,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3150,7 +3150,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3170,7 +3170,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3190,7 +3190,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3232,7 +3232,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3252,7 +3252,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3323,7 +3323,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3343,7 +3343,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3418,7 +3418,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3438,7 +3438,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3458,7 +3458,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3478,7 +3478,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3547,7 +3547,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3567,7 +3567,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3587,7 +3587,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3607,7 +3607,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3651,7 +3651,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3671,7 +3671,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3691,7 +3691,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3711,7 +3711,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3795,7 +3795,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3815,7 +3815,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3835,7 +3835,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3855,7 +3855,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3875,7 +3875,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -3895,7 +3895,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -4061,7 +4061,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -4081,7 +4081,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -4140,7 +4140,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;
@@ -4160,7 +4160,7 @@ export interface paths {
                         "application/json": {
                             error: {
                                 /** @enum {string} */
-                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
                                 message: string;
                                 details?: {
                                     path: string;

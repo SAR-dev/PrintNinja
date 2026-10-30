@@ -2,6 +2,7 @@ import {
   NotFoundError,
   RevisionConflictError,
   RevisionRequiredError,
+  TemplateNameTakenError,
 } from "../../src/domain/errors.js";
 import { toPage } from "../../src/domain/pagination.js";
 import type { SyncEntity, SyncRepository } from "../../src/domain/syncPorts.js";
@@ -182,6 +183,15 @@ export function createFakeTemplateRepos(users: {
       query,
     );
 
+  // Mirrors the unique (owner_id, name) index; the column is NOCASE.
+  const nameTaken = (ownerId: string, name: string, exceptId: string) =>
+    [...store.templates.values()].some(
+      (t) =>
+        t.id !== exceptId &&
+        t.ownerId === ownerId &&
+        t.name.toLowerCase() === name.toLowerCase(),
+    );
+
   const templates: TemplateRepository = {
     async findById(id) {
       const stored = store.templates.get(id) ?? null;
@@ -193,6 +203,9 @@ export function createFakeTemplateRepos(users: {
         // Mirrors the P2002 mapping: the row now exists, so the
         // caller retries as an update.
         throw new RevisionRequiredError();
+      }
+      if (nameTaken(input.ownerId, input.name, input.id)) {
+        throw new TemplateNameTakenError();
       }
       const timestamp = now();
       const stored: StoredTemplate = {
@@ -228,6 +241,9 @@ export function createFakeTemplateRepos(users: {
       }
       if (stored.revision !== expectedRevision) {
         throw new RevisionConflictError(stored.revision);
+      }
+      if (nameTaken(stored.ownerId, input.name, stored.id)) {
+        throw new TemplateNameTakenError();
       }
       const nextRevision = version ? stored.revision + 1 : stored.revision;
       Object.assign(stored, {

@@ -10,6 +10,7 @@ export const ERROR_CODES = [
   "forbidden",
   "not_found",
   "handle_taken",
+  "template_name_taken",
   "revision_conflict",
   "revision_required",
   "quota_exceeded",
@@ -78,6 +79,19 @@ export class NotFoundError extends DomainError {
 export class HandleTakenError extends DomainError {
   constructor() {
     super("handle_taken", 409, "Handle already taken");
+  }
+}
+
+/** A create or rename to a name the owner already uses on another
+ * template (compared case-insensitively). */
+export class TemplateNameTakenError extends DomainError {
+  constructor() {
+    super(
+      "template_name_taken",
+      409,
+      "You already have a template with this name",
+      [{ path: "name", message: "Already used by another of your templates" }],
+    );
   }
 }
 
