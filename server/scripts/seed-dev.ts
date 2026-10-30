@@ -233,7 +233,10 @@ async function verify(db: DbClient): Promise<void> {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (
+  process.argv[1] &&
+  fileURLToPath(import.meta.url) === process.argv[1]
+) {
   main().catch((err) => {
     console.error(err instanceof Error ? (err.stack ?? err.message) : err);
     process.exit(1);
