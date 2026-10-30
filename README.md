@@ -187,6 +187,7 @@ Other options include `url` (a data URL), `test=1`, `orientation`, `fit` and `pr
 
 **Templates and sharing**
 - Mine, Saved and Community tabs with search and sort; publish, unpublish and save to the server
+- Saved community templates sync to every PC on their own, and Clone turns one into your own timestamped, editable copy
 - Offline-first: printing keeps working when the server is unreachable, and changes sync when it returns
 - A hosted share service with accounts, delta sync, sample datasets, printer profiles, fonts and preferences
 
