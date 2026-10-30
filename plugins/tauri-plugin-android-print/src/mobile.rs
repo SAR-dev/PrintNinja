@@ -219,9 +219,11 @@ impl<R: Runtime> AndroidPrint<R> {
     }
 
     pub fn start_background_service(&self) -> crate::Result<bool> {
-        self.0
+        let res: RunningResponse = self
+            .0
             .run_mobile_plugin("startBackgroundService", ())
-            .map_err(Into::into)
+            .map_err(crate::Error::from)?;
+        Ok(res.running)
     }
 
     pub fn stop_background_service(&self) -> crate::Result<()> {
@@ -231,9 +233,11 @@ impl<R: Runtime> AndroidPrint<R> {
     }
 
     pub fn is_background_service_running(&self) -> crate::Result<bool> {
-        self.0
+        let res: RunningResponse = self
+            .0
             .run_mobile_plugin("isBackgroundServiceRunning", ())
-            .map_err(Into::into)
+            .map_err(crate::Error::from)?;
+        Ok(res.running)
     }
 
     /// Tell the foreground service whether the local API server is up,
@@ -245,14 +249,18 @@ impl<R: Runtime> AndroidPrint<R> {
     }
 
     pub fn request_battery_exemption(&self) -> crate::Result<bool> {
-        self.0
+        let res: GrantedResponse = self
+            .0
             .run_mobile_plugin("requestBatteryExemption", ())
-            .map_err(Into::into)
+            .map_err(crate::Error::from)?;
+        Ok(res.granted)
     }
 
     pub fn is_battery_exemption_granted(&self) -> crate::Result<bool> {
-        self.0
+        let res: GrantedResponse = self
+            .0
             .run_mobile_plugin("isBatteryExemptionGranted", ())
-            .map_err(Into::into)
+            .map_err(crate::Error::from)?;
+        Ok(res.granted)
     }
 }
