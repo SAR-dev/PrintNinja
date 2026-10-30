@@ -567,6 +567,40 @@ describe("Automation → Phones and server", () => {
       }
     });
 
+    it("shows a newly paired phone without leaving the page", async () => {
+      // Regression: the list only refreshed on mount/focus, so a guest
+      // pairing from its own screen sat invisible until navigation.
+      // Real timers: the poll interval is scheduled at mount, and fake
+      // timers installed afterwards cannot move it.
+      appMode();
+      try {
+        const be = pcBackend({ enabled: true });
+        openApi();
+        renderPage();
+        await screen.findByTestId("devices-share-toggle");
+        expect(screen.queryByTestId("devices-paired-guest-1")).toBeNull();
+        be.devices.push({
+          id: "guest-1",
+          name: "Guest Phone",
+          display_name: null,
+          platform: "android",
+          paired_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+          can_print: true,
+          account_id: null,
+          role: "guest",
+          expires_at: null,
+        });
+        expect(
+          await screen.findByTestId("devices-paired-guest-1", undefined, {
+            timeout: 8000,
+          }),
+        ).toHaveTextContent("Guest Phone");
+      } finally {
+        webMode();
+      }
+    }, 15000);
+
     it("asks before removing all phones, and cancel changes nothing", async () => {
       appMode();
       try {

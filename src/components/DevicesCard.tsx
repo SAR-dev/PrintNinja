@@ -210,6 +210,14 @@ function PcSection() {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [load, loadDevices]);
+  // A phone pairs from its own screen: without a poll the new row sits
+  // invisible until focus/mount. Cheap local read, skipped while hidden.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (!document.hidden) void loadDevices();
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [loadDevices]);
 
   /** Phones reach this PC over the LAN, so the API server must be up
    * and listening beyond loopback. One tap instead of a hunt through
