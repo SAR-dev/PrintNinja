@@ -95,7 +95,9 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
             where: { id: input.id },
             select: { id: true },
           });
-          throw row ? new RevisionRequiredError() : new TemplateNameTakenError();
+          throw row
+            ? new RevisionRequiredError()
+            : new TemplateNameTakenError();
         }
         throw error;
       }

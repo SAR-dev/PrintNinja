@@ -312,7 +312,7 @@ describe("ported B4/P1 characterization", () => {
     const owner = await register("sv-owner");
     const other = await register("sv-other");
     const id = randomUUID();
-    await put(id, owner.token, tpl());
+    await put(id, owner.token, tpl({ name: "Priv" }));
 
     const save = await app.inject({
       method: "PUT",
@@ -328,7 +328,7 @@ describe("ported B4/P1 characterization", () => {
     expect(use.statusCode).toBe(404);
 
     const pub = randomUUID();
-    await put(pub, owner.token, tpl());
+    await put(pub, owner.token, tpl({ name: "Pub" }));
     await app.inject({
       method: "POST",
       url: `/v2/templates/${pub}/publish`,
