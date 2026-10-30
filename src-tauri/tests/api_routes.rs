@@ -1824,7 +1824,9 @@ async fn unknown_server_id_is_409_missing() {
     assert_eq!(body["code"], "template_missing");
     assert_eq!(body["side"], "pc", "the gap is on the PC, not the phone");
     assert!(
-        body["error"].as_str().is_some_and(|m| m.contains("sync templates on the PC")),
+        body["error"]
+            .as_str()
+            .is_some_and(|m| m.contains("sync templates on the PC")),
         "names where to sync: {body}",
     );
     assert_eq!(job_count(&db), 0, "refused requests create no job");
