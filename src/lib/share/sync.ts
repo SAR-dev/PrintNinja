@@ -63,25 +63,15 @@ export async function downloadToLocal(
   );
   if (already) return { id: already.id, created: false, name: already.name };
 
-  // Unique names per device: a clash (own row, or a half-saved earlier
-  // attempt) would refuse the whole save, so suffix first. Sync identity
-  // stays explicit via server_id, so renaming is sync-safe.
-  const taken = new Set(
-    (existing ?? []).map((t) => t.name.trim().toLowerCase()),
-  );
-  let name = remote.name;
-  for (let n = 2; taken.has(name.trim().toLowerCase()) && n <= 100; n++) {
-    name = `${remote.name} (${n})`;
-  }
-
   let created;
   try {
     // A downloaded copy arrives synced at the server's revision: the
     // engine must not push it back as a new own template, and a later
-    // pull refreshes it instead of duplicating it.
+    // pull refreshes it instead of duplicating it. The author's title
+    // is kept verbatim — mirrors are exempt from unique names.
     created = await agent("create_template", {
       req: {
-        name,
+        name: remote.name,
         page_w_mm: Math.round(remote.page_w_mm),
         page_h_mm: Math.round(remote.page_h_mm),
         orientation:
@@ -125,5 +115,5 @@ export async function downloadToLocal(
       },
     });
   }
-  return { id: created.id, created: true, name };
+  return { id: created.id, created: true, name: remote.name };
 }

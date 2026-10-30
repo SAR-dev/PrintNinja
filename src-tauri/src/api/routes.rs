@@ -286,7 +286,8 @@ fn resolve_template_by_name(
     match name.filter(|n| !n.is_empty()) {
         Some(n) => conn
             .query_row(
-                "SELECT id FROM templates WHERE name = ?1 COLLATE NOCASE AND sync_state <> 'deleted_pending'",
+                "SELECT id FROM templates WHERE name = ?1 COLLATE NOCASE AND sync_state <> 'deleted_pending'
+                 ORDER BY CASE WHEN kind = 'own' THEN 0 ELSE 1 END, id",
                 [n],
                 |r| r.get(0),
             )

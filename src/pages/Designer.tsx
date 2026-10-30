@@ -233,7 +233,7 @@ export function DesignerPage() {
       remote_id?: string | null;
       server_id?: string | null;
       published_at?: string | null;
-      origin?: string;
+      origin?: string | null;
     }>
   >([]);
   const [currentTemplateId, setCurrentTemplateId] = useState<number | null>(
@@ -306,7 +306,7 @@ export function DesignerPage() {
     remote_id?: string | null;
     server_id?: string | null;
     published_at?: string | null;
-    origin?: string;
+    origin?: string | null;
     updated_at?: string;
   }) => {
     setCurrentTemplateId(tpl.id);
@@ -654,6 +654,7 @@ export function DesignerPage() {
             page_w_mm: r.page_w_mm,
             page_h_mm: r.page_h_mm,
             orientation: r.orientation,
+            origin: r.origin ?? null,
           }));
           setTemplates(hydrated);
           setCurrentTemplateId(hydrated[0].id);
@@ -746,6 +747,7 @@ export function DesignerPage() {
               page_w_mm: r.page_w_mm,
               page_h_mm: r.page_h_mm,
               orientation: r.orientation,
+              origin: r.origin ?? t.origin ?? null,
             };
           });
           for (const r of rows) {
@@ -758,6 +760,7 @@ export function DesignerPage() {
                 page_w_mm: r.page_w_mm,
                 page_h_mm: r.page_h_mm,
                 orientation: r.orientation,
+                origin: r.origin ?? null,
               });
             }
           }
