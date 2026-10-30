@@ -1883,6 +1883,8 @@ async fn pc_templates_lists_only_printable_rows() {
     seed_printers_and_templates(&db);
     seed_versioned_template(&db);
     // Local-only and dirty rows: names the phone must never offer.
+    // A saved mirror (same title allowed) IS offered: synced, with an
+    // id the check can match — this is how a phone prints PC mirrors.
     db.lock()
         .unwrap()
         .connection()
@@ -1890,7 +1892,9 @@ async fn pc_templates_lists_only_printable_rows() {
             "INSERT INTO templates (name, html, server_id, server_revision, sync_state)
              VALUES ('Private', '<p>p</p>', 'srv-private', NULL, 'dirty');
              INSERT INTO templates (name, html, server_id, server_revision, sync_state)
-             VALUES ('Stale', '<p>s</p>', 'srv-stale', 2, 'dirty');",
+             VALUES ('Stale', '<p>s</p>', 'srv-stale', 2, 'dirty');
+             INSERT INTO templates (name, html, server_id, server_revision, base_revision, sync_state, kind, origin, origin_owner)
+             VALUES ('Mirror', '<p>m</p>', 'srv-mirror', 3, 3, 'synced', 'saved', 'saved', 'ana');",
         )
         .unwrap();
     seed_sharing(&db, "ver-token-7");
@@ -1905,9 +1909,9 @@ async fn pc_templates_lists_only_printable_rows() {
         .iter()
         .map(|t| t["name"].as_str().expect("name"))
         .collect();
-    assert_eq!(names, vec!["Versioned"], "only the synced row: {body}");
-    assert_eq!(body["templates"][0]["server_id"], "srv-1");
-    assert_eq!(body["templates"][0]["server_revision"], 7);
+    assert_eq!(names, vec!["Mirror", "Versioned"], "synced rows incl. mirrors: {body}");
+    assert_eq!(body["templates"][0]["server_id"], "srv-mirror");
+    assert_eq!(body["templates"][0]["server_revision"], 3);
     assert!(body["templates"][0].get("html").is_none(), "never bodies");
 }
 
