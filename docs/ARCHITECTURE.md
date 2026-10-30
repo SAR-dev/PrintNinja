@@ -293,8 +293,9 @@ bytes and which transports exist.
   printers are listed through the USB host API and Bluetooth printers are
   chosen from the bonded devices. The receipt and label languages (ESC/POS,
   ZPL, TSPL, CPCL, raster) need a raster Android cannot produce yet, so the
-  printer form offers only PDF there. A background service keeps the print
-  queue draining even after the app is swiped away, and the app requests
+  printer form offers only PDF there. A background service, on by default
+  since v1.1.0, keeps the print queue draining even after the app is swiped
+  away (Open and Close sit on its notification), and the app can request
   exemption from battery optimization so the system doesn't defer prints.
 - **macOS** is not a print target: rendering and delivery both report
   unsupported rather than failing mysteriously.
@@ -391,8 +392,8 @@ did the rendering.
 
 ### Pairing
 
-The PC shows a one-time 8-character code, valid for 30 seconds, together
-with its address. Turning sharing on does everything needed in one step,
+The PC shows a one-time 8-character code, valid for 90 seconds
+(`PRINTNINJA_PAIRING_TTL_SECS` overrides it), together with its address. Turning sharing on does everything needed in one step,
 including bringing up the local server so phones on the Wi-Fi can reach
 it. The phone types the code; the PC answers a discovery hello whenever
 sharing is on (with a flag for whether a window is open), and the phone
@@ -430,7 +431,7 @@ Three rules keep this safe:
   outright; a removal is for when the PC stays shared but one phone
   should lose access.) Re-pairing the same phone replaces its row and
   keeps the PC's rename; the old token dies with the row.
-- **The code cannot be guessed.** 40 bits of entropy, a 30-second
+- **The code cannot be guessed.** 40 bits of entropy, a 90-second
   window, five wrong guesses close it, and comparison leaks nothing
   about how close a guess was.
 
