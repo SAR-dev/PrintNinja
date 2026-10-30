@@ -80,8 +80,15 @@ async function main(): Promise<void> {
     console.error("DATABASE_URL is not set (server/.env or environment)");
     process.exit(2);
   }
+  // Turso and other libsql:// remotes authenticate with a token, same
+  // variable the migrate and reset scripts use.
+  const authToken = process.env.DATABASE_AUTH_TOKEN;
+  if (databaseUrl.startsWith("libsql://") && !authToken) {
+    console.error("DATABASE_AUTH_TOKEN is required for a libsql:// URL");
+    process.exit(2);
+  }
   const { createDbClient } = await import("../src/infra/db/client.js");
-  const db = createDbClient(databaseUrl);
+  const db = createDbClient(databaseUrl, authToken);
   try {
     const users = createUserRepository(db);
     const templates = createTemplateRepository(db);
