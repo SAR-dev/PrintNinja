@@ -210,9 +210,14 @@ export interface NewPairingInvite {
 }
 
 /** One print through a paired PC (see `remote_print`). Field names mirror
- * the local print request; `template_id` is this phone's local id. */
+ * the local print request; `template_id` is this phone's local id, absent
+ * when printing a PC-listed template with no local counterpart. */
 export interface RemotePrintArgs {
-  template_id: number;
+  template_id?: number | null;
+  /** Explicit identity from the PC's own listing; skips the local lookup. */
+  template_name?: string | null;
+  template_server_id?: string | null;
+  template_server_revision?: number | null;
   printer_name: string;
   data?: unknown;
   data_url?: string;
@@ -251,6 +256,19 @@ export interface PcPrinterInfo {
 
 export interface RemotePrintersResult {
   printers: PcPrinterInfo[];
+  /** True when the PC did not answer and this is the last good list. */
+  cached: boolean;
+}
+
+/** One printable PC template: name plus the sync identity, never a body. */
+export interface PcTemplateInfo {
+  name: string;
+  server_id: string;
+  server_revision: number | null;
+}
+
+export interface PcTemplatesResult {
+  templates: PcTemplateInfo[];
   /** True when the PC did not answer and this is the last good list. */
   cached: boolean;
 }

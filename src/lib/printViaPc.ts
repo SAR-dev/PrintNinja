@@ -7,7 +7,11 @@
  * localStorage mirror via read/writeSetting), next to `render_pairs`.
  */
 import { agent } from "@/lib/agent/commands";
-import type { PcPrinterInfo, RenderPair } from "@/lib/agent/types";
+import type {
+  PcPrinterInfo,
+  PcTemplateInfo,
+  RenderPair,
+} from "@/lib/agent/types";
 import { parsePairs } from "@/lib/pairing";
 import { readSetting, writeSetting } from "@/lib/settings";
 
@@ -60,4 +64,14 @@ export async function fetchPcPrinters(
   refresh?: boolean,
 ): Promise<{ printers: PcPrinterInfo[]; cached: boolean }> {
   return agent("remote_printers", { pair_id: pairId ?? null, refresh });
+}
+
+/** PC templates for the dialog: live, else the last good list. While
+ * via-PC printing is on, the picker lists these instead of the phone's
+ * own rows. */
+export async function fetchPcTemplates(
+  pairId?: string | null,
+  refresh?: boolean,
+): Promise<{ templates: PcTemplateInfo[]; cached: boolean }> {
+  return agent("pc_templates", { pair_id: pairId ?? null, refresh });
 }

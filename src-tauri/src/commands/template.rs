@@ -319,6 +319,20 @@ pub fn write_template_meta(
     if name.is_empty() {
         return Err(AppError::Validation("Template name required".into()));
     }
+    // Unique names (case-insensitive), like create: renaming onto another
+    // row's name is refused. Existing duplicates are left alone — no
+    // backfill — and renaming a row to its own name always passes.
+    let clash: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM templates WHERE name = ?1 COLLATE NOCASE AND id <> ?2 AND sync_state <> 'deleted_pending'",
+        rusqlite::params![name, req.id],
+        |r| r.get(0),
+    )?;
+    if clash > 0 {
+        return Err(AppError::Validation(format!(
+            "A template named '{}' already exists",
+            name
+        )));
+    }
     if req.page_w_mm <= 0 || req.page_h_mm <= 0 {
         return Err(AppError::Validation(
             "Page dimensions must be positive".into(),

@@ -139,7 +139,10 @@ async fn live_pc(db: &Db) -> u16 {
 
 fn args(template_id: i64) -> RemotePrintArgs {
     RemotePrintArgs {
-        template_id,
+        template_id: Some(template_id),
+        template_name: None,
+        template_server_id: None,
+        template_server_revision: None,
         printer_name: "Desk".into(),
         data: Some(serde_json::json!({"x": "hi"})),
         data_url: None,
@@ -243,7 +246,7 @@ async fn remote_print_unknown_template_creates_no_rows() {
     let port = live_pc(&pc).await;
     let (phone, _) = phone_db(port);
     let mut bad = args(1);
-    bad.template_id = 999;
+    bad.template_id = Some(999);
     let err = remote_print_inner(&phone, bad).await.unwrap_err();
     assert!(err.to_string().contains("not found"), "{err}");
     for db in [&phone, &pc] {

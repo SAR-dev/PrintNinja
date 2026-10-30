@@ -30,13 +30,18 @@ import { cn } from "@/lib/utils";
 import { useSystemPrinters } from "@/lib/hooks/useSystemPrinters";
 import {
   fetchPcPrinters,
+  fetchPcTemplates,
   getPrintViaPcDevice,
   isPrintViaPc,
   listPhonePairs,
   resolvePhonePair,
   setPrintViaPcDevice,
 } from "@/lib/printViaPc";
-import type { PcPrinterInfo, RenderPair } from "@/lib/agent/types";
+import type {
+  PcPrinterInfo,
+  PcTemplateInfo,
+  RenderPair,
+} from "@/lib/agent/types";
 import { cacheNow } from "@/lib/sync/useSyncStatus";
 import { usePcStatus } from "@/lib/shell/usePcStatus";
 import { Link } from "react-router-dom";
@@ -91,6 +96,11 @@ export function PrintPage() {
   const [viaPcDevice, setViaPcDevice] = useState<string | null>(null);
   const [pcPrinters, setPcPrinters] = useState<PcPrinterInfo[]>([]);
   const [pcCached, setPcCached] = useState(false);
+  // Via-PC template picker: the PC's printable rows, not this phone's.
+  // Chosen by server_id; history links a local row only when one exists.
+  const [pcTemplates, setPcTemplates] = useState<PcTemplateInfo[]>([]);
+  const [pcTemplate, setPcTemplate] = useState("");
+  const [pcTemplatesCached, setPcTemplatesCached] = useState(false);
   // The initial list fetch fails quietly: hammering an unreachable PC
   // with an error toast on every page open is noise — the banner below
   // already says the PC did not answer. Manual refreshes still toast.
@@ -114,12 +124,33 @@ export function PrintPage() {
     }
   };
 
+  const refreshPcTemplates = async (pairId?: string | null, quiet = false) => {
+    try {
+      const r = await fetchPcTemplates(pairId ?? viaPcDevice, true);
+      setPcTemplates(r.templates);
+      setPcTemplatesCached(r.cached);
+      if (!quiet) setPcFailed(false);
+      if (
+        r.templates.length > 0 &&
+        !r.templates.some((x) => x.server_id === pcTemplate)
+      ) {
+        setPcTemplate(r.templates[0].server_id);
+      }
+    } catch (e) {
+      if (!quiet) {
+        setPcFailed(true);
+        notifyError(describeError(e));
+      }
+    }
+  };
+
   // Choosing here resolves the block in place: no trip to Automation.
   const pickViaPcDevice = async (id: string) => {
     try {
       await setPrintViaPcDevice(id);
       setViaPcDevice(id);
       await refreshPcPrinters(id);
+      await refreshPcTemplates(id);
     } catch (e) {
       notifyError(describeError(e));
     }
@@ -148,6 +179,22 @@ export function PrintPage() {
             }
           } catch {
             if (!cancelled) setPcFailed(true);
+          }
+          try {
+            const r = await fetchPcTemplates(chosen, false);
+            if (!cancelled) {
+              setPcTemplates(r.templates);
+              setPcTemplatesCached(r.cached);
+              if (r.templates.length > 0) {
+                setPcTemplate((cur) =>
+                  cur && r.templates.some((x) => x.server_id === cur)
+                    ? cur
+                    : r.templates[0].server_id,
+                );
+              }
+            }
+          } catch {
+            /* printers path already flagged the PC */
           }
         }
       } catch {
@@ -199,13 +246,17 @@ export function PrintPage() {
   // The printer name belongs to one list or the other: flipping the
   // mode clears the other side's choice, and a landed PC list snaps an
   // empty choice to its first entry. The local list keeps its own
-  // mount-time preselect below, untouched.
+  // mount-time preselect below, untouched. Templates work the same way:
+  // via-PC prints choose by the PC's server_id, local prints by row id.
   const prevViaPc = useRef(viaPc);
   useEffect(() => {
     if (prevViaPc.current !== viaPc) {
       prevViaPc.current = viaPc;
       usePrintStore.getState().setPrinterId("");
+      setPcTemplate("");
+      if (viaPc) void refreshPcTemplates(null, true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viaPc]);
   useEffect(() => {
     if (
@@ -223,18 +274,34 @@ export function PrintPage() {
     [templates, store.templateId],
   );
 
+  // Via-PC prints choose from the PC's listing: the preview can only
+  // render a local copy, so it uses the same-named one when there is
+  // one — print identity always comes from the PC's server_id.
+  const selectedPcTemplate = useMemo(
+    () =>
+      viaPc ? pcTemplates.find((x) => x.server_id === pcTemplate) : undefined,
+    [viaPc, pcTemplates, pcTemplate],
+  );
+  const previewTemplate = viaPc
+    ? selectedPcTemplate &&
+      templates.find((x) => x.name === selectedPcTemplate.name)
+    : selectedTemplate;
+
   const selectedTemplateId = selectedTemplate?.id;
   // The template's orientation is the default; flipping the selector below
   // overrides it for this print only (never written back).
+  const previewTemplateKey = viaPc
+    ? `pc:${pcTemplate}`
+    : `local:${selectedTemplateId ?? ""}`;
   useEffect(() => {
-    if (selectedTemplate) {
+    if (previewTemplate) {
       store.setOrientation(
-        selectedTemplate.orientation === "landscape" ? "landscape" : "portrait",
+        previewTemplate.orientation === "landscape" ? "landscape" : "portrait",
       );
     }
     // Keyed on the template only: a reload must not clobber a manual flip.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTemplateId]);
+  }, [previewTemplateKey]);
 
   // The preview follows the selected template and data source, so
   // operators see what will print. With test data it renders the bundled
@@ -256,10 +323,19 @@ export function PrintPage() {
     return () => window.clearTimeout(id);
   }, [dataUrl]);
   useEffect(() => {
-    const template = selectedTemplate;
+    const template = previewTemplate;
     if (!template) {
       setPreviewPages([]);
       setPreviewError("");
+      // A PC template with no local same-named copy has nothing to
+      // render from — but it still prints; say so instead of blankness.
+      if (viaPc && pcTemplate) {
+        setPreviewNotice(
+          t("print.preview_pc_template", {
+            pc: viaPcPair?.name ?? t("print.via_pc_no_pair"),
+          }),
+        );
+      }
       return;
     }
     let cancelled = false;
@@ -370,20 +446,35 @@ export function PrintPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedTemplate, debouncedDataUrl, useTestData, httpMethod, pageCount]);
+  }, [
+    previewTemplate,
+    debouncedDataUrl,
+    useTestData,
+    httpMethod,
+    pageCount,
+    viaPc,
+    pcTemplate,
+    viaPcPair?.name,
+  ]);
 
+  const [refreshingPrinters, setRefreshingPrinters] = useState(false);
   const loadPrinters = async () => {
+    if (refreshingPrinters) return;
+    setRefreshingPrinters(true);
     // Via PC, the phone's own printers are not in play: asking the OS
     // would only toast "Found 0 system printers" next to the real result.
-    if (viaPc) {
-      await refreshPcPrinters();
-      return;
-    }
     try {
+      if (viaPc) {
+        await refreshPcPrinters();
+        await refreshPcTemplates();
+        return;
+      }
       const list = await refreshSystemPrinters();
       notifySuccess(t("printers.toast_found_system", { count: list.length }));
     } catch (e) {
       notifyError(t("settings_page.toast_failed", { error: describeError(e) }));
+    } finally {
+      setRefreshingPrinters(false);
     }
   };
 
@@ -392,7 +483,7 @@ export function PrintPage() {
       notifyError(t("print.blocker_printer"));
       return;
     }
-    if (!store.templateId) {
+    if (!templateChosen) {
       notifyError(t("print.blocker_template"));
       return;
     }
@@ -475,9 +566,27 @@ export function PrintPage() {
           globalThis.crypto?.randomUUID?.() ??
           `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       }
+      // Via-PC identity comes from the PC's own listing (matched by
+      // construction); the local row is only history linkage, and may
+      // not exist — e.g. a guest printing a PC template.
+      const pcPick =
+        viaPc && selectedPcTemplate
+          ? {
+              template_id: undefined,
+              template_name: selectedPcTemplate.name,
+              template_server_id: selectedPcTemplate.server_id,
+              template_server_revision:
+                selectedPcTemplate.server_revision ?? undefined,
+            }
+          : {
+              template_id: Number(store.templateId),
+              template_name: undefined,
+              template_server_id: undefined,
+              template_server_revision: undefined,
+            };
       const result = await agent("remote_print", {
         args: {
-          template_id: Number(store.templateId),
+          ...pcPick,
           printer_name: store.printerId,
           copies: store.copies,
           records: store.records,
@@ -540,9 +649,12 @@ export function PrintPage() {
     }
   };
 
+  // Via-PC prints choose from the PC's listing (by server_id); local
+  // prints choose a local row. One of them must be chosen.
+  const templateChosen = viaPc ? pcTemplate !== "" : store.templateId !== "";
   const canPrint =
     !!store.printerId &&
-    !!store.templateId &&
+    templateChosen &&
     store.copies >= 1 &&
     store.status !== "printing" &&
     !loading &&
@@ -554,7 +666,7 @@ export function PrintPage() {
     ? t("print.pair_again_to_print")
     : !store.printerId
       ? t("print.blocker_printer")
-      : !store.templateId
+      : !templateChosen
         ? t("print.blocker_template")
         : store.status === "printing"
           ? t("print.blocker_running")
@@ -569,8 +681,8 @@ export function PrintPage() {
 
   // Paper presets: physical sheets. "auto" means the template's design
   // size; "custom" is edited in the inputs below.
-  const designW = selectedTemplate?.page_w_mm ?? 80;
-  const designH = selectedTemplate?.page_h_mm ?? 200;
+  const designW = previewTemplate?.page_w_mm ?? 80;
+  const designH = previewTemplate?.page_h_mm ?? 200;
   // Explicit paper size wins per axis; null falls back to the design size.
   // The paper is per-print only — never written back to the template.
   const effPaperW = store.paperW ?? designW;
@@ -791,18 +903,19 @@ export function PrintPage() {
             <p className="break-words text-xs">
               {store.error || t("print.unknown_error")}
             </p>
-            {remoteCode &&
-              (remoteCode === "template_missing" ||
-                remoteCode === "template_stale") && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  data-testid="print-sync-templates"
-                  onClick={handleSyncTemplates}
-                >
-                  {t("print.sync_templates")}
-                </Button>
-              )}
+            {/* Sync refreshes this phone only: it can heal a stale
+                revision, never a template missing on the PC — whose
+                message now names the PC. */}
+            {remoteCode === "template_stale" && (
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="print-sync-templates"
+                onClick={handleSyncTemplates}
+              >
+                {t("print.sync_templates")}
+              </Button>
+            )}
             {store.timings && <TimingBreakdown timings={store.timings} />}
           </div>
           <Button
@@ -843,10 +956,14 @@ export function PrintPage() {
                     variant="ghost"
                     size="sm"
                     onClick={loadPrinters}
+                    disabled={refreshingPrinters}
                     aria-label={t("print.refresh")}
                     title={t("print.refresh")}
                   >
-                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                    <RefreshCw
+                      className={`h-4 w-4${refreshingPrinters ? " animate-spin" : ""}`}
+                      aria-hidden="true"
+                    />
                     {t("print.refresh")}
                   </Button>
                 </div>
@@ -893,31 +1010,64 @@ export function PrintPage() {
               </div>
               <div className={field}>
                 <Label htmlFor="print-template">{t("print.template")}</Label>
-                <Select
-                  value={store.templateId}
-                  onValueChange={store.setTemplateId}
-                >
-                  <SelectTrigger
-                    id="print-template"
-                    aria-label={t("print.template")}
+                {viaPc && viaPcPair ? (
+                  <Select value={pcTemplate} onValueChange={setPcTemplate}>
+                    <SelectTrigger
+                      id="print-template"
+                      aria-label={t("print.template")}
+                    >
+                      <SelectValue
+                        placeholder={t("print.template_placeholder")}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pcTemplates.length === 0 && (
+                        <SelectItem value="none" disabled>
+                          {t("print.no_templates")}
+                        </SelectItem>
+                      )}
+                      {pcTemplates.map((x) => (
+                        <SelectItem key={x.server_id} value={x.server_id}>
+                          {x.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Select
+                    value={store.templateId}
+                    onValueChange={store.setTemplateId}
                   >
-                    <SelectValue
-                      placeholder={t("print.template_placeholder")}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {templates.length === 0 && (
-                      <SelectItem value="none" disabled>
-                        {t("print.no_templates")}
-                      </SelectItem>
-                    )}
-                    {templates.map((x) => (
-                      <SelectItem key={x.id} value={String(x.id)}>
-                        {x.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    <SelectTrigger
+                      id="print-template"
+                      aria-label={t("print.template")}
+                    >
+                      <SelectValue
+                        placeholder={t("print.template_placeholder")}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.length === 0 && (
+                        <SelectItem value="none" disabled>
+                          {t("print.no_templates")}
+                        </SelectItem>
+                      )}
+                      {templates.map((x) => (
+                        <SelectItem key={x.id} value={String(x.id)}>
+                          {x.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {viaPc &&
+                  viaPcPair &&
+                  pcTemplatesCached &&
+                  pcTemplates.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("print.via_pc_templates_cached")}
+                    </p>
+                  )}
               </div>
 
               {/* "Use test data" stays put; the fields it replaces move into
@@ -1231,11 +1381,11 @@ export function PrintPage() {
               <div className="space-y-1">
                 <CardTitle>{t("print.preview")}</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  {selectedTemplate
+                  {previewTemplate
                     ? t("print.preview_subtitle", {
-                        name: selectedTemplate.name,
-                        w: selectedTemplate.page_w_mm,
-                        h: selectedTemplate.page_h_mm,
+                        name: previewTemplate.name,
+                        w: previewTemplate.page_w_mm,
+                        h: previewTemplate.page_h_mm,
                         source: t(
                           useTestData || !dataUrl.trim()
                             ? "print.preview_sample"
@@ -1244,7 +1394,7 @@ export function PrintPage() {
                       })
                     : t("print.preview_empty")}
                 </p>
-                {selectedTemplate ? (
+                {previewTemplate ? (
                   <p className="text-xs text-muted-foreground">
                     {t("print.paper_note", {
                       dw: designW,

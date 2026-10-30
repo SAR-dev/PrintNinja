@@ -353,6 +353,7 @@ const en = {
     pair_again_to_print: "Pair again to print.",
     via_pc_banner: "Printing on {{pc}} — the job runs on its printers.",
     via_pc_cached: "Printer list is cached: the PC is unreachable.",
+    via_pc_templates_cached: "Template list is cached: the PC is unreachable.",
     via_pc_unreachable:
       "The PC did not answer — check it is on and on the same Wi-Fi, then Refresh.",
     via_pc_no_pair: "Choose which PC to print on.",
@@ -399,6 +400,8 @@ const en = {
     preview_live: "live data URL",
     preview_subtitle: "{{name}}, {{w}} × {{h}} mm, {{source}}",
     preview_empty: "Choose a template to see a preview.",
+    preview_pc_template:
+      "This template lives on {{pc}} and has no local copy to preview from — printing still works.",
     preview_collapse: "Collapse preview",
     preview_expand: "Show preview",
     preview_region: "Print preview",
@@ -1080,6 +1083,8 @@ const en = {
       "Save a community template to keep a copy that works offline.",
     empty_saved_action: "Browse community",
     col_size: "Page size",
+    col_sync_id: "Sync ID",
+    local_only: "local only",
     action_save_server: "Save {{name}} to the server",
     action_save_server_title: "Save to the server",
     action_refresh_server: "Refresh {{name}} from the server",

@@ -84,6 +84,13 @@ export function DesignerToolbar({
                 : t("designer.visibility_private"),
             })}
           />
+          <span
+            className="font-mono text-xs text-muted-foreground"
+            title={remoteId}
+            data-testid="designer-sync-id"
+          >
+            {remoteId.slice(0, 8)}
+          </span>
         </div>
       )}
     </div>
