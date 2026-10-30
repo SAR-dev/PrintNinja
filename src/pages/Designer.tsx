@@ -1,3 +1,4 @@
+import { ApiError } from "@/lib/api/errors";
 import { describeError } from "@/lib/errors";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
@@ -84,6 +85,7 @@ import {
 import { useCompiledCss } from "@/lib/templates/useCompiledCss";
 import { formatCss, formatHtml } from "@/lib/utils/format";
 import { ensureStarterTemplates } from "@/lib/templates/seedTemplates";
+import { hideStarterWhenOthers } from "@/lib/templates/starterVisibility";
 import * as share from "@/lib/share/client";
 import { useShareStatus } from "@/lib/shell/useShareStatus";
 import { getLocalTemplate, isReadOnly } from "@/lib/share/sync";
@@ -372,6 +374,24 @@ export function DesignerPage() {
       notifyError(t("designer.toast_offline_save"));
       return;
     }
+    // Names are unique per owner on the server (case-insensitive). Check
+    // here first so a taken name never reaches the local row, which would
+    // otherwise show the rejected name on the Templates page as a draft.
+    const wanted = templateName.trim();
+    if (!wanted) {
+      notifyError(t("designer.toast_name_required"));
+      return;
+    }
+    if (
+      templates.some(
+        (x) =>
+          x.id !== currentTemplateDbId &&
+          x.name.trim().toLowerCase() === wanted.toLowerCase(),
+      )
+    ) {
+      notifyError(t("designer.toast_name_exists"));
+      return;
+    }
     setPending("save");
     try {
       const row = await getLocalTemplate(currentTemplateDbId);
@@ -379,7 +399,7 @@ export function DesignerPage() {
         notifyError(t("designer.toast_readonly"));
         return;
       }
-      const content = await buildContent();
+      const content = { ...(await buildContent()), name: wanted };
       const result = await saveTemplateToServer(row, content);
       setRemoteId(result.remoteId);
       setPublishedAt(result.published ? result.updatedAt : null);
@@ -411,6 +431,10 @@ export function DesignerPage() {
     } catch (e) {
       if (e instanceof TemplateConflictError) {
         setConflict({ rowId: currentTemplateDbId, serverId: e.serverId });
+        return;
+      }
+      if (e instanceof ApiError && e.code === "template_name_taken") {
+        notifyError(t("designer.toast_name_exists"));
         return;
       }
       notifyError(describeError(e));
@@ -540,6 +564,7 @@ export function DesignerPage() {
       notifyError(t("designer.toast_offline_create"));
       return;
     }
+    let keepDialogOpen = false;
     try {
       const created = await createTemplateOnServer({
         name,
@@ -560,11 +585,19 @@ export function DesignerPage() {
         orientation: created.orientation,
       };
       contentLoaded.current.add(tpl.id);
-      setTemplates((prev) => [...prev, tpl]);
+      setTemplates((prev) => hideStarterWhenOthers([...prev, tpl]));
       loadTemplate(tpl);
       setCurrentTemplateDbId(tpl.id);
       notifySuccess(t("designer.toast_created_server", { name }));
-    } catch {
+    } catch (e) {
+      // The server already has a template with this name (another PC, or
+      // a name this list has not synced yet). Not a fallback case: show
+      // it on the field and keep the dialog open.
+      if (e instanceof ApiError && e.code === "template_name_taken") {
+        keepDialogOpen = true;
+        setNewNameError(t("designer.toast_name_exists"));
+        return;
+      }
       // Web mode / DB unavailable — keep in-memory fallback so UI stays usable.
       const id = templates.length
         ? Math.max(...templates.map((t) => t.id)) + 1
@@ -584,8 +617,10 @@ export function DesignerPage() {
       setCurrentTemplateDbId(tpl.id);
       notifySuccess(t("designer.toast_created_local", { name }));
     } finally {
-      setNewTemplateName("");
-      setShowNewTemplateDialog(false);
+      if (!keepDialogOpen) {
+        setNewTemplateName("");
+        setShowNewTemplateDialog(false);
+      }
     }
   };
   const [selectedDatasetName, setSelectedDatasetName] =
@@ -726,7 +761,7 @@ export function DesignerPage() {
               });
             }
           }
-          return next;
+          return hideStarterWhenOthers(next);
         });
       } catch {
         /* keep current list on failure */
