@@ -695,7 +695,7 @@ const en = {
     hint_diagnostics: "Export logs for support",
     background_title: "Run in the background",
     background_hint:
-      "Keeps the print queue running after the app is swiped away. Stop it from its notification.",
+      "Runs by default and keeps the print queue going after the app is swiped away. Use Open or Close on its notification.",
     background_launch: "Launch at startup",
     background_minimized: "Start minimized in the notification area",
     background_minimized_hint: "Start minimized needs launch at startup.",
@@ -709,7 +709,7 @@ const en = {
       "Templates, print history, printers, fonts, datasets, profiles and all settings will be permanently deleted from this PC. The server keeps the account — sign back in to pull it down again.",
     background_service: "Print service",
     background_service_hint:
-      "Keeps the print queue running after the app is swiped away. Stop it from its notification.",
+      "Runs by default and keeps the print queue going after the app is swiped away. Use Open or Close on its notification.",
     background_running: "running",
     background_stopped: "stopped",
     background_battery: "Ignore battery optimizations",

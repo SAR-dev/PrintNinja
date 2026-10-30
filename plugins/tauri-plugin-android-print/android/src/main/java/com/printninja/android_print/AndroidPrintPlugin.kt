@@ -1473,16 +1473,23 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
 
     /**
      * Starts the foreground print service when the plugin loads at app
-     * startup, so the queue survives before any command runs. The app
-     * also starts it from the webview on launch; starting twice is a
-     * no-op by Android contract.
+     * startup, so the queue survives before any command runs, and asks
+     * for the notification permission so its notification is visible.
+     * The app also starts it from the webview on launch; starting twice
+     * is a no-op by Android contract.
      */
     override fun load(webView: WebView) {
         super.load(webView)
+        PrintNinjaService.attachActivity(activity)
         try {
             PrintNinjaService.start(activity)
         } catch (e: Exception) {
             Log.w(tag, "could not start background service: ${e.message}")
         }
+        // Android 13+ hides the service's notification until the user
+        // allows notifications. Ask at launch, not only when the API
+        // server starts, so the background notification is there by
+        // default. Off the main thread: it waits for the user's answer.
+        ioPool.execute { ensureNotificationPermission() }
     }
 }
