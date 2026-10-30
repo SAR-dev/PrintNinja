@@ -475,7 +475,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               search icon on screen (the release literal must stay in
               source; tooling reads it there, not in the DOM). */}
           <span className="hidden shrink-0 text-xs text-muted-foreground md:inline">
-            {appVersion ? `v${appVersion}` : "v1.2.2"}
+            {appVersion ? `v${appVersion}` : "v1.3.0"}
           </span>
         </span>
         {!shortLandscape && (
