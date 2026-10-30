@@ -1,5 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { DbClient } from "../src/infra/db/client.js";
 import { createPasswordHasher } from "../src/infra/security/passwordHasher.js";
 import { createSavedRepository } from "../src/infra/db/saved.js";
 import { createTemplateRepository } from "../src/infra/db/templates.js";
@@ -87,9 +88,11 @@ async function main(): Promise<void> {
     console.error("DATABASE_AUTH_TOKEN is required for a libsql:// URL");
     process.exit(2);
   }
+  console.log(`seed target: ${describeTarget(databaseUrl, !!authToken)}`);
   const { createDbClient } = await import("../src/infra/db/client.js");
   const db = createDbClient(databaseUrl, authToken);
   try {
+    await ping(db, databaseUrl);
     const users = createUserRepository(db);
     const templates = createTemplateRepository(db);
     const saved = createSavedRepository(db);
@@ -103,7 +106,7 @@ async function main(): Promise<void> {
     for (const u of USERS) {
       const existing = await users.findByHandleKey(u.handle);
       if (existing) {
-        console.log(`user ${u.handle}: exists, skipped`);
+        console.log(`user ${u.handle}: exists (${existing.id}), skipped`);
         byHandle.set(u.handle, existing.id);
         continue;
       }
@@ -114,7 +117,7 @@ async function main(): Promise<void> {
         passwordHash: await hasher.hash(PASSWORD),
       });
       byHandle.set(u.handle, created.id);
-      console.log(`user ${u.handle}: created`);
+      console.log(`user ${u.handle}: created (${created.id})`);
     }
 
     const byName = new Map<string, string>();
@@ -122,7 +125,10 @@ async function main(): Promise<void> {
       const ownerId = byHandle.get(t.owner)!;
       const existing = await templates.findById(t.id);
       if (existing) {
-        console.log(`template "${t.name}": exists, skipped`);
+        console.log(
+          `template "${t.name}": exists (rev ${existing.revision}, ` +
+            `published ${existing.publishedAt !== null}), skipped`,
+        );
         byName.set(t.name, t.id);
         continue;
       }
@@ -139,13 +145,22 @@ async function main(): Promise<void> {
         ownerId,
       );
       byName.set(t.name, t.id);
+      console.log(
+        `template "${t.name}": put status ${put.status}, ` +
+          `rev ${put.template.revision}, seq ${put.template.changeSeq}`,
+      );
       if (t.publish) {
-        await publishTemplate({ templates }, t.id, ownerId, new Date());
+        const published = await publishTemplate(
+          { templates },
+          t.id,
+          ownerId,
+          new Date(),
+        );
         console.log(
-          `template "${t.name}": created (${put.status}) and published`,
+          `template "${t.name}": published at ${published.publishedAt?.toISOString()}`,
         );
       } else {
-        console.log(`template "${t.name}": created (${put.status}), private`);
+        console.log(`template "${t.name}": left private`);
       }
     }
 
@@ -162,15 +177,65 @@ async function main(): Promise<void> {
       }
     }
 
+    await verify(db);
     console.log("sign in with demo / demo1234 or sam / demo1234");
   } finally {
     await db.$disconnect();
   }
 }
 
+/** What the script thinks it is talking to. The token itself never logs. */
+function describeTarget(databaseUrl: string, hasToken: boolean): string {
+  if (databaseUrl.startsWith("libsql://")) {
+    const host = databaseUrl.slice("libsql://".length).split("/")[0];
+    return `turso remote ${host} (token ${hasToken ? "set" : "missing"})`;
+  }
+  return `local file ${databaseUrl}`;
+}
+
+/** Fail fast on a wrong address or a dead remote before writing a row. */
+async function ping(db: DbClient, databaseUrl: string): Promise<void> {
+  const started = Date.now();
+  try {
+    await db.$queryRaw`SELECT 1`;
+  } catch (err) {
+    throw new Error(
+      `cannot reach ${describeTarget(databaseUrl, true)}: ` +
+        (err instanceof Error ? err.message : String(err)),
+    );
+  }
+  console.log(`ping ok in ${Date.now() - started} ms`);
+}
+
+/** Read back everything the seed should have written, so a silent
+ * no-op (wrong database, swallowed write) shows up here, not in the app. */
+async function verify(db: DbClient): Promise<void> {
+  const users = (await db.$queryRawUnsafe(
+    `SELECT handle FROM users WHERE handle IN ('demo', 'sam') ORDER BY handle`,
+  )) as { handle: string }[];
+  const tpl = (await db.$queryRawUnsafe(
+    `SELECT id, name, owner_id, published_at IS NOT NULL AS published
+     FROM templates WHERE id IN (${TEMPLATES.map((t) => `'${t.id}'`).join(",")})`,
+  )) as { id: string; name: string; owner_id: string; published: number }[];
+  const saves = (await db.$queryRawUnsafe(
+    `SELECT user_id, template_id FROM saved_templates`,
+  )) as { user_id: string; template_id: string }[];
+  console.log(
+    `verify: users [${users.map((u) => u.handle).join(", ")}], ` +
+      `templates [${tpl.map((t) => `${t.name}:${t.published ? "pub" : "priv"}`).join(", ")}], ` +
+      `saves ${saves.length}`,
+  );
+  if (users.length !== 2 || tpl.length !== 3 || saves.length < 2) {
+    throw new Error(
+      "verify failed: the database does not hold the seeded rows — " +
+        "check that this is the database the app reads",
+    );
+  }
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((err) => {
-    console.error(err instanceof Error ? err.message : err);
+    console.error(err instanceof Error ? (err.stack ?? err.message) : err);
     process.exit(1);
   });
 }
