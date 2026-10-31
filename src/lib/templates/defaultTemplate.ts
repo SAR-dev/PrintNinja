@@ -5,7 +5,7 @@ export const DEFAULT_TEMPLATE_HTML = `<!DOCTYPE html>
 <head><meta charset="UTF-8"></head>
 <body class="p-4 text-xs font-sans">
   <!-- Label border -->
-  <div class="border-4 border-slate-800 rounded-lg p-3 h-full flex flex-col justify-between">
+  <div class="h-full flex flex-col justify-between">
     <div class="space-y-2">
       <div class="flex justify-between items-center border-b border-slate-300 pb-2">
         <span class="text-[10px] uppercase tracking-widest text-slate-500">PrintNinja Logistics</span>
