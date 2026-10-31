@@ -336,10 +336,12 @@ const en = {
     toast_dataset_deleted: "Dataset removed — save the template to apply",
     toast_delete_failed: "Delete failed: {{error}}",
     toast_dataset_name_required: "Dataset name required",
-    toast_dataset_name_too_long: "Dataset name must be {{max}} characters or fewer",
+    toast_dataset_name_too_long:
+      "Dataset name must be {{max}} characters or fewer",
     toast_dataset_name_exists: "A dataset with this name already exists",
     toast_invalid_json: "Invalid JSON",
-    toast_dataset_added: 'Dataset "{{name}}" added — save the template to keep it',
+    toast_dataset_added:
+      'Dataset "{{name}}" added — save the template to keep it',
     toast_add_failed: "Add failed: {{error}}",
     toast_dataset_updated: "Dataset updated — save the template to keep it",
     toast_save_failed: "Save failed: {{error}}",

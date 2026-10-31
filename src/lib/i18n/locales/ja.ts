@@ -340,15 +340,19 @@ const ja: Translation = {
     toast_created_local: "テンプレート「{{name}}」をローカルに作成しました",
     toast_readme_too_big: "READMEが64 KiBを超えています",
     toast_showing_canvas: "キャンバスを表示しています",
-    toast_dataset_deleted: "データセットを削除しました（テンプレートを保存すると反映されます）",
+    toast_dataset_deleted:
+      "データセットを削除しました（テンプレートを保存すると反映されます）",
     toast_delete_failed: "削除に失敗しました: {{error}}",
     toast_dataset_name_required: "データセット名を入力してください",
-    toast_dataset_name_too_long: "データセット名は{{max}}文字以内にしてください",
+    toast_dataset_name_too_long:
+      "データセット名は{{max}}文字以内にしてください",
     toast_dataset_name_exists: "同じ名前のデータセットがすでにあります",
     toast_invalid_json: "JSONが正しくありません",
-    toast_dataset_added: "データセット「{{name}}」を追加しました（テンプレートを保存すると確定します）",
+    toast_dataset_added:
+      "データセット「{{name}}」を追加しました（テンプレートを保存すると確定します）",
     toast_add_failed: "追加に失敗しました: {{error}}",
-    toast_dataset_updated: "データセットを更新しました（テンプレートを保存すると確定します）",
+    toast_dataset_updated:
+      "データセットを更新しました（テンプレートを保存すると確定します）",
     toast_save_failed: "保存に失敗しました: {{error}}",
     toast_barcode_inserted: "{{type}}バーコードを挿入しました",
     controls_expanded: "デザイナーのコントロール",

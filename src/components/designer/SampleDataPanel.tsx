@@ -353,4 +353,3 @@ export function SampleDataPanel({
     </div>
   );
 }
-
