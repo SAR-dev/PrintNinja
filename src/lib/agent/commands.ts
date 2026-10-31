@@ -258,7 +258,10 @@ export interface AgentCommands {
   /** Delete an invite. Pairs it already minted keep their own expiry. */
   revoke_pairing_invite: [{ id: string }, null];
   /** Pair this phone with a PC using its 8-character code. */
-  pair_with_code: [{ code: string; host?: string; port?: number }, RenderPair];
+  pair_with_code: [
+    { code: string; host?: string; port?: number; device_name?: string },
+    RenderPair,
+  ];
   // Shared rendering: this device as a consumer (buys renders).
   peer_capabilities: [
     { host: string; port: number; secret: string; name?: string },

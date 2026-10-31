@@ -73,3 +73,8 @@ dev-printer/output/
 # Editors
 .idea/
 .vscode/
+
+# Test artifacts
+.vitest/
+e2e/test-results/
+e2e/playwright-report/
