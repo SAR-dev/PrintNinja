@@ -1,5 +1,6 @@
 import {
   Blocks,
+  Database,
   PanelLeftOpen,
   Ruler,
   Wand2,
@@ -10,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 /** The desktop accordion section ids, in the order the accordion lists them.
  * Templates are not here: the top row switches them. */
-export type ControlsSection = "page" | "helpers" | "custom";
+export type ControlsSection = "page" | "sample" | "helpers" | "custom";
 
 interface Props {
   /** Open the controls column, with this section open. */
@@ -31,6 +32,7 @@ export function ControlsRail({ onOpenSection, onExpand }: Props) {
     Icon: LucideIcon;
   }[] = [
     { id: "page", labelKey: "designer.pageSetup", Icon: Ruler },
+    { id: "sample", labelKey: "designer.sampleData", Icon: Database },
     { id: "helpers", labelKey: "designer.helpers", Icon: Wand2 },
     { id: "custom", labelKey: "designer.custom_input", Icon: Blocks },
   ];

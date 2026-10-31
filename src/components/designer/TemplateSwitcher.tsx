@@ -16,6 +16,9 @@ interface Props<T extends SwitcherTemplate> {
   currentTemplateId: number | null;
   onSelect: (tpl: T) => void;
   disabled?: boolean;
+  /** Icon-only trigger that sits inside another control's frame (the toolbar's
+   * name field), which already shows the open template's name. */
+  compact?: boolean;
 }
 
 /**
@@ -28,6 +31,7 @@ export function TemplateSwitcher<T extends SwitcherTemplate>({
   currentTemplateId,
   onSelect,
   disabled = false,
+  compact = false,
 }: Props<T>) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -69,7 +73,7 @@ export function TemplateSwitcher<T extends SwitcherTemplate>({
   return (
     <div
       ref={root}
-      className="relative"
+      className={cn("relative", compact && "h-full")}
       onKeyDown={(e) => {
         if (e.key === "Escape" && open) {
           e.stopPropagation();
@@ -81,8 +85,9 @@ export function TemplateSwitcher<T extends SwitcherTemplate>({
       <Button
         ref={trigger}
         type="button"
-        variant="outline"
+        variant={compact ? "ghost" : "outline"}
         size="sm"
+        className={cn(compact && "h-full gap-1 rounded-r-none px-2.5")}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -92,7 +97,7 @@ export function TemplateSwitcher<T extends SwitcherTemplate>({
         onClick={() => setOpen((v) => !v)}
       >
         <FileText className="h-4 w-4" aria-hidden="true" />
-        {t("designer.templates")}
+        {!compact && t("designer.templates")}
         <ChevronsUpDown
           className="h-3.5 w-3.5 text-muted-foreground"
           aria-hidden="true"

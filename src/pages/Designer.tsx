@@ -153,7 +153,7 @@ export function DesignerPage() {
   );
   const [openSections, setOpenSections] = usePersistentState<string[]>(
     "printninja.designer.openSections",
-    ["page"],
+    ["page", "sample"],
     (v): v is string[] =>
       Array.isArray(v) && v.every((x) => typeof x === "string"),
   );
@@ -1007,7 +1007,6 @@ export function DesignerPage() {
             </div>
           </>
         }
-        samplePanel={sampleDataPanel}
       />
     </div>
   );
@@ -1108,27 +1107,36 @@ export function DesignerPage() {
       ) : isDesktop ? (
         <div className="flex min-h-0 flex-1 gap-4">
           {controlsExpanded ? (
+            // One full-height panel, like the editor and canvas beside it: the
+            // collapse button lives in its header so all three tops line up,
+            // and the sections scroll inside it instead of leaving a gap below.
             <aside
               aria-label={t("designer.controls_expanded")}
-              className="flex w-[280px] shrink-0 flex-col gap-2 overflow-y-auto"
+              className="flex w-[300px] shrink-0 flex-col overflow-hidden rounded-lg border bg-card"
             >
-              <button
-                type="button"
-                aria-label={t("designer.collapse_controls")}
-                title={t("designer.collapse_controls")}
-                onClick={() => setControlsExpanded(false)}
-                className="flex h-7 shrink-0 items-center gap-1.5 self-start rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <PanelLeftClose className="h-3.5 w-3.5" aria-hidden="true" />
-                {t("designer.collapse_short")}
-              </button>
-              <ControlsAccordion
-                {...controls}
-                showTemplates={false}
-                openSections={openSections}
-                onOpenSectionsChange={setOpenSections}
-                onInsertHelper={insertHelper}
-              />
+              <div className="flex h-11 shrink-0 items-center border-b px-2">
+                <button
+                  type="button"
+                  aria-label={t("designer.collapse_controls")}
+                  title={t("designer.collapse_controls")}
+                  onClick={() => setControlsExpanded(false)}
+                  className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <PanelLeftClose className="h-3.5 w-3.5" aria-hidden="true" />
+                  {t("designer.collapse_short")}
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <ControlsAccordion
+                  {...controls}
+                  showTemplates={false}
+                  openSections={openSections}
+                  onOpenSectionsChange={setOpenSections}
+                  onInsertHelper={insertHelper}
+                  samplePanel={sampleDataPanel}
+                  className="rounded-none border-0 bg-transparent"
+                />
+              </div>
             </aside>
           ) : (
             <ControlsRail
@@ -1142,14 +1150,14 @@ export function DesignerPage() {
             <ResizablePanelGroup
               key={layout}
               direction={layout === "stacked" ? "vertical" : "horizontal"}
-              autoSaveId={`printninja.designer.split.${layout}`}
+              autoSaveId={`printninja.designer.split.v2.${layout}`}
               className="min-w-0 flex-1"
             >
               <ResizablePanel
                 id="editor"
                 order={1}
-                defaultSize={50}
-                minSize={25}
+                defaultSize={layout === "stacked" ? 55 : 58}
+                minSize={30}
               >
                 {editorPane(layout === "stacked" ? "pb-2" : "pr-2")}
               </ResizablePanel>
@@ -1157,7 +1165,7 @@ export function DesignerPage() {
               <ResizablePanel
                 id="canvas"
                 order={2}
-                defaultSize={50}
+                defaultSize={layout === "stacked" ? 45 : 42}
                 minSize={25}
               >
                 <div
@@ -1423,7 +1431,7 @@ export function DesignerPage() {
                   height="160px"
                   extensions={[json()]}
                   onChange={setDatasetJson}
-                  theme="dark"
+                  theme="light"
                   basicSetup={{ lintKeymap: true }}
                 />
               </div>
@@ -1501,7 +1509,7 @@ export function DesignerPage() {
                 height="200px"
                 extensions={[json()]}
                 onChange={setEditJson}
-                theme="dark"
+                theme="light"
               />
             </div>
             {(() => {
