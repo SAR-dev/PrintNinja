@@ -41,6 +41,10 @@ export function SignInScreen({
   const [handle, setHandle] = useState("");
   const [password, setPassword] = useState("");
   const [guestHandle, setGuestHandle] = useState("");
+  // The name field lives on its own step: the sign-in form shows only
+  // the entry button, and clicking it swaps the card to ask for the
+  // handle before continuing.
+  const [guestStep, setGuestStep] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -83,6 +87,12 @@ export function SignInScreen({
     setError("");
   };
 
+  const enterGuestStep = () => {
+    if (busy) return;
+    setError("");
+    setGuestStep(true);
+  };
+
   const enterAsGuest = () => {
     if (busy) return;
     const name = guestHandle.trim();
@@ -97,6 +107,76 @@ export function SignInScreen({
     setError("");
     onGuest(name);
   };
+
+  if (guestStep) {
+    return (
+      <main
+        data-testid="signin-form"
+        className="flex min-h-dvh-safe items-center justify-center bg-background p-4"
+      >
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-3">
+            <AppLogo src={logo} className="h-10 w-10" />
+            <h1 className="text-xl font-semibold leading-none tracking-tight">
+              {t("auth.continue_as_guest")}
+            </h1>
+            <CardDescription>{t("auth.guest_hint")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="auth-guest-handle">
+                  {t("auth.guest_handle")}
+                </Label>
+                <Input
+                  id="auth-guest-handle"
+                  data-testid="auth-guest-handle"
+                  autoComplete="nickname"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  autoFocus
+                  placeholder={t("auth.guest_handle_placeholder")}
+                  value={guestHandle}
+                  onChange={(e) => setGuestHandle(e.target.value)}
+                  disabled={busy}
+                />
+              </div>
+
+              {error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setGuestStep(false);
+                    setError("");
+                  }}
+                  disabled={busy}
+                >
+                  {t("common.back")}
+                </Button>
+                <Button
+                  type="button"
+                  className="flex-1"
+                  data-testid="auth-guest-continue"
+                  onClick={enterAsGuest}
+                  disabled={busy}
+                >
+                  {t("auth.continue_as_guest")}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
 
   return (
     <main
@@ -210,26 +290,12 @@ export function SignInScreen({
                 : t("auth.switch_to_register")}
             </Button>
             <div className="space-y-1">
-              <Label htmlFor="auth-guest-handle">
-                {t("auth.guest_handle")}
-              </Label>
-              <Input
-                id="auth-guest-handle"
-                data-testid="auth-guest-handle"
-                autoComplete="nickname"
-                autoCapitalize="none"
-                spellCheck={false}
-                placeholder={t("auth.guest_handle_placeholder")}
-                value={guestHandle}
-                onChange={(e) => setGuestHandle(e.target.value)}
-                disabled={busy}
-              />
               <Button
                 type="button"
                 variant="outline"
                 className="w-full"
                 data-testid="auth-guest"
-                onClick={enterAsGuest}
+                onClick={enterGuestStep}
                 disabled={busy}
               >
                 {t("auth.continue_as_guest")}

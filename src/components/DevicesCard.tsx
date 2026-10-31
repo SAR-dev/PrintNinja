@@ -29,7 +29,12 @@ import {
   parsePairs,
 } from "@/lib/pairing";
 import { isWebMode, readSetting, writeSetting } from "@/lib/settings";
-import { fetchMe, getShareUserId, onSessionStarted } from "@/lib/share/client";
+import {
+  fetchMe,
+  getShareUserId,
+  getWelcomeName,
+  onSessionStarted,
+} from "@/lib/share/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -571,8 +576,16 @@ function PcSection() {
       )}
 
       {sharing && (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div>
+              <p className="text-sm font-medium">
+                {t("settings_page.devices_own_title")}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t("settings_page.devices_own_desc")}
+              </p>
+            </div>
             {!showPair ? (
               <Button
                 variant="outline"
@@ -581,7 +594,7 @@ function PcSection() {
                 disabled={busy}
                 onClick={() => void openPanel()}
               >
-                {t("settings_page.devices_pair_phone")}
+                {t("settings_page.devices_pair_my_phone")}
               </Button>
             ) : (
               <Button
@@ -593,6 +606,77 @@ function PcSection() {
                 {t("settings_page.devices_pair_phone_hide")}
               </Button>
             )}
+
+            {showPair && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">
+                  {t("settings_page.devices_code_hint")}
+                </p>
+                {pairing?.open ? (
+                  <>
+                    <p
+                      className="text-center font-mono text-4xl font-bold tracking-widest"
+                      data-testid="devices-pairing-code"
+                    >
+                      {pairing.code}
+                    </p>
+                    <p
+                      className="text-center text-sm text-muted-foreground"
+                      data-testid="devices-pairing-countdown"
+                    >
+                      {t("settings_page.devices_code_expires", {
+                        count: pairing.expires_in,
+                      })}
+                    </p>
+                    <p
+                      className="text-center font-mono text-xs text-muted-foreground"
+                      data-testid="devices-pairing-address"
+                    >
+                      {pairing.host}:{pairing.port}
+                    </p>
+                    <div className="flex justify-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        data-testid="devices-new-code"
+                        disabled={busy}
+                        onClick={() => void newCode()}
+                      >
+                        {t("settings_page.devices_new_code")}
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-center text-sm text-muted-foreground">
+                      {t("settings_page.devices_code_gone")}
+                    </p>
+                    <div className="flex justify-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        data-testid="devices-new-code"
+                        disabled={busy}
+                        onClick={() => void newCode()}
+                      >
+                        {t("settings_page.devices_new_code")}
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <div>
+              <p className="text-sm font-medium">
+                {t("settings_page.devices_guest_title")}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t("settings_page.devices_guest_desc")}
+              </p>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -606,187 +690,127 @@ function PcSection() {
             >
               {t("settings_page.devices_invite")}
             </Button>
-          </div>
 
-          {showPair && (
-            <div className="space-y-3 rounded-md border p-3">
-              <p className="text-xs text-muted-foreground">
-                {t("settings_page.devices_code_hint")}
-              </p>
-              {pairing?.open ? (
-                <>
-                  <p
-                    className="text-center font-mono text-4xl font-bold tracking-widest"
-                    data-testid="devices-pairing-code"
-                  >
-                    {pairing.code}
-                  </p>
-                  <p
-                    className="text-center text-sm text-muted-foreground"
-                    data-testid="devices-pairing-countdown"
-                  >
-                    {t("settings_page.devices_code_expires", {
-                      count: pairing.expires_in,
-                    })}
-                  </p>
-                  <p
-                    className="text-center font-mono text-xs text-muted-foreground"
-                    data-testid="devices-pairing-address"
-                  >
-                    {pairing.host}:{pairing.port}
-                  </p>
-                  <div className="flex justify-center">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      data-testid="devices-new-code"
-                      disabled={busy}
-                      onClick={() => void newCode()}
+            {showInvite && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">
+                  {t("settings_page.devices_invite_hint")}
+                </p>
+                {mintedCode ? (
+                  <>
+                    <p
+                      className="text-center font-mono text-4xl font-bold tracking-widest"
+                      data-testid="devices-invite-code"
                     >
-                      {t("settings_page.devices_new_code")}
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p className="text-center text-sm text-muted-foreground">
-                    {t("settings_page.devices_code_gone")}
-                  </p>
-                  <div className="flex justify-center">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      data-testid="devices-new-code"
-                      disabled={busy}
-                      onClick={() => void newCode()}
-                    >
-                      {t("settings_page.devices_new_code")}
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {showInvite && (
-            <div className="space-y-3 rounded-md border p-3">
-              <p className="text-xs text-muted-foreground">
-                {t("settings_page.devices_invite_hint")}
-              </p>
-              {mintedCode ? (
-                <>
-                  <p
-                    className="text-center font-mono text-4xl font-bold tracking-widest"
-                    data-testid="devices-invite-code"
-                  >
-                    {mintedCode}
-                  </p>
-                  <p className="text-center text-xs text-muted-foreground">
-                    {t("settings_page.devices_invite_code_once")}
-                  </p>
-                  <div className="flex justify-center">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => setMintedCode(null)}
-                    >
-                      {t("settings_page.devices_invite_another")}
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="devices-invite-hours">
-                      {t("settings_page.devices_invite_hours")}
-                    </Label>
-                    <Input
-                      id="devices-invite-hours"
-                      data-testid="devices-invite-hours"
-                      type="number"
-                      min="1"
-                      value={inviteHours}
-                      onChange={(e) => setInviteHours(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="devices-invite-uses">
-                      {t("settings_page.devices_invite_uses")}
-                    </Label>
-                    <Input
-                      id="devices-invite-uses"
-                      data-testid="devices-invite-uses"
-                      type="number"
-                      min="1"
-                      placeholder="∞"
-                      value={inviteUses}
-                      onChange={(e) => setInviteUses(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id="devices-invite-can-print"
-                      data-testid="devices-invite-can-print"
-                      checked={inviteCanPrint}
-                      onCheckedChange={setInviteCanPrint}
-                    />
-                    <Label htmlFor="devices-invite-can-print">
-                      {t("settings_page.devices_can_print")}
-                    </Label>
-                  </div>
-                  <div className="flex items-end">
-                    <Button
-                      size="sm"
-                      data-testid="devices-invite-mint"
-                      disabled={busy}
-                      onClick={() => void mintInvite()}
-                    >
-                      {t("settings_page.devices_invite_mint")}
-                    </Button>
-                  </div>
-                </div>
-              )}
-              {invites.length > 0 ? (
-                <ul className="space-y-1">
-                  {invites.map((inv) => (
-                    <li
-                      key={inv.id}
-                      data-testid={`devices-invite-${inv.id}`}
-                      className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs"
-                    >
-                      <span className="min-w-0 truncate text-muted-foreground">
-                        {t("settings_page.devices_invite_expires", {
-                          date: new Date(inv.expires_at).toLocaleString(),
-                        })}{" "}
-                        ·{" "}
-                        {inv.uses_left == null
-                          ? t("settings_page.devices_invite_unlimited")
-                          : t("settings_page.devices_invite_uses_left", {
-                              count: inv.uses_left,
-                            })}
-                      </span>
+                      {mintedCode}
+                    </p>
+                    <p className="text-center text-xs text-muted-foreground">
+                      {t("settings_page.devices_invite_code_once")}
+                    </p>
+                    <div className="flex justify-center">
                       <Button
                         variant="ghost"
                         size="sm"
-                        data-testid={`devices-invite-revoke-${inv.id}`}
                         disabled={busy}
-                        onClick={() => void revokeInvite(inv.id)}
+                        onClick={() => setMintedCode(null)}
                       >
-                        {t("settings_page.devices_invite_revoke")}
+                        {t("settings_page.devices_invite_another")}
                       </Button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                !mintedCode && (
-                  <p className="text-xs text-muted-foreground">
-                    {t("settings_page.devices_invite_empty")}
-                  </p>
-                )
-              )}
-            </div>
-          )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="devices-invite-hours">
+                        {t("settings_page.devices_invite_hours")}
+                      </Label>
+                      <Input
+                        id="devices-invite-hours"
+                        data-testid="devices-invite-hours"
+                        type="number"
+                        min="1"
+                        value={inviteHours}
+                        onChange={(e) => setInviteHours(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="devices-invite-uses">
+                        {t("settings_page.devices_invite_uses")}
+                      </Label>
+                      <Input
+                        id="devices-invite-uses"
+                        data-testid="devices-invite-uses"
+                        type="number"
+                        min="1"
+                        placeholder="∞"
+                        value={inviteUses}
+                        onChange={(e) => setInviteUses(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="devices-invite-can-print"
+                        data-testid="devices-invite-can-print"
+                        checked={inviteCanPrint}
+                        onCheckedChange={setInviteCanPrint}
+                      />
+                      <Label htmlFor="devices-invite-can-print">
+                        {t("settings_page.devices_can_print")}
+                      </Label>
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        size="sm"
+                        data-testid="devices-invite-mint"
+                        disabled={busy}
+                        onClick={() => void mintInvite()}
+                      >
+                        {t("settings_page.devices_invite_mint")}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {invites.length > 0 ? (
+                  <ul className="space-y-1">
+                    {invites.map((inv) => (
+                      <li
+                        key={inv.id}
+                        data-testid={`devices-invite-${inv.id}`}
+                        className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs"
+                      >
+                        <span className="min-w-0 truncate text-muted-foreground">
+                          {t("settings_page.devices_invite_expires", {
+                            date: new Date(inv.expires_at).toLocaleString(),
+                          })}{" "}
+                          ·{" "}
+                          {inv.uses_left == null
+                            ? t("settings_page.devices_invite_unlimited")
+                            : t("settings_page.devices_invite_uses_left", {
+                                count: inv.uses_left,
+                              })}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          data-testid={`devices-invite-revoke-${inv.id}`}
+                          disabled={busy}
+                          onClick={() => void revokeInvite(inv.id)}
+                        >
+                          {t("settings_page.devices_invite_revoke")}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  !mintedCode && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings_page.devices_invite_empty")}
+                    </p>
+                  )
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -1101,9 +1125,14 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
     setBusy(true);
     try {
       const trimmedAddr = address.trim();
+      // The PC lists this phone under the handle the person picked
+      // (session first, else guest); absent, the backend falls back to
+      // the generic device name.
+      const deviceName = getWelcomeName();
       const pair = await agent("pair_with_code", {
         code: normalized,
         ...(trimmedAddr ? { host: trimmedAddr } : {}),
+        ...(deviceName ? { device_name: deviceName } : {}),
       });
       await addPair(pair);
       notifySuccess(t("settings_page.devices_paired_ok", { name: pair.name }));
@@ -1249,6 +1278,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
                     name: pair.name,
                   })}
                   onClick={() => void removePair(pair.id)}
+                  className="[@media(pointer:coarse)]:min-w-11"
                 >
                   <Trash2 className="h-3 w-3" />
                 </Button>

@@ -90,7 +90,7 @@ test("settings admin: shared-rendering phone pairs by code, tests, removes", asy
   browser,
 }) => {
   // A phone that is already paired reaches the shell; an unpaired one
-  // stops at the pairing gate (App.tsx). Studio PC is a second pair.
+  // can browse but printing redirects to /pair. Studio PC is a second pair.
   const seeded = await signedSeed(browser, "devices", {
     settings: PAIRED_PC_SETTINGS,
   });
