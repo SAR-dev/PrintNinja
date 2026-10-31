@@ -140,7 +140,7 @@ describe("CommandPalette search coverage", () => {
       ],
       [
         "pair",
-        "Let phones print through this PC",
+        "Allow phones on this Wi-Fi to use this PC",
         "/automation?tab=phones&field=devices-share",
       ],
       [

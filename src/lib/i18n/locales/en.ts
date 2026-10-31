@@ -845,9 +845,18 @@ const en = {
       "Your phone prints through your PC: the PC prepares every job and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. If the PC is off, asleep or blocked, prints fail until it answers; retry them from History.",
     devices_web_notice:
       "Shared rendering needs the app backend, which the browser preview does not have.",
-    devices_provider_title: "Let phones print through this PC",
+    devices_pc_title: "Print from your phone through this PC",
+    devices_provider_title: "Allow phones on this Wi-Fi to use this PC",
     devices_provider_hint:
-      "Phones on your Wi-Fi may ask this PC to prepare their PDFs — and, with printing allowed, to print on its printers. The phone's own printers and history stay on the phone.",
+      "While this is on, phones on the same Wi-Fi can ask this PC to make their PDFs. Keep this PC on and awake. You choose per phone whether it may also print on this PC's printers. Printing from this PC is not affected.",
+    devices_off_hint: "Turn on sharing to pair phones.",
+    devices_steps_title: "How to connect a phone",
+    devices_step_1: "Turn on the switch above.",
+    devices_step_2:
+      "Click Pair my phone (your own phone) or Invite guest (someone else's).",
+    devices_step_3:
+      "On the phone, open Settings → Shared rendering and type the code shown here.",
+    devices_status_on: "Sharing is on · Paired phones: {{count}}",
     devices_lan_warning:
       "Phones can only reach this PC while the server is running with Wi-Fi (LAN) access on.",
     devices_no_pairs: "No PC paired yet. Type the code shown on your PC.",
@@ -865,13 +874,14 @@ const en = {
     devices_phone_hint:
       "Your phone prints through your PC: the PC prepares every job and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. If the PC is off, asleep or blocked, prints fail until it answers; retry them from History.",
     devices_pc_hint:
-      "Let phones on your Wi-Fi use this PC to prepare their PDFs. Nothing changes for printing from this PC.",
+      "Use this PC as the print engine for your phone. The phone sends a job, this PC makes the PDF, then either sends it back to the phone or prints it on this PC's printers.",
     devices_lan_enable: "Turn on Wi-Fi access",
     devices_own_title: "Your own phone",
-    devices_own_desc: "Signed in to the same account. Permanent, full access.",
+    devices_own_desc:
+      "Signed in to the same account. Permanent, full access. Shows a code to type on your phone.",
     devices_guest_title: "Someone else's phone (guest)",
     devices_guest_desc:
-      "No account needed. Expires automatically; printing optional. Guests use templates by name but never read or change them.",
+      "No account needed. Access expires automatically, and you choose whether they can print. Guests can use templates by name but cannot view or edit them.",
     devices_pair_my_phone: "Pair my phone",
     devices_pair_phone_hide: "Hide pairing code",
     devices_code_hint:
@@ -881,7 +891,7 @@ const en = {
       "This code is used or expired. Get a new one to keep pairing.",
     devices_new_code: "New code",
     devices_paired_title: "Paired phones ({{count}})",
-    devices_no_phones: "No phones paired yet. Pair one with the button above.",
+    devices_no_phones: "No phones paired yet. Pair one with the buttons above.",
     devices_phone_fallback: "Phone",
     devices_paired_phone: "{{name}} paired",
     devices_paired_on: "Paired {{date}}",
