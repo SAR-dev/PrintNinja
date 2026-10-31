@@ -107,7 +107,18 @@ test("empty searches and duplicate saves behave", async ({ browser }) => {
     timeout: 15_000,
   });
 
-  // Saving twice is idempotent: both succeed with no error.
-  await expect(apiSaveTemplate(auth.token, serverId)).resolves.toBeUndefined();
-  await expect(apiSaveTemplate(auth.token, serverId)).resolves.toBeUndefined();
+  // Saving twice is idempotent: both succeed with no error. Saving
+  // your own template is a 409 (it is already yours — the Community
+  // gallery shows no Save button for it), so a second account saves.
+  const viewer = await apiRegister(
+    `neg2v-${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`,
+    PASSWORD,
+  );
+  await expect(
+    apiSaveTemplate(viewer.token, serverId),
+  ).resolves.toBeUndefined();
+  await expect(
+    apiSaveTemplate(viewer.token, serverId),
+  ).resolves.toBeUndefined();
+  await expect(apiSaveTemplate(auth.token, serverId)).rejects.toThrow(/409/);
 });

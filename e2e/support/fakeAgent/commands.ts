@@ -299,6 +299,15 @@ const implemented: Record<string, Handler> = {
   // mirror the Rust commands; tombstones stay hidden from lists).
   list_templates: () => cache.listTemplates(),
   get_template: (args) => cache.getTemplate(Number(args["id"] ?? 0)),
+  set_publish_info: (args) => {
+    const req = (args["req"] ?? args) as Record<string, unknown>;
+    cache.setPublishInfo(
+      Number(req["id"] ?? 0),
+      String(req["remote_id"] ?? ""),
+      (req["published_at"] as string | null) ?? null,
+    );
+    return cache.getTemplate(Number(req["id"] ?? 0));
+  },
   create_template: (args) => {
     const req = (args["req"] ?? args) as Record<string, unknown>;
     const row = cache.createTemplate(req);
@@ -523,7 +532,6 @@ const implemented: Record<string, Handler> = {
  * fails when a Rust command is neither implemented nor acknowledged. */
 const acknowledgedStubs: string[] = [
   "test_printer",
-  "set_publish_info",
   "clear_publish_info",
   "list_jobs",
   "get_job",
