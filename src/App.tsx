@@ -6,6 +6,8 @@ import {
   Route,
   Navigate,
   useSearchParams,
+  useNavigate,
+  useLocation,
 } from "react-router-dom";
 import { AuthGate } from "./components/AuthGate";
 import { Layout } from "./components/Layout";
@@ -19,8 +21,6 @@ import { SettingsPage } from "./pages/Settings";
 import { TemplatesPage } from "./pages/Templates";
 import { diagnostics } from "./lib/diagnostics";
 import { startOnPrint } from "./lib/shell/startRoute";
-import { isAndroid } from "./lib/platform";
-import { hasPairedProvider } from "./lib/pairing";
 import { PairingGate } from "./components/PairingGate";
 
 // Reference page for shared components. Not bundled into production builds.
@@ -50,6 +50,19 @@ export function SettingsRoute() {
 }
 
 /**
+ * Pairing lives on its own route instead of replacing the app: an
+ * unpaired phone can browse everything, and only printing redirects
+ * here. After the pair, back to wherever the person came from.
+ */
+function PairRoute() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo ?? "/print";
+  return <PairingGate onPaired={() => navigate(returnTo, { replace: true })} />;
+}
+
+/**
  * The router, started on the Print page. The address is rewritten before
  * `BrowserRouter` reads it (a `useState` initializer runs once, during this
  * component's first render and so before its child's), which is why the
@@ -73,10 +86,6 @@ function AppContent() {
     },
   );
   const [checking, setChecking] = useState(true);
-  // Android only: the phone never renders locally, so the app opens on
-  // the pairing screen until a PC is paired (auto policy on). Null
-  // while undecided; desktop never needs it.
-  const [pairingNeeded, setPairingNeeded] = useState<boolean | null>(null);
 
   useEffect(() => {
     diagnostics.info("App started", { platform: navigator.platform });
@@ -158,22 +167,9 @@ function AppContent() {
     };
   }, []);
 
-  // After onboarding, Android decides whether the pairing gate is
-  // needed. Desktop and already-paired phones go straight in.
-  useEffect(() => {
-    if (!onboardingComplete) return;
-    let cancelled = false;
-    if (!isAndroid()) {
-      setPairingNeeded(false);
-      return;
-    }
-    void hasPairedProvider().then((paired) => {
-      if (!cancelled) setPairingNeeded(!paired);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [onboardingComplete]);
+  // After onboarding the app opens straight in: pairing no longer
+  // replaces the app on Android, it guards printing instead (Print page
+  // and the API explorer redirect unpaired phones to /pair).
 
   const handleOnboardingComplete = async (destination?: string) => {
     localStorage.setItem("printninja-onboarding-complete", "true");
@@ -199,19 +195,6 @@ function AppContent() {
   if (!onboardingComplete) {
     return <Onboarding onComplete={handleOnboardingComplete} />;
   }
-  // Mandatory pairing on Android: without a paired PC the phone cannot
-  // print anything, so it stays here until one is paired. While the
-  // check runs, hold the spinner rather than flashing the app.
-  if (pairingNeeded === true) {
-    return <PairingGate onPaired={() => setPairingNeeded(false)} />;
-  }
-  if (pairingNeeded === null && isAndroid()) {
-    return (
-      <div className="min-h-dvh-safe flex items-center justify-center bg-background">
-        <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <AppRouter>
@@ -221,6 +204,7 @@ function AppContent() {
           <Route path="/template/:id" element={<DesignerPage />} />
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/print" element={<PrintPage />} />
+          <Route path="/pair" element={<PairRoute />} />
           <Route path="/printers" element={<PrinterSetupPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/automation" element={<AutomationPage />} />

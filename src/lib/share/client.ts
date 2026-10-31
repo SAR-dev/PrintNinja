@@ -180,6 +180,54 @@ export function setGuestMode(on: boolean): void {
   }
 }
 
+const GUEST_HANDLE_KEY = "printninja-guest-handle";
+const SESSION_HANDLE_KEY = "printninja-session-handle";
+
+/** Who is using this device, for greetings only (never a credential).
+ * Guests pick the handle before entering; signed-in users keep the
+ * handle they signed in with. Device-local UI state, plain localStorage
+ * like guest mode, so screens outside the shell can read it
+ * synchronously. A real sign-in overwrites a guest handle. */
+function readHandle(key: string): string | null {
+  try {
+    const v = localStorage.getItem(key)?.trim();
+    return v ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeHandle(key: string, handle: string | null): void {
+  try {
+    if (handle && handle.trim()) localStorage.setItem(key, handle.trim());
+    else localStorage.removeItem(key);
+  } catch {
+    /* private mode; the greeting falls back to nameless */
+  }
+}
+
+export function getGuestHandle(): string | null {
+  return readHandle(GUEST_HANDLE_KEY);
+}
+
+export function setGuestHandle(handle: string | null): void {
+  writeHandle(GUEST_HANDLE_KEY, handle);
+}
+
+export function getSessionHandle(): string | null {
+  return readHandle(SESSION_HANDLE_KEY);
+}
+
+export function setSessionHandle(handle: string | null): void {
+  writeHandle(SESSION_HANDLE_KEY, handle);
+}
+
+/** The name the pairing gate greets: the session handle first, then the
+ * guest handle, then nothing (the gate stays nameless, never blocked). */
+export function getWelcomeName(): string | null {
+  return getSessionHandle() ?? (isGuestMode() ? getGuestHandle() : null);
+}
+
 /** Forget the stored token and account id, and send the app back to
  * sign-in. A device with no stored id simply signs in again (ARCHITECTURE §9). */
 export async function endSession(
@@ -187,6 +235,7 @@ export async function endSession(
 ): Promise<void> {
   await setSessionToken(null);
   await setShareUserId(null);
+  setSessionHandle(null);
   window.dispatchEvent(
     new CustomEvent<SessionEndReason>(SESSION_ENDED_EVENT, { detail: reason }),
   );
@@ -240,6 +289,8 @@ async function authRequest(
   // A real sign-in always ends a guest visit: the next session end
   // returns to the sign-in screen, not to session-less mode.
   setGuestMode(false);
+  setGuestHandle(null);
+  setSessionHandle(data.user.handle);
   window.dispatchEvent(new CustomEvent(SESSION_STARTED_EVENT));
   return data;
 }
