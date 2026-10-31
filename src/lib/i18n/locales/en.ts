@@ -866,7 +866,12 @@ const en = {
     devices_pc_hint:
       "Let phones on your Wi-Fi use this PC to prepare their PDFs. Nothing changes for printing from this PC.",
     devices_lan_enable: "Turn on Wi-Fi access",
-    devices_pair_phone: "Pair a phone",
+    devices_own_title: "Your own phone",
+    devices_own_desc: "Signed in to the same account. Permanent, full access.",
+    devices_guest_title: "Someone else's phone (guest)",
+    devices_guest_desc:
+      "No account needed. Expires automatically; printing optional. Guests use templates by name but never read or change them.",
+    devices_pair_my_phone: "Pair my phone",
     devices_pair_phone_hide: "Hide pairing code",
     devices_code_hint:
       "On the phone: Settings → Shared rendering → type this code. It expires after a short time; a new one appears by itself for a few minutes, then use New code.",
