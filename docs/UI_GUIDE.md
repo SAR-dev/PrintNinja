@@ -74,13 +74,13 @@ adding a second library for the same job. Join class names with `cn()` from `src
   showing who is signed in must reload on `printninja:session-started` (broadcast by the
   login/register funnel, the mirror of `session-ended`). Forgetting this shows the old
   session after signing in again.
-- **Guest entry.** `SignInScreen` offers "Continue as guest": no account, no
-  session, the app opens session-less (an unpaired phone lands on
-  `PairingGate`, where an invite code pairs over LAN). Remembered in
-  localStorage across restarts; any real sign-in clears it, so the next
-  session end returns to the sign-in screen. Share-dependent views keep
+- **Guest entry.** `SignInScreen` offers "Continue as guest" with a name
+  field: no account, no session, the app opens session-less, and the
+  handle (plus guest mode) is remembered in localStorage across
+  restarts; any real sign-in clears both, so the next session end
+  returns to the sign-in screen. Share-dependent views keep
   their existing signed-out states — nothing branches on guest mode
-  except the gate.
+  except the gate greeting.
 - **Onboarding** is for operators only: three steps and two buttons, "Start printing" (opens
   `/print`) and "Set up this workstation" (opens `/settings?section=setup`). Printer, template
   and sharing setup is an admin job and lives in the Settings checklist.
@@ -150,7 +150,8 @@ the code editor. "Reprint last job" asks for confirmation before it prints.
 |---|---|---|
 | `/` and `/template/:id` | Designer | `PageHeader` with `DesignerToolbar` (New, template-name field, Save, Public/Private switch with sync id; read-only copies hide Save and the switch, phones use `DesignerOverflowMenu`); at `lg` and up a workspace that fills the viewport: `ControlsAccordion` (Templates, Page Setup, Helpers, Custom input), `EditorPane` (tabs **HTML**, **CSS**, **README**, **Sample data**) and `CanvasWorkspace` (toolbar with Fit/zoom, then `CanvasPane`), the last two split by a draggable `ResizableHandle`. Below `lg`: a Settings sheet, then tabs **Canvas**, **Code** (`CodeEditors`), **README** and **Sample data**. An empty account holds `Loading…`, then an `EmptyState` with the New action; every new template starts from the bundled label example |
 | `/templates` | Templates | Tabs **Mine**, **Saved**, **Community**. Mine and Saved are `DataTable`s (phones use cards with a row menu); Community is a card gallery with sort and a preview dialog. Saved rows offer Print, Clone (your own timestamped copy under Mine) and Remove; Community rows offer a save star |
-| `/print` | Print | "Print job" card (printer, template, copies, options such as grayscale and test data), a live preview, and a banner that says "Print sent" or "Print failed" |
+| `/print` | Print | "Print job" card (printer, template, copies, options such as grayscale and test data), a live preview, and a banner that says "Print sent" or "Print failed". On Android without a paired PC it redirects to `/pair` instead of rendering |
+| `/pair` | Pairing | `PairingGate` as a route (not a whole-app block): greets the session or guest handle, pairs over LAN via `DevicesCard`, then returns to where the person came from. Unpaired Android phones can browse the app; printing — the Print page and the API explorer's `/v1/print` — redirects or disables here |
 | `/printers` | Printers | `DataTable` of printers with their status; "Add printer" opens a side sheet |
 | `/history` | History | `DataTable` of jobs with `JobStatusBadge`; reprint, retry and delete, one at a time or in bulk, with a confirmation |
 | `/settings` | Settings | Sections opened with `?section=`: `setup` (checklist), `profile` (signed-in account, password, sign out; opened by the top-bar user badge and by the account row in the phone More sheet), `general` (appearance, branding, density), `background`, `share` (labelled **Account & sync**: the share service URL and sign-in), `data` (labelled **Data & network**: allowed domains and private-IP blocking), `retention`, `diagnostics`. `&field=<id>` scrolls to and flashes a control. An unknown section opens General. The local API server is not here; it lives on Automation |
