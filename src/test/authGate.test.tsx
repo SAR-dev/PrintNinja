@@ -375,15 +375,25 @@ describe("sign-in gate", () => {
   it("continues as guest with a handle and remembers both", async () => {
     renderGate();
     await screen.findByLabelText("Password");
+    // The form only offers entry; the name lives on the next step.
+    expect(screen.queryByTestId("auth-guest-handle")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue as guest" }));
+    expect(screen.getByTestId("auth-guest-handle")).toBeInTheDocument();
+    // Back returns to the sign-in form without entering.
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.queryByTestId("auth-guest-handle")).not.toBeInTheDocument();
+    expect(screen.queryByText("The app")).not.toBeInTheDocument();
+
     // No handle, no entry.
     fireEvent.click(screen.getByRole("button", { name: "Continue as guest" }));
+    fireEvent.click(screen.getByTestId("auth-guest-continue"));
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(screen.queryByText("The app")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByTestId("auth-guest-handle"), {
       target: { value: "guest-ana" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Continue as guest" }));
+    fireEvent.click(screen.getByTestId("auth-guest-continue"));
 
     // No server contact, no session — the app opens session-less.
     expect(await screen.findByText("The app")).toBeVisible();

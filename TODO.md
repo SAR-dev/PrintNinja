@@ -1,124 +1,103 @@
-# TODO: print-speed validation on hardware
+# TODO: pair-phone vs invite-guest clarity (PC Phones tab)
 
-The code is done and unit-tested (`perf` work, all on `main` since
-v0.10.0); static checks and emulators cannot cover what is listed here.
-Each item says how to run it, what to record, and what "done" looks
-like. General device setup (pairing, printers, Wi-Fi) lives in
-`docs/HARDWARE_TODO.md` — this file is only the performance half.
-Background and per-finding details: `docs/PRINT_SPEED.md`.
+Status: implemented on branch `pair-guest-automation-ux`.
 
-Conventions used below:
-- **Timing source of truth:** open the finished job in History — every
-  job carries its per-stage breakdown (fetch / template / layout /
-  render / send / history / total). No logcat needed for these.
-- **Backend log without a terminal:** Settings → Diagnostics →
-  Download App Log (size-rotated file, newest chunk last). On desktop
-  the same lines go to stdout (`RUST_LOG=debug` for sub-stage detail);
-  on Android the file is the only practical source.
-- **A/B builds:** the v0.9.0 APK (GitHub releases) is the "before".
-  Install it next to the current build to compare the same printer/job.
-- **Where to record numbers:** paste the tables into the tracking
-  issue (or update `docs/PRINT_SPEED.md` Phase 0 directly).
+Problem: both actions produce an identical-looking code typed into the
+identical phone-side field. The only differences are invisible at a
+glance — who may use it (same-account you vs. anyone) and how long it
+lasts (90 s window vs. hours/days, limited uses). "Pair a phone" does
+not say *your own* phone; "Invite guest" does not say what a guest
+gets.
 
-## 0. Release hygiene (no hardware, decisions only)
+1. Split the two actions into two labeled groups on the PC tab
+   (`src/components/DevicesCard.tsx`), mechanics untouched:
+   - "Your own phone" — same account, permanent, full access → the
+     90-second code panel (button renamed "Pair a phone" to
+     "Pair my phone").
+   - "Someone else's phone (guest)" — no account needed, expires
+     automatically, printing optional, templates usable by name but
+     never readable/changeable → the existing invite form unchanged.
+2. Update en + ja strings (renames + two audience lines, no new flows).
+3. Update specs that click the old names (e2e settingsAdmin pairing
+   flows, any unit tests asserting the copy).
+4. Verify: `tsc -b`, `pnpm lint`, targeted vitest + e2e pairing specs.
+5. Docs: one line in `docs/UI_GUIDE.md` Pages table if the headings
+   change the described blocks.
 
-- [x] Delete the stale drafts `v0.1.0` and `v0.0.2` (pre-release) from
-  the GitHub releases page, or keep them deliberately. They sit behind
-  the published v0.10.0 and confuse the download list.
-  Done 2026-10-29: both deleted; releases list is now v0.10.0
-  (Latest, published) + v0.9.0 (published).
+Deliberately out of scope: code mechanics, expiry defaults, phone UI
+(it types a code either way; the server already tells kinds apart).
 
-## 1. Held connections (A2/A3) — Bluetooth + USB
+# TODO: mobile opens on Automation with the PC tab first
 
-Goal: one connect per send (was: one per operation), and no skipped
-fault detection.
+Status: implemented on branch `pair-guest-automation-ux`.
 
-1. Pair the phone, add the Bluetooth printer (ZPL/TSPL) and the USB
-   printer (ESC/POS).
-2. Print the same small label/receipt **three times in quick
-   succession** on each printer (well inside a minute).
-3. Record each job's History breakdown, especially `send_ms`.
-4. On the 2nd and 3rd prints, `send_ms` should be roughly one
-   connection cheaper than the 1st (no repeat RFCOMM connect / USB
-   reopen for the status query). All three must print correctly.
-5. Regression check (must still fail fast): unplug the printer (or
-   turn it off), print once, and confirm the job fails with a clear
-   status/probe error — **not** a success, and not a hang. This is the
-   behavior the query-skip rejection protects; if it ever reports
-   success into a dead printer, file a bug and reference A6.
+Findings: `startOnPrint()` rewrites bare `/` → `/print` for everyone,
+and the mobile bottom bar is Print/History/Templates/Printers + More
+(Automation hides under More) — so a phone user opens on Print and
+must dig for Automation. Default tab: missing/unknown `?tab=` →
+`"server"` (`parseAutomationTab`, only used by `Automation.tsx`); on
+Android the tab that matters — pairing + Print via PC — is `phones`
+(labeled PC/Computer there). Header badges already link explicitly to
+`/automation?tab=phones`, so they are unaffected.
 
-Done when: 3-rapid-print timings recorded for BT and USB, plus the
-unplugged failure case confirmed on both.
+1. `startOnPrint()` becomes platform-aware: bare `/` → `/automation`
+   on Android, `/print` elsewhere. Deep links and bookmarks untouched
+   (only bare `/` is rewritten — same guarantee as today).
+2. Default Automation tab becomes
+   `isAndroid() ? "phones" : "server"`, applied in both the
+   `parseAutomationTab` fallback and `openTab`'s param cleanup (which
+   currently deletes `?tab=` only for `"server"` — it must delete for
+   whichever the default is, so shared/bookmarked URLs stay clean).
+3. Tests: extend the "opens on the server" + "falls back to server"
+   cases with Android-UA variants asserting the phones tab; add a
+   `startOnPrint` unit test for both platforms. Then `tsc -b`,
+   `pnpm lint`, targeted vitest.
+4. Docs: one-line updates in `docs/UI_GUIDE.md` (automation row:
+   unknown-tab rule becomes platform-dependent) and the
+   `startRoute.ts` comment.
 
-## 2. File handoff (A4) — large raster over USB/BT
+Deliberately out of scope: bottom-bar composition (Templates stays;
+only the landing changes), badge links, desktop behavior. Swapping
+Templates out of the bottom bar for Automation would be a separate,
+bigger change.
 
-Goal: payloads over 256 KiB cross by file, print identically, no
-orphans.
+# TODO: show the guest name of the paired phone on the PC
 
-1. Print a full-page image (photo/logo covering most of the label) —
-   large enough that the rendered bytes exceed 256 KiB.
-2. Confirm the output matches the v0.9.0 build's output for the same
-   job (no missing bands, no duplication).
-3. After the print, check the app cache dir holds no
-   `printninja-payload-*.bin` leftovers (both sides delete; at most one
-   orphan per crashed print is acceptable, steady-state must be zero).
+Status: implemented on branch `pair-guest-automation-ux`.
 
-Done when: large-job output matches v0.9.0 and no staged files linger.
+Today every guest shows up as "Android phone" because `pair_with_code`
+hardcodes `device_name` to `phone_name()`. The claim
+(`POST /v1/pair/claim`) already carries `device_name`, and the PC
+already stores and shows it — only the phone side needs to send the
+handle the guest (or session) picked.
 
-## 3. Phase-0 baselines (the table everything else waits on)
+1. Rust (`src-tauri/src/commands/api.rs`): `pair_with_code` gains
+   optional `device_name`; `claim_at` sends it instead of
+   `phone_name()`. Absent/blank keeps today's fallback.
+2. Frontend: `pair_with_code` agent type gains `device_name?`;
+   `DevicesCard` submit passes the welcome name (session handle, else
+   guest handle).
+3. e2e fake: mirror the parameter.
+4. Tests: Rust unit for name threading + fallback; frontend test that
+   the submit carries the handle. No new i18n strings.
+5. Verify: `tsc -b`, `pnpm lint`, `cargo fmt --check`,
+   `cargo clippy --all-targets -- -D warnings`, targeted suites.
 
-Goal: p50/p95 per stage, per printer type, single + burst.
+# TODO: guest name step after "Continue as guest"
 
-1. For each printer type at hand (USB thermal, BT thermal, network
-   IPP, CUPS/system): print the same job **20 times singly**, then a
-   **burst of 20 back-to-back**, recording History `total_ms` (and
-   `render_ms`/`send_ms`) each time.
-2. On the PC side (Windows/Linux with a browser): note the
-   `browser_renders` counter before/after — read it from the Automation
-   page → Try the API → `GET /v1/metrics` (`persistent` vs `oneshot`).
-   Any `oneshot` > 0 in normal use is a W1/L1 datum (see item 5).
-3. Fill one table per printer type:
+Status: implemented on branch `pair-guest-automation-ux`.
 
-   | run | p50 total | p95 total | p50 render | p50 send | notes |
-   |---|---|---|---|---|---|
-   | single ×20 | | | | | |
-   | burst ×20 | | | | | |
+The name field sitting inline on the sign-in form is noisy — most
+visitors never use it. Instead: "Continue as guest" swaps the form to
+a small guest step (name input + Back + Continue), and only that step
+asks for the handle.
 
-4. Paste the tables into the tracking issue.
-
-Done when: tables exist for every printer type on hand. These numbers
-then calibrate `BENCH_P50_MS`/`BENCH_P95_MS` in
-`src-tauri/tests/virtual_printer.rs` (currently generous placeholders)
-and the A5 chunk decision below.
-
-## 4. Chunk size (A5 follow-up)
-
-Blocked on item 3. If `send_ms` on USB is dominated by transfer (not
-connect) in the baselines, raise the bulk chunk 16 KiB → 64 KiB in
-`bulkWriteOut` and re-run the USB burst. If connect dominates, leave it.
-
-## 5. Persistent-browser data (W1/L1)
-
-Blocked on item 3's counter readings. If `oneshot` stays 0 across the
-baselines, W1/L1 need no work — record that and close them. If it
-climbs, capture the accompanying `persistent … could not render`
-warning lines (`adb logcat` on Android, console on desktop: launch
-timeout vs profile lock vs stale port file) and file them as the W1/L1
-work order.
-
-## 6. Template self-containment (W2) — 2-minute UI check
-
-- [x] Enforced at every write path (client create/update reject remote refs;
-  the server rejects them too, strictly). Just confirm the operator
-  wording once: in the Designer, save a template containing
-  `<img src="https://…">` and confirm it is refused with the
-  "use data: URIs" message.
-  Done 2026-10-29: operator confirmed the refusal wording.
-
-## 7. Phase-4 warning sighting
-
-Set a USB or Bluetooth printer row's language to PDF, print, and
-confirm the per-job warning appears (logcat/console) while the job
-still goes out. Then set it back to the native command language.
-(RawTcp and CUPS `System` rows are deliberately excluded — JetDirect
-lasers take PDF, and raw-vs-filtered is unknowable from the row.)
+1. `SignInScreen`: guest section keeps just the button + hint;
+   clicking it swaps the card to the guest step with the name field,
+   validated as today (non-empty, `HANDLE_RE`), Back returns to the
+   sign-in form. `onGuest(handle)` signature unchanged.
+2. en + ja: relabel if needed (a title for the step, e.g. "Continue
+   as guest" as the heading).
+3. Tests: update the guest-entry cases (button reveals the step;
+   handle required on Continue; Back returns). Then `tsc -b`,
+   `pnpm lint`, targeted vitest.
