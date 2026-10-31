@@ -273,7 +273,7 @@ const ja: Translation = {
     sample_add: "データセットを追加",
     sample_empty:
       "データセットはまだありません。追加すると、テンプレートのプレビューと検証ができます。",
-    sample_default: "デフォルト",
+    sample_default_note: "{{name}} がデフォルトに設定されています",
     sample_use: "データセット {{name}} を使用",
     sample_delete: "データセット {{name}} を削除",
     sample_fields: "フィールド:",
@@ -394,6 +394,7 @@ const ja: Translation = {
     sample_save: "保存",
     new_name_example: "マイテンプレート",
     new_create: "作成",
+    new_creating: "作成しています…",
     conflict_title: "このテンプレートはサーバー上で変更されています",
     conflict_body:
       "このコンピューターのコピーが作成された後に、別の誰かが保存しました。サーバーのコピーを採用してここでの未保存の編集を破棄するか、エディターの内容でサーバーを上書きしてください。",

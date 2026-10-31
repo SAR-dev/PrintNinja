@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { notifySuccess } from "@/lib/notify";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -203,11 +202,6 @@ export function SampleDataPanel({
                     >
                       {ds.name}
                     </span>
-                    {ds.isDefault && (
-                      <Badge variant="secondary" className="shrink-0 text-xs">
-                        {t("designer.sample_default")}
-                      </Badge>
-                    )}
                   </label>
                   <div className="flex shrink-0 gap-0.5">
                     <Button
@@ -248,6 +242,13 @@ export function SampleDataPanel({
           <Plus className="h-3 w-3" />
           {t("designer.sample_add")}
         </Button>
+        {datasets.some((ds) => ds.isDefault) && (
+          <p className="text-xs text-muted-foreground">
+            {t("designer.sample_default_note", {
+              name: datasets.find((ds) => ds.isDefault)!.name,
+            })}
+          </p>
+        )}
       </div>
 
       {/* Variables: the dataset's paths, with sample values, click to insert */}
