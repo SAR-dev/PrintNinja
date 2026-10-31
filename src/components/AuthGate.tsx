@@ -6,6 +6,7 @@ import {
   getServiceUrl,
   isGuestMode,
   onSessionEnded,
+  setGuestHandle,
   setGuestMode,
 } from "@/lib/share/client";
 import {
@@ -82,8 +83,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   // Entering without an account (guest invite pairing needs no session).
   // Remembered across restarts; a real sign-in clears it again.
-  const enterAsGuest = useCallback(() => {
+  const enterAsGuest = useCallback((handle: string) => {
     setGuestMode(true);
+    setGuestHandle(handle);
     setGate({ kind: "ready" });
   }, []);
 

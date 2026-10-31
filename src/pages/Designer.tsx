@@ -29,6 +29,7 @@ import { README_MAX_BYTES } from "@/components/ReadmeEditor";
 import {
   SampleDataPanel,
   type Dataset,
+  DATASET_NAME_MAX,
 } from "@/components/designer/SampleDataPanel";
 import { ClassWarnings } from "@/components/designer/ClassWarnings";
 import { OfflinePrintHint } from "@/components/designer/OfflinePrintHint";
@@ -300,16 +301,57 @@ export function DesignerPage() {
     return () => window.removeEventListener("sync:pulled", onPulled);
   }, [loadDatasets]);
 
-  const visibleDatasets: Dataset[] =
-    datasets.length > 0
-      ? datasets
-      : [
-          {
-            name: "Sample Order",
-            json: JSON.stringify(DEFAULT_MOCK_DATA, null, 2),
-            isDefault: true,
-          },
-        ];
+  // Add, edit and delete only change this local draft. `null` means no
+  // pending change, so the list shown is the saved one. Save writes the draft
+  // to the database; discarding the edits drops it.
+  const [draftDatasets, setDraftDatasets] = useState<Array<
+    Dataset & { id?: number | null }
+  > | null>(null);
+
+  const fallbackDataset: Dataset & { id?: number | null } = {
+    name: "Sample Order",
+    json: JSON.stringify(DEFAULT_MOCK_DATA, null, 2),
+    isDefault: true,
+  };
+  const withFallback = (list: Array<Dataset & { id?: number | null }>) =>
+    list.length > 0 ? list : [fallbackDataset];
+  const workingDatasets = withFallback(draftDatasets ?? datasets);
+  const visibleDatasets: Dataset[] = workingDatasets;
+  const datasetKey = (list: Array<Dataset & { id?: number | null }>) =>
+    JSON.stringify(list.map((d) => [d.id ?? null, d.name, d.json]));
+  const datasetsDirty =
+    draftDatasets !== null &&
+    datasetKey(withFallback(draftDatasets)) !==
+      datasetKey(withFallback(datasets));
+
+  /** Write the draft to the database: delete removed rows, create new ones,
+   * update edited ones. The untouched built-in fallback is never stored. */
+  const commitDatasets = async () => {
+    if (draftDatasets === null) return;
+    const keep = new Set(
+      draftDatasets.map((d) => d.id).filter((id) => id != null),
+    );
+    for (const row of datasets) {
+      if (row.id != null && !keep.has(row.id)) {
+        await agent("delete_dataset", { id: row.id });
+      }
+    }
+    for (const d of draftDatasets) {
+      const saved = d.id != null ? datasets.find((x) => x.id === d.id) : null;
+      if (d.id == null) {
+        if (d.isDefault && d.json === fallbackDataset.json) continue;
+        await agent("save_dataset", {
+          req: { name: d.name, data_json: d.json },
+        });
+      } else if (saved && saved.json !== d.json) {
+        await agent("save_dataset", {
+          req: { id: d.id, name: d.name, data_json: d.json },
+        });
+      }
+    }
+    setDraftDatasets(null);
+    await loadDatasets();
+  };
 
   const loadTemplate = (tpl: {
     id: number;
@@ -373,7 +415,8 @@ export function DesignerPage() {
       cssCode !== baseline.css ||
       pageWidth !== baseline.w ||
       pageHeight !== baseline.h ||
-      readme !== savedReadme);
+      readme !== savedReadme ||
+      datasetsDirty);
 
   // The name is edited in one place (the top row), so its problems show there,
   // live, rather than as a toast on Save.
@@ -490,6 +533,15 @@ export function DesignerPage() {
         h: content.page_h_mm,
       });
       setSavedReadme(content.readme);
+      try {
+        await commitDatasets();
+      } catch (e) {
+        // The template is saved; the datasets stay in the draft to retry.
+        notifyError(
+          t("designer.toast_save_failed", { error: describeError(e) }),
+        );
+        return;
+      }
       window.dispatchEvent(new Event("sync:pulled"));
       notifySuccess(
         result.published
@@ -911,8 +963,27 @@ export function DesignerPage() {
     notifySuccess(t("designer.toast_showing_canvas"));
   };
 
-  const sampleDataPanel = (
+  // Live check for the Add Dataset name: length cap and no duplicates.
+  const datasetNameError = (() => {
+    const n = datasetName.trim();
+    if (!n) return "";
+    if (n.length > DATASET_NAME_MAX) {
+      return t("designer.toast_dataset_name_too_long", {
+        max: DATASET_NAME_MAX,
+      });
+    }
+    const taken = workingDatasets.some(
+      (d) => d.name.trim().toLowerCase() === n.toLowerCase(),
+    );
+    return taken ? t("designer.toast_dataset_name_exists") : "";
+  })();
+
+  // `canInsert`: the desktop editor is beside the panel, so a click inserts at
+  // its cursor. A phone shows the panel on its own tab with no editor mounted,
+  // so there a click copies instead.
+  const renderSampleDataPanel = (canInsert: boolean) => (
     <SampleDataPanel
+      onInsert={canInsert ? insertHelper : undefined}
       datasets={visibleDatasets}
       selectedName={selectedDatasetName}
       onSelect={setSelectedDatasetName}
@@ -927,23 +998,12 @@ export function DesignerPage() {
         setShowEditDataset(true);
       }}
       onDelete={(ds) => {
-        void (async () => {
-          try {
-            const row = datasets.find((d) => d.name === ds.name);
-            if (row?.id != null) {
-              await agent("delete_dataset", { id: row.id });
-            }
-            await loadDatasets();
-            if (selectedDatasetName === ds.name) {
-              setSelectedDatasetName(visibleDatasets[0]?.name ?? "");
-            }
-            notifySuccess(t("designer.toast_dataset_deleted"));
-          } catch (e) {
-            notifyError(
-              t("designer.toast_delete_failed", { error: describeError(e) }),
-            );
-          }
-        })();
+        const next = workingDatasets.filter((d) => d.name !== ds.name);
+        setDraftDatasets(next);
+        if (selectedDatasetName === ds.name) {
+          setSelectedDatasetName(next[0]?.name ?? fallbackDataset.name);
+        }
+        notifySuccess(t("designer.toast_dataset_deleted"));
       }}
     />
   );
@@ -1121,7 +1181,7 @@ export function DesignerPage() {
                   openSections={openSections}
                   onOpenSectionsChange={setOpenSections}
                   onInsertHelper={insertHelper}
-                  samplePanel={sampleDataPanel}
+                  samplePanel={renderSampleDataPanel(true)}
                   className="rounded-none border-0 bg-transparent"
                 />
               </div>
@@ -1286,7 +1346,7 @@ export function DesignerPage() {
               {activeTab === "sample-data" && (
                 <Card>
                   <CardContent className="space-y-4 pt-5">
-                    {sampleDataPanel}
+                    {renderSampleDataPanel(false)}
                     <div className="space-y-2 border-t pt-3">
                       <h3 className="text-xs font-semibold">
                         {t("designer.helpers")}
@@ -1408,7 +1468,20 @@ export function DesignerPage() {
                 value={datasetName}
                 onChange={(e) => setDatasetName(e.target.value)}
                 placeholder={t("designer.sample_name_example")}
+                aria-invalid={datasetNameError ? true : undefined}
               />
+              <div className="flex justify-between text-xs">
+                <span className="text-danger">{datasetNameError}</span>
+                <span
+                  className={
+                    datasetName.trim().length > DATASET_NAME_MAX
+                      ? "text-danger"
+                      : "text-muted-foreground"
+                  }
+                >
+                  {datasetName.trim().length}/{DATASET_NAME_MAX}
+                </span>
+              </div>
             </div>
             <div className="space-y-1">
               <Label>{t("designer.sample_json_label")}</Label>
@@ -1445,8 +1518,13 @@ export function DesignerPage() {
             </Button>
             <Button
               onClick={() => {
-                if (!datasetName.trim()) {
+                const name = datasetName.trim();
+                if (!name) {
                   notifyError(t("designer.toast_dataset_name_required"));
+                  return;
+                }
+                if (datasetNameError) {
+                  notifyError(datasetNameError);
                   return;
                 }
                 try {
@@ -1455,25 +1533,15 @@ export function DesignerPage() {
                   notifyError(t("designer.toast_invalid_json"));
                   return;
                 }
-                void (async () => {
-                  try {
-                    await agent("save_dataset", {
-                      req: { name: datasetName, data_json: datasetJson },
-                    });
-                    await loadDatasets();
-                    setShowDatasetDialog(false);
-                    notifySuccess(
-                      t("designer.toast_dataset_added", { name: datasetName }),
-                    );
-                  } catch (e) {
-                    notifyError(
-                      t("designer.toast_add_failed", {
-                        error: describeError(e),
-                      }),
-                    );
-                  }
-                })();
+                setDraftDatasets([
+                  ...workingDatasets,
+                  { id: null, name, json: datasetJson, isDefault: false },
+                ]);
+                setSelectedDatasetName(name);
+                setShowDatasetDialog(false);
+                notifySuccess(t("designer.toast_dataset_added", { name }));
               }}
+              disabled={datasetNameError !== ""}
             >
               {t("common.add")}
             </Button>
@@ -1524,27 +1592,13 @@ export function DesignerPage() {
                   notifyError(t("designer.toast_invalid_json"));
                   return;
                 }
-                void (async () => {
-                  try {
-                    const row = datasets.find((d) => d.name === editingDataset);
-                    await agent("save_dataset", {
-                      req: {
-                        id: row?.id ?? null,
-                        name: editingDataset ?? "",
-                        data_json: editJson,
-                      },
-                    });
-                    await loadDatasets();
-                    setShowEditDataset(false);
-                    notifySuccess(t("designer.toast_dataset_updated"));
-                  } catch (e) {
-                    notifyError(
-                      t("designer.toast_save_failed", {
-                        error: describeError(e),
-                      }),
-                    );
-                  }
-                })();
+                setDraftDatasets(
+                  workingDatasets.map((d) =>
+                    d.name === editingDataset ? { ...d, json: editJson } : d,
+                  ),
+                );
+                setShowEditDataset(false);
+                notifySuccess(t("designer.toast_dataset_updated"));
               }}
             >
               {t("designer.sample_save")}
@@ -1617,6 +1671,7 @@ export function DesignerPage() {
         onConfirm={() => {
           const action = discardAction;
           setDiscardAction(null);
+          setDraftDatasets(null);
           action?.();
         }}
       />

@@ -128,8 +128,7 @@ describe("PairingGate", () => {
     }
   });
 
-  // Regression: pairing used to be noticed only by the gate's 2s poll, so
-  // after a successful pair the freshly-paired device sat on the welcome
+  // Regression: pairing used to be noticed only by the gate's 2s poll, so  // after a successful pair the freshly-paired device sat on the welcome
   // screen for up to two seconds before /print replaced it. Pairing now
   // signals onPaired directly, so it must fire well before any poll tick.
   it("leaves immediately when a pair is made, not on the next poll", async () => {
@@ -185,6 +184,41 @@ describe("PairingGate", () => {
       (window as any).__TAURI_INTERNALS__ = undefined;
       ua.mockRestore();
     }
+  });
+});
+
+describe("PairingGate welcome", () => {
+  it("greets the signed-in handle", async () => {
+    localStorage.setItem("printninja-session-handle", "sam");
+    const view = render(<PairingGate onPaired={() => {}} />);
+    expect(await screen.findByText(/Welcome sam/)).toBeInTheDocument();
+    view.unmount();
+  });
+
+  it("greets the guest handle in guest mode", async () => {
+    localStorage.setItem("printninja-guest-mode", "true");
+    localStorage.setItem("printninja-guest-handle", "guest-ana");
+    const view = render(<PairingGate onPaired={() => {}} />);
+    expect(await screen.findByText(/Welcome guest-ana/)).toBeInTheDocument();
+    view.unmount();
+  });
+
+  it("prefers the session handle over a stale guest one", async () => {
+    localStorage.setItem("printninja-guest-mode", "true");
+    localStorage.setItem("printninja-guest-handle", "guest-ana");
+    localStorage.setItem("printninja-session-handle", "sam");
+    const view = render(<PairingGate onPaired={() => {}} />);
+    expect(await screen.findByText(/Welcome sam/)).toBeInTheDocument();
+    view.unmount();
+  });
+
+  it("stays nameless with no identity", async () => {
+    const view = render(<PairingGate onPaired={() => {}} />);
+    expect(
+      await screen.findByText(/Pair your PC to start printing/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Welcome /)).not.toBeInTheDocument();
+    view.unmount();
   });
 });
 

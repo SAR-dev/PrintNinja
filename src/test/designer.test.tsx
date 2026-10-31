@@ -1013,7 +1013,46 @@ describe("SampleDataPanel", () => {
     ).toBeChecked();
     fireEvent.click(screen.getByRole("radio", { name: "Use dataset Empty" }));
     expect(p.onSelect).toHaveBeenCalledWith("Empty");
-    expect(screen.getAllByText("{{store}}").length).toBeGreaterThan(0);
+    // Variables are the dataset's paths, with the sample value beside them.
+    expect(screen.getByText("{{store.name}}")).toBeInTheDocument();
+    expect(screen.getByText("A")).toBeInTheDocument();
+  });
+
+  it("puts icon-only edit and delete buttons in the name's row", () => {
+    render(<SampleDataPanel {...props()} />);
+    // span -> label -> the flex row that also holds the buttons
+    const row = screen.getByText("Empty").parentElement?.parentElement;
+    const edit = screen.getAllByRole("button", { name: "Edit" })[1];
+    const del = screen.getByRole("button", { name: "Delete dataset Empty" });
+    expect(row).toContainElement(edit);
+    expect(row).toContainElement(del);
+    expect(edit).toHaveTextContent("");
+    expect(del).toHaveTextContent("");
+  });
+
+  it("filters the variables", () => {
+    render(<SampleDataPanel {...props()} />);
+    fireEvent.change(screen.getByLabelText("Filter variables…"), {
+      target: { value: "zzz" },
+    });
+    expect(screen.queryByText("{{store.name}}")).toBeNull();
+    expect(screen.getByText("No variables match.")).toBeInTheDocument();
+  });
+
+  it("inserts a variable at the cursor when it can, else copies it", () => {
+    const onInsert = vi.fn();
+    const { unmount } = render(
+      <SampleDataPanel {...props()} onInsert={onInsert} />,
+    );
+    fireEvent.click(screen.getByText("{{store.name}}"));
+    expect(onInsert).toHaveBeenCalledWith("{{store.name}}", 0);
+    // A list inserts an {{#each}} block, cursor inside it.
+    fireEvent.click(screen.getByText("{{items}}"));
+    expect(onInsert).toHaveBeenLastCalledWith(
+      "{{#each items}}\n  \n{{/each}}",
+      "\n{{/each}}".length,
+    );
+    unmount();
   });
 
   it("adds, edits and deletes datasets, but never deletes the default one", () => {

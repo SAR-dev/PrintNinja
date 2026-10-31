@@ -44,8 +44,9 @@ import type {
 } from "@/lib/agent/types";
 import { cacheNow } from "@/lib/sync/useSyncStatus";
 import { usePcStatus } from "@/lib/shell/usePcStatus";
-import { Link } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import { useCanPrint } from "@/lib/hooks/useCanPrint";
 import { notifySuccess, notifyError } from "@/lib/notify";
 import { usePrintStore } from "@/lib/store/printStore";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
@@ -63,6 +64,31 @@ const PAPER_PRESETS = [
 ] as const;
 
 export function PrintPage() {
+  const location = useLocation();
+  // Unpaired Android phones cannot print at all: back to the pairing
+  // screen (which returns here), instead of a dead print form. Null
+  // holds the spinner so nothing flashes before the redirect.
+  const canPrint = useCanPrint();
+  if (canPrint === false) {
+    return (
+      <Navigate
+        to="/pair"
+        replace
+        state={{ returnTo: `${location.pathname}${location.search}` }}
+      />
+    );
+  }
+  if (canPrint === null) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+  return <PrintForm />;
+}
+
+function PrintForm() {
   const { t } = useTranslation();
   const store = usePrintStore();
   const { printers, refresh: refreshSystemPrinters } = useSystemPrinters();
