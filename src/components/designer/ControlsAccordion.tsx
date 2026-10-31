@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ArrowLeftRight, FileText, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -44,19 +45,22 @@ interface Props<
   showHelpers?: boolean;
   /** Open the barcode dialog. Renders the "Custom input" section (barcode + font). */
   onBarcode?: () => void;
-  /** Section ids open at first: "templates", "page", "helpers", "custom". Desktop opens only "page"; a phone opens none. */
+  /** Section ids open at first: "templates", "page", "sample", "helpers", "custom". Desktop opens only "page"; a phone opens none. */
   defaultOpen?: string[];
   /** Controlled open sections. When given, the parent owns (and can remember) which are open. */
   openSections?: string[];
   onOpenSectionsChange?: (sections: string[]) => void;
   /** Click-to-insert for the Helpers section; without it the helpers are only a reference. */
   onInsertHelper?: (text: string) => void;
+  /** The sample datasets. When given, a Sample data section is listed after Page Setup. */
+  samplePanel?: ReactNode;
+  /** Extra classes for the accordion; the desktop column drops the card frame it draws itself. */
+  className?: string;
 }
 
 /**
- * The controls column: template list, page setup, helpers
+ * The controls column: template list, page setup, sample data, helpers
  * and custom input, as accordion sections. Several can be open at once.
- * (Sample data lives in the editor pane, after the HTML / CSS / README tabs.)
  */
 export function ControlsAccordion<
   T extends { id: number; name: string; origin?: string | null },
@@ -79,6 +83,8 @@ export function ControlsAccordion<
   onOpenSectionsChange,
   onInsertHelper,
   onBarcode,
+  samplePanel,
+  className,
 }: Props<T>) {
   const { t } = useTranslation();
   const open = openSections
@@ -128,7 +134,7 @@ export function ControlsAccordion<
     <Accordion
       type="multiple"
       {...open}
-      className="rounded-lg border bg-card px-3"
+      className={cn("rounded-lg border bg-card px-3", className)}
     >
       {showTemplates && (
         <AccordionItem value="templates">
@@ -232,6 +238,13 @@ export function ControlsAccordion<
           </div>
         </AccordionContent>
       </AccordionItem>
+
+      {samplePanel !== undefined && (
+        <AccordionItem value="sample">
+          <AccordionTrigger>{t("designer.sampleData")}</AccordionTrigger>
+          <AccordionContent>{samplePanel}</AccordionContent>
+        </AccordionItem>
+      )}
 
       {showHelpers && (
         <AccordionItem value="helpers">
