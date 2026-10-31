@@ -41,6 +41,7 @@ interface StoredTemplate extends TemplateRecord {
 interface SavedRow {
   templateId: string;
   addedAt: Date;
+  changeSeq: bigint;
 }
 
 export interface FakeTemplateStore {
@@ -111,6 +112,41 @@ export function createFakeTemplateRepos(users: {
       throw new NotFoundError();
     }
     return user.handle;
+  };
+
+  // Saver fan-out, mirroring the Prisma repositories: author edits and
+  // (re)publishes stamp every saver's row; unpublish and delete tombstone
+  // each saver. The author is excluded — their own feed owns the template.
+  const saverIds = (templateId: string, ownerId: string): string[] =>
+    [
+      ...new Set(
+        [...store.saved.entries()]
+          .filter(
+            ([userId, rows]) =>
+              userId !== ownerId &&
+              rows.some((row) => row.templateId === templateId),
+          )
+          .map(([userId]) => userId),
+      ),
+    ].sort();
+  const stampSavers = (templateId: string, ownerId: string): void => {
+    for (const userId of saverIds(templateId, ownerId)) {
+      const row = store.saved
+        .get(userId)
+        ?.find((r) => r.templateId === templateId);
+      if (row) row.changeSeq = bumpSeq(userId);
+    }
+  };
+  const tombstoneSavers = (templateId: string, ownerId: string): void => {
+    for (const userId of saverIds(templateId, ownerId)) {
+      store.tombstones.push({
+        userId,
+        seq: bumpSeq(userId),
+        entity: "template",
+        entityKey: templateId,
+        deletedAt: now(),
+      });
+    }
   };
 
   const toView = (stored: StoredTemplate): TemplateView => ({
@@ -252,6 +288,7 @@ export function createFakeTemplateRepos(users: {
         changeSeq: bumpSeq(stored.ownerId),
         updatedAt: now(),
       });
+      stampSavers(stored.id, stored.ownerId);
       if (version) {
         const maxNo = stored.versions.reduce(
           (m, v) => Math.max(m, v.versionNo),
@@ -284,6 +321,11 @@ export function createFakeTemplateRepos(users: {
       }
       stored.changeSeq = bumpSeq(stored.ownerId);
       stored.updatedAt = now();
+      if (publishedAt === null) {
+        tombstoneSavers(stored.id, stored.ownerId);
+      } else {
+        stampSavers(stored.id, stored.ownerId);
+      }
       return toView(stored);
     },
 
@@ -299,6 +341,7 @@ export function createFakeTemplateRepos(users: {
         entityKey: id,
         deletedAt: now(),
       });
+      tombstoneSavers(id, stored.ownerId);
       // Saved rows survive on purpose: the manifest reports them as
       // deleted (E14). Only versions cascade with the template.
       store.templates.delete(id);
@@ -436,8 +479,11 @@ export function createFakeTemplateRepos(users: {
 
     async save(userId, templateId) {
       const rows = store.saved.get(userId) ?? [];
-      if (!rows.some((row) => row.templateId === templateId)) {
-        rows.push({ templateId, addedAt: now() });
+      const existing = rows.find((row) => row.templateId === templateId);
+      if (existing) {
+        existing.changeSeq = bumpSeq(userId);
+      } else {
+        rows.push({ templateId, addedAt: now(), changeSeq: bumpSeq(userId) });
         store.saved.set(userId, rows);
       }
     },
@@ -445,9 +491,23 @@ export function createFakeTemplateRepos(users: {
     async unsave(userId, templateId) {
       const rows = store.saved.get(userId) ?? [];
       const index = rows.findIndex((row) => row.templateId === templateId);
-      if (index >= 0) {
-        rows.splice(index, 1);
+      if (index < 0) {
+        return;
       }
+      rows.splice(index, 1);
+      // The mirrors must go on every PC. No tombstone for the author's
+      // own row — their own feed owns that lifecycle.
+      const template = store.templates.get(templateId) ?? null;
+      if (template && template.ownerId === userId) {
+        return;
+      }
+      store.tombstones.push({
+        userId,
+        seq: bumpSeq(userId),
+        entity: "template",
+        entityKey: templateId,
+        deletedAt: now(),
+      });
     },
 
     async listManifest(userId) {
@@ -491,7 +551,12 @@ export function createFakeTemplateRepos(users: {
     },
     async readSince(userId, query, byteBudget) {
       type Candidate =
-        | { seq: bigint; kind: "upsert"; template: StoredTemplate }
+        | {
+            seq: bigint;
+            kind: "upsert";
+            origin: "own" | "saved";
+            template: StoredTemplate;
+          }
         | {
             seq: bigint;
             kind: "delete";
@@ -513,6 +578,25 @@ export function createFakeTemplateRepos(users: {
       templateRows.sort((a, b) =>
         a.changeSeq < b.changeSeq ? -1 : a.changeSeq > b.changeSeq ? 1 : 0,
       );
+      // Saved mirrors, sequenced in the saver's own stream: published
+      // templates of other authors only. The author's own rows ride the
+      // own stream; unpublished and deleted ones travel as tombstones.
+      const savedRows: { seq: bigint; template: StoredTemplate }[] = [];
+      if (query.types.includes("template")) {
+        for (const row of store.saved.get(userId) ?? []) {
+          if (row.changeSeq <= query.cursor) continue;
+          const template = store.templates.get(row.templateId) ?? null;
+          if (
+            template === null ||
+            template.publishedAt === null ||
+            template.ownerId === userId
+          ) {
+            continue;
+          }
+          savedRows.push({ seq: row.changeSeq, template });
+        }
+      }
+      savedRows.sort((a, b) => (a.seq < b.seq ? -1 : a.seq > b.seq ? 1 : 0));
       const tombRows = store.tombstones.filter(
         (t) =>
           t.userId === userId &&
@@ -521,14 +605,24 @@ export function createFakeTemplateRepos(users: {
       );
       tombRows.sort((a, b) => (a.seq < b.seq ? -1 : a.seq > b.seq ? 1 : 0));
       const streamHasMore =
-        templateRows.length > query.limit || tombRows.length > query.limit;
+        templateRows.length > query.limit ||
+        savedRows.length > query.limit ||
+        tombRows.length > query.limit;
       const keptTemplates = templateRows.slice(0, query.limit);
+      const keptSaved = savedRows.slice(0, query.limit);
       const keptTombs = tombRows.slice(0, query.limit);
       const candidates: Candidate[] = [
         ...keptTemplates.map((t) => ({
           seq: t.changeSeq,
           kind: "upsert" as const,
+          origin: "own" as const,
           template: t,
+        })),
+        ...keptSaved.map((row) => ({
+          seq: row.seq,
+          kind: "upsert" as const,
+          origin: "saved" as const,
+          template: row.template,
         })),
         ...keptTombs.map((t) => ({
           seq: t.seq,
@@ -557,6 +651,7 @@ export function createFakeTemplateRepos(users: {
             : {
                 seq: c.seq,
                 entity: "template",
+                origin: c.origin,
                 data: toView(c.template),
                 headVersionNo: c.template.versions.reduce(
                   (m, v) => Math.max(m, v.versionNo),

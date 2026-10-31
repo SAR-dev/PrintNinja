@@ -18,7 +18,7 @@ variables outside it (see Desktop app below), baked in by vite — copy
 | --- | --- |
 | `docker compose up` (from `server/`) | `server/.env` (copy `server/env.example`) |
 | Local server (`pnpm dev`, from `server/`) | `server/.env`, loaded by the script via `--env-file-if-exists` |
-| CLI scripts (`db:apply`, `db:import`, `openapi:generate`) | `server/.env`, loaded automatically (explicit env wins) |
+| CLI scripts (`db:apply`, `db:import`, `db:reset`, `db:seed`, `openapi:generate`) | `server/.env`, loaded automatically (explicit env wins) |
 | `pnpm db:generate` / `db:migrate` / `db:validate` | `server/.env`, loaded by the script (see Migrations) |
 | Bare `npx prisma ...` | **not** auto-loaded — use the scripts above or set `DATABASE_URL` yourself |
 

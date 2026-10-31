@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { isPrintViaPc } from "@/lib/printViaPc";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ControlsAccordion } from "@/components/designer/ControlsAccordion";
 import { CanvasWorkspace } from "@/components/designer/CanvasWorkspace";
 import {
@@ -16,7 +17,6 @@ import {
   type ControlsSection,
 } from "@/components/designer/ControlsRail";
 import {
-  LayoutToggle,
   isDesignerLayout,
   type DesignerLayout,
 } from "@/components/designer/LayoutToggle";
@@ -25,6 +25,7 @@ import { DesignerOverflowMenu } from "@/components/designer/DesignerOverflowMenu
 import { DesignerToolbar } from "@/components/designer/DesignerToolbar";
 import { HelpersPanel } from "@/components/designer/HelpersPanel";
 import { ReadmePanel } from "@/components/designer/ReadmePanel";
+import { README_MAX_BYTES } from "@/components/ReadmeEditor";
 import {
   SampleDataPanel,
   type Dataset,
@@ -45,6 +46,7 @@ import { usePersistentState } from "@/lib/hooks/usePersistentState";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { agent } from "@/lib/agent/commands";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -79,13 +81,13 @@ import {
   DEFAULT_TEMPLATE_HTML,
   DEFAULT_TEMPLATE_CSS,
   DEFAULT_MOCK_DATA,
-  STARTER_TEMPLATES,
-  defaultTemplateReadme,
+  NEW_TEMPLATE_PAGE_W_MM,
+  NEW_TEMPLATE_PAGE_H_MM,
+  newTemplateContent,
 } from "@/lib/templates/defaultTemplate";
 import { useCompiledCss } from "@/lib/templates/useCompiledCss";
+import { listTemplates } from "@/lib/templates/listTemplates";
 import { formatCss, formatHtml } from "@/lib/utils/format";
-import { ensureStarterTemplates } from "@/lib/templates/seedTemplates";
-import { hideStarterWhenOthers } from "@/lib/templates/starterVisibility";
 import * as share from "@/lib/share/client";
 import { useShareStatus } from "@/lib/shell/useShareStatus";
 import { getLocalTemplate, isReadOnly } from "@/lib/share/sync";
@@ -124,16 +126,11 @@ export function DesignerPage() {
   const [newNameError, setNewNameError] = useState("");
   const [htmlCode, setHtmlCode] = useState(DEFAULT_TEMPLATE_HTML);
   const [cssCode, setCssCode] = useState(DEFAULT_TEMPLATE_CSS);
-  const [templateName, setTemplateName] = useState(STARTER_TEMPLATES[0].name);
-  const [pageWidth, setPageWidth] = useState(
-    STARTER_TEMPLATES[0]?.page_w_mm ?? 80,
-  );
-  const [pageHeight, setPageHeight] = useState(
-    STARTER_TEMPLATES[0]?.page_h_mm ?? 200,
-  );
-  const [orientation, setOrientation] = useState<"portrait" | "landscape">(
-    "portrait",
-  );
+  // No template exists until one is opened or made: an empty Designer is
+  // the honest starting point, not a bundled example nobody asked for.
+  const [templateName, setTemplateName] = useState("");
+  const [pageWidth, setPageWidth] = useState(NEW_TEMPLATE_PAGE_W_MM);
+  const [pageHeight, setPageHeight] = useState(NEW_TEMPLATE_PAGE_H_MM);
   // Print-via-PC mode: templates sync down, they are not drawn here.
   const [viaPc, setViaPc] = useState(false);
   useEffect(() => {
@@ -157,7 +154,7 @@ export function DesignerPage() {
   );
   const [openSections, setOpenSections] = usePersistentState<string[]>(
     "printninja.designer.openSections",
-    ["page"],
+    ["page", "sample"],
     (v): v is string[] =>
       Array.isArray(v) && v.every((x) => typeof x === "string"),
   );
@@ -187,8 +184,24 @@ export function DesignerPage() {
   // Phone: Templates / Page Setup / Custom input live in a bottom sheet
   // opened from a single Settings button.
   const [controlsOpen, setControlsOpen] = useState(false);
+  // What the editor held when the template was last opened or saved. The
+  // difference from the live values is the "Unsaved" mark, and it asks before
+  // a switch throws the edits away. The README is tracked beside it
+  // (`savedReadme`) because it loads asynchronously, after the rest.
+  const [baseline, setBaseline] = useState<{
+    name: string;
+    html: string;
+    css: string;
+    w: number;
+    h: number;
+  } | null>(null);
   const [readme, setReadme] = useState("");
-  const [readmeSaving, setReadmeSaving] = useState(false);
+  const [savedReadme, setSavedReadme] = useState("");
+  /** Put README text into the editor as the saved copy (open, take server, load). */
+  const loadReadme = (value: string) => {
+    setReadme(value);
+    setSavedReadme(value);
+  };
   const [remoteId, setRemoteId] = useState<string | null>(null);
   const [publishedAt, setPublishedAt] = useState<string | null>(null);
   const [origin, setOrigin] = useState<"own" | "saved">("own");
@@ -215,8 +228,8 @@ export function DesignerPage() {
   const compiledCss = useCompiledCss(debouncedHtml);
 
   // Templates available in the designer — persisted in SQLite via
-  // `list_templates` / `create_template`. Starter templates are the
-  // fallback when the DB is empty (first launch) or in web mode.
+  // `list_templates` / `create_template`. Nothing is seeded: an empty
+  // list means no templates yet, and the accordion shows the New action.
   // Local working copies: content for the editor plus the server link
   // when the row came from a full template (nulls when it did not).
   const [templates, setTemplates] = useState<
@@ -239,8 +252,13 @@ export function DesignerPage() {
   const [currentTemplateId, setCurrentTemplateId] = useState<number | null>(
     null,
   );
-  const [_templatesLoading, setTemplatesLoading] = useState(true);
-  void _templatesLoading;
+
+  // The active template's DB row id (null until a template is opened or
+  // made — the Designer starts empty).
+  const [currentTemplateDbId, setCurrentTemplateDbId] = useState<number | null>(
+    null,
+  );
+  const [templatesLoading, setTemplatesLoading] = useState(true);
 
   // Template ids whose html/css in `templates` is already loaded into
   // the editor. `loadTemplate` writes content directly since rows carry
@@ -309,19 +327,22 @@ export function DesignerPage() {
     origin?: string | null;
     updated_at?: string;
   }) => {
+    const html = formatHtml(tpl.html);
+    const css = formatCss(tpl.css);
+    const w = tpl.page_w_mm || pageWidth;
+    const h = tpl.page_h_mm || pageHeight;
     setCurrentTemplateId(tpl.id);
     setTemplateName(tpl.name);
-    setHtmlCode(formatHtml(tpl.html));
-    setCssCode(formatCss(tpl.css));
+    setHtmlCode(html);
+    setCssCode(css);
     contentLoaded.current.add(tpl.id);
-    if (tpl.page_w_mm) setPageWidth(tpl.page_w_mm);
-    if (tpl.page_h_mm) setPageHeight(tpl.page_h_mm);
-    if (tpl.orientation)
-      setOrientation(tpl.orientation as "portrait" | "landscape");
+    setPageWidth(w);
+    setPageHeight(h);
+    setBaseline({ name: tpl.name, html, css, w, h });
     setCurrentTemplateDbId(tpl.id);
     // Load readme and publish info if provided, otherwise fetch from DB
     if (tpl.readme !== undefined) {
-      setReadme(tpl.readme);
+      loadReadme(tpl.readme);
       setRemoteId(tpl.server_id ?? tpl.remote_id ?? null);
       setPublishedAt(tpl.published_at ?? null);
       setOrigin((tpl.origin ?? "own") === "saved" ? "saved" : "own");
@@ -329,12 +350,12 @@ export function DesignerPage() {
       (async () => {
         try {
           const full = await agent("get_template", { id: tpl.id });
-          setReadme(full.readme ?? "");
+          loadReadme(full.readme ?? "");
           setRemoteId(full.server_id ?? full.remote_id ?? null);
           setPublishedAt(full.published_at ?? null);
           setOrigin(full.origin === "saved" ? "saved" : "own");
         } catch {
-          setReadme("");
+          loadReadme("");
           setRemoteId(null);
           setPublishedAt(null);
           setOrigin("own");
@@ -343,6 +364,41 @@ export function DesignerPage() {
     }
     // Content now lives on the template row itself; nothing more to load.
     notifySuccess(t("designer.toast_loaded", { name: tpl.name }));
+  };
+
+  const dirty =
+    baseline !== null &&
+    (templateName !== baseline.name ||
+      htmlCode !== baseline.html ||
+      cssCode !== baseline.css ||
+      pageWidth !== baseline.w ||
+      pageHeight !== baseline.h ||
+      readme !== savedReadme);
+
+  // The name is edited in one place (the top row), so its problems show there,
+  // live, rather than as a toast on Save.
+  const nameError = (() => {
+    if (currentTemplateDbId == null) return "";
+    const wanted = templateName.trim();
+    if (!wanted) return t("designer.toast_name_required");
+    const taken = templates.some(
+      (x) =>
+        x.id !== currentTemplateDbId &&
+        x.name.trim().toLowerCase() === wanted.toLowerCase(),
+    );
+    return taken ? t("designer.toast_name_exists") : "";
+  })();
+
+  // Anything that would replace the editor asks first when edits are unsaved.
+  const [discardAction, setDiscardAction] = useState<(() => void) | null>(null);
+  const unlessDiscarding = (action: () => void) => {
+    if (dirty) setDiscardAction(() => action);
+    else action();
+  };
+  const switchTemplate = (id: number) => {
+    if (id === currentTemplateId) return;
+    const tpl = templates.find((x) => x.id === id);
+    if (tpl) unlessDiscarding(() => loadTemplate(tpl));
   };
 
   /**
@@ -392,6 +448,10 @@ export function DesignerPage() {
       notifyError(t("designer.toast_name_exists"));
       return;
     }
+    if (new TextEncoder().encode(readme).length > README_MAX_BYTES) {
+      notifyError(t("designer.toast_readme_too_big"));
+      return;
+    }
     setPending("save");
     try {
       const row = await getLocalTemplate(currentTemplateDbId);
@@ -422,6 +482,14 @@ export function DesignerPage() {
         ),
       );
       setTemplateName(content.name);
+      setBaseline({
+        name: content.name,
+        html: content.html,
+        css: content.css,
+        w: content.page_w_mm,
+        h: content.page_h_mm,
+      });
+      setSavedReadme(content.readme);
       window.dispatchEvent(new Event("sync:pulled"));
       notifySuccess(
         result.published
@@ -456,14 +524,34 @@ export function DesignerPage() {
     const serverId = row.server_id ?? row.remote_id;
     if (!serverId) return;
     setPending("visibility");
+    /** Write the publish state onto the local row too: the switch is the
+     * source of truth on screen, but after a relogin the row is rebuilt
+     * from the DB — state-only updates made this vanish back to private. */
+    const persistPublish = async (id: string, published: string | null) => {
+      setPublishedAt(published);
+      setRemoteId(id);
+      try {
+        await agent("set_publish_info", {
+          req: {
+            id: currentTemplateDbId,
+            remote_id: id,
+            published_at: published,
+          },
+        });
+      } catch {
+        /* offline race: the next pull repairs it from the server */
+      }
+    };
     try {
       let id = serverId;
       if (row.base_revision == null) {
         const content = await buildContent();
         const saved = await saveTemplateToServer(row, content);
         id = saved.remoteId;
-        setRemoteId(saved.remoteId);
-        setPublishedAt(saved.published ? saved.updatedAt : null);
+        await persistPublish(
+          saved.remoteId,
+          saved.published ? saved.updatedAt : null,
+        );
         setTemplates((prev) =>
           prev.map((t) =>
             t.id === currentTemplateDbId
@@ -485,11 +573,14 @@ export function DesignerPage() {
       }
       if (makePublic) {
         const remote = await share.publishRemoteTemplate(id);
-        setPublishedAt(remote.published_at ?? remote.updated_at ?? null);
+        await persistPublish(
+          id,
+          remote.published_at ?? remote.updated_at ?? null,
+        );
         notifySuccess(t("designer.toast_now_public"));
       } else {
         await share.unpublishRemoteTemplate(id);
-        setPublishedAt(null);
+        await persistPublish(id, null);
         notifySuccess(t("designer.toast_now_private"));
       }
       window.dispatchEvent(new Event("sync:pulled"));
@@ -512,7 +603,14 @@ export function DesignerPage() {
       setTemplateName(taken.name);
       setPageWidth(taken.page_w_mm);
       setPageHeight(taken.page_h_mm);
-      setReadme(taken.readme);
+      loadReadme(taken.readme);
+      setBaseline({
+        name: taken.name,
+        html: formatHtml(taken.html),
+        css: formatCss(taken.css),
+        w: taken.page_w_mm,
+        h: taken.page_h_mm,
+      });
       setRemoteId(conflict.serverId);
       setPublishedAt(taken.updatedAt);
       setConflict(null);
@@ -532,6 +630,14 @@ export function DesignerPage() {
       const row = await getLocalTemplate(conflict.rowId);
       const content = await buildContent();
       const result = await overwriteWithMine(row, content);
+      setBaseline({
+        name: content.name,
+        html: content.html,
+        css: content.css,
+        w: content.page_w_mm,
+        h: content.page_h_mm,
+      });
+      setSavedReadme(content.readme);
       setRemoteId(result.remoteId);
       setPublishedAt(result.published ? result.updatedAt : null);
       setConflict(null);
@@ -566,14 +672,15 @@ export function DesignerPage() {
     }
     let keepDialogOpen = false;
     try {
+      const start = newTemplateContent(name);
       const created = await createTemplateOnServer({
         name,
-        page_w_mm: STARTER_TEMPLATES[0].page_w_mm,
-        page_h_mm: STARTER_TEMPLATES[0].page_h_mm,
-        orientation: STARTER_TEMPLATES[0].orientation,
-        html: DEFAULT_TEMPLATE_HTML,
-        css: DEFAULT_TEMPLATE_CSS,
-        readme: defaultTemplateReadme(name),
+        page_w_mm: start.page_w_mm,
+        page_h_mm: start.page_h_mm,
+        orientation: "portrait",
+        html: start.html,
+        css: start.css,
+        readme: start.readme,
       });
       const tpl = {
         id: created.id,
@@ -585,7 +692,7 @@ export function DesignerPage() {
         orientation: created.orientation,
       };
       contentLoaded.current.add(tpl.id);
-      setTemplates((prev) => hideStarterWhenOthers([...prev, tpl]));
+      setTemplates((prev) => [...prev, tpl]);
       loadTemplate(tpl);
       setCurrentTemplateDbId(tpl.id);
       notifySuccess(t("designer.toast_created_server", { name }));
@@ -602,14 +709,15 @@ export function DesignerPage() {
       const id = templates.length
         ? Math.max(...templates.map((t) => t.id)) + 1
         : 1;
+      const start = newTemplateContent(name);
       const tpl = {
         id,
         name,
-        html: DEFAULT_TEMPLATE_HTML,
-        css: DEFAULT_TEMPLATE_CSS,
-        page_w_mm: STARTER_TEMPLATES[0].page_w_mm,
-        page_h_mm: STARTER_TEMPLATES[0].page_h_mm,
-        orientation: STARTER_TEMPLATES[0].orientation,
+        html: start.html,
+        css: start.css,
+        page_w_mm: start.page_w_mm,
+        page_h_mm: start.page_h_mm,
+        orientation: "portrait",
       };
       contentLoaded.current.add(tpl.id);
       setTemplates((prev) => [...prev, tpl]);
@@ -632,80 +740,56 @@ export function DesignerPage() {
   const [editJson, setEditJson] = useState("");
   const [showEditDataset, setShowEditDataset] = useState(false);
 
-  // The active template's DB row id (created on first save / on load).
-  const [currentTemplateDbId, setCurrentTemplateDbId] = useState(1);
-
-  // Load template list from SQLite on mount; fall back to starters in web
-  // mode or on first launch when the table is empty.
+  // Load the template list from SQLite on mount. Nothing is seeded: an
+  // empty list means no templates yet, and the empty state offers the
+  // one action that matters — make one.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        // Seeds the bundled starters into SQLite on first run, so the Designer
-        // and the Print tab both see real rows instead of an empty list.
-        const rows = await ensureStarterTemplates();
+        const rows = await listTemplates();
         if (cancelled) return;
-        if (rows && rows.length > 0) {
-          const hydrated = rows.map((r) => ({
-            id: r.id,
-            name: r.name,
-            html: r.html || DEFAULT_TEMPLATE_HTML,
-            css: r.css || DEFAULT_TEMPLATE_CSS,
-            page_w_mm: r.page_w_mm,
-            page_h_mm: r.page_h_mm,
-            orientation: r.orientation,
-            origin: r.origin ?? null,
-          }));
-          setTemplates(hydrated);
-          setCurrentTemplateId(hydrated[0].id);
-          setTemplateName(hydrated[0].name);
-          setHtmlCode(formatHtml(hydrated[0].html));
-          setCssCode(formatCss(hydrated[0].css));
-          setPageWidth(hydrated[0].page_w_mm ?? 80);
-          setPageHeight(hydrated[0].page_h_mm ?? 200);
-          setOrientation(
-            (hydrated[0].orientation as "portrait" | "landscape") ?? "portrait",
-          );
-          setCurrentTemplateDbId(hydrated[0].id);
-          // Load README and publish info for the first template
-          try {
-            const full = await agent("get_template", { id: hydrated[0].id });
-            setReadme(full.readme ?? "");
-            setRemoteId(full.server_id ?? full.remote_id ?? null);
-            setPublishedAt(full.published_at ?? null);
-            setOrigin(full.origin === "saved" ? "saved" : "own");
-          } catch {
-            setReadme("");
-            setRemoteId(null);
-            setPublishedAt(null);
-          }
-        } else {
-          const starters = STARTER_TEMPLATES.map((t, i) => ({
-            id: i + 1,
-            name: t.name,
-            html: t.html,
-            css: t.css,
-            page_w_mm: t.page_w_mm,
-            page_h_mm: t.page_h_mm,
-            orientation: t.orientation,
-          }));
-          starters.forEach((t) => contentLoaded.current.add(t.id));
-          setTemplates(starters);
-          setCurrentTemplateId(starters[0].id);
+        const hydrated = rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          html: r.html || "",
+          css: r.css || "",
+          page_w_mm: r.page_w_mm,
+          page_h_mm: r.page_h_mm,
+          orientation: r.orientation,
+          origin: r.origin ?? null,
+        }));
+        setTemplates(hydrated);
+        const first = hydrated[0];
+        if (!first) return;
+        setCurrentTemplateId(first.id);
+        setTemplateName(first.name);
+        setHtmlCode(formatHtml(first.html));
+        setCssCode(formatCss(first.css));
+        setPageWidth(first.page_w_mm ?? NEW_TEMPLATE_PAGE_W_MM);
+        setPageHeight(first.page_h_mm ?? NEW_TEMPLATE_PAGE_H_MM);
+        setBaseline({
+          name: first.name,
+          html: formatHtml(first.html),
+          css: formatCss(first.css),
+          w: first.page_w_mm ?? NEW_TEMPLATE_PAGE_W_MM,
+          h: first.page_h_mm ?? NEW_TEMPLATE_PAGE_H_MM,
+        });
+        setCurrentTemplateDbId(first.id);
+        // README and publish info live on the full row.
+        try {
+          const full = await agent("get_template", { id: first.id });
+          loadReadme(full.readme ?? "");
+          setRemoteId(full.server_id ?? full.remote_id ?? null);
+          setPublishedAt(full.published_at ?? null);
+          setOrigin(full.origin === "saved" ? "saved" : "own");
+        } catch {
+          loadReadme("");
+          setRemoteId(null);
+          setPublishedAt(null);
         }
       } catch {
-        const starters = STARTER_TEMPLATES.map((t, i) => ({
-          id: i + 1,
-          name: t.name,
-          html: t.html,
-          css: t.css,
-          page_w_mm: t.page_w_mm,
-          page_h_mm: t.page_h_mm,
-          orientation: t.orientation,
-        }));
-        starters.forEach((t) => contentLoaded.current.add(t.id));
-        setTemplates(starters);
-        setCurrentTemplateId(starters[0].id);
+        /* web mode / backend unavailable: the empty state applies */
       } finally {
         if (!cancelled) setTemplatesLoading(false);
       }
@@ -723,8 +807,8 @@ export function DesignerPage() {
   useEffect(() => {
     const onPulled = async () => {
       try {
-        const rows = await ensureStarterTemplates();
-        if (!rows || rows.length === 0) return;
+        const rows = await listTemplates();
+        if (rows.length === 0) return;
         setTemplates((prev) => {
           const byId = new Map(rows.map((r) => [r.id, r]));
           const next = prev.map((t) => {
@@ -755,8 +839,8 @@ export function DesignerPage() {
               next.push({
                 id: r.id,
                 name: r.name,
-                html: r.html || DEFAULT_TEMPLATE_HTML,
-                css: r.css || DEFAULT_TEMPLATE_CSS,
+                html: r.html || "",
+                css: r.css || "",
                 page_w_mm: r.page_w_mm,
                 page_h_mm: r.page_h_mm,
                 orientation: r.orientation,
@@ -764,8 +848,21 @@ export function DesignerPage() {
               });
             }
           }
-          return hideStarterWhenOthers(next);
+          return next;
         });
+        // Publish state is owned by the server, so a publish made on
+        // another PC lands here: refresh it for the open template.
+        const openId = currentTemplateDbIdRef.current;
+        if (openId != null) {
+          try {
+            const full = await agent("get_template", { id: openId });
+            setRemoteId(full.server_id ?? full.remote_id ?? null);
+            setPublishedAt(full.published_at ?? null);
+            setOrigin(full.origin === "saved" ? "saved" : "own");
+          } catch {
+            /* row gone or backend busy: keep the state we have */
+          }
+        }
       } catch {
         /* keep current list on failure */
       }
@@ -808,30 +905,6 @@ export function DesignerPage() {
       return DEFAULT_MOCK_DATA as Record<string, unknown>;
     }
   }, [visibleDatasets, selectedDatasetName]);
-
-  const handleSaveReadme = async () => {
-    if (!currentTemplateDbId) {
-      notifyError(t("designer.toast_no_template"));
-      return;
-    }
-    const bytes = new TextEncoder().encode(readme).length;
-    if (bytes > 64 * 1024) {
-      notifyError(t("designer.toast_readme_too_big"));
-      return;
-    }
-    setReadmeSaving(true);
-    try {
-      await agent("update_readme", {
-        req: { id: currentTemplateDbId, readme },
-      });
-      // The README rides along with the next Save; nothing to send here.
-      notifySuccess(t("designer.toast_readme_saved"));
-    } catch (e) {
-      notifyError(describeError(e));
-    } finally {
-      setReadmeSaving(false);
-    }
-  };
 
   const handleShowCanvas = () => {
     setActiveTab("canvas");
@@ -878,7 +951,9 @@ export function DesignerPage() {
   const controls = {
     templates,
     currentTemplateId,
-    loadTemplate,
+    loadTemplate: (tpl: (typeof templates)[number]) =>
+      unlessDiscarding(() => loadTemplate(tpl)),
+    onNew: () => setShowNewTemplateDialog(true),
     templateName,
     setTemplateName,
     pageWidth,
@@ -886,8 +961,6 @@ export function DesignerPage() {
     pageHeight,
     setPageHeight,
     presets: PAGE_PRESETS,
-    orientation,
-    setOrientation,
     onBarcode: () => setShowBarcodeDialog(true),
   };
 
@@ -913,8 +986,7 @@ export function DesignerPage() {
         onCssChange={setCssCode}
         readme={readme}
         onReadmeChange={setReadme}
-        readmeSaving={readmeSaving}
-        onSaveReadme={() => void handleSaveReadme()}
+        readmeReadOnly={isReadOnly({ origin })}
         notices={
           <>
             <ClassWarnings html={debouncedHtml} />
@@ -923,7 +995,6 @@ export function DesignerPage() {
             </div>
           </>
         }
-        samplePanel={sampleDataPanel}
       />
     </div>
   );
@@ -943,23 +1014,41 @@ export function DesignerPage() {
   return (
     // On desktop the page fills the viewport (see Layout) and each pane scrolls on its own.
     <div className="space-y-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:gap-4 lg:space-y-0">
-      <PageHeader title={t("designer.title")} description={t("pages.designer")}>
-        {isDesktop && <LayoutToggle value={layout} onChange={setLayout} />}
-        {isDesktop ? (
+      {isDesktop ? (
+        // The top row replaces the page header: it names, switches and saves
+        // the open template. The sidebar already says which page this is, so
+        // the title stays for screen readers only.
+        <div data-slot="page-header" className="border-b pb-4">
+          <h1 className="sr-only">{t("designer.title")}</h1>
           <DesignerToolbar
-            onNew={() => setShowNewTemplateDialog(true)}
+            templates={templates}
+            currentTemplateId={currentTemplateId}
+            onSelectTemplate={switchTemplate}
+            noTemplate={templates.length === 0 || currentTemplateDbId == null}
+            nameError={nameError}
+            dirty={dirty}
+            layout={layout}
+            onLayoutChange={setLayout}
+            onNew={() => unlessDiscarding(() => setShowNewTemplateDialog(true))}
             onSave={() => void handleSave()}
-            saveDisabled={offline || isReadOnly({ origin })}
+            saveDisabled={offline || isReadOnly({ origin }) || !!nameError}
             saveTitle={
               offline ? "Offline — connect to save to the server" : undefined
             }
+            templateName={templateName}
+            onTemplateNameChange={setTemplateName}
             remoteId={remoteId}
             publishedAt={publishedAt}
             readOnly={isReadOnly({ origin })}
             pending={pending}
             onVisibilityChange={(v) => void handleVisibilityChange(v)}
           />
-        ) : (
+        </div>
+      ) : (
+        <PageHeader
+          title={t("designer.title")}
+          description={t("pages.designer")}
+        >
           <DesignerOverflowMenu
             onNew={() => setShowNewTemplateDialog(true)}
             published={!!remoteId && !!publishedAt}
@@ -968,8 +1057,8 @@ export function DesignerPage() {
             busy={pending != null}
             onVisibilityChange={(v) => void handleVisibilityChange(v)}
           />
-        )}
-      </PageHeader>
+        </PageHeader>
+      )}
 
       {viaPc && (
         <div
@@ -983,29 +1072,59 @@ export function DesignerPage() {
         </div>
       )}
 
-      {isDesktop ? (
+      {/* The list is still loading: hold a neutral state so a new
+          account never flashes the full editor before the empty state.
+          No templates yet: the one action is making one. The toolbar's
+          New button stays, but the nameless editor and canvas wait until
+          there is something to edit. */}
+      {templatesLoading ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          {t("common.loading")}
+        </p>
+      ) : templates.length === 0 ? (
+        <Card>
+          <EmptyState
+            title={t("designer.no_templates_yet")}
+            description={t("designer.no_templates_hint")}
+            action={{
+              label: t("designer.newTemplate"),
+              onClick: () => setShowNewTemplateDialog(true),
+            }}
+          />
+        </Card>
+      ) : isDesktop ? (
         <div className="flex min-h-0 flex-1 gap-4">
           {controlsExpanded ? (
+            // One full-height panel, like the editor and canvas beside it: the
+            // collapse button lives in its header so all three tops line up,
+            // and the sections scroll inside it instead of leaving a gap below.
             <aside
               aria-label={t("designer.controls_expanded")}
-              className="flex w-[280px] shrink-0 flex-col gap-2 overflow-y-auto"
+              className="flex w-[300px] shrink-0 flex-col overflow-hidden rounded-lg border bg-card"
             >
-              <button
-                type="button"
-                aria-label={t("designer.collapse_controls")}
-                title={t("designer.collapse_controls")}
-                onClick={() => setControlsExpanded(false)}
-                className="flex h-7 shrink-0 items-center gap-1.5 self-start rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <PanelLeftClose className="h-3.5 w-3.5" aria-hidden="true" />
-                {t("designer.collapse_short")}
-              </button>
-              <ControlsAccordion
-                {...controls}
-                openSections={openSections}
-                onOpenSectionsChange={setOpenSections}
-                onInsertHelper={insertHelper}
-              />
+              <div className="flex h-11 shrink-0 items-center border-b px-2">
+                <button
+                  type="button"
+                  aria-label={t("designer.collapse_controls")}
+                  title={t("designer.collapse_controls")}
+                  onClick={() => setControlsExpanded(false)}
+                  className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <PanelLeftClose className="h-3.5 w-3.5" aria-hidden="true" />
+                  {t("designer.collapse_short")}
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <ControlsAccordion
+                  {...controls}
+                  showTemplates={false}
+                  openSections={openSections}
+                  onOpenSectionsChange={setOpenSections}
+                  onInsertHelper={insertHelper}
+                  samplePanel={sampleDataPanel}
+                  className="rounded-none border-0 bg-transparent"
+                />
+              </div>
             </aside>
           ) : (
             <ControlsRail
@@ -1019,14 +1138,14 @@ export function DesignerPage() {
             <ResizablePanelGroup
               key={layout}
               direction={layout === "stacked" ? "vertical" : "horizontal"}
-              autoSaveId={`printninja.designer.split.${layout}`}
+              autoSaveId={`printninja.designer.split.v2.${layout}`}
               className="min-w-0 flex-1"
             >
               <ResizablePanel
                 id="editor"
                 order={1}
-                defaultSize={50}
-                minSize={25}
+                defaultSize={layout === "stacked" ? 55 : 58}
+                minSize={30}
               >
                 {editorPane(layout === "stacked" ? "pb-2" : "pr-2")}
               </ResizablePanel>
@@ -1034,7 +1153,7 @@ export function DesignerPage() {
               <ResizablePanel
                 id="canvas"
                 order={2}
-                defaultSize={50}
+                defaultSize={layout === "stacked" ? 45 : 42}
                 minSize={25}
               >
                 <div
@@ -1153,14 +1272,13 @@ export function DesignerPage() {
                 />
               )}
               {activeTab === "readme" && (
-                <Card>
-                  <CardContent className="pt-5">
+                <Card className="overflow-hidden">
+                  <CardContent className="p-0">
                     <ReadmePanel
                       readme={readme}
                       onChange={setReadme}
                       templateName={templateName}
-                      saving={readmeSaving}
-                      onSave={() => void handleSaveReadme()}
+                      readOnly={isReadOnly({ origin })}
                     />
                   </CardContent>
                 </Card>
@@ -1300,7 +1418,7 @@ export function DesignerPage() {
                   height="160px"
                   extensions={[json()]}
                   onChange={setDatasetJson}
-                  theme="dark"
+                  theme="light"
                   basicSetup={{ lintKeymap: true }}
                 />
               </div>
@@ -1378,7 +1496,7 @@ export function DesignerPage() {
                 height="200px"
                 extensions={[json()]}
                 onChange={setEditJson}
-                theme="dark"
+                theme="light"
               />
             </div>
             {(() => {
@@ -1485,6 +1603,23 @@ export function DesignerPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={discardAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setDiscardAction(null);
+        }}
+        title={t("designer.discard_title")}
+        description={t("designer.discard_body")}
+        confirmLabel={t("designer.discard_confirm")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => {
+          const action = discardAction;
+          setDiscardAction(null);
+          action?.();
+        }}
+      />
 
       {/* Save conflict: the server copy moved since this PC last synced
           it. Two ways out, both explicit — nothing is chosen for the

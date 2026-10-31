@@ -1,4 +1,8 @@
-import { NotFoundError, QuotaExceededError } from "../errors.js";
+import {
+  NotFoundError,
+  OwnTemplateSavedError,
+  QuotaExceededError,
+} from "../errors.js";
 import { toPage, type Page } from "../pagination.js";
 import type {
   PageQuery,
@@ -22,8 +26,9 @@ export async function listSaved(
 }
 
 /**
- * Saves a published template. Missing or private is a 404; over quota
- * is a 409; repeating a save is a 204, not an error.
+ * Saves a published template. Missing or private is a 404; your own is
+ * a 409 (it is already yours — a mirror would collide with the original
+ * in the sync stream); over quota is a 409; repeating a save is a 204.
  */
 export async function saveTemplate(
   repos: { templates: TemplateRepository; saved: SavedRepository },
@@ -33,6 +38,9 @@ export async function saveTemplate(
   const template = await repos.templates.findById(id);
   if (!template || template.publishedAt === null) {
     throw new NotFoundError();
+  }
+  if (template.ownerId === userId) {
+    throw new OwnTemplateSavedError();
   }
   const saved = await repos.saved.countByUser(userId);
   if (saved >= MAX_SAVED_PER_USER) {

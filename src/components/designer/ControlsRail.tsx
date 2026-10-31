@@ -1,6 +1,6 @@
 import {
   Blocks,
-  FileText,
+  Database,
   PanelLeftOpen,
   Ruler,
   Wand2,
@@ -9,8 +9,9 @@ import {
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
-/** The accordion section ids, in the order the accordion lists them. */
-export type ControlsSection = "templates" | "page" | "helpers" | "custom";
+/** The desktop accordion section ids, in the order the accordion lists them.
+ * Templates are not here: the top row switches them. */
+export type ControlsSection = "page" | "sample" | "helpers" | "custom";
 
 interface Props {
   /** Open the controls column, with this section open. */
@@ -30,8 +31,8 @@ export function ControlsRail({ onOpenSection, onExpand }: Props) {
     labelKey: string;
     Icon: LucideIcon;
   }[] = [
-    { id: "templates", labelKey: "designer.templates", Icon: FileText },
     { id: "page", labelKey: "designer.pageSetup", Icon: Ruler },
+    { id: "sample", labelKey: "designer.sampleData", Icon: Database },
     { id: "helpers", labelKey: "designer.helpers", Icon: Wand2 },
     { id: "custom", labelKey: "designer.custom_input", Icon: Blocks },
   ];

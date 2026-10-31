@@ -33,14 +33,34 @@ const PAD_X = 32;
 
 type ZoomMode = "fit" | number;
 
-/** The zoom that makes the page exactly as wide as the space it has, never above 100%. */
-export function fitZoom(availableWidth: number, pageWidthPx: number): number {
+/** Space kept around the page inside the scroll area, top and bottom. */
+const PAD_Y = 32;
+/** The most Fit will enlarge a small page, so a label fills the pane without going blurry. */
+const MAX_FIT = 3;
+
+/**
+ * The zoom that makes the page exactly as wide as the space it has, never above 100%.
+ *
+ * Given the pane's height too (desktop, where the pane has a fixed height), a
+ * page that already fits at 100% is enlarged until it fills the pane, up to
+ * 300%: a small label no longer sits tiny in a big canvas. A page larger than
+ * the pane still fits by width and scrolls down, as before.
+ */
+export function fitZoom(
+  availableWidth: number,
+  pageWidthPx: number,
+  availableHeight = 0,
+  pageHeightPx = 0,
+): number {
   // Width is 0 before the first measurement (and in jsdom): show the page at full size.
   if (availableWidth <= 0 || pageWidthPx <= 0) return 1;
-  return Math.min(
-    1,
-    Math.max(MIN_ZOOM, (availableWidth - PAD_X) / pageWidthPx),
-  );
+  const byWidth = (availableWidth - PAD_X) / pageWidthPx;
+  if (availableHeight > 0 && pageHeightPx > 0) {
+    const byHeight = (availableHeight - PAD_Y) / pageHeightPx;
+    const both = Math.min(byWidth, byHeight);
+    if (both > 1) return Math.min(MAX_FIT, both);
+  }
+  return Math.min(1, Math.max(MIN_ZOOM, byWidth));
 }
 
 /** The next zoom step above or below `zoom`, or `zoom` itself at the end of the range. */
@@ -77,21 +97,30 @@ export function CanvasWorkspace({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<ZoomMode>("fit");
   const [areaWidth, setAreaWidth] = useState(0);
+  const [areaHeight, setAreaHeight] = useState(0);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const measure = () => setAreaWidth(el.clientWidth);
+    const measure = () => {
+      setAreaWidth(el.clientWidth);
+      // On a phone the pane is as tall as the page, so its height says nothing:
+      // only a pane with a fixed height can ask Fit to enlarge the page.
+      setAreaHeight(fill ? el.clientHeight : 0);
+    };
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [fill]);
 
   const pageWidth = pageWidthMm * MM_TO_PX;
   const pageHeight = pageHeightMm * MM_TO_PX;
-  const zoom = mode === "fit" ? fitZoom(areaWidth, pageWidth) : mode;
+  const zoom =
+    mode === "fit"
+      ? fitZoom(areaWidth, pageWidth, areaHeight, pageHeight)
+      : mode;
   const pct = Math.round(zoom * 100);
   // While the template is momentarily invalid (an unclosed {{#each}}, say) the
   // page below shows the raw source; this says why.
@@ -184,7 +213,8 @@ export function CanvasWorkspace({
             {t("designer.canvas_size", { w: pageWidthMm, h: pageHeightMm })}
           </span>
         </span>
-        <div className="flex items-center gap-1">
+        {/* One joined control: zoom level, − / + and the live percentage. */}
+        <div className="inline-flex h-8 items-center overflow-hidden rounded-md border border-input bg-background">
           <Select
             value={selectValue}
             onValueChange={(v) => {
@@ -194,7 +224,7 @@ export function CanvasWorkspace({
           >
             <SelectTrigger
               aria-label={t("designer.zoom_level")}
-              className="h-8 w-24 text-xs"
+              className="h-full w-[4.5rem] rounded-none border-0 bg-transparent px-2.5 text-xs shadow-none ring-offset-0 focus:ring-inset focus:ring-offset-0"
             >
               <SelectValue />
             </SelectTrigger>
@@ -210,10 +240,11 @@ export function CanvasWorkspace({
               )}
             </SelectContent>
           </Select>
+          <span className="h-4 w-px bg-border" aria-hidden="true" />
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-full w-8 rounded-none"
             aria-label={t("designer.zoom_out")}
             title={t("designer.zoom_out")}
             disabled={zoom <= MIN_ZOOM + 0.001}
@@ -221,13 +252,16 @@ export function CanvasWorkspace({
           >
             <ZoomOut className="h-4 w-4" />
           </Button>
-          <span className="w-12 text-center text-xs" aria-live="polite">
+          <span
+            className="w-12 text-center text-xs tabular-nums"
+            aria-live="polite"
+          >
             {pct}%
           </span>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-full w-8 rounded-none"
             aria-label={t("designer.zoom_in")}
             title={t("designer.zoom_in")}
             disabled={zoom >= MAX_ZOOM - 0.001}
@@ -267,7 +301,7 @@ export function CanvasWorkspace({
         onTouchEnd={onTouchEnd}
         onTouchCancel={onTouchEnd}
         className={cn(
-          "flex overflow-auto bg-muted p-4 [scrollbar-gutter:stable] [touch-action:pan-x_pan-y]",
+          "flex overflow-auto bg-muted p-4 [background-image:radial-gradient(hsl(var(--border))_1px,transparent_1px)] [background-size:16px_16px] [scrollbar-gutter:stable] [touch-action:pan-x_pan-y]",
           fill ? "min-h-0 flex-1" : "min-h-[62dvh]",
         )}
       >

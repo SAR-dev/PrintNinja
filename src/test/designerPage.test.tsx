@@ -21,8 +21,9 @@ import "@/lib/i18n";
 import { EditorView } from "@uiw/react-codemirror";
 import { DesignerPage } from "@/pages/Designer";
 
-// The page reads templates and versions over IPC on mount; answer as a fresh
-// install does (see smoke.test.tsx).
+// The page reads templates and versions over IPC on mount. These tests
+// cover the editing workspace, so answer with one real row (an empty
+// account shows the New-template empty state instead — see smoke).
 const TEMPLATE_ROW = {
   id: 1,
   name: "Receipt",
@@ -34,18 +35,17 @@ const TEMPLATE_ROW = {
   compiled_css: "",
   compiled_key: "",
 };
-let templateId = 0;
 const EMPTY_LISTS = new Set([
-  "list_templates",
   "list_fonts",
   "list_printers",
   "list_datasets",
   "list_profiles",
 ]);
-const invoke = vi.fn(async (...args: any[]): Promise<any> => {
+const invoke = vi.fn(defaultImpl);
+async function defaultImpl(...args: any[]): Promise<any> {
   const cmd = args[0] as string;
   if (EMPTY_LISTS.has(cmd)) return [];
-  if (cmd === "create_template") return { ...TEMPLATE_ROW, id: ++templateId };
+  if (cmd === "list_templates") return [{ ...TEMPLATE_ROW }];
   if (cmd === "get_template")
     return {
       ...TEMPLATE_ROW,
@@ -57,7 +57,7 @@ const invoke = vi.fn(async (...args: any[]): Promise<any> => {
       withdrawn: false,
     };
   return null;
-});
+}
 vi.mock("@tauri-apps/api/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tauri-apps/api/core")>();
   return { ...actual, invoke: (...a: unknown[]) => invoke(...a) };
@@ -133,6 +133,51 @@ const openTab = (name: string) => {
 
 describe("Designer page layout on a phone", () => {
   beforeEach(() => setViewport("phone"));
+
+  it("holds a loading state instead of flashing the workspace", async () => {
+    invoke.mockImplementation(async (...args: any[]): Promise<any> => {
+      const cmd = args[0] as string;
+      if (EMPTY_LISTS.has(cmd)) return [];
+      // The template list never answers: the page must wait, not guess.
+      if (cmd === "list_templates") return new Promise(() => {});
+      return null;
+    });
+    try {
+      renderDesigner();
+      expect(await screen.findByRole("status")).toHaveTextContent("Loading…");
+      expect(screen.queryByText("No templates yet")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("tablist", { name: "Designer views" }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Canvas preview")).not.toBeInTheDocument();
+    } finally {
+      invoke.mockImplementation(defaultImpl);
+    }
+  });
+
+  it("shows an empty state with a New action when the account has no templates", async () => {
+    invoke.mockImplementation(async (...args: any[]): Promise<any> => {
+      const cmd = args[0] as string;
+      if (EMPTY_LISTS.has(cmd)) return [];
+      if (cmd === "list_templates") return [];
+      return null;
+    });
+    try {
+      renderDesigner();
+      // The workspace waits: no canvas, no tabs, just the way forward.
+      expect(await screen.findByText("No templates yet")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("tablist", { name: "Designer views" }),
+      ).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "New Template" }));
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("Template name", { selector: "input" }),
+      ).toBeInTheDocument();
+    } finally {
+      invoke.mockImplementation(defaultImpl);
+    }
+  });
 
   it("offers Canvas, Code, README and Sample data, and no Visual or Preview tab", async () => {
     renderDesigner();
@@ -231,14 +276,15 @@ describe("Designer page layout on a phone", () => {
     );
   });
 
-  it("saves the README from its tab", async () => {
+  it("has no Save of its own on the README tab: the sticky Save covers it", async () => {
     renderDesigner();
     await screen.findByTitle("Canvas preview");
     openTab("README");
-    fireEvent.click(await screen.findByRole("button", { name: "Save README" }));
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("update_readme", expect.anything()),
-    );
+    await screen.findByPlaceholderText(/Write your README/);
+    expect(
+      screen.queryByRole("button", { name: /Save README/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(1);
   });
 
   it("loads row content directly with the template list", async () => {
@@ -309,7 +355,7 @@ describe("Designer page layout on desktop", () => {
       Array.from(files.querySelectorAll('[role="tab"]')).map(
         (t) => t.textContent,
       ),
-    ).toEqual(["HTML", "CSS", "README", "Sample data"]);
+    ).toEqual(["HTML", "CSS", "README"]);
     // Both are on screen at once: no switching tabs to see an edit.
     expect(screen.getByLabelText("HTML editor")).toBeInTheDocument();
     expect(screen.getByTitle("Canvas preview")).toBeInTheDocument();
@@ -330,25 +376,38 @@ describe("Designer page layout on desktop", () => {
     const controls = within(
       screen.getByRole("complementary", { name: "Designer controls" }),
     );
-    const states = ["Templates", "Page Setup", "Helpers"].map((name) => [
+    const states = ["Page Setup", "Helpers"].map((name) => [
       name,
       controls.getByRole("button", { name }).getAttribute("aria-expanded"),
     ]);
     expect(states).toEqual([
-      ["Templates", "false"],
       ["Page Setup", "true"],
       ["Helpers", "false"],
     ]);
+    // Templates are switched, and renamed, from the top row instead.
+    expect(
+      controls.queryByRole("button", { name: "Templates" }),
+    ).not.toBeInTheDocument();
+    expect(controls.queryByLabelText("Template name")).not.toBeInTheDocument();
     expect(controls.getByLabelText("Width (mm)")).toBeInTheDocument();
   });
 
-  it("shows the sample datasets in the editor, after the README tab, where they drive the canvas", async () => {
+  it("shows the sample datasets in the controls column, open by default, beside the editor and canvas they drive", async () => {
     renderDesigner();
     await screen.findByTitle("Canvas preview");
-    openTab("Sample data");
+    const controls = within(
+      await screen.findByRole("complementary", { name: "Designer controls" }),
+    );
     expect(
-      await screen.findByRole("radio", { name: "Use dataset Sample Order" }),
+      controls.getByRole("button", { name: "Sample data" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      await controls.findByRole("radio", { name: "Use dataset Sample Order" }),
     ).toBeChecked();
+    // Not a tab in the code editor any more.
+    expect(
+      screen.queryByRole("tab", { name: "Sample data" }),
+    ).not.toBeInTheDocument();
   });
 
   it("changing the page size in the accordion resizes the canvas without leaving the editor", async () => {
@@ -419,7 +478,7 @@ describe("Designer page layout on desktop", () => {
     await screen.findByTitle("Canvas preview");
     openTab("README");
     expect(
-      await screen.findByRole("button", { name: "Save README" }),
+      await screen.findByRole("tab", { name: "Preview" }),
     ).toBeInTheDocument();
     expect(screen.getByTitle("Canvas preview")).toBeInTheDocument();
   });
@@ -509,8 +568,8 @@ describe("Designer page, phase 3 polish on desktop", () => {
       within(again).getByRole("button", { name: "Page Setup" }),
     ).toHaveAttribute("aria-expanded", "true");
     expect(
-      within(again).getByRole("button", { name: "Templates" }),
-    ).toHaveAttribute("aria-expanded", "false");
+      within(again).queryByRole("button", { name: "Templates" }),
+    ).not.toBeInTheDocument();
   });
 
   it("clicking a helper inserts it into the HTML editor", async () => {
@@ -579,6 +638,23 @@ describe("Designer page, phase 3 polish on desktop", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens the Sample data section from the icon rail on a narrow desktop", async () => {
+    setViewport("narrow-desktop");
+    window.localStorage.setItem(
+      "printninja.designer.openSections",
+      JSON.stringify(["page"]),
+    );
+    renderDesigner();
+    await screen.findByTitle("Canvas preview");
+    fireEvent.click(screen.getByRole("button", { name: "Open Sample data" }));
+    const aside = await screen.findByRole("complementary", {
+      name: "Designer controls",
+    });
+    expect(
+      within(aside).getByRole("button", { name: "Sample data" }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("shows the full controls column on a wide desktop, with no rail", async () => {
     renderDesigner();
     await screen.findByRole("complementary", { name: "Designer controls" });
@@ -617,5 +693,201 @@ describe("Designer page, phase 3 polish on desktop", () => {
       () => expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
       { timeout: 2000 },
     );
+  });
+});
+
+describe("Designer top row on desktop", () => {
+  const ROWS = [
+    { ...TEMPLATE_ROW, id: 1, name: "Receipt", origin: "own" },
+    {
+      ...TEMPLATE_ROW,
+      id: 2,
+      name: "Shipping label",
+      html: "<p>label</p>",
+      origin: "own",
+    },
+    {
+      ...TEMPLATE_ROW,
+      id: 3,
+      name: "Community tag",
+      html: "<p>tag</p>",
+      origin: "saved",
+    },
+  ];
+  const twoTemplates = async (...args: any[]): Promise<any> => {
+    const cmd = args[0] as string;
+    if (EMPTY_LISTS.has(cmd)) return [];
+    if (cmd === "list_templates") return ROWS.map((r) => ({ ...r }));
+    if (cmd === "get_template") {
+      const row = ROWS.find((r) => r.id === args[1]?.id) ?? ROWS[0];
+      return {
+        ...row,
+        summary: "",
+        readme: "",
+        remote_id: null,
+        published_at: null,
+        withdrawn: false,
+      };
+    }
+    return null;
+  };
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    setViewport("desktop");
+    invoke.mockImplementation(twoTemplates);
+  });
+  afterEach(() => {
+    setViewport("phone");
+    invoke.mockImplementation(defaultImpl);
+  });
+
+  const nameField = () =>
+    screen.getByRole("textbox", { name: "Template name" }) as HTMLInputElement;
+  const openSwitcher = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Switch template" }));
+
+  it("renames a template from one field only, in the top row", async () => {
+    renderDesigner();
+    await screen.findByTitle("Canvas preview");
+    expect(screen.getAllByLabelText("Template name")).toHaveLength(1);
+    const aside = screen.getByRole("complementary", {
+      name: "Designer controls",
+    });
+    expect(
+      within(aside).queryByLabelText("Template name"),
+    ).not.toBeInTheDocument();
+    expect(nameField()).toHaveValue("Receipt");
+  });
+
+  it("lists the templates in a searchable switcher, grouped Mine and Saved", async () => {
+    renderDesigner();
+    await screen.findByTitle("Canvas preview");
+    openSwitcher();
+    const list = await screen.findByRole("listbox");
+    expect(within(list).getByText("Mine")).toBeInTheDocument();
+    expect(within(list).getByText("Saved")).toBeInTheDocument();
+    expect(
+      within(list).getByRole("option", { name: /Shipping label/ }),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Search templates…"), {
+      target: { value: "tag" },
+    });
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("listbox")).queryByRole("option", {
+          name: /Shipping label/,
+        }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      within(screen.getByRole("listbox")).getByRole("option", {
+        name: /Community tag/,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("switches to the chosen template straight away when nothing is unsaved", async () => {
+    renderDesigner();
+    await screen.findByTitle("Canvas preview");
+    openSwitcher();
+    fireEvent.click(
+      await screen.findByRole("option", { name: /Shipping label/ }),
+    );
+    await waitFor(() => expect(nameField()).toHaveValue("Shipping label"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+  });
+
+  it("marks a rename as unsaved, and asks before a switch throws it away", async () => {
+    renderDesigner();
+    await screen.findByTitle("Canvas preview");
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    fireEvent.change(nameField(), { target: { value: "Receipt v2" } });
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+
+    openSwitcher();
+    fireEvent.click(
+      await screen.findByRole("option", { name: /Shipping label/ }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText("Discard unsaved changes?"),
+    ).toBeInTheDocument();
+
+    // Cancel keeps the edit and the template.
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(nameField()).toHaveValue("Receipt v2");
+
+    // Discard switches, and the new template starts clean.
+    openSwitcher();
+    fireEvent.click(
+      await screen.findByRole("option", { name: /Shipping label/ }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Discard changes",
+      }),
+    );
+    await waitFor(() => expect(nameField()).toHaveValue("Shipping label"));
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+  });
+
+  it("counts a README edit as unsaved, and asks before a switch throws it away", async () => {
+    renderDesigner();
+    await screen.findByTitle("Canvas preview");
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    openTab("README");
+    fireEvent.change(await screen.findByPlaceholderText(/Write your README/), {
+      target: { value: "# Notes for the label" },
+    });
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Save README/ }),
+    ).not.toBeInTheDocument();
+
+    openSwitcher();
+    fireEvent.click(
+      await screen.findByRole("option", { name: /Shipping label/ }),
+    );
+    expect(
+      within(await screen.findByRole("dialog")).getByText(
+        "Discard unsaved changes?",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a name that is empty or already taken under the field", async () => {
+    renderDesigner();
+    await screen.findByTitle("Canvas preview");
+    fireEvent.change(nameField(), { target: { value: "shipping LABEL" } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Template name taken",
+    );
+    expect(nameField()).toHaveAttribute("aria-invalid", "true");
+
+    fireEvent.change(nameField(), { target: { value: "  " } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Template name required",
+    );
+
+    fireEvent.change(nameField(), { target: { value: "Receipt 2" } });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(nameField()).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("shows the name of a saved (read-only) copy in a disabled field", async () => {
+    renderDesigner();
+    await screen.findByTitle("Canvas preview");
+    openSwitcher();
+    fireEvent.click(
+      await screen.findByRole("option", { name: /Community tag/ }),
+    );
+    await waitFor(() => expect(nameField()).toHaveValue("Community tag"));
+    expect(nameField()).toBeDisabled();
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
   });
 });

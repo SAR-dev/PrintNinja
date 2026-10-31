@@ -74,7 +74,13 @@ export function createSyncScheduler(deps: SchedulerDeps) {
   const backoffMs = () =>
     Math.min(BASE_BACKOFF_MS * 2 ** failures, MAX_BACKOFF_MS);
 
-  async function refreshNow(): Promise<void> {
+  async function refreshNow(opts?: { force?: boolean }): Promise<void> {
+    // A new sign-in is a fresh start: backoff earned while signed out
+    // (401s) must not delay the new account's first pull.
+    if (opts?.force) {
+      failures = 0;
+      backoffUntil = 0;
+    }
     if (running) {
       rerun = true;
       return;

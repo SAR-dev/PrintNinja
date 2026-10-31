@@ -12,7 +12,11 @@ import {
 } from "@/lib/templates/templateCss";
 import {
   DEFAULT_MOCK_DATA,
-  STARTER_TEMPLATES,
+  DEFAULT_TEMPLATE_HTML,
+  DEFAULT_TEMPLATE_CSS,
+  NEW_TEMPLATE_PAGE_W_MM,
+  NEW_TEMPLATE_PAGE_H_MM,
+  newTemplateContent,
 } from "@/lib/templates/defaultTemplate";
 
 describe("base print stylesheet", () => {
@@ -290,40 +294,47 @@ describe("barcode and qrcode helpers", () => {
   });
 });
 
-describe("starter templates", () => {
-  it("all render against the mock data without throwing", () => {
-    for (const tpl of STARTER_TEMPLATES) {
-      const out = renderTemplate(tpl.html, tpl.css, DEFAULT_MOCK_DATA as any);
-      expect(out, tpl.name).toContain("<!DOCTYPE html>");
-      expect(out, tpl.name).toContain("<style data-printninja>");
-      expect(out, tpl.name).not.toContain("cdn.tailwindcss.com");
-    }
+describe("new-template example content", () => {
+  it("renders against the mock data without throwing", () => {
+    const start = newTemplateContent("Example");
+    const out = renderTemplate(start.html, start.css, DEFAULT_MOCK_DATA as any);
+    expect(out).toContain("<!DOCTYPE html>");
+    expect(out).toContain("<style data-printninja>");
+    expect(out).not.toContain("cdn.tailwindcss.com");
   });
 
-  it("every starter template has sane page dimensions", () => {
-    for (const tpl of STARTER_TEMPLATES) {
-      expect(tpl.page_w_mm, tpl.name).toBeGreaterThan(0);
-      expect(tpl.page_h_mm, tpl.name).toBeGreaterThan(0);
-      expect(tpl.orientation, tpl.name).toMatch(/portrait|landscape/);
-    }
+  it("has sane page dimensions at label size", () => {
+    const start = newTemplateContent("Example");
+    expect(start.page_w_mm).toBe(NEW_TEMPLATE_PAGE_W_MM);
+    expect(start.page_h_mm).toBe(NEW_TEMPLATE_PAGE_H_MM);
+    expect(start.page_w_mm).toBeGreaterThan(0);
+    expect(start.page_h_mm).toBeGreaterThan(0);
   });
 
   it("the label resolves the mock order data", () => {
-    const label = STARTER_TEMPLATES[0];
-    const out = renderTemplate(label.html, label.css, DEFAULT_MOCK_DATA as any);
+    const out = renderTemplate(
+      DEFAULT_TEMPLATE_HTML,
+      DEFAULT_TEMPLATE_CSS,
+      DEFAULT_MOCK_DATA as any,
+    );
     expect(out).toContain(DEFAULT_MOCK_DATA.store.name);
     expect(out).toContain(DEFAULT_MOCK_DATA.order.id);
     expect(out).not.toContain("{{");
   });
 
   it("the label carries a Code 128 barcode of the tracking number", () => {
-    const label = STARTER_TEMPLATES[0];
-    expect(label.html).toContain('{{barcode "code128" order.tracking');
-    const out = renderTemplate(label.html, label.css, DEFAULT_MOCK_DATA as any);
+    expect(DEFAULT_TEMPLATE_HTML).toContain(
+      '{{barcode "code128" order.tracking',
+    );
+    const out = renderTemplate(
+      DEFAULT_TEMPLATE_HTML,
+      DEFAULT_TEMPLATE_CSS,
+      DEFAULT_MOCK_DATA as any,
+    );
     expect(out).toContain('<div class="barcode"');
     expect(out).toContain("<svg");
     // A different tracking number gives a different barcode.
-    const other = renderTemplate(label.html, label.css, {
+    const other = renderTemplate(DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS, {
       ...DEFAULT_MOCK_DATA,
       order: { ...DEFAULT_MOCK_DATA.order, tracking: "PN-0000-0000-XX" },
     } as any);

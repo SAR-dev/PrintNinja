@@ -75,7 +75,7 @@ export function CodeEditors({
               height="auto"
               extensions={[html(), CmView.lineWrapping]}
               onChange={onHtmlChange}
-              theme="dark"
+              theme="light"
               style={{ fontSize: "13px", maxHeight: "60vh" }}
               basicSetup={BASIC_SETUP}
               aria-label={t("designer.editor_html_label")}
@@ -94,7 +94,7 @@ export function CodeEditors({
               height="auto"
               extensions={[css(), CmView.lineWrapping]}
               onChange={onCssChange}
-              theme="dark"
+              theme="light"
               style={{ fontSize: "13px", maxHeight: "60vh" }}
               basicSetup={BASIC_SETUP}
               aria-label={t("designer.editor_css_label")}
@@ -106,7 +106,7 @@ export function CodeEditors({
   );
 }
 
-type EditorTab = "html" | "css" | "readme" | "sample";
+type EditorTab = "html" | "css" | "readme";
 
 /** What a parent can ask the editor pane to do. */
 export interface EditorPaneHandle {
@@ -121,18 +121,15 @@ export interface EditorPaneHandle {
 interface Props extends CodeProps {
   readme: string;
   onReadmeChange: (value: string) => void;
-  readmeSaving: boolean;
-  onSaveReadme: () => void;
+  /** A saved copy: the README shows but cannot be edited. */
+  readmeReadOnly?: boolean;
   /** Shown under the tabs while the HTML or CSS tab is open, such as the class-name warnings. */
   notices?: ReactNode;
   className?: string;
-  /** Content of the Sample data tab, after HTML / CSS / README. When omitted the tab is hidden. */
-  samplePanel?: ReactNode;
 }
 
 /**
- * The desktop editor: HTML, CSS, README and (optionally) sample data as tabs
- * in one pane that fills its parent and scrolls on its own. Both code
+ * The desktop editor: HTML, CSS and README as tabs in one pane that fills its parent and scrolls on its own. Both code
  * editors stay mounted, so switching tabs keeps each one's cursor, scroll
  * position and undo history.
  */
@@ -146,10 +143,8 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
       onCssChange,
       readme,
       onReadmeChange,
-      readmeSaving,
-      onSaveReadme,
+      readmeReadOnly = false,
       notices,
-      samplePanel,
       className,
     },
     ref,
@@ -201,32 +196,23 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
           className,
         )}
       >
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-1.5">
+        <div className="flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
+          {/* shrink-0 + overflow-visible: the tabs always fit on one line, so
+              no scrollbar appears under them however narrow the pane gets. */}
           <TabsList
             aria-label={t("designer.editor_files")}
-            className="min-h-8 w-max gap-0.5 p-0.5"
+            className="min-h-8 w-max shrink-0 gap-0.5 overflow-visible p-0.5"
           >
-            <TabsTrigger value="html" className="h-7 px-3 text-xs">
+            <TabsTrigger value="html" className="h-7 px-3.5 text-sm">
               {t("designer.editor_html")}
             </TabsTrigger>
-            <TabsTrigger value="css" className="h-7 px-3 text-xs">
+            <TabsTrigger value="css" className="h-7 px-3.5 text-sm">
               {t("designer.editor_css")}
             </TabsTrigger>
-            <TabsTrigger value="readme" className="h-7 px-3 text-xs">
+            <TabsTrigger value="readme" className="h-7 px-3.5 text-sm">
               {t("designer.readme")}
             </TabsTrigger>
-            {samplePanel !== undefined && (
-              <TabsTrigger value="sample" className="h-7 px-3 text-xs">
-                {t("designer.sampleData")}
-              </TabsTrigger>
-            )}
           </TabsList>
-          <span
-            className="min-w-0 truncate text-xs text-muted-foreground"
-            title={templateName}
-          >
-            {templateName}
-          </span>
         </div>
         {showNotices && notices && (
           <div className="max-h-40 shrink-0 overflow-auto border-b p-2">
@@ -245,10 +231,10 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
             className="h-full"
             value={htmlCode}
             height="100%"
-            extensions={[html()]}
+            extensions={[html(), CmView.lineWrapping]}
             onChange={onHtmlChange}
-            theme="dark"
-            style={{ fontSize: "13px" }}
+            theme="light"
+            style={{ fontSize: "14px" }}
             basicSetup={BASIC_SETUP}
             aria-label={t("designer.editor_html_label")}
           />
@@ -258,34 +244,27 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
             className="h-full"
             value={cssCode}
             height="100%"
-            extensions={[css()]}
+            extensions={[css(), CmView.lineWrapping]}
             onChange={onCssChange}
-            theme="dark"
-            style={{ fontSize: "13px" }}
+            theme="light"
+            style={{ fontSize: "14px" }}
             basicSetup={BASIC_SETUP}
             aria-label={t("designer.editor_css_label")}
           />
         </TabsContent>
+        {/* Edge to edge like the code tabs: the editor draws its own
+            toolbar and footer, so the tab adds no padding or second border. */}
         <TabsContent
           value="readme"
-          className="mt-0 min-h-0 flex-1 overflow-auto p-3"
+          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col"
         >
           <ReadmePanel
             readme={readme}
             onChange={onReadmeChange}
             templateName={templateName}
-            saving={readmeSaving}
-            onSave={onSaveReadme}
+            readOnly={readmeReadOnly}
           />
         </TabsContent>
-        {samplePanel !== undefined && (
-          <TabsContent
-            value="sample"
-            className="mt-0 min-h-0 flex-1 overflow-auto p-3"
-          >
-            {samplePanel}
-          </TabsContent>
-        )}
       </Tabs>
     );
   },

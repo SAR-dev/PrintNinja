@@ -24,6 +24,7 @@ const shareMock = vi.hoisted(() => ({
   getServiceUrl: vi.fn(async () => null as string | null),
   getSessionToken: vi.fn(async () => null as string | null),
   onSessionStarted: () => () => {},
+  onSessionEnded: () => () => {},
   hasUnpublishedChanges: (t: {
     remote_id: string | null;
     published_at: string | null;
@@ -42,7 +43,6 @@ vi.mock("@/lib/share/sync", async (importOriginal) => {
   return {
     ...actual,
     downloadToLocal: vi.fn(async () => ({ id: 9, created: true })),
-    listAvailableRemoteTemplates: vi.fn(async () => ({ mine: [], saved: [] })),
   };
 });
 const saveMock = vi.hoisted(() => ({
@@ -84,8 +84,8 @@ const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...a: unknown[]) => invoke(...a),
 }));
-vi.mock("@/lib/templates/seedTemplates", () => ({
-  ensureStarterTemplates: async () => [
+vi.mock("@/lib/templates/listTemplates", () => ({
+  listTemplates: async () => [
     {
       id: 7,
       name: "Shipping label",

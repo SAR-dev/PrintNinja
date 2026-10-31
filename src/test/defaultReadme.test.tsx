@@ -4,15 +4,15 @@ import "@/lib/i18n";
 import { ReadmeEditor } from "@/components/ReadmeEditor";
 import {
   DEFAULT_TEMPLATE_HTML,
-  STARTER_TEMPLATES,
   defaultTemplateReadme,
+  newTemplateContent,
 } from "@/lib/templates/defaultTemplate";
 
 const readme = defaultTemplateReadme("Shipping Label 4x6");
 
 describe("default template README", () => {
-  it("is the README the starter template ships with", () => {
-    expect(STARTER_TEMPLATES[0].readme).toBe(readme);
+  it("is the README a new template starts with", () => {
+    expect(newTemplateContent("Shipping Label 4x6").readme).toBe(readme);
   });
 
   it("uses only Markdown the preview renders: no comments, no raw HTML", () => {

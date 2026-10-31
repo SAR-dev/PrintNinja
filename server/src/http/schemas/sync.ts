@@ -14,6 +14,8 @@ export const syncQuery = z.object({
 
 const templateChangeData = templateSchema.extend({
   head_version_no: z.number().int(),
+  // Own rows land as editable originals; saved rows as read-only mirrors.
+  origin: z.enum(["own", "saved"]),
 });
 
 const templateUpsertChange = z.object({

@@ -6,6 +6,7 @@ import type {
 import { toPage } from "../../domain/pagination.js";
 import type { DbClient } from "./client.js";
 import { toTemplateSummaryView, toTemplateView } from "./views.js";
+import { bumpSeq } from "./templates.js";
 
 /**
  * Saved rows survive template deletes (no FK to templates — E14 needs
@@ -51,15 +52,42 @@ export function createSavedRepository(db: DbClient): SavedRepository {
     },
 
     async save(userId: string, templateId: string): Promise<void> {
-      await db.savedTemplate.upsert({
-        where: { userId_templateId: { userId, templateId } },
-        update: {},
-        create: { userId, templateId },
+      await db.$transaction(async (tx) => {
+        const seq = await bumpSeq(tx, userId);
+        await tx.savedTemplate.upsert({
+          where: { userId_templateId: { userId, templateId } },
+          // A repeat save re-stamps: the mirror is re-emitted, and the
+          // apply is idempotent, so this stays a 204 with no downside.
+          update: { changeSeq: seq },
+          create: { userId, templateId, changeSeq: seq },
+        });
       });
     },
 
     async unsave(userId: string, templateId: string): Promise<void> {
-      await db.savedTemplate.deleteMany({ where: { userId, templateId } });
+      await db.$transaction(async (tx) => {
+        const deleted = await tx.savedTemplate.deleteMany({
+          where: { userId, templateId },
+        });
+        if (deleted.count === 0) {
+          return;
+        }
+        // The local mirror must go too, on every PC: the tombstone lands
+        // in the saver's stream and the pull forgets the row. No tombstone
+        // for the author's own row — their own feed owns that lifecycle,
+        // and a tombstone here would delete their template locally.
+        const template = await tx.template.findUnique({
+          where: { id: templateId },
+          select: { ownerId: true },
+        });
+        if (template && template.ownerId === userId) {
+          return;
+        }
+        const seq = await bumpSeq(tx, userId);
+        await tx.tombstone.create({
+          data: { userId, seq, entity: "template", entityKey: templateId },
+        });
+      });
     },
 
     async listManifest(userId: string): Promise<ManifestSource[]> {

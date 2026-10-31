@@ -3,8 +3,18 @@ import { useTranslation } from "react-i18next";
 import { currentLanguage } from "@/lib/i18n";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  Bold,
+  Code,
+  Heading2,
+  Link2,
+  List,
+  Quote,
+  RotateCcw,
+  SquareCode,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { DisabledReason } from "@/components/ui/disabled-reason";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -55,6 +65,8 @@ interface ReadmeEditorProps {
   templateName: string;
   onReset?: () => void;
   scaffoldForName?: string;
+  /** A saved copy: the text shows, but nothing can change it. */
+  readOnly?: boolean;
 }
 
 function scaffoldFor(templateName: string): string {
@@ -115,6 +127,7 @@ export function ReadmeEditor({
   templateName,
   onReset,
   scaffoldForName,
+  readOnly = false,
 }: ReadmeEditorProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<"edit" | "preview">("edit");
@@ -188,113 +201,72 @@ export function ReadmeEditor({
   };
 
   const preview = (
-    <div className="readme-preview p-4 border rounded-md bg-card min-h-[300px] overflow-auto">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, stripHtmlComments]}
-        // No rehype-raw: raw HTML stays as text, which is the XSS guarantee
-        components={{
-          a: ({ href, children, ...props }) => {
-            const safe = href && /^(https?:\/\/|mailto:)/i.test(href);
-            if (!safe) {
-              return <span {...props}>{children}</span>;
-            }
-            return (
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                {...props}
-              >
-                {children}
-              </a>
-            );
-          },
-        }}
-      >
-        {value || t("readme.empty_hint")}
-      </ReactMarkdown>
+    <div className="min-h-0 flex-1 overflow-auto bg-card px-6 py-5">
+      <div className="readme-preview mx-auto max-w-[72ch]">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, stripHtmlComments]}
+          // No rehype-raw: raw HTML stays as text, which is the XSS guarantee
+          components={{
+            a: ({ href, children, ...props }) => {
+              const safe = href && /^(https?:\/\/|mailto:)/i.test(href);
+              if (!safe) {
+                return <span {...props}>{children}</span>;
+              }
+              return (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  {...props}
+                >
+                  {children}
+                </a>
+              );
+            },
+          }}
+        >
+          {value || t("readme.empty_hint")}
+        </ReactMarkdown>
+      </div>
     </div>
   );
 
+  const tools: Array<{
+    action: string;
+    label: string;
+    icon: typeof Bold;
+  }> = [
+    { action: "bold", label: t("readme.tool_bold"), icon: Bold },
+    { action: "heading", label: t("readme.tool_heading"), icon: Heading2 },
+    { action: "link", label: t("readme.tool_link"), icon: Link2 },
+    { action: "code", label: t("readme.tool_code"), icon: Code },
+    {
+      action: "codeblock",
+      label: t("readme.tool_codeblock"),
+      icon: SquareCode,
+    },
+    { action: "list", label: t("readme.tool_list"), icon: List },
+    { action: "quote", label: t("readme.tool_quote"), icon: Quote },
+  ];
+
+  // Edge to edge, like the HTML and CSS editors: the pane's own border frames
+  // it, so the text area carries none, and the size sits in a slim footer.
   const editor = (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-1 p-1 border rounded-md bg-muted/30">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handleToolbar("bold")}
-          title={t("readme.tool_bold")}
-        >
-          <strong>B</strong>
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handleToolbar("heading")}
-          title={t("readme.tool_heading")}
-        >
-          H
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handleToolbar("link")}
-          title={t("readme.tool_link")}
-        >
-          🔗
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handleToolbar("code")}
-          title={t("readme.tool_code")}
-        >
-          {"</>"}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handleToolbar("codeblock")}
-          title={t("readme.tool_codeblock")}
-        >
-          {"```"}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handleToolbar("list")}
-          title={t("readme.tool_list")}
-        >
-          • {t("readme.list_label")}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handleToolbar("quote")}
-          title={t("readme.tool_quote")}
-        >
-          ❝
-        </Button>
-        <div className="flex-1" />
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowResetDialog(true)}
-          title={t("readme.tool_reset")}
-        >
-          {t("readme.reset")}
-        </Button>
-      </div>
-      <Textarea
+    <>
+      <textarea
         ref={textareaRef}
         value={value}
+        readOnly={readOnly}
         onChange={(e) => onChange(e.target.value)}
         placeholder={t("readme.placeholder")}
-        className="min-h-[300px] font-mono text-sm"
-        rows={16}
+        spellCheck={false}
+        data-slot="textarea"
+        className={`min-h-[240px] w-full flex-1 resize-none bg-card px-5 py-4 font-mono text-[13px] leading-6 [tab-size:2] placeholder:text-muted-foreground focus-visible:outline-none ${
+          readOnly ? "cursor-default bg-muted/40" : ""
+        }`}
       />
       <div
-        className={`text-xs ${overCap ? "text-destructive font-medium" : "text-muted-foreground"}`}
+        className={`shrink-0 border-t px-4 py-1.5 text-xs tabular-nums ${overCap ? "font-medium text-destructive" : "text-muted-foreground"}`}
       >
         {t("readme.byte_count", {
           used: bytes.toLocaleString(currentLanguage()),
@@ -302,22 +274,87 @@ export function ReadmeEditor({
         })}
         {overCap && t("readme.over_cap")}
       </div>
+    </>
+  );
+
+  // Formatting tools only act on the editor, so the preview shows none.
+  const toolbar = (
+    <div
+      role="toolbar"
+      aria-label={t("readme.edit")}
+      className="flex items-center gap-0.5"
+    >
+      {tools.map(({ action, label, icon: Icon }) => (
+        <Button
+          key={action}
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          disabled={readOnly}
+          onClick={() => handleToolbar(action)}
+          title={label}
+          aria-label={label}
+        >
+          <Icon className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      ))}
     </div>
+  );
+
+  const resetButton = (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-muted-foreground hover:text-foreground"
+      disabled={readOnly}
+      onClick={() => setShowResetDialog(true)}
+      title={t("readme.tool_reset")}
+    >
+      <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+      {t("readme.reset")}
+    </Button>
   );
 
   return (
     <>
       {/* Edit and preview share one pane: the preview renders on demand
-        instead of live beside the editor. */}
-      <div>
-        <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="edit">{t("readme.edit")}</TabsTrigger>
-            <TabsTrigger value="preview">{t("readme.preview")}</TabsTrigger>
+        instead of live beside the editor. The pane fills the height it is
+        given, so the text area grows with the window instead of ending
+        halfway down. There is no Save here: the Designer's Save sends the
+        README with the rest of the template. */}
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as typeof tab)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b bg-muted/30 px-3 py-1.5">
+          <TabsList className="min-h-8 w-max shrink-0 gap-0.5 overflow-visible p-0.5">
+            <TabsTrigger value="edit" className="h-7 px-3.5 text-sm">
+              {t("readme.edit")}
+            </TabsTrigger>
+            <TabsTrigger value="preview" className="h-7 px-3.5 text-sm">
+              {t("readme.preview")}
+            </TabsTrigger>
           </TabsList>
-          <div className="mt-4">{tab === "edit" ? editor : preview}</div>
-        </Tabs>
-      </div>
+          {tab === "edit" && (
+            <div className="ml-auto">
+              <DisabledReason
+                reason={readOnly ? t("designer.reason_readonly") : undefined}
+              >
+                <div className="flex items-center gap-1">
+                  {toolbar}
+                  <span
+                    className="mx-1 h-5 w-px bg-border"
+                    aria-hidden="true"
+                  />
+                  {resetButton}
+                </div>
+              </DisabledReason>
+            </div>
+          )}
+        </div>
+        {tab === "edit" ? editor : preview}
+      </Tabs>
 
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
         <DialogContent>
