@@ -409,7 +409,20 @@ pub async fn claim(
         .trim()
         .trim_end_matches('/')
         .to_string();
-    if phone_account.is_empty() || phone_account.len() > 128 || phone_url.is_empty() {
+    if phone_account.is_empty() {
+        // No account, no invite match: the code is mistyped, revoked, or
+        // the owner's 90-second code, which guests can never use. Say so
+        // instead of sending a guest to sign in — that fixes nothing.
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "that code did not match any guest invite — ask the PC owner for an invite code (the 90-second owner code needs a signed-in account)",
+                "code": "guest_invite_required",
+            })),
+        )
+            .into_response();
+    }
+    if phone_account.len() > 128 || phone_url.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({
