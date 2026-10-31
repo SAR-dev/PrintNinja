@@ -1,6 +1,6 @@
 # TODO: pair-phone vs invite-guest clarity (PC Phones tab)
 
-Status: plan only, not implemented.
+Status: implemented on branch `pair-guest-automation-ux`.
 
 Problem: both actions produce an identical-looking code typed into the
 identical phone-side field. The only differences are invisible at a
@@ -29,7 +29,7 @@ Deliberately out of scope: code mechanics, expiry defaults, phone UI
 
 # TODO: mobile opens on Automation with the PC tab first
 
-Status: plan only, not implemented.
+Status: implemented on branch `pair-guest-automation-ux`.
 
 Findings: `startOnPrint()` rewrites bare `/` → `/print` for everyone,
 and the mobile bottom bar is Print/History/Templates/Printers + More
@@ -63,7 +63,7 @@ bigger change.
 
 # TODO: show the guest name of the paired phone on the PC
 
-Status: plan only, not implemented.
+Status: implemented on branch `pair-guest-automation-ux`.
 
 Today every guest shows up as "Android phone" because `pair_with_code`
 hardcodes `device_name` to `phone_name()`. The claim
@@ -85,7 +85,7 @@ handle the guest (or session) picked.
 
 # TODO: guest name step after "Continue as guest"
 
-Status: plan only, not implemented.
+Status: implemented on branch `pair-guest-automation-ux`.
 
 The name field sitting inline on the sign-in form is noisy — most
 visitors never use it. Instead: "Continue as guest" swaps the form to

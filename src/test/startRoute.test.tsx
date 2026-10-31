@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { useEffect } from "react";
 import { Link, Route, Routes } from "react-router-dom";
@@ -16,6 +16,21 @@ describe("startOnPrint", () => {
     expect(window.location.pathname).toBe("/print");
     expect(window.location.search).toBe("?from=launcher");
     expect(window.location.hash).toBe("#x");
+  });
+
+  it("rewrites a bare / to /automation on Android", () => {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    try {
+      visit("/?from=launcher#x");
+      startOnPrint();
+      expect(window.location.pathname).toBe("/automation");
+      expect(window.location.search).toBe("?from=launcher");
+      expect(window.location.hash).toBe("#x");
+    } finally {
+      ua.mockRestore();
+    }
   });
 
   it.each(["/history", "/template/4", "/print", "/templates"])(

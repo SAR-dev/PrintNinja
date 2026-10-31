@@ -128,6 +128,54 @@ describe("PairingGate", () => {
     }
   });
 
+  it("sends the picked handle as the PC's device name", async () => {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    (window as any).__TAURI_INTERNALS__ = {};
+    localStorage.setItem("printninja-session-handle", "sam");
+    const settings: Record<string, string> = {};
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      switch (cmd) {
+        case "get_setting":
+          return settings[String(args?.key)] ?? null;
+        case "set_setting":
+          settings[String(args?.key)] = String(args?.value);
+          return null;
+        case "pair_with_code":
+          return {
+            id: "provider-1",
+            name: "Shop PC",
+            host: "192.168.1.9",
+            port: 17717,
+            secret: "tokentokentokentokentokentoken01",
+            fingerprint: "f".repeat(64),
+            provider_id: "provider-1",
+          };
+        case "peer_capabilities":
+          return { protocol: 1, can_render: true, score: 800, cores: 8 };
+        default:
+          return null;
+      }
+    });
+    try {
+      const view = render(<PairingGate onPaired={() => {}} />);
+      const input = await screen.findByTestId("devices-code-input");
+      fireEvent.change(input, { target: { value: "k7qm-4xpd" } });
+      fireEvent.click(screen.getByTestId("devices-code-submit"));
+      await waitFor(() =>
+        expect(invoke).toHaveBeenCalledWith(
+          "pair_with_code",
+          expect.objectContaining({ device_name: "sam" }),
+        ),
+      );
+      view.unmount();
+    } finally {
+      (window as any).__TAURI_INTERNALS__ = undefined;
+      ua.mockRestore();
+    }
+  });
+
   // Regression: pairing used to be noticed only by the gate's 2s poll, so  // after a successful pair the freshly-paired device sat on the welcome
   // screen for up to two seconds before /print replaced it. Pairing now
   // signals onPaired directly, so it must fire well before any poll tick.

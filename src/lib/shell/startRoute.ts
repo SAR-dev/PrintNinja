@@ -1,5 +1,10 @@
+import { isAndroid } from "@/lib/platform";
+
 /**
- * The app opens on the Print page, not the Designer (which is also at "/").
+ * Where the app opens. Phones open on Automation: pairing and Print
+ * via PC live there, Templates matter less, and printing needs a pair
+ * anyway. Everywhere else opens on Print, not the Designer (which is
+ * also at "/").
  *
  * This used to be an effect that called `navigate("/print")` after the router
  * had mounted at "/", so the Designer rendered for a frame before the Print
@@ -15,9 +20,10 @@ export function startOnPrint(): void {
   if (window.location.pathname !== "/") return;
   // Keep any query string or hash the launcher passed along.
   const { search, hash } = window.location;
+  const target = isAndroid() ? "/automation" : "/print";
   window.history.replaceState(
     window.history.state,
     "",
-    `/print${search}${hash}`,
+    `${target}${search}${hash}`,
   );
 }
