@@ -77,4 +77,22 @@ describe("Print via PC card", () => {
     fireEvent.click(screen.getByTestId("via-pc-device"));
     expect(await screen.findByText("Shop PC")).toBeInTheDocument();
   });
+
+  it("enables in place when a pair lands elsewhere, with no reload", async () => {
+    settingsBackend([]);
+    render(<PrintViaPcCard />);
+    const flip = await screen.findByTestId("via-pc-switch");
+    expect(flip).toBeDisabled();
+
+    // A pairing made in the DevicesCard above writes the same setting;
+    // the card re-reads on the event instead of waiting for a remount.
+    settingsBackend([PAIR("pc-1", "Studio PC")]);
+    const { writeSetting } = await import("@/lib/settings");
+    await writeSetting(
+      "render_pairs",
+      JSON.stringify([PAIR("pc-1", "Studio PC")]),
+    );
+    await waitFor(() => expect(flip).toBeEnabled());
+    expect(screen.queryByTestId("via-pc-no-pairs")).not.toBeInTheDocument();
+  });
 });
