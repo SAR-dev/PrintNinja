@@ -4,6 +4,7 @@ import { notifyError } from "@/lib/notify";
 import type { RenderPair } from "@/lib/agent/types";
 import { describeError } from "@/lib/errors";
 import { isAndroid } from "@/lib/platform";
+import { useSettingChanged } from "@/lib/hooks/useSettingChanged";
 import {
   getPrintViaPcDevice,
   isPrintViaPc,
@@ -56,6 +57,11 @@ export function PrintViaPcCard() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // A pair made in the DevicesCard above lands in the same setting:
+  // re-read it so the switch enables in the same tick, not after a
+  // reload. Removals flow back the same way and disable it again.
+  useSettingChanged(["render_pairs"], () => void load());
 
   if (!isAndroid()) return null;
 
