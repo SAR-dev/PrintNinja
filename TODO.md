@@ -27,6 +27,30 @@ gets.
 Deliberately out of scope: code mechanics, expiry defaults, phone UI
 (it types a code either way; the server already tells kinds apart).
 
+# TODO: mobile opens on Automation with the PC tab first
+
+Status: plan only, not implemented.
+
+On mobile the Automation menu matters most (pairing, Print via PC)
+and Templates least, yet a phone opens on Print with Automation buried
+under More, and Automation itself opens on the server tab.
+
+1. `startOnPrint()` becomes platform-aware: bare `/` rewrites to
+   `/automation` on Android, `/print` elsewhere. Deep links and
+   bookmarks untouched (only bare `/` is rewritten).
+2. Default Automation tab becomes `isAndroid() ? "phones" : "server"`,
+   in both the `parseAutomationTab` fallback and `openTab`'s param
+   cleanup (which deletes `?tab=` for the default). Header badge links
+   already pin `?tab=phones`, so they are unaffected.
+3. Tests: Android-UA variants for the landing rewrite and the default
+   tab; desktop behavior unchanged. Then `tsc -b`, `pnpm lint`,
+   targeted vitest.
+4. Docs: `docs/UI_GUIDE.md` automation row (unknown-tab rule becomes
+   platform-dependent) and the `startRoute.ts` comment.
+
+Deliberately out of scope: bottom-bar composition (Templates stays;
+only the landing changes).
+
 # TODO: show the guest name of the paired phone on the PC
 
 Status: plan only, not implemented.
