@@ -116,6 +116,26 @@ describe("DesignerToolbar", () => {
     expect(onTemplateNameChange).toHaveBeenCalledWith("Renamed");
   });
 
+  it("puts the template switcher inside the name field as an icon, so the name is not repeated", () => {
+    render(
+      <DesignerToolbar
+        {...base}
+        templates={[{ id: 1, name: "Label" }]}
+        currentTemplateId={1}
+        onSelectTemplate={vi.fn()}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    const switcher = screen.getByRole("button", { name: "Switch template" });
+    const name = screen.getByRole("textbox", { name: "Template name" });
+    // Same frame, and no "Templates" word beside the name.
+    const frame = switcher.closest('[data-slot="template-field"]');
+    expect(frame).not.toBeNull();
+    expect(name.closest('[data-slot="template-field"]')).toBe(frame);
+    expect(switcher).toHaveTextContent("");
+  });
+
   it("shows only New until a template is open", () => {
     render(
       <DesignerToolbar
@@ -860,32 +880,12 @@ describe("EditorPane", () => {
     expect(p.onSaveReadme).toHaveBeenCalled();
   });
 
-  it("shows a Sample data tab after README when given sample content", () => {
-    render(<EditorPane {...props()} samplePanel={<p>datasets here</p>} />);
-    const names = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(names).toEqual(["HTML", "CSS", "README", "Sample data"]);
-    openTab("Sample data");
-    expect(screen.getByRole("tab", { name: "Sample data" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(screen.getByText("datasets here")).toBeVisible();
-  });
-
-  it("shows notices under the HTML and CSS tabs, but not README or Sample data", () => {
-    render(
-      <EditorPane
-        {...props()}
-        notices={<p>watch out</p>}
-        samplePanel={<p>datasets here</p>}
-      />,
-    );
+  it("shows notices under the HTML and CSS tabs, but not README", () => {
+    render(<EditorPane {...props()} notices={<p>watch out</p>} />);
     expect(screen.getByText("watch out")).toBeInTheDocument();
     openTab("CSS");
     expect(screen.getByText("watch out")).toBeInTheDocument();
     openTab("README");
-    expect(screen.queryByText("watch out")).not.toBeInTheDocument();
-    openTab("Sample data");
     expect(screen.queryByText("watch out")).not.toBeInTheDocument();
   });
 
@@ -923,9 +923,18 @@ describe("EditorPane", () => {
     expect(screen.queryByText(/README — Label/)).not.toBeInTheDocument();
   });
 
-  it("shows the template name beside the tabs", () => {
-    render(<EditorPane {...props()} />);
-    expect(screen.getByTitle("Label")).toHaveTextContent("Label");
+  it("keeps the tab row to the tabs alone, so a long name cannot squeeze them into a scrollbar", () => {
+    render(
+      <EditorPane
+        {...props()}
+        templateName="Parcel Tag 80mm (1793396109) with a very long name"
+      />,
+    );
+    const list = screen.getByRole("tablist", { name: "Editor files" });
+    expect(list).toHaveClass("shrink-0", "overflow-visible");
+    expect(
+      screen.queryByTitle("Parcel Tag 80mm (1793396109) with a very long name"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders the initial HTML and CSS without reporting a change", () => {
@@ -1120,12 +1129,14 @@ describe("ControlsRail", () => {
     expect(onOpenSection).toHaveBeenCalledWith("helpers");
     fireEvent.click(screen.getByRole("button", { name: "Open Helpers" }));
     expect(onOpenSection).toHaveBeenCalledWith("helpers");
+    fireEvent.click(screen.getByRole("button", { name: "Open Sample data" }));
+    expect(onOpenSection).toHaveBeenCalledWith("sample");
     fireEvent.click(screen.getByRole("button", { name: "Open Custom input" }));
     expect(onOpenSection).toHaveBeenCalledWith("custom");
     fireEvent.click(screen.getByRole("button", { name: "Expand controls" }));
     expect(onExpand).toHaveBeenCalled();
-    // Expand, Page Setup, Helpers, Custom input. Templates live in the top row.
-    expect(screen.getAllByRole("button")).toHaveLength(4);
+    // Expand, Page Setup, Sample data, Helpers, Custom input. Templates live in the top row.
+    expect(screen.getAllByRole("button")).toHaveLength(5);
     expect(
       screen.queryByRole("button", { name: "Open Templates" }),
     ).not.toBeInTheDocument();
