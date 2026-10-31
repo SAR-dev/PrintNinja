@@ -1037,7 +1037,7 @@ fn clean_display_name(name: &str) -> AppResult<Option<String>> {
 
 #[cfg(test)]
 mod paired_device_tests {
-    use super::clean_display_name;
+    use super::{claim_display_name, clean_display_name};
 
     #[test]
     fn rename_sets_trims_caps_and_clears_on_empty() {
@@ -1049,6 +1049,18 @@ mod paired_device_tests {
         assert_eq!(clean_display_name("   ").unwrap(), None);
         assert!(clean_display_name(&"n".repeat(64)).is_ok());
         assert!(clean_display_name(&"n".repeat(65)).is_err());
+    }
+
+    #[test]
+    fn claim_uses_the_picked_handle_then_the_device_name() {
+        assert_eq!(
+            claim_display_name(Some("  sam  ".into())),
+            "sam".to_string()
+        );
+        assert_eq!(claim_display_name(Some("x".repeat(100))).len(), 64);
+        // Absent or blank: the generic name the PC has always shown.
+        assert_eq!(claim_display_name(None), super::phone_name());
+        assert_eq!(claim_display_name(Some("   ".into())), super::phone_name());
     }
 }
 /// This phone's stable id, minted once: the PC stores it as
@@ -1231,30 +1243,46 @@ async fn probe_subnet(port: u16) -> Vec<(String, HelloReply)> {
     found
 }
 
+/// What one claim attempt carries: endpoint, code, and this phone's
+/// identity for the PC's registry.
+struct ClaimTarget<'a> {
+    host: &'a str,
+    port: u16,
+    code: &'a str,
+    device_id: &'a str,
+    account_id: &'a str,
+    service_url: &'a str,
+    device_name: &'a str,
+}
+
 async fn claim_at(
     client: &reqwest::Client,
-    host: &str,
-    port: u16,
-    code: &str,
-    device_id: &str,
-    account_id: &str,
-    service_url: &str,
+    target: &ClaimTarget<'_>,
 ) -> Result<ClaimReply, String> {
     let res = client
-        .post(format!("http://{host}:{port}/v1/pair/claim"))
+        .post(format!(
+            "http://{host}:{port}/v1/pair/claim",
+            host = target.host,
+            port = target.port
+        ))
         .json(&serde_json::json!({
             "protocol": crate::api::render_share::PROTOCOL_VERSION,
-            "code": code,
-            "device_id": device_id,
-            "device_name": phone_name(),
+            "code": target.code,
+            "device_id": target.device_id,
+            "device_name": target.device_name,
             "platform": std::env::consts::OS,
-            "account_id": account_id,
-            "service_url": service_url,
+            "account_id": target.account_id,
+            "service_url": target.service_url,
         }))
         .send()
         .await
         .map_err(|e| {
-            crate::api::peer_consume::describe_no_answer_for(&phone_name(), host, port, &e)
+            crate::api::peer_consume::describe_no_answer_for(
+                &phone_name(),
+                target.host,
+                target.port,
+                &e,
+            )
         })?;
     let status = res.status();
     if status == reqwest::StatusCode::NOT_FOUND {
@@ -1317,6 +1345,7 @@ pub async fn pair_with_code(
     code: String,
     host: Option<String>,
     port: Option<u16>,
+    device_name: Option<String>,
 ) -> AppResult<crate::api::peer_consume::RenderPair> {
     let normalized = crate::api::pair_code::normalize_code(&code);
     if !crate::api::pair_code::valid_format(&normalized) {
@@ -1324,6 +1353,10 @@ pub async fn pair_with_code(
             "Enter the 8-character code shown on the PC.".into(),
         ));
     }
+    // The name the PC lists this phone under: the handle the person
+    // picked, falling back to the generic device name. Trimmed and
+    // capped; the server truncates and defaults the rest.
+    let display_name = claim_display_name(device_name);
     let client = pair_client().map_err(AppError::Internal)?;
     // Our stable id for the PC's registry.
     let device_id = {
@@ -1398,17 +1431,16 @@ pub async fn pair_with_code(
     }
     let mut last_err = String::new();
     for (h, p) in &candidates {
-        match claim_at(
-            &client,
-            h,
-            *p,
-            &normalized,
-            &device_id,
-            &account_id,
-            &service_url,
-        )
-        .await
-        {
+        let target = ClaimTarget {
+            host: h,
+            port: *p,
+            code: &normalized,
+            device_id: &device_id,
+            account_id: &account_id,
+            service_url: &service_url,
+            device_name: &display_name,
+        };
+        match claim_at(&client, &target).await {
             Ok(reply) => {
                 let pair = crate::api::peer_consume::RenderPair {
                     id: reply.provider_id.clone(),
@@ -1462,6 +1494,22 @@ pub async fn pair_with_code(
     } else {
         last_err
     }))
+}
+
+/// The name the PC lists a newly paired phone under: the handle the
+/// person picked, or the generic device name when none was sent.
+pub fn claim_display_name(device_name: Option<String>) -> String {
+    let picked = device_name
+        .unwrap_or_default()
+        .trim()
+        .chars()
+        .take(64)
+        .collect::<String>();
+    if picked.is_empty() {
+        phone_name()
+    } else {
+        picked
+    }
 }
 
 /// This PC's display name for pairing.

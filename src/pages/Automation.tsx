@@ -19,11 +19,16 @@ export const AUTOMATION_TABS = [
 ] as const;
 export type AutomationTab = (typeof AUTOMATION_TABS)[number];
 
-/** Unknown or missing `?tab=` lands on the server, where everything starts. */
+/** Unknown or missing `?tab=` lands on the default: phones on Android
+ * (pairing and Print via PC live there), server everywhere else. */
+export function defaultAutomationTab(): AutomationTab {
+  return isAndroid() ? "phones" : "server";
+}
+
 export function parseAutomationTab(raw: string | null): AutomationTab {
   return (AUTOMATION_TABS as readonly string[]).includes(raw ?? "")
     ? (raw as AutomationTab)
-    : "server";
+    : defaultAutomationTab();
 }
 
 /**
@@ -41,7 +46,9 @@ export function AutomationPage() {
   useFlashField(searchParams.get("field"), true, [tab]);
   const openTab = (next: AutomationTab) => {
     const params = new URLSearchParams(searchParams);
-    if (next === "server") params.delete("tab");
+    // The default tab owns the bare URL, so shared and bookmarked links
+    // stay clean on either platform.
+    if (next === defaultAutomationTab()) params.delete("tab");
     else params.set("tab", next);
     // A flash target belongs to the tab the link opened, not the next one.
     params.delete("field");

@@ -885,7 +885,12 @@ const ja: Translation = {
     devices_pc_hint:
       "同じWi-Fi上のスマートフォンが、このPCでPDFを作成できるようにします。このPCからの印刷は変わりません。",
     devices_lan_enable: "Wi-Fiアクセスをオンにする",
-    devices_pair_phone: "スマートフォンをペアリング",
+    devices_own_title: "自分のスマートフォン",
+    devices_own_desc: "同じアカウントでサインイン。無期限、フルアクセス。",
+    devices_guest_title: "他の人のスマートフォン（ゲスト）",
+    devices_guest_desc:
+      "アカウント不要。自動的に期限切れ。印刷は任意。ゲストはテンプレートを名前で使えますが、読み取りや変更はできません。",
+    devices_pair_my_phone: "自分の電話をペアリング",
     devices_pair_phone_hide: "ペアリングコードを隠す",
     devices_code_hint:
       "スマートフォン側：設定 → 共有レンダリング → このコードを入力。まもなく期限切れになります。しばらくは新しいコードが自動で表示され、その後は「新しいコード」で取得できます。",

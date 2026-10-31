@@ -30,6 +30,7 @@ vi.mock("@/lib/share/client", () => ({
   logout: async () => {},
   onSessionStarted: () => () => {},
   onSessionEnded: () => () => {},
+  getWelcomeName: () => null,
 }));
 
 import { AutomationPage } from "@/pages/Automation";
@@ -72,6 +73,21 @@ describe("Automation page", () => {
       "true",
     );
     expect(screen.getByText("Local API server")).toBeInTheDocument();
+  });
+
+  it("opens on the PC tab on Android", () => {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    try {
+      renderPage();
+      expect(screen.getByRole("tab", { name: "PC" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    } finally {
+      ua.mockRestore();
+    }
   });
 
   it("keeps each switch in one tab: start and stop only on the server", async () => {
@@ -132,6 +148,21 @@ describe("Automation page", () => {
       "aria-selected",
       "true",
     );
+  });
+
+  it("falls back to the PC tab for an unknown ?tab= on Android", () => {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    try {
+      renderPage("nonsense");
+      expect(screen.getByRole("tab", { name: "PC" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    } finally {
+      ua.mockRestore();
+    }
   });
 
   it("groups deep-link trust under its own tab", async () => {
