@@ -1,7 +1,9 @@
 import { describeError } from "@/lib/errors";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { notifyError } from "@/lib/notify";
+import { useCanPrint } from "@/lib/hooks/useCanPrint";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -199,6 +201,8 @@ export function ApiExplorerPanel({
     status: number;
     text: string;
   } | null>(null);
+  // Unpaired Android phones cannot print anywhere, including here.
+  const canPrint = useCanPrint();
 
   const loadStatus = useCallback(async () => {
     if (isWebMode()) return;
@@ -250,8 +254,17 @@ export function ApiExplorerPanel({
   const canSend =
     !busy && !!status?.running && (!selected.needsId || jobId.trim() !== "");
 
+  // Unpaired Android phones cannot print anywhere, including here: the
+  // side door stays shut with a way to the pairing screen, and the
+  // request the person composed stays put.
+  const printBlocked = selected.path === "/v1/print" && canPrint === false;
+
   const send = async () => {
     if (!status?.running) return;
+    if (printBlocked) {
+      notifyError(t("explorer.print_needs_pair"));
+      return;
+    }
     if (selected.needsId && !jobId.trim()) {
       notifyError(t("explorer.toast_job_id_required"));
       return;
@@ -554,7 +567,7 @@ export function ApiExplorerPanel({
 
               <Button
                 onClick={send}
-                disabled={!canSend}
+                disabled={!canSend || printBlocked}
                 data-testid="api-explorer-send"
               >
                 {busy
@@ -564,6 +577,17 @@ export function ApiExplorerPanel({
                       path: resolvedPath,
                     })}
               </Button>
+              {printBlocked && (
+                <p className="text-xs text-muted-foreground">
+                  {t("explorer.print_needs_pair")}{" "}
+                  <Link
+                    to="/pair"
+                    state={{ returnTo: "/automation?tab=explorer" }}
+                  >
+                    {t("explorer.print_pair_now")}
+                  </Link>
+                </p>
+              )}
 
               {response && (
                 <div className="space-y-1">

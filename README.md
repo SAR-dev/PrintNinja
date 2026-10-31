@@ -121,7 +121,9 @@ Phones are small and Android cannot make every printer language. So PrintNinja l
 3. On the phone, open **Automation → PC** (the same tab, named for what you pair with) and type the code. The phone finds the PC on its own, or you can type the PC's address.
 4. Both devices must be signed in to the same account on the same server.
 
-**Let someone borrow your PC without an account.** On the PC, choose **Invite guest** and pick how long the invite lasts (24 hours by default), how many times it can be used, and whether the guest may print or only render. The guest taps **Continue as guest** on the sign-in screen and types the code. Guests can use templates by name, but can never read or change them.
+**Let someone borrow your PC without an account.** On the PC, choose **Invite guest** and pick how long the invite lasts (24 hours by default), how many times it can be used, and whether the guest may print or only render. The guest enters a name, taps **Continue as guest** on the sign-in screen and types the code. Guests can use templates by name, but can never read or change them.
+
+An unpaired phone can browse the app, but printing needs a pair: opening Print (or sending `/v1/print` from Try the API) takes you to the pairing screen first, which greets you by name and returns afterwards.
 
 **Two ways to use a paired PC**
 

@@ -372,9 +372,17 @@ describe("sign-in gate", () => {
     expect(localStorage.getItem(TOKEN_KEY)).toBe("new");
   });
 
-  it("continues as guest without an account and remembers it", async () => {
+  it("continues as guest with a handle and remembers both", async () => {
     renderGate();
     await screen.findByLabelText("Password");
+    // No handle, no entry.
+    fireEvent.click(screen.getByRole("button", { name: "Continue as guest" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByText("The app")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("auth-guest-handle"), {
+      target: { value: "guest-ana" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Continue as guest" }));
 
     // No server contact, no session — the app opens session-less.
@@ -382,6 +390,7 @@ describe("sign-in gate", () => {
     expect(calls).toEqual([]);
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
     expect(localStorage.getItem("printninja-guest-mode")).toBe("true");
+    expect(localStorage.getItem("printninja-guest-handle")).toBe("guest-ana");
   });
 
   it("skips sign-in at startup for a returning guest", async () => {

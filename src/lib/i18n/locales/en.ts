@@ -65,6 +65,9 @@ const en = {
     switch_to_register: "New here? Create an account",
     switch_to_sign_in: "Already have an account? Sign in",
     continue_as_guest: "Continue as guest",
+    guest_handle: "Your name",
+    guest_handle_placeholder: "e.g. Aisha",
+    guest_handle_required: "Enter a name to continue as a guest.",
     guest_hint:
       "Pair with a PC over Wi-Fi without an account. Sign in anytime from Settings to use the server.",
     session_expired:
@@ -89,6 +92,7 @@ const en = {
     onboarding_checklist_hint:
       "Setting up a printer, templates, or sharing? The checklist in Settings walks through it.",
     pair_required_title: "Pair your PC to start printing",
+    pair_welcome_name: "Welcome {{name}} — pair your PC to start printing",
     pair_required_body:
       "Printing on this phone always goes through a paired PC: the PC renders each page and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. Pair once below — it stays paired.",
   },
@@ -1260,6 +1264,9 @@ const en = {
     idem_hint: "replay-safe key for retries",
     sending: "Sending…",
     send: "Send {{method}} {{path}}",
+    print_needs_pair:
+      "Printing needs a paired PC on this phone — the request stays here until you pair.",
+    print_pair_now: "Pair a PC",
     response: "Response",
     toast_bad_json: "Request body is not valid JSON",
     toast_job_id_required: "Enter a job id first",
