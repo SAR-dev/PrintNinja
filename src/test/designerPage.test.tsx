@@ -276,14 +276,15 @@ describe("Designer page layout on a phone", () => {
     );
   });
 
-  it("saves the README from its tab", async () => {
+  it("has no Save of its own on the README tab: the sticky Save covers it", async () => {
     renderDesigner();
     await screen.findByTitle("Canvas preview");
     openTab("README");
-    fireEvent.click(await screen.findByRole("button", { name: "Save README" }));
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("update_readme", expect.anything()),
-    );
+    await screen.findByPlaceholderText(/Write your README/);
+    expect(
+      screen.queryByRole("button", { name: /Save README/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(1);
   });
 
   it("loads row content directly with the template list", async () => {
@@ -477,7 +478,7 @@ describe("Designer page layout on desktop", () => {
     await screen.findByTitle("Canvas preview");
     openTab("README");
     expect(
-      await screen.findByRole("button", { name: "Save README" }),
+      await screen.findByRole("tab", { name: "Preview" }),
     ).toBeInTheDocument();
     expect(screen.getByTitle("Canvas preview")).toBeInTheDocument();
   });
@@ -833,6 +834,30 @@ describe("Designer top row on desktop", () => {
     );
     await waitFor(() => expect(nameField()).toHaveValue("Shipping label"));
     expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+  });
+
+  it("counts a README edit as unsaved, and asks before a switch throws it away", async () => {
+    renderDesigner();
+    await screen.findByTitle("Canvas preview");
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    openTab("README");
+    fireEvent.change(await screen.findByPlaceholderText(/Write your README/), {
+      target: { value: "# Notes for the label" },
+    });
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Save README/ }),
+    ).not.toBeInTheDocument();
+
+    openSwitcher();
+    fireEvent.click(
+      await screen.findByRole("option", { name: /Shipping label/ }),
+    );
+    expect(
+      within(await screen.findByRole("dialog")).getByText(
+        "Discard unsaved changes?",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("shows a name that is empty or already taken under the field", async () => {

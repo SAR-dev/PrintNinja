@@ -4,19 +4,19 @@ interface Props {
   readme: string;
   onChange: (value: string) => void;
   templateName: string;
-  saving: boolean;
-  onSave: () => void;
-  /** A saved copy: viewable, but not editable or saveable. */
+  /** A saved copy: viewable, but not editable. */
   readOnly?: boolean;
 }
 
-/** The template's README: the Markdown editor, with Save at the end of its tool row. */
+/**
+ * The template's README: the Markdown editor, filling its parent edge to
+ * edge. It has no Save of its own; the Designer's Save sends it with the
+ * rest of the template.
+ */
 export function ReadmePanel({
   readme,
   onChange,
   templateName,
-  saving,
-  onSave,
   readOnly = false,
 }: Props) {
   return (
@@ -26,8 +26,6 @@ export function ReadmePanel({
         onChange={onChange}
         templateName={templateName}
         readOnly={readOnly}
-        onSave={onSave}
-        saving={saving}
       />
     </div>
   );

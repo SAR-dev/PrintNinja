@@ -67,9 +67,6 @@ interface ReadmeEditorProps {
   scaffoldForName?: string;
   /** A saved copy: the text shows, but nothing can change it. */
   readOnly?: boolean;
-  /** When given, a Save button sits at the end of the tool row. */
-  onSave?: () => void;
-  saving?: boolean;
 }
 
 function scaffoldFor(templateName: string): string {
@@ -131,8 +128,6 @@ export function ReadmeEditor({
   onReset,
   scaffoldForName,
   readOnly = false,
-  onSave,
-  saving = false,
 }: ReadmeEditorProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<"edit" | "preview">("edit");
@@ -206,7 +201,7 @@ export function ReadmeEditor({
   };
 
   const preview = (
-    <div className="min-h-0 flex-1 overflow-auto rounded-md border bg-card px-6 py-5">
+    <div className="min-h-0 flex-1 overflow-auto bg-card px-6 py-5">
       <div className="readme-preview mx-auto max-w-[72ch]">
         <ReactMarkdown
           remarkPlugins={[remarkGfm, stripHtmlComments]}
@@ -254,8 +249,10 @@ export function ReadmeEditor({
     { action: "quote", label: t("readme.tool_quote"), icon: Quote },
   ];
 
+  // Edge to edge, like the HTML and CSS editors: the pane's own border frames
+  // it, so the text area carries none, and the size sits in a slim footer.
   const editor = (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
+    <>
       <textarea
         ref={textareaRef}
         value={value}
@@ -264,12 +261,12 @@ export function ReadmeEditor({
         placeholder={t("readme.placeholder")}
         spellCheck={false}
         data-slot="textarea"
-        className={`min-h-[240px] w-full flex-1 resize-none rounded-md border border-input bg-card px-4 py-3 font-mono text-[13px] leading-relaxed ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+        className={`min-h-[240px] w-full flex-1 resize-none bg-card px-5 py-4 font-mono text-[13px] leading-6 [tab-size:2] placeholder:text-muted-foreground focus-visible:outline-none ${
           readOnly ? "cursor-default bg-muted/40" : ""
         }`}
       />
       <div
-        className={`text-xs tabular-nums ${overCap ? "font-medium text-destructive" : "text-muted-foreground"}`}
+        className={`shrink-0 border-t px-4 py-1.5 text-xs tabular-nums ${overCap ? "font-medium text-destructive" : "text-muted-foreground"}`}
       >
         {t("readme.byte_count", {
           used: bytes.toLocaleString(currentLanguage()),
@@ -277,7 +274,7 @@ export function ReadmeEditor({
         })}
         {overCap && t("readme.over_cap")}
       </div>
-    </div>
+    </>
   );
 
   // Formatting tools only act on the editor, so the preview shows none.
@@ -301,19 +298,21 @@ export function ReadmeEditor({
           <Icon className="h-4 w-4" aria-hidden="true" />
         </Button>
       ))}
-      <span className="mx-1.5 h-5 w-px bg-border" aria-hidden="true" />
-      <Button
-        variant="ghost"
-        size="sm"
-        className="text-muted-foreground hover:text-foreground"
-        disabled={readOnly}
-        onClick={() => setShowResetDialog(true)}
-        title={t("readme.tool_reset")}
-      >
-        <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-        {t("readme.reset")}
-      </Button>
     </div>
+  );
+
+  const resetButton = (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-muted-foreground hover:text-foreground"
+      disabled={readOnly}
+      onClick={() => setShowResetDialog(true)}
+      title={t("readme.tool_reset")}
+    >
+      <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+      {t("readme.reset")}
+    </Button>
   );
 
   return (
@@ -321,43 +320,41 @@ export function ReadmeEditor({
       {/* Edit and preview share one pane: the preview renders on demand
         instead of live beside the editor. The pane fills the height it is
         given, so the text area grows with the window instead of ending
-        halfway down. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <Tabs
-          value={tab}
-          onValueChange={(v) => setTab(v as typeof tab)}
-          className="flex min-h-0 flex-1 flex-col gap-3"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <TabsList className="grid w-44 grid-cols-2">
-              <TabsTrigger value="edit">{t("readme.edit")}</TabsTrigger>
-              <TabsTrigger value="preview">{t("readme.preview")}</TabsTrigger>
-            </TabsList>
-            {tab === "edit" && (
+        halfway down. There is no Save here: the Designer's Save sends the
+        README with the rest of the template. */}
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as typeof tab)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b bg-muted/30 px-3 py-1.5">
+          <TabsList className="min-h-8 w-max shrink-0 gap-0.5 overflow-visible p-0.5">
+            <TabsTrigger value="edit" className="h-7 px-3.5 text-sm">
+              {t("readme.edit")}
+            </TabsTrigger>
+            <TabsTrigger value="preview" className="h-7 px-3.5 text-sm">
+              {t("readme.preview")}
+            </TabsTrigger>
+          </TabsList>
+          {tab === "edit" && (
+            <div className="ml-auto">
               <DisabledReason
                 reason={readOnly ? t("designer.reason_readonly") : undefined}
               >
-                {toolbar}
+                <div className="flex items-center gap-1">
+                  {toolbar}
+                  <span
+                    className="mx-1 h-5 w-px bg-border"
+                    aria-hidden="true"
+                  />
+                  {resetButton}
+                </div>
               </DisabledReason>
-            )}
-            {onSave && (
-              <DisabledReason
-                className="ml-auto"
-                reason={readOnly ? t("designer.reason_readonly") : undefined}
-              >
-                <Button
-                  size="sm"
-                  onClick={onSave}
-                  disabled={saving || readOnly}
-                >
-                  {saving ? t("readme.saving") : t("readme.save")}
-                </Button>
-              </DisabledReason>
-            )}
-          </div>
-          {tab === "edit" ? editor : preview}
-        </Tabs>
-      </div>
+            </div>
+          )}
+        </div>
+        {tab === "edit" ? editor : preview}
+      </Tabs>
 
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
         <DialogContent>

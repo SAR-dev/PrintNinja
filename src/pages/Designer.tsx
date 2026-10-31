@@ -25,6 +25,7 @@ import { DesignerOverflowMenu } from "@/components/designer/DesignerOverflowMenu
 import { DesignerToolbar } from "@/components/designer/DesignerToolbar";
 import { HelpersPanel } from "@/components/designer/HelpersPanel";
 import { ReadmePanel } from "@/components/designer/ReadmePanel";
+import { README_MAX_BYTES } from "@/components/ReadmeEditor";
 import {
   SampleDataPanel,
   type Dataset,
@@ -185,8 +186,8 @@ export function DesignerPage() {
   const [controlsOpen, setControlsOpen] = useState(false);
   // What the editor held when the template was last opened or saved. The
   // difference from the live values is the "Unsaved" mark, and it asks before
-  // a switch throws the edits away. The README is left out: it has its own
-  // save button and is stored locally on its own.
+  // a switch throws the edits away. The README is tracked beside it
+  // (`savedReadme`) because it loads asynchronously, after the rest.
   const [baseline, setBaseline] = useState<{
     name: string;
     html: string;
@@ -195,7 +196,12 @@ export function DesignerPage() {
     h: number;
   } | null>(null);
   const [readme, setReadme] = useState("");
-  const [readmeSaving, setReadmeSaving] = useState(false);
+  const [savedReadme, setSavedReadme] = useState("");
+  /** Put README text into the editor as the saved copy (open, take server, load). */
+  const loadReadme = (value: string) => {
+    setReadme(value);
+    setSavedReadme(value);
+  };
   const [remoteId, setRemoteId] = useState<string | null>(null);
   const [publishedAt, setPublishedAt] = useState<string | null>(null);
   const [origin, setOrigin] = useState<"own" | "saved">("own");
@@ -336,7 +342,7 @@ export function DesignerPage() {
     setCurrentTemplateDbId(tpl.id);
     // Load readme and publish info if provided, otherwise fetch from DB
     if (tpl.readme !== undefined) {
-      setReadme(tpl.readme);
+      loadReadme(tpl.readme);
       setRemoteId(tpl.server_id ?? tpl.remote_id ?? null);
       setPublishedAt(tpl.published_at ?? null);
       setOrigin((tpl.origin ?? "own") === "saved" ? "saved" : "own");
@@ -344,12 +350,12 @@ export function DesignerPage() {
       (async () => {
         try {
           const full = await agent("get_template", { id: tpl.id });
-          setReadme(full.readme ?? "");
+          loadReadme(full.readme ?? "");
           setRemoteId(full.server_id ?? full.remote_id ?? null);
           setPublishedAt(full.published_at ?? null);
           setOrigin(full.origin === "saved" ? "saved" : "own");
         } catch {
-          setReadme("");
+          loadReadme("");
           setRemoteId(null);
           setPublishedAt(null);
           setOrigin("own");
@@ -366,7 +372,8 @@ export function DesignerPage() {
       htmlCode !== baseline.html ||
       cssCode !== baseline.css ||
       pageWidth !== baseline.w ||
-      pageHeight !== baseline.h);
+      pageHeight !== baseline.h ||
+      readme !== savedReadme);
 
   // The name is edited in one place (the top row), so its problems show there,
   // live, rather than as a toast on Save.
@@ -441,6 +448,10 @@ export function DesignerPage() {
       notifyError(t("designer.toast_name_exists"));
       return;
     }
+    if (new TextEncoder().encode(readme).length > README_MAX_BYTES) {
+      notifyError(t("designer.toast_readme_too_big"));
+      return;
+    }
     setPending("save");
     try {
       const row = await getLocalTemplate(currentTemplateDbId);
@@ -478,6 +489,7 @@ export function DesignerPage() {
         w: content.page_w_mm,
         h: content.page_h_mm,
       });
+      setSavedReadme(content.readme);
       window.dispatchEvent(new Event("sync:pulled"));
       notifySuccess(
         result.published
@@ -591,7 +603,7 @@ export function DesignerPage() {
       setTemplateName(taken.name);
       setPageWidth(taken.page_w_mm);
       setPageHeight(taken.page_h_mm);
-      setReadme(taken.readme);
+      loadReadme(taken.readme);
       setBaseline({
         name: taken.name,
         html: formatHtml(taken.html),
@@ -625,6 +637,7 @@ export function DesignerPage() {
         w: content.page_w_mm,
         h: content.page_h_mm,
       });
+      setSavedReadme(content.readme);
       setRemoteId(result.remoteId);
       setPublishedAt(result.published ? result.updatedAt : null);
       setConflict(null);
@@ -766,12 +779,12 @@ export function DesignerPage() {
         // README and publish info live on the full row.
         try {
           const full = await agent("get_template", { id: first.id });
-          setReadme(full.readme ?? "");
+          loadReadme(full.readme ?? "");
           setRemoteId(full.server_id ?? full.remote_id ?? null);
           setPublishedAt(full.published_at ?? null);
           setOrigin(full.origin === "saved" ? "saved" : "own");
         } catch {
-          setReadme("");
+          loadReadme("");
           setRemoteId(null);
           setPublishedAt(null);
         }
@@ -893,30 +906,6 @@ export function DesignerPage() {
     }
   }, [visibleDatasets, selectedDatasetName]);
 
-  const handleSaveReadme = async () => {
-    if (!currentTemplateDbId) {
-      notifyError(t("designer.toast_no_template"));
-      return;
-    }
-    const bytes = new TextEncoder().encode(readme).length;
-    if (bytes > 64 * 1024) {
-      notifyError(t("designer.toast_readme_too_big"));
-      return;
-    }
-    setReadmeSaving(true);
-    try {
-      await agent("update_readme", {
-        req: { id: currentTemplateDbId, readme },
-      });
-      // The README rides along with the next Save; nothing to send here.
-      notifySuccess(t("designer.toast_readme_saved"));
-    } catch (e) {
-      notifyError(describeError(e));
-    } finally {
-      setReadmeSaving(false);
-    }
-  };
-
   const handleShowCanvas = () => {
     setActiveTab("canvas");
     notifySuccess(t("designer.toast_showing_canvas"));
@@ -997,8 +986,6 @@ export function DesignerPage() {
         onCssChange={setCssCode}
         readme={readme}
         onReadmeChange={setReadme}
-        readmeSaving={readmeSaving}
-        onSaveReadme={() => void handleSaveReadme()}
         readmeReadOnly={isReadOnly({ origin })}
         notices={
           <>
@@ -1285,14 +1272,12 @@ export function DesignerPage() {
                 />
               )}
               {activeTab === "readme" && (
-                <Card>
-                  <CardContent className="pt-5">
+                <Card className="overflow-hidden">
+                  <CardContent className="p-0">
                     <ReadmePanel
                       readme={readme}
                       onChange={setReadme}
                       templateName={templateName}
-                      saving={readmeSaving}
-                      onSave={() => void handleSaveReadme()}
                       readOnly={isReadOnly({ origin })}
                     />
                   </CardContent>
