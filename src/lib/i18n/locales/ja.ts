@@ -67,6 +67,9 @@ const ja: Translation = {
     switch_to_register: "初めての方はこちら: アカウントを作成",
     switch_to_sign_in: "アカウントをお持ちの方はこちら: サインイン",
     continue_as_guest: "ゲストとして続ける",
+    guest_handle: "お名前",
+    guest_handle_placeholder: "例: アイシャ",
+    guest_handle_required: "ゲストとして続けるには名前を入力してください。",
     guest_hint:
       "アカウントなしでWi-Fi経由でPCとペアリングします。サーバーを使うときは設定からいつでもサインインできます。",
     session_expired:
@@ -91,6 +94,8 @@ const ja: Translation = {
     onboarding_checklist_hint:
       "プリンター、テンプレート、共有の設定は、設定内のチェックリストで順に確認できます。",
     pair_required_title: "印刷を開始するにはPCとペアリングしてください",
+    pair_welcome_name:
+      "ようこそ {{name}} さん — 印刷を開始するにはPCとペアリングしてください",
     pair_required_body:
       "この電話での印刷は常にペアリングされたPCを経由します: PCが各ページをレンダリングし、電話が印刷するか — PC経由印刷がオンならPC自身のプリンターで印刷します。一度ペアリングすれば、そのまま保持されます。",
   },
@@ -278,6 +283,15 @@ const ja: Translation = {
     sample_quick_hint:
       "下の変数チップをクリックしてコピーし、HTML/CSSに貼り付けます。",
     copied_token: "{{token}} をコピーしました",
+    inserted_token: "{{token}} を挿入しました",
+    sample_variables: "変数",
+    sample_click_insert: "クリックで挿入",
+    sample_click_copy: "クリックでコピー",
+    sample_filter: "変数を絞り込み…",
+    sample_no_match: "一致する変数がありません。",
+    sample_insert_title: "カーソル位置に挿入",
+    sample_copy_json: "JSONをコピー",
+    copied_json: "JSONをコピーしました",
     editor_html: "HTML",
     editor_css: "CSS",
     editor_html_title: "HTML — {{name}}",
@@ -331,13 +345,19 @@ const ja: Translation = {
     toast_created_local: "テンプレート「{{name}}」をローカルに作成しました",
     toast_readme_too_big: "READMEが64 KiBを超えています",
     toast_showing_canvas: "キャンバスを表示しています",
-    toast_dataset_deleted: "データセットを削除しました",
+    toast_dataset_deleted:
+      "データセットを削除しました（テンプレートを保存すると反映されます）",
     toast_delete_failed: "削除に失敗しました: {{error}}",
     toast_dataset_name_required: "データセット名を入力してください",
+    toast_dataset_name_too_long:
+      "データセット名は{{max}}文字以内にしてください",
+    toast_dataset_name_exists: "同じ名前のデータセットがすでにあります",
     toast_invalid_json: "JSONが正しくありません",
-    toast_dataset_added: "データセット「{{name}}」を追加しました",
+    toast_dataset_added:
+      "データセット「{{name}}」を追加しました（テンプレートを保存すると確定します）",
     toast_add_failed: "追加に失敗しました: {{error}}",
-    toast_dataset_updated: "データセットを更新しました",
+    toast_dataset_updated:
+      "データセットを更新しました（テンプレートを保存すると確定します）",
     toast_save_failed: "保存に失敗しました: {{error}}",
     toast_barcode_inserted: "{{type}}バーコードを挿入しました",
     controls_expanded: "デザイナーのコントロール",
@@ -1276,6 +1296,9 @@ const ja: Translation = {
     idem_hint: "再試行時に重複実行を防ぐキー",
     sending: "送信しています…",
     send: "{{method}} {{path}} を送信",
+    print_needs_pair:
+      "この電話での印刷にはペアリングされたPCが必要です。ペアリングするまでリクエストはここに保持されます。",
+    print_pair_now: "PCとペアリングする",
     response: "レスポンス",
     toast_bad_json: "リクエストボディが有効なJSONではありません",
     toast_job_id_required: "先にジョブIDを入力してください",

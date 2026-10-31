@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
 import "@/lib/i18n";
 
 const invoke = vi.fn();
@@ -612,6 +612,31 @@ describe("Print via PC exit", () => {
 });
 
 describe("unpaired phone on the Print page", () => {
+  it("redirects to the pairing screen instead of a dead form", async () => {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_setting") return null;
+      return null;
+    });
+    try {
+      render(
+        <MemoryRouter initialEntries={["/print"]}>
+          <Routes>
+            <Route path="/print" element={<PrintPage />} />
+            <Route path="/pair" element={<p>Pair your PC</p>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      // The form never renders; the pairing screen does.
+      expect(await screen.findByText("Pair your PC")).toBeInTheDocument();
+      expect(screen.queryByTitle("Print preview")).not.toBeInTheDocument();
+    } finally {
+      ua.mockRestore();
+    }
+  });
+
   it("blocks Print with a Pair-again link instead of a generic message", async () => {
     const ua = vi
       .spyOn(window.navigator, "userAgent", "get")

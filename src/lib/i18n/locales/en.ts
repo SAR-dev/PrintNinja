@@ -65,6 +65,9 @@ const en = {
     switch_to_register: "New here? Create an account",
     switch_to_sign_in: "Already have an account? Sign in",
     continue_as_guest: "Continue as guest",
+    guest_handle: "Your name",
+    guest_handle_placeholder: "e.g. Aisha",
+    guest_handle_required: "Enter a name to continue as a guest.",
     guest_hint:
       "Pair with a PC over Wi-Fi without an account. Sign in anytime from Settings to use the server.",
     session_expired:
@@ -89,6 +92,7 @@ const en = {
     onboarding_checklist_hint:
       "Setting up a printer, templates, or sharing? The checklist in Settings walks through it.",
     pair_required_title: "Pair your PC to start printing",
+    pair_welcome_name: "Welcome {{name}} — pair your PC to start printing",
     pair_required_body:
       "Printing on this phone always goes through a paired PC: the PC renders each page and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. Pair once below — it stays paired.",
   },
@@ -277,6 +281,15 @@ const en = {
     sample_quick_hint:
       "Click a variable chip below to copy it, then paste into the HTML/CSS.",
     copied_token: "Copied {{token}}",
+    inserted_token: "Inserted {{token}}",
+    sample_variables: "Variables",
+    sample_click_insert: "Click to insert",
+    sample_click_copy: "Click to copy",
+    sample_filter: "Filter variables…",
+    sample_no_match: "No variables match.",
+    sample_insert_title: "Insert at the cursor",
+    sample_copy_json: "Copy JSON",
+    copied_json: "Copied JSON",
     editor_html: "HTML",
     editor_css: "CSS",
     editor_html_title: "HTML — {{name}}",
@@ -324,13 +337,17 @@ const en = {
     toast_created_local: 'Template "{{name}}" created locally',
     toast_readme_too_big: "README exceeds 64 KiB",
     toast_showing_canvas: "Showing the canvas",
-    toast_dataset_deleted: "Dataset deleted",
+    toast_dataset_deleted: "Dataset removed — save the template to apply",
     toast_delete_failed: "Delete failed: {{error}}",
     toast_dataset_name_required: "Dataset name required",
+    toast_dataset_name_too_long:
+      "Dataset name must be {{max}} characters or fewer",
+    toast_dataset_name_exists: "A dataset with this name already exists",
     toast_invalid_json: "Invalid JSON",
-    toast_dataset_added: 'Dataset "{{name}}" added',
+    toast_dataset_added:
+      'Dataset "{{name}}" added — save the template to keep it',
     toast_add_failed: "Add failed: {{error}}",
-    toast_dataset_updated: "Dataset updated",
+    toast_dataset_updated: "Dataset updated — save the template to keep it",
     toast_save_failed: "Save failed: {{error}}",
     toast_barcode_inserted: "{{type}} barcode inserted",
     controls_expanded: "Designer controls",
@@ -1247,6 +1264,9 @@ const en = {
     idem_hint: "replay-safe key for retries",
     sending: "Sending…",
     send: "Send {{method}} {{path}}",
+    print_needs_pair:
+      "Printing needs a paired PC on this phone — the request stays here until you pair.",
+    print_pair_now: "Pair a PC",
     response: "Response",
     toast_bad_json: "Request body is not valid JSON",
     toast_job_id_required: "Enter a job id first",
