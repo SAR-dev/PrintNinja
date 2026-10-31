@@ -1324,6 +1324,21 @@ async fn claim_at(
         return Err(format!("Wrong code{left}. Check the PC and try again."));
     }
     if !status.is_success() {
+        // Guest misses carry their own code (a mistyped, revoked, or
+        // owner-window code with no account behind it): surface the
+        // guidance, not the raw envelope. The body reads once — json
+        // and text both consume it.
+        if status == reqwest::StatusCode::BAD_REQUEST {
+            let detail = res.text().await.unwrap_or_default();
+            let is_guest_miss = serde_json::from_str::<serde_json::Value>(&detail)
+                .ok()
+                .and_then(|v| v.get("code").and_then(|c| c.as_str()).map(str::to_string))
+                .is_some_and(|code| code == "guest_invite_required");
+            if is_guest_miss {
+                return Err("That code did not match any guest invite. Ask the PC owner for an invite code — the 90-second code needs a signed-in account.".into());
+            }
+            return Err(format!("Pairing failed ({status}): {detail}"));
+        }
         let detail = res.text().await.unwrap_or_default();
         return Err(format!("Pairing failed ({status}): {detail}"));
     }
