@@ -23,8 +23,9 @@ export interface FakeTemplateRow {
   id: number;
   server_id: string | null;
   /** The server link, written by set_publish_info (Rust keeps this column
-   * separate from the sync identity; the fake used to conflate them). */
-  remote_id: string | null;
+   * separate from the sync identity; the fake used to conflate them).
+   * Optional so older literals and persisted rows still typecheck. */
+  remote_id?: string | null;
   name: string;
   summary: string;
   page_w: number;
@@ -197,7 +198,7 @@ export function createFakeCache() {
   if (persisted) {
     for (const row of persisted) {
       // Rows persisted before remote_id existed rehydrate without it.
-      templates.set(row.id, { remote_id: null, ...row });
+      templates.set(row.id, { ...row, remote_id: row.remote_id ?? null });
       nextId = Math.max(nextId, row.id + 1);
     }
   } else {
