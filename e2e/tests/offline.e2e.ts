@@ -75,7 +75,7 @@ test("F12 offline opens the cache view-only, recovery pulls then saves", async (
   const saveButton = page.getByTestId(testids.designerSave);
   await expect(saveButton).toBeDisabled({ timeout: 15_000 });
   // The reason lives on the hover/focus wrapper now, not the button title.
-  await page.getByTestId("save-disabled-reason").focus();
+  await page.getByTestId(testids.saveDisabledReason).focus();
   await expect(
     page.getByRole("tooltip", { name: /Offline — connect to save/ }),
   ).toBeVisible({ timeout: 15_000 });
