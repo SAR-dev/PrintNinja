@@ -123,6 +123,9 @@ export function DesignerPage() {
   const [barcodeError, setBarcodeError] = useState<string | null>(null);
   const [showNewTemplateDialog, setShowNewTemplateDialog] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");
+  // The create round-trip (server PUT + local cache) is async: while it
+  // runs the dialog holds still so a second click cannot double-create.
+  const [creatingTemplate, setCreatingTemplate] = useState(false);
   // Name problems show under the field, not as a toast.
   const [newNameError, setNewNameError] = useState("");
   const [htmlCode, setHtmlCode] = useState(DEFAULT_TEMPLATE_HTML);
@@ -723,6 +726,7 @@ export function DesignerPage() {
       return;
     }
     let keepDialogOpen = false;
+    setCreatingTemplate(true);
     try {
       const start = newTemplateContent(name);
       const created = await createTemplateOnServer({
@@ -777,6 +781,7 @@ export function DesignerPage() {
       setCurrentTemplateDbId(tpl.id);
       notifySuccess(t("designer.toast_created_local", { name }));
     } finally {
+      setCreatingTemplate(false);
       if (!keepDialogOpen) {
         setNewTemplateName("");
         setShowNewTemplateDialog(false);
@@ -1632,6 +1637,7 @@ export function DesignerPage() {
                 aria-describedby={
                   newNameError ? "new-template-name-error" : undefined
                 }
+                disabled={creatingTemplate}
               />
               {newNameError && (
                 <p
@@ -1648,11 +1654,17 @@ export function DesignerPage() {
             <Button
               variant="outline"
               onClick={() => setShowNewTemplateDialog(false)}
+              disabled={creatingTemplate}
             >
               {t("common.cancel")}
             </Button>
-            <Button onClick={createNewTemplate}>
-              {t("designer.new_create")}
+            <Button
+              onClick={() => void createNewTemplate()}
+              disabled={creatingTemplate}
+            >
+              {creatingTemplate
+                ? t("designer.new_creating")
+                : t("designer.new_create")}
             </Button>
           </DialogFooter>
         </DialogContent>

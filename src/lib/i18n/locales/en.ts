@@ -271,7 +271,7 @@ const en = {
     barcode_more: "+{{count}} more",
     sample_add: "Add Dataset",
     sample_empty: "No datasets yet. Add one to preview and validate templates.",
-    sample_default: "Default",
+    sample_default_note: "{{name}} is set as default",
     sample_use: "Use dataset {{name}}",
     sample_delete: "Delete dataset {{name}}",
     sample_fields: "Fields:",
@@ -384,6 +384,7 @@ const en = {
     sample_save: "Save",
     new_name_example: "My Template",
     new_create: "Create",
+    new_creating: "Creating…",
     conflict_title: "This template changed on the server",
     conflict_body:
       "Someone else saved it after the copy on this computer was made. Take the server copy and lose your unsaved edits here, or overwrite the server with what’s in the editor.",
