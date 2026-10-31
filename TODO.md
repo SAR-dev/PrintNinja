@@ -31,25 +31,35 @@ Deliberately out of scope: code mechanics, expiry defaults, phone UI
 
 Status: plan only, not implemented.
 
-On mobile the Automation menu matters most (pairing, Print via PC)
-and Templates least, yet a phone opens on Print with Automation buried
-under More, and Automation itself opens on the server tab.
+Findings: `startOnPrint()` rewrites bare `/` → `/print` for everyone,
+and the mobile bottom bar is Print/History/Templates/Printers + More
+(Automation hides under More) — so a phone user opens on Print and
+must dig for Automation. Default tab: missing/unknown `?tab=` →
+`"server"` (`parseAutomationTab`, only used by `Automation.tsx`); on
+Android the tab that matters — pairing + Print via PC — is `phones`
+(labeled PC/Computer there). Header badges already link explicitly to
+`/automation?tab=phones`, so they are unaffected.
 
-1. `startOnPrint()` becomes platform-aware: bare `/` rewrites to
-   `/automation` on Android, `/print` elsewhere. Deep links and
-   bookmarks untouched (only bare `/` is rewritten).
-2. Default Automation tab becomes `isAndroid() ? "phones" : "server"`,
-   in both the `parseAutomationTab` fallback and `openTab`'s param
-   cleanup (which deletes `?tab=` for the default). Header badge links
-   already pin `?tab=phones`, so they are unaffected.
-3. Tests: Android-UA variants for the landing rewrite and the default
-   tab; desktop behavior unchanged. Then `tsc -b`, `pnpm lint`,
-   targeted vitest.
-4. Docs: `docs/UI_GUIDE.md` automation row (unknown-tab rule becomes
-   platform-dependent) and the `startRoute.ts` comment.
+1. `startOnPrint()` becomes platform-aware: bare `/` → `/automation`
+   on Android, `/print` elsewhere. Deep links and bookmarks untouched
+   (only bare `/` is rewritten — same guarantee as today).
+2. Default Automation tab becomes
+   `isAndroid() ? "phones" : "server"`, applied in both the
+   `parseAutomationTab` fallback and `openTab`'s param cleanup (which
+   currently deletes `?tab=` only for `"server"` — it must delete for
+   whichever the default is, so shared/bookmarked URLs stay clean).
+3. Tests: extend the "opens on the server" + "falls back to server"
+   cases with Android-UA variants asserting the phones tab; add a
+   `startOnPrint` unit test for both platforms. Then `tsc -b`,
+   `pnpm lint`, targeted vitest.
+4. Docs: one-line updates in `docs/UI_GUIDE.md` (automation row:
+   unknown-tab rule becomes platform-dependent) and the
+   `startRoute.ts` comment.
 
 Deliberately out of scope: bottom-bar composition (Templates stays;
-only the landing changes).
+only the landing changes), badge links, desktop behavior. Swapping
+Templates out of the bottom bar for Automation would be a separate,
+bigger change.
 
 # TODO: show the guest name of the paired phone on the PC
 
