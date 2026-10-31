@@ -22,6 +22,10 @@ export interface FakeVersion {
 export interface FakeTemplateRow {
   id: number;
   server_id: string | null;
+  /** The server link, written by set_publish_info (Rust keeps this column
+   * separate from the sync identity; the fake used to conflate them).
+   * Optional so older literals and persisted rows still typecheck. */
+  remote_id?: string | null;
   name: string;
   summary: string;
   page_w: number;
@@ -193,7 +197,8 @@ export function createFakeCache() {
   const persisted = readPersistedTemplates();
   if (persisted) {
     for (const row of persisted) {
-      templates.set(row.id, row);
+      // Rows persisted before remote_id existed rehydrate without it.
+      templates.set(row.id, { ...row, remote_id: row.remote_id ?? null });
       nextId = Math.max(nextId, row.id + 1);
     }
   } else {
@@ -206,6 +211,7 @@ export function createFakeCache() {
         // Like the Rust backfill: local-only rows get fresh sync
         // identities so pushes and markPushed address the same id.
         server_id: seed.server_id ?? crypto.randomUUID(),
+        remote_id: null,
         name: seed.name ?? "Seeded",
         summary: seed.summary ?? "",
         page_w: seed.page_w ?? 210,
@@ -474,6 +480,29 @@ export function createFakeCache() {
       persist();
     },
 
+    setPublishInfo(
+      id: number,
+      remoteId: string,
+      publishedAt: string | null,
+    ): void {
+      // Mirrors write_publish_info in src-tauri/src/commands/template.rs:
+      // the server link and publish state land on the row (a null
+      // published_at links it privately), and updated_at follows the
+      // publish when there is one.
+      if (
+        !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+          remoteId,
+        )
+      ) {
+        throw new Error("Invalid remote_id (must be UUID)");
+      }
+      const row = findRow(id);
+      row.remote_id = remoteId;
+      row.published_at = publishedAt;
+      row.updated_at = publishedAt ?? nowIso();
+      persist();
+    },
+
     markConflicted(serverId: string): void {
       const row = findByServerId(serverId);
       if (!row) {
@@ -585,7 +614,7 @@ export function createFakeCache() {
           compiled_key: "",
           readme: t.readme,
           summary: t.summary,
-          remote_id: t.server_id,
+          remote_id: t.remote_id ?? t.server_id,
           server_id: t.server_id,
           published_at: t.published_at,
           origin: t.kind === "saved" ? "saved" : "own",
@@ -613,7 +642,7 @@ export function createFakeCache() {
         compiled_key: "",
         readme: row.readme,
         summary: row.summary,
-        remote_id: row.server_id,
+        remote_id: row.remote_id ?? row.server_id,
         server_id: row.server_id,
         published_at: row.published_at,
         origin: row.kind === "saved" ? "saved" : "own",

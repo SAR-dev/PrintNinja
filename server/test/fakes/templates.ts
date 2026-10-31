@@ -137,17 +137,6 @@ export function createFakeTemplateRepos(users: {
       if (row) row.changeSeq = bumpSeq(userId);
     }
   };
-  const tombstoneSavers = (templateId: string, ownerId: string): void => {
-    for (const userId of saverIds(templateId, ownerId)) {
-      store.tombstones.push({
-        userId,
-        seq: bumpSeq(userId),
-        entity: "template",
-        entityKey: templateId,
-        deletedAt: now(),
-      });
-    }
-  };
 
   const toView = (stored: StoredTemplate): TemplateView => ({
     ...recordOf(stored),
@@ -321,9 +310,7 @@ export function createFakeTemplateRepos(users: {
       }
       stored.changeSeq = bumpSeq(stored.ownerId);
       stored.updatedAt = now();
-      if (publishedAt === null) {
-        tombstoneSavers(stored.id, stored.ownerId);
-      } else {
+      if (publishedAt !== null) {
         stampSavers(stored.id, stored.ownerId);
       }
       return toView(stored);
@@ -341,9 +328,10 @@ export function createFakeTemplateRepos(users: {
         entityKey: id,
         deletedAt: now(),
       });
-      tombstoneSavers(id, stored.ownerId);
       // Saved rows survive on purpose: the manifest reports them as
-      // deleted (E14). Only versions cascade with the template.
+      // Saved rows survive on purpose: the manifest reports them as
+      // deleted (E14), and mirrors of deleted templates stay put like
+      // withdrawn ones. Only versions cascade with the template.
       store.templates.delete(id);
       return { ownerId: stored.ownerId };
     },

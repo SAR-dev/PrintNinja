@@ -292,16 +292,16 @@ describe("readChanges saved mirrors", () => {
     ]);
   });
 
-  it("tombstones on unpublish and re-emits on republish", async () => {
+  it("emits nothing on unpublish and re-emits on republish", async () => {
     const repos = await publishedSaved();
     const first = await read(repos, "saver-1", null);
+    // The mirror stays put, printable but withdrawn — so the stream
+    // carries no delete for it.
     await repos.templates.setPublished("a1", null);
     const gone = await read(repos, "saver-1", first.nextCursor);
-    expect(gone.changes).toEqual([
-      expect.objectContaining({ entity: "template", entityKey: "a1" }),
-    ]);
+    expect(gone.changes).toEqual([]);
     await repos.templates.setPublished("a1", new Date("2026-10-20T00:00:00Z"));
-    const back = await read(repos, "saver-1", gone.nextCursor);
+    const back = await read(repos, "saver-1", first.nextCursor);
     expect(back.changes).toHaveLength(1);
     expect(back.changes[0]).toMatchObject({
       entity: "template",
@@ -309,14 +309,13 @@ describe("readChanges saved mirrors", () => {
     });
   });
 
-  it("tombstones savers when the author deletes", async () => {
+  it("emits nothing for savers when the author deletes", async () => {
     const repos = await publishedSaved();
     const first = await read(repos, "saver-1", null);
+    // Mirrors of a deleted template stay put like withdrawn ones.
     await repos.templates.deleteWithTombstone("a1");
     const second = await read(repos, "saver-1", first.nextCursor);
-    expect(second.changes).toEqual([
-      expect.objectContaining({ entity: "template", entityKey: "a1" }),
-    ]);
+    expect(second.changes).toEqual([]);
     // The author's own delete is untouched: still their own tombstone.
     const author = await read(repos, "owner-1", first.nextCursor);
     expect(author.changes).toEqual([
