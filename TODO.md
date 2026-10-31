@@ -26,3 +26,44 @@ gets.
 
 Deliberately out of scope: code mechanics, expiry defaults, phone UI
 (it types a code either way; the server already tells kinds apart).
+
+# TODO: show the guest name of the paired phone on the PC
+
+Status: plan only, not implemented.
+
+Today every guest shows up as "Android phone" because `pair_with_code`
+hardcodes `device_name` to `phone_name()`. The claim
+(`POST /v1/pair/claim`) already carries `device_name`, and the PC
+already stores and shows it — only the phone side needs to send the
+handle the guest (or session) picked.
+
+1. Rust (`src-tauri/src/commands/api.rs`): `pair_with_code` gains
+   optional `device_name`; `claim_at` sends it instead of
+   `phone_name()`. Absent/blank keeps today's fallback.
+2. Frontend: `pair_with_code` agent type gains `device_name?`;
+   `DevicesCard` submit passes the welcome name (session handle, else
+   guest handle).
+3. e2e fake: mirror the parameter.
+4. Tests: Rust unit for name threading + fallback; frontend test that
+   the submit carries the handle. No new i18n strings.
+5. Verify: `tsc -b`, `pnpm lint`, `cargo fmt --check`,
+   `cargo clippy --all-targets -- -D warnings`, targeted suites.
+
+# TODO: guest name step after "Continue as guest"
+
+Status: plan only, not implemented.
+
+The name field sitting inline on the sign-in form is noisy — most
+visitors never use it. Instead: "Continue as guest" swaps the form to
+a small guest step (name input + Back + Continue), and only that step
+asks for the handle.
+
+1. `SignInScreen`: guest section keeps just the button + hint;
+   clicking it swaps the card to the guest step with the name field,
+   validated as today (non-empty, `HANDLE_RE`), Back returns to the
+   sign-in form. `onGuest(handle)` signature unchanged.
+2. en + ja: relabel if needed (a title for the step, e.g. "Continue
+   as guest" as the heading).
+3. Tests: update the guest-entry cases (button reveals the step;
+   handle required on Continue; Back returns). Then `tsc -b`,
+   `pnpm lint`, targeted vitest.
