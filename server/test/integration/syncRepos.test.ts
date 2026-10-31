@@ -232,7 +232,7 @@ for (const name of ["fake", "prisma"] as const) {
       ).toEqual(["own"]);
     });
 
-    it("re-emits mirrors on author edits and tombstones on unsave, unpublish and delete", async () => {
+    it("re-emits mirrors on author edits and tombstones on unsave", async () => {
       const saver = await be.createUser(
         `sync-saver-${randomUUID().slice(0, 8)}`,
       );
@@ -275,7 +275,8 @@ for (const name of ["fake", "prisma"] as const) {
         expect.objectContaining({ entity: "template", entityKey: tpl.id }),
       ]);
 
-      // Re-save, then unpublish tombstones it again; republish restores it.
+      // Re-save, then unpublish emits nothing (the mirror stays put,
+      // printable but withdrawn) and republish re-emits it.
       await be.saved.save(saver, tpl.id);
       const resaved = await be.sync.readSince(
         saver,
@@ -289,13 +290,11 @@ for (const name of ["fake", "prisma"] as const) {
         { cursor: resaved.nextCursor, limit: 100, types: ["template"] },
         8 * 1024 * 1024,
       );
-      expect(withdrawn.changes).toEqual([
-        expect.objectContaining({ entity: "template", entityKey: tpl.id }),
-      ]);
+      expect(withdrawn.changes).toEqual([]);
       await be.templates.setPublished(tpl.id, new Date());
       const back = await be.sync.readSince(
         saver,
-        { cursor: withdrawn.nextCursor, limit: 100, types: ["template"] },
+        { cursor: resaved.nextCursor, limit: 100, types: ["template"] },
         8 * 1024 * 1024,
       );
       expect(back.changes).toHaveLength(1);
@@ -304,16 +303,15 @@ for (const name of ["fake", "prisma"] as const) {
         origin: "saved",
       });
 
-      // Delete tombstones the saver's mirror alongside the original.
+      // Delete emits nothing for savers: their mirrors stay put like
+      // withdrawn ones.
       await be.templates.deleteWithTombstone(tpl.id);
       const deleted = await be.sync.readSince(
         saver,
         { cursor: back.nextCursor, limit: 100, types: ["template"] },
         8 * 1024 * 1024,
       );
-      expect(deleted.changes).toEqual([
-        expect.objectContaining({ entity: "template", entityKey: tpl.id }),
-      ]);
+      expect(deleted.changes).toEqual([]);
     });
 
     it("paginates by count with has_more and next_cursor", async () => {
