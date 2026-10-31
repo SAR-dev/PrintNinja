@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { isPrintViaPc } from "@/lib/printViaPc";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ControlsAccordion } from "@/components/designer/ControlsAccordion";
 import { CanvasWorkspace } from "@/components/designer/CanvasWorkspace";
 import {
@@ -16,7 +17,6 @@ import {
   type ControlsSection,
 } from "@/components/designer/ControlsRail";
 import {
-  LayoutToggle,
   isDesignerLayout,
   type DesignerLayout,
 } from "@/components/designer/LayoutToggle";
@@ -130,9 +130,6 @@ export function DesignerPage() {
   const [templateName, setTemplateName] = useState("");
   const [pageWidth, setPageWidth] = useState(NEW_TEMPLATE_PAGE_W_MM);
   const [pageHeight, setPageHeight] = useState(NEW_TEMPLATE_PAGE_H_MM);
-  const [orientation, setOrientation] = useState<"portrait" | "landscape">(
-    "portrait",
-  );
   // Print-via-PC mode: templates sync down, they are not drawn here.
   const [viaPc, setViaPc] = useState(false);
   useEffect(() => {
@@ -186,6 +183,17 @@ export function DesignerPage() {
   // Phone: Templates / Page Setup / Custom input live in a bottom sheet
   // opened from a single Settings button.
   const [controlsOpen, setControlsOpen] = useState(false);
+  // What the editor held when the template was last opened or saved. The
+  // difference from the live values is the "Unsaved" mark, and it asks before
+  // a switch throws the edits away. The README is left out: it has its own
+  // save button and is stored locally on its own.
+  const [baseline, setBaseline] = useState<{
+    name: string;
+    html: string;
+    css: string;
+    w: number;
+    h: number;
+  } | null>(null);
   const [readme, setReadme] = useState("");
   const [readmeSaving, setReadmeSaving] = useState(false);
   const [remoteId, setRemoteId] = useState<string | null>(null);
@@ -236,6 +244,12 @@ export function DesignerPage() {
     }>
   >([]);
   const [currentTemplateId, setCurrentTemplateId] = useState<number | null>(
+    null,
+  );
+
+  // The active template's DB row id (null until a template is opened or
+  // made — the Designer starts empty).
+  const [currentTemplateDbId, setCurrentTemplateDbId] = useState<number | null>(
     null,
   );
   const [templatesLoading, setTemplatesLoading] = useState(true);
@@ -307,15 +321,18 @@ export function DesignerPage() {
     origin?: string | null;
     updated_at?: string;
   }) => {
+    const html = formatHtml(tpl.html);
+    const css = formatCss(tpl.css);
+    const w = tpl.page_w_mm || pageWidth;
+    const h = tpl.page_h_mm || pageHeight;
     setCurrentTemplateId(tpl.id);
     setTemplateName(tpl.name);
-    setHtmlCode(formatHtml(tpl.html));
-    setCssCode(formatCss(tpl.css));
+    setHtmlCode(html);
+    setCssCode(css);
     contentLoaded.current.add(tpl.id);
-    if (tpl.page_w_mm) setPageWidth(tpl.page_w_mm);
-    if (tpl.page_h_mm) setPageHeight(tpl.page_h_mm);
-    if (tpl.orientation)
-      setOrientation(tpl.orientation as "portrait" | "landscape");
+    setPageWidth(w);
+    setPageHeight(h);
+    setBaseline({ name: tpl.name, html, css, w, h });
     setCurrentTemplateDbId(tpl.id);
     // Load readme and publish info if provided, otherwise fetch from DB
     if (tpl.readme !== undefined) {
@@ -341,6 +358,40 @@ export function DesignerPage() {
     }
     // Content now lives on the template row itself; nothing more to load.
     notifySuccess(t("designer.toast_loaded", { name: tpl.name }));
+  };
+
+  const dirty =
+    baseline !== null &&
+    (templateName !== baseline.name ||
+      htmlCode !== baseline.html ||
+      cssCode !== baseline.css ||
+      pageWidth !== baseline.w ||
+      pageHeight !== baseline.h);
+
+  // The name is edited in one place (the top row), so its problems show there,
+  // live, rather than as a toast on Save.
+  const nameError = (() => {
+    if (currentTemplateDbId == null) return "";
+    const wanted = templateName.trim();
+    if (!wanted) return t("designer.toast_name_required");
+    const taken = templates.some(
+      (x) =>
+        x.id !== currentTemplateDbId &&
+        x.name.trim().toLowerCase() === wanted.toLowerCase(),
+    );
+    return taken ? t("designer.toast_name_exists") : "";
+  })();
+
+  // Anything that would replace the editor asks first when edits are unsaved.
+  const [discardAction, setDiscardAction] = useState<(() => void) | null>(null);
+  const unlessDiscarding = (action: () => void) => {
+    if (dirty) setDiscardAction(() => action);
+    else action();
+  };
+  const switchTemplate = (id: number) => {
+    if (id === currentTemplateId) return;
+    const tpl = templates.find((x) => x.id === id);
+    if (tpl) unlessDiscarding(() => loadTemplate(tpl));
   };
 
   /**
@@ -420,6 +471,13 @@ export function DesignerPage() {
         ),
       );
       setTemplateName(content.name);
+      setBaseline({
+        name: content.name,
+        html: content.html,
+        css: content.css,
+        w: content.page_w_mm,
+        h: content.page_h_mm,
+      });
       window.dispatchEvent(new Event("sync:pulled"));
       notifySuccess(
         result.published
@@ -534,6 +592,13 @@ export function DesignerPage() {
       setPageWidth(taken.page_w_mm);
       setPageHeight(taken.page_h_mm);
       setReadme(taken.readme);
+      setBaseline({
+        name: taken.name,
+        html: formatHtml(taken.html),
+        css: formatCss(taken.css),
+        w: taken.page_w_mm,
+        h: taken.page_h_mm,
+      });
       setRemoteId(conflict.serverId);
       setPublishedAt(taken.updatedAt);
       setConflict(null);
@@ -553,6 +618,13 @@ export function DesignerPage() {
       const row = await getLocalTemplate(conflict.rowId);
       const content = await buildContent();
       const result = await overwriteWithMine(row, content);
+      setBaseline({
+        name: content.name,
+        html: content.html,
+        css: content.css,
+        w: content.page_w_mm,
+        h: content.page_h_mm,
+      });
       setRemoteId(result.remoteId);
       setPublishedAt(result.published ? result.updatedAt : null);
       setConflict(null);
@@ -655,12 +727,6 @@ export function DesignerPage() {
   const [editJson, setEditJson] = useState("");
   const [showEditDataset, setShowEditDataset] = useState(false);
 
-  // The active template's DB row id (null until a template is opened or
-  // made — the Designer starts empty).
-  const [currentTemplateDbId, setCurrentTemplateDbId] = useState<number | null>(
-    null,
-  );
-
   // Load the template list from SQLite on mount. Nothing is seeded: an
   // empty list means no templates yet, and the empty state offers the
   // one action that matters — make one.
@@ -689,9 +755,13 @@ export function DesignerPage() {
         setCssCode(formatCss(first.css));
         setPageWidth(first.page_w_mm ?? NEW_TEMPLATE_PAGE_W_MM);
         setPageHeight(first.page_h_mm ?? NEW_TEMPLATE_PAGE_H_MM);
-        setOrientation(
-          (first.orientation as "portrait" | "landscape") ?? "portrait",
-        );
+        setBaseline({
+          name: first.name,
+          html: formatHtml(first.html),
+          css: formatCss(first.css),
+          w: first.page_w_mm ?? NEW_TEMPLATE_PAGE_W_MM,
+          h: first.page_h_mm ?? NEW_TEMPLATE_PAGE_H_MM,
+        });
         setCurrentTemplateDbId(first.id);
         // README and publish info live on the full row.
         try {
@@ -892,7 +962,8 @@ export function DesignerPage() {
   const controls = {
     templates,
     currentTemplateId,
-    loadTemplate,
+    loadTemplate: (tpl: (typeof templates)[number]) =>
+      unlessDiscarding(() => loadTemplate(tpl)),
     onNew: () => setShowNewTemplateDialog(true),
     templateName,
     setTemplateName,
@@ -901,8 +972,6 @@ export function DesignerPage() {
     pageHeight,
     setPageHeight,
     presets: PAGE_PRESETS,
-    orientation,
-    setOrientation,
     onBarcode: () => setShowBarcodeDialog(true),
   };
 
@@ -958,13 +1027,24 @@ export function DesignerPage() {
   return (
     // On desktop the page fills the viewport (see Layout) and each pane scrolls on its own.
     <div className="space-y-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:gap-4 lg:space-y-0">
-      <PageHeader title={t("designer.title")} description={t("pages.designer")}>
-        {isDesktop && <LayoutToggle value={layout} onChange={setLayout} />}
-        {isDesktop ? (
+      {isDesktop ? (
+        // The top row replaces the page header: it names, switches and saves
+        // the open template. The sidebar already says which page this is, so
+        // the title stays for screen readers only.
+        <div data-slot="page-header" className="border-b pb-4">
+          <h1 className="sr-only">{t("designer.title")}</h1>
           <DesignerToolbar
-            onNew={() => setShowNewTemplateDialog(true)}
+            templates={templates}
+            currentTemplateId={currentTemplateId}
+            onSelectTemplate={switchTemplate}
+            noTemplate={templates.length === 0 || currentTemplateDbId == null}
+            nameError={nameError}
+            dirty={dirty}
+            layout={layout}
+            onLayoutChange={setLayout}
+            onNew={() => unlessDiscarding(() => setShowNewTemplateDialog(true))}
             onSave={() => void handleSave()}
-            saveDisabled={offline || isReadOnly({ origin })}
+            saveDisabled={offline || isReadOnly({ origin }) || !!nameError}
             saveTitle={
               offline ? "Offline — connect to save to the server" : undefined
             }
@@ -976,7 +1056,12 @@ export function DesignerPage() {
             pending={pending}
             onVisibilityChange={(v) => void handleVisibilityChange(v)}
           />
-        ) : (
+        </div>
+      ) : (
+        <PageHeader
+          title={t("designer.title")}
+          description={t("pages.designer")}
+        >
           <DesignerOverflowMenu
             onNew={() => setShowNewTemplateDialog(true)}
             published={!!remoteId && !!publishedAt}
@@ -985,8 +1070,8 @@ export function DesignerPage() {
             busy={pending != null}
             onVisibilityChange={(v) => void handleVisibilityChange(v)}
           />
-        )}
-      </PageHeader>
+        </PageHeader>
+      )}
 
       {viaPc && (
         <div
@@ -1039,6 +1124,7 @@ export function DesignerPage() {
               </button>
               <ControlsAccordion
                 {...controls}
+                showTemplates={false}
                 openSections={openSections}
                 onOpenSectionsChange={setOpenSections}
                 onInsertHelper={insertHelper}
@@ -1522,6 +1608,23 @@ export function DesignerPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={discardAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setDiscardAction(null);
+        }}
+        title={t("designer.discard_title")}
+        description={t("designer.discard_body")}
+        confirmLabel={t("designer.discard_confirm")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => {
+          const action = discardAction;
+          setDiscardAction(null);
+          action?.();
+        }}
+      />
 
       {/* Save conflict: the server copy moved since this PC last synced
           it. Two ways out, both explicit — nothing is chosen for the

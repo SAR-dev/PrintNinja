@@ -1,4 +1,4 @@
-import { FileText, Plus } from "lucide-react";
+import { ArrowLeftRight, FileText, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   Accordion,
@@ -9,14 +9,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
 import { cn } from "@/lib/utils";
 import { HelpersPanel } from "./HelpersPanel";
 import { CustomInputPanel } from "./CustomInputPanel";
@@ -44,8 +36,10 @@ interface Props<
   pageHeight: number;
   setPageHeight: (v: number) => void;
   presets: PagePreset[];
-  orientation: "portrait" | "landscape";
-  setOrientation: (v: "portrait" | "landscape") => void;
+  /** Show the Templates section and the name field. The desktop Designer
+   * turns this off: its top row switches and renames templates. A phone has
+   * no such row, so it keeps both here. Defaults to on. */
+  showTemplates?: boolean;
   /** Show the Helpers section. A phone shows the helpers inside the Sample data tab instead. */
   showHelpers?: boolean;
   /** Open the barcode dialog. Renders the "Custom input" section (barcode + font). */
@@ -78,8 +72,7 @@ export function ControlsAccordion<
   pageHeight,
   setPageHeight,
   presets: PAGE_PRESETS,
-  orientation,
-  setOrientation,
+  showTemplates = true,
   showHelpers = true,
   defaultOpen = ["page"],
   openSections,
@@ -137,46 +130,50 @@ export function ControlsAccordion<
       {...open}
       className="rounded-lg border bg-card px-3"
     >
-      <AccordionItem value="templates">
-        <AccordionTrigger>{t("designer.templates")}</AccordionTrigger>
-        <AccordionContent className="space-y-3">
-          {templates.length === 0 ? (
-            <div className="space-y-2 px-1 py-1">
-              <p className="text-xs text-muted-foreground">
-                {t("designer.no_templates_yet")}
-              </p>
-              {onNew && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={onNew}
-                >
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  {t("designer.newTemplate")}
-                </Button>
-              )}
-            </div>
-          ) : (
-            templateGroups
-          )}
-        </AccordionContent>
-      </AccordionItem>
+      {showTemplates && (
+        <AccordionItem value="templates">
+          <AccordionTrigger>{t("designer.templates")}</AccordionTrigger>
+          <AccordionContent className="space-y-3">
+            {templates.length === 0 ? (
+              <div className="space-y-2 px-1 py-1">
+                <p className="text-xs text-muted-foreground">
+                  {t("designer.no_templates_yet")}
+                </p>
+                {onNew && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={onNew}
+                  >
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    {t("designer.newTemplate")}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              templateGroups
+            )}
+          </AccordionContent>
+        </AccordionItem>
+      )}
 
       <AccordionItem value="page">
         <AccordionTrigger>{t("designer.pageSetup")}</AccordionTrigger>
         <AccordionContent className="space-y-3 px-1">
-          <div className="space-y-1">
-            <Label htmlFor="designer-template-name" className="text-xs">
-              {t("designer.template_name")}
-            </Label>
-            <Input
-              id="designer-template-name"
-              value={templateName}
-              onChange={(e) => setTemplateName(e.target.value)}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
+          {showTemplates && (
+            <div className="space-y-1">
+              <Label htmlFor="designer-template-name" className="text-xs">
+                {t("designer.template_name")}
+              </Label>
+              <Input
+                id="designer-template-name"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+              />
+            </div>
+          )}
+          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
             <div className="space-y-1">
               <Label htmlFor="designer-width" className="text-xs">
                 {t("designer.width_mm")}
@@ -188,6 +185,19 @@ export function ControlsAccordion<
                 onChange={(e) => setPageWidth(Number(e.target.value))}
               />
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label={t("designer.swap_dimensions")}
+              title={t("designer.swap_dimensions")}
+              onClick={() => {
+                setPageWidth(pageHeight);
+                setPageHeight(pageWidth);
+              }}
+            >
+              <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+            </Button>
             <div className="space-y-1">
               <Label htmlFor="designer-height" className="text-xs">
                 {t("designer.height_mm")}
@@ -202,13 +212,14 @@ export function ControlsAccordion<
           </div>
           <div className="space-y-1">
             <Label className="text-xs">{t("designer.presets")}</Label>
-            <div className="flex flex-wrap gap-1">
+            <div className="grid grid-cols-3 gap-1">
               {PAGE_PRESETS.map((preset) => (
                 <Button
                   key={preset.labelKey}
                   variant="outline"
                   size="sm"
-                  className="h-7 text-xs"
+                  className="h-7 px-1 text-xs"
+                  title={`${preset.width} × ${preset.height} mm`}
                   onClick={() => {
                     setPageWidth(preset.width);
                     setPageHeight(preset.height);
@@ -218,32 +229,6 @@ export function ControlsAccordion<
                 </Button>
               ))}
             </div>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="designer-orientation" className="text-xs">
-              {t("designer.orientation")}
-            </Label>
-            <Select
-              value={orientation}
-              onValueChange={(v) =>
-                setOrientation(v as "portrait" | "landscape")
-              }
-            >
-              <SelectTrigger
-                id="designer-orientation"
-                aria-label={t("designer.orientation")}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="portrait">
-                  {t("designer.portrait")}
-                </SelectItem>
-                <SelectItem value="landscape">
-                  {t("designer.landscape")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </AccordionContent>
       </AccordionItem>

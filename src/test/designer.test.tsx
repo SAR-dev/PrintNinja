@@ -116,17 +116,109 @@ describe("DesignerToolbar", () => {
     expect(onTemplateNameChange).toHaveBeenCalledWith("Renamed");
   });
 
-  it("hides the name field and Save for read-only saved copies", () => {
+  it("shows only New until a template is open", () => {
+    render(
+      <DesignerToolbar
+        {...base}
+        noTemplate
+        templates={[]}
+        onSelectTemplate={vi.fn()}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /New/ })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Template name" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Switch template" }),
+    ).toBeNull();
+  });
+
+  it("offers the switcher beside the name, and reports the chosen template", async () => {
+    const onSelectTemplate = vi.fn();
+    render(
+      <DesignerToolbar
+        {...base}
+        templates={[
+          { id: 1, name: "Receipt" },
+          { id: 2, name: "Label" },
+        ]}
+        currentTemplateId={2}
+        onSelectTemplate={onSelectTemplate}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Switch template" }));
+    const active = await screen.findByRole("option", { name: /Label/ });
+    expect(active).toHaveAttribute("aria-current", "true");
+    fireEvent.click(screen.getByRole("option", { name: /Receipt/ }));
+    expect(onSelectTemplate).toHaveBeenCalledWith(1);
+    // The list closes once a template is chosen.
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("closes the switcher on Escape without choosing", async () => {
+    const onSelectTemplate = vi.fn();
+    render(
+      <DesignerToolbar
+        {...base}
+        templates={[{ id: 1, name: "Receipt" }]}
+        currentTemplateId={1}
+        onSelectTemplate={onSelectTemplate}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Switch template" }));
+    const search = await screen.findByPlaceholderText("Search templates…");
+    fireEvent.keyDown(search, { key: "Escape" });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(onSelectTemplate).not.toHaveBeenCalled();
+  });
+
+  it("says when the name cannot be saved, and when edits are unsaved", () => {
+    const { rerender } = render(
+      <DesignerToolbar
+        {...base}
+        nameError="Template name taken"
+        dirty
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Template name taken");
+    expect(
+      screen.getByRole("textbox", { name: "Template name" }),
+    ).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    rerender(<DesignerToolbar {...base} onNew={vi.fn()} onSave={vi.fn()} />);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+  });
+
+  it("shows the name of a read-only saved copy in a disabled field, and hides Save", () => {
+    const onTemplateNameChange = vi.fn();
     render(
       <DesignerToolbar
         {...base}
         onNew={vi.fn()}
         onSave={vi.fn()}
         onVisibilityChange={vi.fn()}
+        onTemplateNameChange={onTemplateNameChange}
+        nameError="Template name taken"
+        dirty
         readOnly
       />,
     );
-    expect(screen.queryByRole("textbox", { name: "Template name" })).toBeNull();
+    const name = screen.getByRole("textbox", { name: "Template name" });
+    expect(name).toHaveValue("Label");
+    expect(name).toBeDisabled();
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
+    // Nothing to fix or save on a copy that cannot change.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 
@@ -239,8 +331,6 @@ describe("ControlsAccordion", () => {
     pageHeight: 200,
     setPageHeight: vi.fn(),
     presets: [{ labelKey: "designer.preset_a4", width: 210, height: 297 }],
-    orientation: "portrait" as const,
-    setOrientation: vi.fn(),
   });
 
   const ALL_OPEN = ["templates", "page", "helpers"];
@@ -348,14 +438,39 @@ describe("ControlsAccordion", () => {
     expect(screen.queryByText("Properties")).not.toBeInTheDocument();
   });
 
-  it("reports page size, orientation and zoom only once, in Page Setup", () => {
+  it("reports page size and zoom only once, in Page Setup, with no separate orientation control", () => {
     render(<ControlsAccordion {...props()} defaultOpen={ALL_OPEN} />);
     expect(screen.getAllByLabelText("Width (mm)")).toHaveLength(1);
     expect(screen.getAllByLabelText("Height (mm)")).toHaveLength(1);
     expect(
-      screen.getAllByRole("combobox", { name: "Orientation" }),
-    ).toHaveLength(1);
+      screen.queryByRole("combobox", { name: "Orientation" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/zoom/i)).not.toBeInTheDocument();
+  });
+
+  it("swaps width and height with one button", () => {
+    const p = props();
+    render(<ControlsAccordion {...p} defaultOpen={ALL_OPEN} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Swap width and height" }),
+    );
+    expect(p.setPageWidth).toHaveBeenCalledWith(200);
+    expect(p.setPageHeight).toHaveBeenCalledWith(80);
+  });
+
+  it("leaves out the Templates section and the name field when the top row owns them", () => {
+    render(
+      <ControlsAccordion
+        {...props()}
+        showTemplates={false}
+        defaultOpen={["page"]}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Templates" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Template name")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Width (mm)")).toBeInTheDocument();
   });
 
   it("keeps a closed section's contents out of the page", () => {
@@ -566,6 +681,21 @@ describe("zoom maths", () => {
   it("shows the page at full size before it has been measured, and never goes below 25%", () => {
     expect(fitZoom(0, 794)).toBe(1);
     expect(fitZoom(100, 794)).toBe(0.25);
+  });
+
+  it("enlarges a page that already fits when the pane's height is known, up to 300%", () => {
+    // 80 × 100 mm label (302 × 378 px) in a 590 × 800 px pane: width is the limit.
+    expect(fitZoom(590, 302, 800, 378)).toBeCloseTo((590 - 32) / 302, 5);
+    // A tall pane is not the limit when the pane is narrow.
+    expect(fitZoom(400, 302, 2000, 378)).toBeCloseTo((400 - 32) / 302, 5);
+    // A short pane limits it by height.
+    expect(fitZoom(2000, 302, 500, 378)).toBeCloseTo((500 - 32) / 378, 5);
+    // Never beyond 300%.
+    expect(fitZoom(5000, 100, 5000, 100)).toBe(3);
+    // A page bigger than the pane keeps fitting by width, never by height.
+    expect(fitZoom(500, 794, 600, 1123)).toBeCloseTo((500 - 32) / 794, 5);
+    // No measured height: the old cap of 100% holds.
+    expect(fitZoom(2000, 302, 0, 378)).toBe(1);
   });
 
   it("steps to the next zoom level up or down, and stops at the ends", () => {
@@ -953,8 +1083,6 @@ describe("ControlsAccordion, controlled", () => {
     pageHeight: 150,
     setPageHeight: vi.fn(),
     presets: [],
-    orientation: "portrait" as const,
-    setOrientation: vi.fn(),
     onNewVersion: vi.fn(),
     openDiff: vi.fn(),
     handleRestoreVersion: vi.fn(),
@@ -996,7 +1124,11 @@ describe("ControlsRail", () => {
     expect(onOpenSection).toHaveBeenCalledWith("custom");
     fireEvent.click(screen.getByRole("button", { name: "Expand controls" }));
     expect(onExpand).toHaveBeenCalled();
-    expect(screen.getAllByRole("button")).toHaveLength(5);
+    // Expand, Page Setup, Helpers, Custom input. Templates live in the top row.
+    expect(screen.getAllByRole("button")).toHaveLength(4);
+    expect(
+      screen.queryByRole("button", { name: "Open Templates" }),
+    ).not.toBeInTheDocument();
   });
 });
 
