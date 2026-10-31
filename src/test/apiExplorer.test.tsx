@@ -79,6 +79,41 @@ describe("API Explorer and the server", () => {
     );
   });
 
+  it("blocks the print endpoint on an unpaired phone, with a way to pair", async () => {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_api_status") return running;
+      if (cmd === "get_setting") return null;
+      return null;
+    });
+    try {
+      renderPage();
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: /Render a template and print it/,
+        }),
+      );
+      const send = await screen.findByTestId("api-explorer-send");
+      await waitFor(() => expect(send).toBeDisabled());
+      expect(
+        screen.getByText(/needs a paired PC on this phone/),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Pair a PC" })).toHaveAttribute(
+        "href",
+        "/pair",
+      );
+      fireEvent.click(send);
+      expect(invoke).not.toHaveBeenCalledWith(
+        "api_request",
+        expect.objectContaining({ url: expect.stringContaining("/v1/print") }),
+      );
+    } finally {
+      ua.mockRestore();
+    }
+  });
+
   // The request must go through the Rust `api_request` command: a WebView
   // fetch to 127.0.0.1 is cross-origin (no ACAO on a loopback bind) and
   // mixed content, so it fails with "Failed to fetch" on Android.

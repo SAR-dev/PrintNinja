@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { AppLogo } from "@/components/AppLogo";
 import { DevicesCard } from "@/components/DevicesCard";
 import { usePrefs } from "@/lib/prefs/PrefsProvider";
 import { hasPairedProvider } from "@/lib/pairing";
+import { getWelcomeName } from "@/lib/share/client";
 
 /**
  * Mandatory pairing screen, Android only. The phone never renders
@@ -17,6 +18,9 @@ import { hasPairedProvider } from "@/lib/pairing";
 export function PairingGate({ onPaired }: { onPaired: () => void }) {
   const { t } = useTranslation();
   const { appName, logo } = usePrefs();
+  // Who is pairing: the session handle, else the guest handle, else no
+  // name at all. Read once — this screen never signs anyone in or out.
+  const [welcomeName] = useState<string | null>(() => getWelcomeName());
 
   useEffect(() => {
     let cancelled = false;
@@ -38,7 +42,9 @@ export function PairingGate({ onPaired }: { onPaired: () => void }) {
           <CardHeader className="space-y-3">
             <AppLogo src={logo} className="h-10 w-10" />
             <CardTitle className="text-xl">
-              {t("auth.pair_required_title", { appName })}
+              {welcomeName
+                ? t("auth.pair_welcome_name", { name: welcomeName })
+                : t("auth.pair_required_title", { appName })}
             </CardTitle>
             <p className="text-muted-foreground">
               {t("auth.pair_required_body")}

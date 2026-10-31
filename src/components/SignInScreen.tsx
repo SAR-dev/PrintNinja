@@ -21,7 +21,7 @@ interface SignInScreenProps {
   notice?: string;
   onSignedIn: (handle: string) => void;
   /** Enter without an account: pair over LAN, server features stay signed out. */
-  onGuest: () => void;
+  onGuest: (handle: string) => void;
 }
 
 // Same rules the server enforces on register.
@@ -40,6 +40,7 @@ export function SignInScreen({
   const [url, setUrl] = useState(initialUrl ?? "");
   const [handle, setHandle] = useState("");
   const [password, setPassword] = useState("");
+  const [guestHandle, setGuestHandle] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -80,6 +81,21 @@ export function SignInScreen({
   const toggleMode = () => {
     setMode(registering ? "login" : "register");
     setError("");
+  };
+
+  const enterAsGuest = () => {
+    if (busy) return;
+    const name = guestHandle.trim();
+    if (!name) {
+      setError(t("auth.guest_handle_required"));
+      return;
+    }
+    if (!HANDLE_RE.test(name)) {
+      setError(t("auth.handle_invalid"));
+      return;
+    }
+    setError("");
+    onGuest(name);
   };
 
   return (
@@ -194,12 +210,26 @@ export function SignInScreen({
                 : t("auth.switch_to_register")}
             </Button>
             <div className="space-y-1">
+              <Label htmlFor="auth-guest-handle">
+                {t("auth.guest_handle")}
+              </Label>
+              <Input
+                id="auth-guest-handle"
+                data-testid="auth-guest-handle"
+                autoComplete="nickname"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder={t("auth.guest_handle_placeholder")}
+                value={guestHandle}
+                onChange={(e) => setGuestHandle(e.target.value)}
+                disabled={busy}
+              />
               <Button
                 type="button"
                 variant="outline"
                 className="w-full"
                 data-testid="auth-guest"
-                onClick={onGuest}
+                onClick={enterAsGuest}
                 disabled={busy}
               >
                 {t("auth.continue_as_guest")}
