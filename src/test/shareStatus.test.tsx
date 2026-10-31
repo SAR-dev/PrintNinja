@@ -9,6 +9,8 @@ const share = vi.hoisted(() => ({
   getSessionToken: vi.fn(),
   fetchMe: vi.fn(),
   endSession: vi.fn(),
+  onSessionStarted: () => () => {},
+  onSessionEnded: () => () => {},
 }));
 vi.mock("@/lib/share/client", () => share);
 

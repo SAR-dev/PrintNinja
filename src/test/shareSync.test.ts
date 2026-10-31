@@ -26,6 +26,7 @@ vi.mock("@/lib/share/client", () => client);
 import { ApiError } from "@/lib/api/errors";
 
 import {
+  cloneSavedTemplate,
   createTemplateOnServer,
   deleteTemplateEverywhere,
   overwriteWithMine,
@@ -324,7 +325,7 @@ describe("overwriteWithMine", () => {
 });
 
 describe("createTemplateOnServer", () => {
-  it("PUTs the starter copy, then caches the row synced at that revision", async () => {
+  it("PUTs the new copy, then caches the row synced at that revision", async () => {
     client.putRemoteTemplate.mockResolvedValue({ ...REMOTE, revision: 1 });
     invoke.mockImplementation(async (cmd: string) => {
       if (cmd === "create_template") return { id: 12 };
@@ -353,6 +354,67 @@ describe("createTemplateOnServer", () => {
       },
     });
     expect(created).toEqual({ id: 12 });
+  });
+});
+
+describe("cloneSavedTemplate", () => {
+  const mirror = (over: Partial<TemplateRow> = {}) =>
+    local({
+      name: "Parcel Tag",
+      summary: "A tag",
+      page_w_mm: 80,
+      page_h_mm: 100,
+      orientation: "portrait",
+      html: "<p>{{customer.name}}</p>",
+      css: ".a{}",
+      readme: "# Tag",
+      origin: "saved",
+      origin_owner: "ana",
+      ...over,
+    });
+  const stamp = () => 1_761_889_844_123;
+
+  beforeEach(() => {
+    client.putRemoteTemplate.mockResolvedValue({ ...REMOTE, revision: 1 });
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "create_template") return { id: 12, name: "Parcel Tag" };
+      return null;
+    });
+  });
+
+  it("PUTs the mirror content under a timestamped name with provenance", async () => {
+    await cloneSavedTemplate(mirror(), { now: stamp });
+    const put = client.putRemoteTemplate.mock.calls[0][0];
+    expect(put.name).toBe("Parcel Tag (1761889844)");
+    expect(put.body).toBe("<p>{{customer.name}}</p>");
+    expect(put.summary).toBe("A tag");
+    expect(put.readme).toContain("# Tag");
+    expect(put.readme).toContain('Cloned from @ana\'s "Parcel Tag".');
+  });
+
+  it("retries with milliseconds on a same-second name clash", async () => {
+    client.putRemoteTemplate
+      .mockRejectedValueOnce(
+        new ApiError({
+          code: "template_name_taken",
+          message: "taken",
+          requestId: "r",
+          status: 409,
+        }),
+      )
+      .mockResolvedValue({ ...REMOTE, revision: 1 });
+    await cloneSavedTemplate(mirror(), { now: stamp });
+    const names = client.putRemoteTemplate.mock.calls.map((c) => c[0].name);
+    expect(names).toEqual([
+      "Parcel Tag (1761889844)",
+      "Parcel Tag (1761889844123)",
+    ]);
+  });
+
+  it("omits the handle when the mirror has no known author", async () => {
+    await cloneSavedTemplate(mirror({ origin_owner: null }), { now: stamp });
+    const put = client.putRemoteTemplate.mock.calls[0][0];
+    expect(put.readme).toContain('Cloned from "Parcel Tag".');
   });
 });
 

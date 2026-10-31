@@ -600,6 +600,8 @@ fn conflict_marks_and_resolves_both_ways() {
         revision: 6,
         published_at: None,
         updated_at: "2026-10-20T00:00:00Z".to_string(),
+        origin: None,
+        owner_handle: None,
     };
     // "mine" puts it back to dirty for the next push.
     resolve_conflict(&conn, "srv-c", ConflictResolution::Mine, None, None).unwrap();
@@ -815,6 +817,7 @@ fn server_data(id: &str, body: &str, revision: i64) -> serde_json::Value {
 
 /// A saved mirror follows the author's publishes: same server_id, new
 /// name/body/revision land on the mirror row (read-only, still synced).
+/// Mirror updates arrive as saved-origin upserts from the sync stream.
 #[test]
 fn saved_mirror_follows_author_publishes() {
     let conn = Connection::open_in_memory().unwrap();
@@ -827,7 +830,10 @@ fn saved_mirror_follows_author_publishes() {
     .unwrap();
     let mut data = server_data("srv-m", "<p>v2</p>", 2);
     data["name"] = serde_json::json!("New title");
-    apply_one(&conn, data);
+    data["origin"] = serde_json::json!("saved");
+    data["owner_handle"] = serde_json::json!("ana");
+    let report = apply_one(&conn, data);
+    assert_eq!(report.applied_upserts, 1);
     let (name, html, rev, state, kind): (String, String, i64, String, String) = conn
         .query_row(
             "SELECT name, html, server_revision, sync_state, kind FROM templates WHERE server_id = 'srv-m'",
@@ -840,6 +846,142 @@ fn saved_mirror_follows_author_publishes() {
     assert_eq!(rev, 2);
     assert_eq!(state, "synced");
     assert_eq!(kind, "saved", "mirror stays a mirror");
+}
+
+/// Legacy self-heal: a mirror of your own template (saved before own
+/// saves were rejected) is promoted to an editable original the first
+/// time an own upsert lands for it.
+#[test]
+fn own_upsert_promotes_legacy_mirror() {
+    let conn = Connection::open_in_memory().unwrap();
+    printninja_lib::db::init(&conn).unwrap();
+    conn.execute(
+        "INSERT INTO templates (name, page_w_mm, page_h_mm, orientation, readme, summary, html, css, server_id, server_revision, base_revision, sync_state, kind, origin, origin_owner)
+         VALUES ('Mine', 210, 297, 'portrait', '', '', '<p>v1</p>', '', 'srv-m', 1, 1, 'synced', 'saved', 'saved', 'me')",
+        [],
+    )
+    .unwrap();
+    let report = apply_one(&conn, server_data("srv-m", "<p>v2</p>", 2));
+    assert_eq!(report.applied_upserts, 1);
+    let (kind, origin, owner, html): (String, String, Option<String>, String) = conn
+        .query_row(
+            "SELECT kind, origin, owner_handle, html FROM templates WHERE server_id = 'srv-m'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .unwrap();
+    assert_eq!(kind, "own");
+    assert_eq!(origin, "own");
+    assert_eq!(owner, None);
+    assert_eq!(html, "<p>v2</p>");
+}
+
+/// A saved upsert for an unknown id inserts the mirror directly: the
+/// author's title verbatim (no unique-name check), kind and origin set
+/// to saved, and the author's handle on both owner columns.
+#[test]
+fn saved_upsert_creates_mirror_row() {
+    let conn = Connection::open_in_memory().unwrap();
+    printninja_lib::db::init(&conn).unwrap();
+    // An own template already uses the name: mirrors are exempt.
+    seed_synced(&conn, "srv-own", 1);
+    conn.execute(
+        "UPDATE templates SET name = 'M' WHERE server_id = 'srv-own'",
+        [],
+    )
+    .unwrap();
+
+    let mut data = server_data("srv-m", "<p>v1</p>", 1);
+    data["origin"] = serde_json::json!("saved");
+    data["owner_handle"] = serde_json::json!("ana");
+    let report = apply_one(&conn, data);
+    assert_eq!(report.applied_upserts, 1);
+    let (name, kind, origin, owner, origin_owner, state): (
+        String,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+    ) = conn
+        .query_row(
+            "SELECT name, kind, origin, owner_handle, origin_owner, sync_state
+             FROM templates WHERE server_id = 'srv-m'",
+            [],
+            |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                ))
+            },
+        )
+        .unwrap();
+    assert_eq!(name, "M", "verbatim title despite the clash");
+    assert_eq!(kind, "saved");
+    assert_eq!(origin, "saved");
+    assert_eq!(owner.as_deref(), Some("ana"));
+    assert_eq!(origin_owner.as_deref(), Some("ana"));
+    assert_eq!(state, "synced");
+    // The own row is untouched.
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM templates WHERE name = 'M'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(count, 2);
+}
+
+/// A saved upsert matching an owned original leaves it alone: ownership
+/// wins over mirroring — the row is never converted into a mirror.
+#[test]
+fn saved_upsert_never_converts_own_row() {
+    let conn = Connection::open_in_memory().unwrap();
+    printninja_lib::db::init(&conn).unwrap();
+    seed_synced(&conn, "srv-x", 3);
+
+    let mut data = server_data("srv-x", "<p>mirror</p>", 4);
+    data["origin"] = serde_json::json!("saved");
+    data["owner_handle"] = serde_json::json!("ana");
+    let report = apply_one(&conn, data);
+    assert_eq!(report.applied_upserts, 0);
+    let (kind, html, rev): (String, String, i64) = conn
+        .query_row(
+            "SELECT kind, html, server_revision FROM templates WHERE server_id = 'srv-x'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(kind, "own");
+    assert_eq!(rev, 3);
+    assert_eq!(html, "<p></p>", "local content untouched");
+}
+
+/// An unknown origin fails loudly instead of landing as the wrong kind.
+#[test]
+fn sync_rejects_unknown_origin() {
+    use printninja_lib::commands::cache::{apply_changes, SyncChangeIn};
+    let conn = Connection::open_in_memory().unwrap();
+    printninja_lib::db::init(&conn).unwrap();
+    let fonts_dir = std::env::temp_dir().join(format!("pn-cache-fonts-{}", uuid::Uuid::new_v4()));
+    let mut data = server_data("srv-x", "<p>x</p>", 1);
+    data["origin"] = serde_json::json!("bogus");
+    let changes: Vec<SyncChangeIn> = serde_json::from_value(serde_json::json!([{
+        "seq": 1, "entity": "template", "op": "upsert", "data": data
+    }]))
+    .unwrap();
+    let err = apply_changes(&conn, &fonts_dir, &changes, "MQ==").unwrap_err();
+    assert!(
+        format!("{err:?}").contains("origin"),
+        "unknown origin must fail loudly: {err:?}"
+    );
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM templates", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 0, "nothing lands on a rejected page");
 }
 
 #[test]

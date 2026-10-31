@@ -32,6 +32,7 @@ const SETTINGS_KEYS = {
   serviceUrl: "share_service_url",
   token: "share_session_token",
   userId: "share_user_id",
+  cacheOwner: "cache_owner_user_id",
 } as const;
 
 async function getSetting(key: string): Promise<string | null> {
@@ -93,6 +94,30 @@ export async function getShareUserId(): Promise<string | null> {
 
 export async function setShareUserId(id: string | null): Promise<void> {
   await setSetting(SETTINGS_KEYS.userId, id);
+}
+
+/**
+ * Make sure the local cache belongs to the account that just signed in.
+ *
+ * The cache (templates, datasets, profiles, fonts, sync cursor) is stored
+ * per device, not per account, and it survives sign-out. Without this a
+ * second account would see the first account's templates, and would pull
+ * from the first account's sync cursor. The owner id is kept in a device
+ * setting that sign-out does not clear, so signing back in as the *same*
+ * account keeps unsaved drafts, while a different (or unknown) account
+ * starts from an empty cache and pulls its own data.
+ */
+async function claimCacheFor(userId: string): Promise<void> {
+  const owner = await getSetting(SETTINGS_KEYS.cacheOwner);
+  if (owner && owner.trim() === userId) return;
+  try {
+    await agent("cache_clear_account", {});
+  } catch {
+    // Web mode has no local cache to clear.
+  }
+  await setSetting(SETTINGS_KEYS.cacheOwner, userId);
+  // Lists that already read the old rows must reload.
+  window.dispatchEvent(new CustomEvent("sync:pulled", { detail: {} }));
 }
 
 export async function isSignedIn(): Promise<boolean> {
@@ -205,6 +230,9 @@ async function authRequest(
     path,
     body: { handle, password },
   });
+  // Before the new token is stored, so no pull can run against the
+  // previous account's cache.
+  await claimCacheFor(data.user.id);
   await setSessionToken(data.token);
   // The account this session belongs to, for the same-account pairing
   // check (ARCHITECTURE §9). Stored with the URL it belongs to (already in settings).
@@ -370,18 +398,6 @@ export async function fetchRemoteTemplate(id: string): Promise<RemoteTemplate> {
   }
 }
 
-/** The signed-in user's own templates, private and published. Pages through the v2 list. */
-export async function fetchMyRemoteTemplates(): Promise<
-  RemoteTemplateSummary[]
-> {
-  return fetchAllPages((page, pageSize) =>
-    callApi<{ items: RemoteTemplateSummary[]; has_more: boolean }>(apiDeps(), {
-      method: "GET",
-      path: `/v2/templates/mine?page=${page}&page_size=${pageSize}`,
-    }),
-  );
-}
-
 /** A community template as the v2 service lists it. */
 export type CommunitySummary =
   paths["/v2/community/templates"]["get"]["responses"][200]["content"]["application/json"]["items"][number];
@@ -401,36 +417,6 @@ export async function fetchCommunityTemplates(options: {
     path: `/v2/community/templates?${params.toString()}`,
   });
   return page.items;
-}
-
-/** The community templates the signed-in user has saved. */
-export async function fetchSavedRemoteTemplates(): Promise<
-  RemoteTemplateSummary[]
-> {
-  return fetchAllPages((page, pageSize) =>
-    callApi<{ items: RemoteTemplateSummary[]; has_more: boolean }>(apiDeps(), {
-      method: "GET",
-      path: `/v2/saved?page=${page}&page_size=${pageSize}`,
-    }),
-  );
-}
-
-async function fetchAllPages(
-  fetchPage: (
-    page: number,
-    pageSize: number,
-  ) => Promise<{ items: RemoteTemplateSummary[]; has_more: boolean }>,
-): Promise<RemoteTemplateSummary[]> {
-  const out: RemoteTemplateSummary[] = [];
-  let page = 1;
-  for (;;) {
-    const { items, has_more } = await fetchPage(page, 100);
-    out.push(...items);
-    if (!has_more) {
-      return out;
-    }
-    page += 1;
-  }
 }
 
 /** Keeps a community template in the user's Saved list. Idempotent. */

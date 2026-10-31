@@ -33,10 +33,9 @@ describe("locale files", () => {
     expect(Object.keys(jaFlat).sort()).toEqual(Object.keys(enFlat).sort());
   });
 
-  it("ja has no empty strings except the plural helper words", () => {
-    const allowed = new Set(["templates.server_is", "templates.server_are"]);
+  it("ja has no empty strings", () => {
     const empty = Object.entries(jaFlat)
-      .filter(([k, v]) => v.trim() === "" && !allowed.has(k))
+      .filter(([, v]) => v.trim() === "")
       .map(([k]) => k);
     expect(empty).toEqual([]);
   });

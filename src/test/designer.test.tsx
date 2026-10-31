@@ -74,6 +74,7 @@ beforeEach(() => window.localStorage.clear());
 describe("DesignerToolbar", () => {
   const base = {
     templateName: "Label",
+    onTemplateNameChange: (() => {}) as (name: string) => void,
     remoteId: null as string | null,
     publishedAt: null as string | null,
     readOnly: false as boolean,
@@ -96,6 +97,149 @@ describe("DesignerToolbar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(onNew).toHaveBeenCalled();
     expect(onSave).toHaveBeenCalled();
+  });
+
+  it("edits the template name in place beside Save", () => {
+    const onTemplateNameChange = vi.fn();
+    render(
+      <DesignerToolbar
+        {...base}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+        onVisibilityChange={vi.fn()}
+        onTemplateNameChange={onTemplateNameChange}
+      />,
+    );
+    const name = screen.getByRole("textbox", { name: "Template name" });
+    expect(name).toHaveValue("Label");
+    fireEvent.change(name, { target: { value: "Renamed" } });
+    expect(onTemplateNameChange).toHaveBeenCalledWith("Renamed");
+  });
+
+  it("puts the template switcher inside the name field as an icon, so the name is not repeated", () => {
+    render(
+      <DesignerToolbar
+        {...base}
+        templates={[{ id: 1, name: "Label" }]}
+        currentTemplateId={1}
+        onSelectTemplate={vi.fn()}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    const switcher = screen.getByRole("button", { name: "Switch template" });
+    const name = screen.getByRole("textbox", { name: "Template name" });
+    // Same frame, and no "Templates" word beside the name.
+    const frame = switcher.closest('[data-slot="template-field"]');
+    expect(frame).not.toBeNull();
+    expect(name.closest('[data-slot="template-field"]')).toBe(frame);
+    expect(switcher).toHaveTextContent("");
+  });
+
+  it("shows only New until a template is open", () => {
+    render(
+      <DesignerToolbar
+        {...base}
+        noTemplate
+        templates={[]}
+        onSelectTemplate={vi.fn()}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /New/ })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Template name" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Switch template" }),
+    ).toBeNull();
+  });
+
+  it("offers the switcher beside the name, and reports the chosen template", async () => {
+    const onSelectTemplate = vi.fn();
+    render(
+      <DesignerToolbar
+        {...base}
+        templates={[
+          { id: 1, name: "Receipt" },
+          { id: 2, name: "Label" },
+        ]}
+        currentTemplateId={2}
+        onSelectTemplate={onSelectTemplate}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Switch template" }));
+    const active = await screen.findByRole("option", { name: /Label/ });
+    expect(active).toHaveAttribute("aria-current", "true");
+    fireEvent.click(screen.getByRole("option", { name: /Receipt/ }));
+    expect(onSelectTemplate).toHaveBeenCalledWith(1);
+    // The list closes once a template is chosen.
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("closes the switcher on Escape without choosing", async () => {
+    const onSelectTemplate = vi.fn();
+    render(
+      <DesignerToolbar
+        {...base}
+        templates={[{ id: 1, name: "Receipt" }]}
+        currentTemplateId={1}
+        onSelectTemplate={onSelectTemplate}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Switch template" }));
+    const search = await screen.findByPlaceholderText("Search templates…");
+    fireEvent.keyDown(search, { key: "Escape" });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(onSelectTemplate).not.toHaveBeenCalled();
+  });
+
+  it("says when the name cannot be saved, and when edits are unsaved", () => {
+    const { rerender } = render(
+      <DesignerToolbar
+        {...base}
+        nameError="Template name taken"
+        dirty
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Template name taken");
+    expect(
+      screen.getByRole("textbox", { name: "Template name" }),
+    ).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    rerender(<DesignerToolbar {...base} onNew={vi.fn()} onSave={vi.fn()} />);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+  });
+
+  it("shows the name of a read-only saved copy in a disabled field, and keeps Save disabled", () => {
+    const onTemplateNameChange = vi.fn();
+    render(
+      <DesignerToolbar
+        {...base}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+        onVisibilityChange={vi.fn()}
+        onTemplateNameChange={onTemplateNameChange}
+        nameError="Template name taken"
+        dirty
+        readOnly
+      />,
+    );
+    const name = screen.getByRole("textbox", { name: "Template name" });
+    expect(name).toHaveValue("Label");
+    expect(name).toBeDisabled();
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
+    // Nothing to fix or save on a copy that cannot change.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
   it("has no Import or Export actions", () => {
@@ -174,7 +318,7 @@ describe("DesignerToolbar", () => {
     expect(onVisibilityChange).toHaveBeenCalled();
   });
 
-  it("hides Save and the switch on a saved copy from Community", () => {
+  it("keeps Save and the visibility switch on a saved copy, disabled, with the reason on focus", async () => {
     render(
       <DesignerToolbar
         {...base}
@@ -187,8 +331,39 @@ describe("DesignerToolbar", () => {
       />,
     );
     expect(screen.getByText("Read-only")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-    expect(screen.queryByTestId("template-visibility")).toBeNull();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.getByTestId("template-visibility")).toBeDisabled();
+
+    // A disabled button sends no hover or focus, so the reason hangs on its wrapper.
+    fireEvent.focus(screen.getByTestId("save-disabled-reason"));
+    expect(
+      (await screen.findAllByText(/saved copy from Community/)).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("explains why Save is disabled offline, and leaves a plain Save alone", () => {
+    const { rerender } = render(
+      <DesignerToolbar
+        {...base}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+        saveDisabled
+        saveTitle="Offline — connect to save to the server"
+      />,
+    );
+    expect(screen.getByTestId("save-disabled-reason")).toBeInTheDocument();
+    rerender(<DesignerToolbar {...base} onNew={vi.fn()} onSave={vi.fn()} />);
+    expect(screen.queryByTestId("save-disabled-reason")).toBeNull();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("lets the name field take all the free width", () => {
+    render(<DesignerToolbar {...base} onNew={vi.fn()} onSave={vi.fn()} />);
+    const wrapper = screen
+      .getByRole("textbox", { name: "Template name" })
+      .closest('[data-slot="template-field"]')!.parentElement!;
+    expect(wrapper.className).toContain("flex-1");
+    expect(wrapper.className).not.toMatch(/(^|\s)(max-w-|w-\[)/);
   });
 });
 
@@ -207,8 +382,6 @@ describe("ControlsAccordion", () => {
     pageHeight: 200,
     setPageHeight: vi.fn(),
     presets: [{ labelKey: "designer.preset_a4", width: 210, height: 297 }],
-    orientation: "portrait" as const,
-    setOrientation: vi.fn(),
   });
 
   const ALL_OPEN = ["templates", "page", "helpers"];
@@ -316,14 +489,39 @@ describe("ControlsAccordion", () => {
     expect(screen.queryByText("Properties")).not.toBeInTheDocument();
   });
 
-  it("reports page size, orientation and zoom only once, in Page Setup", () => {
+  it("reports page size and zoom only once, in Page Setup, with no separate orientation control", () => {
     render(<ControlsAccordion {...props()} defaultOpen={ALL_OPEN} />);
     expect(screen.getAllByLabelText("Width (mm)")).toHaveLength(1);
     expect(screen.getAllByLabelText("Height (mm)")).toHaveLength(1);
     expect(
-      screen.getAllByRole("combobox", { name: "Orientation" }),
-    ).toHaveLength(1);
+      screen.queryByRole("combobox", { name: "Orientation" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/zoom/i)).not.toBeInTheDocument();
+  });
+
+  it("swaps width and height with one button", () => {
+    const p = props();
+    render(<ControlsAccordion {...p} defaultOpen={ALL_OPEN} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Swap width and height" }),
+    );
+    expect(p.setPageWidth).toHaveBeenCalledWith(200);
+    expect(p.setPageHeight).toHaveBeenCalledWith(80);
+  });
+
+  it("leaves out the Templates section and the name field when the top row owns them", () => {
+    render(
+      <ControlsAccordion
+        {...props()}
+        showTemplates={false}
+        defaultOpen={["page"]}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Templates" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Template name")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Width (mm)")).toBeInTheDocument();
   });
 
   it("keeps a closed section's contents out of the page", () => {
@@ -536,6 +734,21 @@ describe("zoom maths", () => {
     expect(fitZoom(100, 794)).toBe(0.25);
   });
 
+  it("enlarges a page that already fits when the pane's height is known, up to 300%", () => {
+    // 80 × 100 mm label (302 × 378 px) in a 590 × 800 px pane: width is the limit.
+    expect(fitZoom(590, 302, 800, 378)).toBeCloseTo((590 - 32) / 302, 5);
+    // A tall pane is not the limit when the pane is narrow.
+    expect(fitZoom(400, 302, 2000, 378)).toBeCloseTo((400 - 32) / 302, 5);
+    // A short pane limits it by height.
+    expect(fitZoom(2000, 302, 500, 378)).toBeCloseTo((500 - 32) / 378, 5);
+    // Never beyond 300%.
+    expect(fitZoom(5000, 100, 5000, 100)).toBe(3);
+    // A page bigger than the pane keeps fitting by width, never by height.
+    expect(fitZoom(500, 794, 600, 1123)).toBeCloseTo((500 - 32) / 794, 5);
+    // No measured height: the old cap of 100% holds.
+    expect(fitZoom(2000, 302, 0, 378)).toBe(1);
+  });
+
   it("steps to the next zoom level up or down, and stops at the ends", () => {
     expect(stepZoom(1, 1)).toBe(1.25);
     expect(stepZoom(1, -1)).toBe(0.75);
@@ -657,8 +870,6 @@ describe("EditorPane", () => {
     onCssChange: vi.fn(),
     readme: "# Label docs",
     onReadmeChange: vi.fn(),
-    readmeSaving: false,
-    onSaveReadme: vi.fn(),
   });
   // Radix Tabs switch on mousedown, not click.
   const openTab = (name: string) => {
@@ -688,42 +899,34 @@ describe("EditorPane", () => {
     expect(container.querySelectorAll(".cm-editor")).toHaveLength(2);
   });
 
-  it("shows the README editor and its Save button on the README tab", () => {
-    const p = props();
-    render(<EditorPane {...p} />);
-    expect(screen.queryByText(/README — Label/)).not.toBeInTheDocument();
+  it("shows the README editor on the README tab, with no Save of its own", () => {
+    render(<EditorPane {...props()} />);
     openTab("README");
-    expect(screen.getByText("README — Label")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Save README" }));
-    expect(p.onSaveReadme).toHaveBeenCalled();
+    expect(screen.queryByText(/README — Label/)).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Write your README/)).toHaveValue(
+      "# Label docs",
+    );
+    expect(
+      screen.queryByRole("button", { name: /Save README/ }),
+    ).not.toBeInTheDocument();
   });
 
-  it("shows a Sample data tab after README when given sample content", () => {
-    render(<EditorPane {...props()} samplePanel={<p>datasets here</p>} />);
-    const names = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(names).toEqual(["HTML", "CSS", "README", "Sample data"]);
-    openTab("Sample data");
-    expect(screen.getByRole("tab", { name: "Sample data" })).toHaveAttribute(
-      "aria-selected",
-      "true",
+  it("disables the README tools on a read-only copy", () => {
+    render(<EditorPane {...props()} readmeReadOnly />);
+    openTab("README");
+    expect(screen.getByPlaceholderText(/Write your README/)).toHaveAttribute(
+      "readonly",
     );
-    expect(screen.getByText("datasets here")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
   });
 
-  it("shows notices under the HTML and CSS tabs, but not README or Sample data", () => {
-    render(
-      <EditorPane
-        {...props()}
-        notices={<p>watch out</p>}
-        samplePanel={<p>datasets here</p>}
-      />,
-    );
+  it("shows notices under the HTML and CSS tabs, but not README", () => {
+    render(<EditorPane {...props()} notices={<p>watch out</p>} />);
     expect(screen.getByText("watch out")).toBeInTheDocument();
     openTab("CSS");
     expect(screen.getByText("watch out")).toBeInTheDocument();
     openTab("README");
-    expect(screen.queryByText("watch out")).not.toBeInTheDocument();
-    openTab("Sample data");
     expect(screen.queryByText("watch out")).not.toBeInTheDocument();
   });
 
@@ -761,9 +964,18 @@ describe("EditorPane", () => {
     expect(screen.queryByText(/README — Label/)).not.toBeInTheDocument();
   });
 
-  it("shows the template name beside the tabs", () => {
-    render(<EditorPane {...props()} />);
-    expect(screen.getByTitle("Label")).toHaveTextContent("Label");
+  it("keeps the tab row to the tabs alone, so a long name cannot squeeze them into a scrollbar", () => {
+    render(
+      <EditorPane
+        {...props()}
+        templateName="Parcel Tag 80mm (1793396109) with a very long name"
+      />,
+    );
+    const list = screen.getByRole("tablist", { name: "Editor files" });
+    expect(list).toHaveClass("shrink-0", "overflow-visible");
+    expect(
+      screen.queryByTitle("Parcel Tag 80mm (1793396109) with a very long name"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders the initial HTML and CSS without reporting a change", () => {
@@ -921,8 +1133,6 @@ describe("ControlsAccordion, controlled", () => {
     pageHeight: 150,
     setPageHeight: vi.fn(),
     presets: [],
-    orientation: "portrait" as const,
-    setOrientation: vi.fn(),
     onNewVersion: vi.fn(),
     openDiff: vi.fn(),
     handleRestoreVersion: vi.fn(),
@@ -960,11 +1170,17 @@ describe("ControlsRail", () => {
     expect(onOpenSection).toHaveBeenCalledWith("helpers");
     fireEvent.click(screen.getByRole("button", { name: "Open Helpers" }));
     expect(onOpenSection).toHaveBeenCalledWith("helpers");
+    fireEvent.click(screen.getByRole("button", { name: "Open Sample data" }));
+    expect(onOpenSection).toHaveBeenCalledWith("sample");
     fireEvent.click(screen.getByRole("button", { name: "Open Custom input" }));
     expect(onOpenSection).toHaveBeenCalledWith("custom");
     fireEvent.click(screen.getByRole("button", { name: "Expand controls" }));
     expect(onExpand).toHaveBeenCalled();
+    // Expand, Page Setup, Sample data, Helpers, Custom input. Templates live in the top row.
     expect(screen.getAllByRole("button")).toHaveLength(5);
+    expect(
+      screen.queryByRole("button", { name: "Open Templates" }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -1009,8 +1225,6 @@ describe("EditorPane insertAtCursor", () => {
           onCssChange={setCss}
           readme=""
           onReadmeChange={() => {}}
-          readmeSaving={false}
-          onSaveReadme={() => {}}
         />
         <output data-testid="html">{html}</output>
       </>

@@ -79,6 +79,37 @@ pnpm dev:printer  # ipp://localhost:6310/ipp/print
 
 Add it in PrintNinja as a network printer at `localhost:6310`. Every job is saved to `dev-printer/output/`. See [`dev-printer/README.md`](dev-printer/README.md).
 
+## Design a template
+
+A template is HTML with `{{placeholders}}` for your data, plus a page size. This complete example prints a small parcel tag on 80 mm roll paper:
+
+```html
+<body class="p-2 text-xs font-sans">
+  <p class="uppercase tracking-widest text-slate-500">PrintNinja Post</p>
+  <h1 class="text-lg font-bold">To: {{customer.name}}</h1>
+  <p>{{customer.address}}, {{customer.city}} {{customer.zip}}</p>
+  {{barcode "code128" order.tracking width=60 text=false}}
+  <p class="font-mono">{{order.tracking}}</p>
+</body>
+```
+
+With this JSON as the data:
+
+```json
+{
+  "customer": { "name": "John Doe", "address": "45 Oak Lane, Apt 2", "city": "Gulshan", "zip": "1212" },
+  "order": { "tracking": "PN-7X9K-4242-BD" }
+}
+```
+
+Three things to know:
+
+- **`{{dotted.paths}}` print text.** Nested keys walk the JSON (`{{customer.name}}`), and `{{#each order.items}}…{{/each}}` repeats a block once per list entry.
+- **`{{barcode}}` draws the barcode.** `{{barcode "code128" order.tracking}}` renders an inline SVG from the data, so no image files are needed. QR codes work the same way with `"qrcode"`.
+- **The page size is the paper.** Set 80 mm wide in Page Setup for roll paper (or 102 × 152 mm for a 4×6 label); the canvas previews exactly that. Utility classes such as `p-2` and `font-bold` are compiled into the printout, and anything the network cannot reach at print time (remote images, web fonts) will not load — embed them as `data:` URIs instead.
+
+Every new template starts from a worked shipping-label example using these same pieces, so there is always something concrete to edit down. Publish it from the Designer when you want it listed for the community in **Templates**.
+
 ## Print from your phone
 
 Phones are small and Android cannot make every printer language. So PrintNinja lets a phone borrow a PC on the same Wi-Fi.
@@ -156,6 +187,7 @@ Other options include `url` (a data URL), `test=1`, `orientation`, `fit` and `pr
 
 **Templates and sharing**
 - Mine, Saved and Community tabs with search and sort; publish, unpublish and save to the server
+- Saved community templates sync to every PC on their own, and Clone turns one into your own timestamped, editable copy
 - Offline-first: printing keeps working when the server is unreachable, and changes sync when it returns
 - A hosted share service with accounts, delta sync, sample datasets, printer profiles, fonts and preferences
 

@@ -66,10 +66,19 @@ export function useShareStatus(): ShareStatus {
     const id = window.setInterval(check, POLL_MS);
     const onFocus = () => void check();
     window.addEventListener("focus", onFocus);
+    // The shell stays mounted across logout→login (AuthGate hides rather
+    // than unmounts), so without these the badge keeps the previous
+    // account's handle until the next poll.
+    const offStarted = share.onSessionStarted(() => void check());
+    const offEnded = share.onSessionEnded(() =>
+      setStatus({ state: "signed_out" }),
+    );
     return () => {
       cancelled = true;
       window.clearInterval(id);
       window.removeEventListener("focus", onFocus);
+      offStarted();
+      offEnded();
     };
   }, []);
 

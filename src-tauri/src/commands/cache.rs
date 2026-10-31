@@ -55,6 +55,8 @@ pub struct SyncChangeIn {
 
 /// A synced template record. Field names match the sync wire shape;
 /// `*_mm` arrive as floats and are rounded to the local INTEGER columns.
+/// `origin`/`owner_handle` are new with saved-mirror sync: defaulted so
+/// an older server (which only ever sends own rows) still parses.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TemplateDataIn {
     pub id: String,
@@ -71,6 +73,12 @@ pub struct TemplateDataIn {
     pub revision: i64,
     pub published_at: Option<String>,
     pub updated_at: String,
+    /// "own" | "saved". Anything else is rejected, never coerced.
+    #[serde(default)]
+    pub origin: Option<String>,
+    /// The author's handle for saved mirrors (the wire's owner_handle).
+    #[serde(default)]
+    pub owner_handle: Option<String>,
 }
 
 /// What `cache_apply_changes` did. Counts drive the sync engine's logging,
@@ -188,6 +196,17 @@ fn apply_upsert(
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .ok();
+    // A saved mirror and an owned original share nothing but the id
+    // space: the feed never emits both for one id (own saves are
+    // rejected and the feed skips the author's own rows), so a kind
+    // mismatch means a stale legacy row from when mirrors arrived
+    // without an origin.
+    let origin = data.origin.as_deref().unwrap_or("own");
+    if origin != "own" && origin != "saved" {
+        return Err(AppError::Validation(format!(
+            "sync template has an invalid origin: {origin}"
+        )));
+    }
     // Only synced rows take server state: dirty rows keep local edits,
     // conflicted rows wait for the user's decision, and tombstones wait
     // for the server's confirmation. All three count as skipped.
@@ -201,6 +220,28 @@ fn apply_upsert(
         // content becomes a conflict instead of an overwrite.
         Some((id, _, None)) => adopt_or_conflict(tx, id, data, report),
         Some((id, _, _)) => {
+            let kind: String =
+                tx.query_row("SELECT kind FROM templates WHERE id = ?1", [id], |r| {
+                    r.get(0)
+                })?;
+            if kind != origin {
+                // Own original vs saved mirror: ownership wins. A saved
+                // upsert over an original is left alone; an own upsert
+                // over a mirror promotes it — the server says you own
+                // this template, so the row becomes an editable original
+                // and later own upserts apply normally.
+                if origin == "own" {
+                    tx.execute(
+                        "UPDATE templates SET kind = 'own', origin = 'own',
+                         owner_handle = NULL, origin_owner = NULL WHERE id = ?1",
+                        [id],
+                    )?;
+                    apply_upsert_synced(tx, id, data, report)?;
+                } else {
+                    report.skipped_dirty += 1;
+                }
+                return Ok(());
+            }
             apply_upsert_synced(tx, id, data, report)?;
             Ok(())
         }
@@ -315,11 +356,25 @@ fn apply_upsert_new(
     } else {
         "portrait"
     };
+    // Saved mirrors keep the author's title verbatim and skip the
+    // unique-name check, exactly like a manual download: the sync
+    // identity — not the name — is what refresh and print use. There is
+    // no name CHECK to trip (uniqueness lives in create_template), but
+    // kind/origin/owner must all say "saved" or the row reads as an
+    // editable original.
+    let origin = data.origin.as_deref().unwrap_or("own");
+    let (kind, owner_handle, local_origin, origin_owner): (&str, Option<&str>, &str, Option<&str>) =
+        if origin == "saved" {
+            let handle = data.owner_handle.as_deref();
+            ("saved", handle, "saved", handle)
+        } else {
+            ("own", None, "own", None)
+        };
     tx.execute(
                 "INSERT INTO templates (name, page_w_mm, page_h_mm, orientation, readme, summary,
                         html, css, published_at, updated_at, server_id, server_revision, base_revision,
-                        sync_state, kind, owner_handle, synced_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12, 'synced', 'own', NULL, datetime('now'))",
+                        sync_state, kind, owner_handle, origin, origin_owner, synced_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12, 'synced', ?13, ?14, ?15, ?16, datetime('now'))",
                 rusqlite::params![
                     data.name,
                     page_w,
@@ -333,6 +388,10 @@ fn apply_upsert_new(
                     data.updated_at,
                     data.id,
                     data.revision,
+                    kind,
+                    owner_handle,
+                    local_origin,
+                    origin_owner,
                 ],
             )?;
     report.applied_upserts += 1;

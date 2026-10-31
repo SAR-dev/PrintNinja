@@ -11,6 +11,7 @@ export const ERROR_CODES = [
   "not_found",
   "handle_taken",
   "template_name_taken",
+  "own_template_saved",
   "revision_conflict",
   "revision_required",
   "quota_exceeded",
@@ -92,6 +93,14 @@ export class TemplateNameTakenError extends DomainError {
       "You already have a template with this name",
       [{ path: "name", message: "Already used by another of your templates" }],
     );
+  }
+}
+
+/** Saving your own template: it is already yours, and a mirror of it
+ * would collide with the original in the sync stream. */
+export class OwnTemplateSavedError extends DomainError {
+  constructor() {
+    super("own_template_saved", 409, "You own this template already");
   }
 }
 

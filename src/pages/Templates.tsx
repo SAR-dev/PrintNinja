@@ -5,8 +5,8 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   Bookmark,
   BookmarkCheck,
-  CloudDownload,
   CloudUpload,
+  CopyPlus,
   Eye,
   MoreHorizontal,
   Pencil,
@@ -28,7 +28,6 @@ import {
 } from "@/components/ConflictDialog";
 import { DataTable } from "@/components/DataTable";
 import { EmptyState } from "@/components/EmptyState";
-import { GetFromServerDialog } from "@/components/GetFromServerDialog";
 import {
   Dialog,
   DialogContent,
@@ -46,7 +45,6 @@ import {
 import { Label } from "@/components/ui/label";
 import { usePrintStore } from "@/lib/store/printStore";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
-import { hideStarterWhenOthers } from "@/lib/templates/starterVisibility";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -63,6 +61,7 @@ import * as share from "@/lib/share/client";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { downloadToLocal } from "@/lib/share/sync";
 import {
+  cloneSavedTemplate,
   deleteTemplateEverywhere,
   saveRowToServer,
   takeServerCopy,
@@ -80,7 +79,6 @@ export function TemplatesPage() {
   const [removeTarget, setRemoveTarget] = useState<TemplateRow | null>(null);
   const [refreshTarget, setRefreshTarget] = useState<TemplateRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TemplateRow | null>(null);
-  const [getOpen, setGetOpen] = useState(false);
   const [previewTpl, setPreviewTpl] = useState<ServerSummary | null>(null);
   const [previewHtml, setPreviewHtml] = useState("");
   const [previewError, setPreviewError] = useState("");
@@ -134,7 +132,7 @@ export function TemplatesPage() {
 
   const loadMine = useCallback(async () => {
     try {
-      const list = hideStarterWhenOthers(await agent("list_templates", {}));
+      const list = await agent("list_templates", {});
       setMine(list.filter((t) => t.origin === "own"));
       setSaved(list.filter((t) => t.origin === "saved"));
     } catch {
@@ -350,6 +348,33 @@ export function TemplatesPage() {
     }
   };
 
+  // Clone a saved mirror into your own private template. Server-first
+  // like every creation: share-unconfigured or signed-out means there is
+  // nowhere to create, so the button reports instead of queuing.
+  const handleClone = async (tpl: TemplateRow) => {
+    if (syncing != null) return;
+    const url = await share.getServiceUrl();
+    if (!url) {
+      notifyError(t("templates.toast_share_unconfigured"));
+      return;
+    }
+    const token = await share.getSessionToken();
+    if (!token) {
+      notifyError(t("templates.toast_signin_required"));
+      return;
+    }
+    setSyncing(tpl.id);
+    try {
+      const created = await cloneSavedTemplate(tpl);
+      notifySuccess(t("templates.toast_cloned", { name: created.name }));
+      await loadMine();
+    } catch (e) {
+      notifyError(describeError(e));
+    } finally {
+      setSyncing(null);
+    }
+  };
+
   // Opens the Print page with this template selected.
   const handleUse = async (tpl: TemplateRow, isSavedCopy: boolean) => {
     // For saved copies, queue a use count locally; the sync engine sends
@@ -535,6 +560,13 @@ export function TemplatesPage() {
               <DropdownMenuItem onSelect={() => handleUse(tpl, true)}>
                 <Printer className="h-4 w-4" aria-hidden="true" />
                 {t("templates.action_print")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={syncing != null}
+                onSelect={() => void handleClone(tpl)}
+              >
+                <CopyPlus className="h-4 w-4" aria-hidden="true" />
+                {t("templates.action_clone")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setRemoveTarget(tpl)}
@@ -800,6 +832,14 @@ export function TemplatesPage() {
               <Button
                 size="sm"
                 variant="outline"
+                disabled={syncing != null}
+                onClick={() => void handleClone(tpl)}
+              >
+                {t("templates.action_clone")}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={() => setRemoveTarget(tpl)}
               >
                 {t("templates.action_remove")}
@@ -815,12 +855,10 @@ export function TemplatesPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title={t("nav.templates")} description={t("pages.templates")}>
-        <Button variant="outline" onClick={() => setGetOpen(true)}>
-          <CloudDownload className="h-4 w-4" aria-hidden="true" />
-          {t("templates.get_from_server")}
-        </Button>
-      </PageHeader>
+      <PageHeader
+        title={t("nav.templates")}
+        description={t("pages.templates")}
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
@@ -1096,15 +1134,6 @@ export function TemplatesPage() {
         onConfirm={async () => {
           if (refreshTarget) await handleRefresh(refreshTarget);
           setRefreshTarget(null);
-        }}
-      />
-
-      <GetFromServerDialog
-        open={getOpen}
-        onOpenChange={setGetOpen}
-        onDownloaded={() => {
-          void loadMine();
-          setActiveTab("mine");
         }}
       />
 

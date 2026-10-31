@@ -8,7 +8,7 @@ import {
 import { ValidationError } from "../src/domain/errors.js";
 import { createFakeUsers } from "./fakes/index.js";
 import { createFakeTemplateRepos } from "./fakes/templates.js";
-import { encodeCursor } from "../src/domain/syncPorts.js";
+import { encodeCursor, type SyncRepository } from "../src/domain/syncPorts.js";
 
 function setup() {
   const users = createFakeUsers();
@@ -187,6 +187,141 @@ describe("readChanges", () => {
     expect(second.hasMore).toBe(false);
     expect(second.nextCursor).toBe(second.changes[0].seq);
     expect(second.changes[0].seq).not.toBe(first.changes[0].seq);
+  });
+});
+
+describe("readChanges saved mirrors", () => {
+  function saverSetup() {
+    const users = createFakeUsers();
+    for (const [id, handle] of [
+      ["owner-1", "Owner"],
+      ["saver-1", "Saver"],
+    ] as const) {
+      void users.create({
+        id,
+        handle,
+        handleKey: handle.toLowerCase(),
+        passwordHash: "x",
+      });
+    }
+    const library = createFakeTemplateRepos(users);
+    return {
+      repos: {
+        sync: library.sync,
+        templates: library.templates,
+        saved: library.saved,
+      },
+      store: library.store,
+    };
+  }
+
+  const read = (
+    repos: { sync: SyncRepository },
+    userId: string,
+    cursor: bigint | null,
+  ) =>
+    readChanges(
+      repos,
+      userId,
+      { cursor, limit: 100, types: ["template"] },
+      8 * 1024 * 1024,
+    );
+
+  async function publishedSaved() {
+    const { repos } = saverSetup();
+    await repos.templates.create(write("a1", "a"), version);
+    await repos.templates.setPublished("a1", new Date("2026-10-20T00:00:00Z"));
+    await repos.saved.save("saver-1", "a1");
+    return repos;
+  }
+
+  it("emits a save as a saved upsert with the author's handle", async () => {
+    const repos = await publishedSaved();
+    const result = await read(repos, "saver-1", null);
+    expect(result.reset).toBe(false);
+    expect(result.changes).toHaveLength(1);
+    const [change] = result.changes;
+    expect(change).toMatchObject({
+      entity: "template",
+      origin: "saved",
+      data: { id: "a1", ownerHandle: "Owner" },
+    });
+  });
+
+  it("re-emits the mirror when the author edits", async () => {
+    const repos = await publishedSaved();
+    const first = await read(repos, "saver-1", null);
+    await repos.templates.update(
+      { ...write("a1", "v2"), ownerId: "owner-1" },
+      1,
+      version,
+    );
+    const second = await read(repos, "saver-1", first.nextCursor);
+    expect(second.changes).toHaveLength(1);
+    expect(second.changes[0]).toMatchObject({
+      entity: "template",
+      origin: "saved",
+      data: { body: "<div>v2</div>" },
+    });
+    // The author sees their own edit as an own upsert, not a mirror.
+    const author = await read(repos, "owner-1", first.nextCursor);
+    expect(author.changes).toHaveLength(1);
+    expect(author.changes[0]).toMatchObject({
+      entity: "template",
+      origin: "own",
+    });
+  });
+
+  it("emits nothing once the cursor passes the save", async () => {
+    const repos = await publishedSaved();
+    const first = await read(repos, "saver-1", null);
+    const second = await read(repos, "saver-1", first.nextCursor);
+    expect(second.changes).toEqual([]);
+  });
+
+  it("tombstones the mirror on unsave", async () => {
+    const repos = await publishedSaved();
+    const first = await read(repos, "saver-1", null);
+    await repos.saved.unsave("saver-1", "a1");
+    const second = await read(repos, "saver-1", first.nextCursor);
+    expect(second.changes).toEqual([
+      expect.objectContaining({
+        entity: "template",
+        entityKey: "a1",
+      }),
+    ]);
+  });
+
+  it("tombstones on unpublish and re-emits on republish", async () => {
+    const repos = await publishedSaved();
+    const first = await read(repos, "saver-1", null);
+    await repos.templates.setPublished("a1", null);
+    const gone = await read(repos, "saver-1", first.nextCursor);
+    expect(gone.changes).toEqual([
+      expect.objectContaining({ entity: "template", entityKey: "a1" }),
+    ]);
+    await repos.templates.setPublished("a1", new Date("2026-10-20T00:00:00Z"));
+    const back = await read(repos, "saver-1", gone.nextCursor);
+    expect(back.changes).toHaveLength(1);
+    expect(back.changes[0]).toMatchObject({
+      entity: "template",
+      origin: "saved",
+    });
+  });
+
+  it("tombstones savers when the author deletes", async () => {
+    const repos = await publishedSaved();
+    const first = await read(repos, "saver-1", null);
+    await repos.templates.deleteWithTombstone("a1");
+    const second = await read(repos, "saver-1", first.nextCursor);
+    expect(second.changes).toEqual([
+      expect.objectContaining({ entity: "template", entityKey: "a1" }),
+    ]);
+    // The author's own delete is untouched: still their own tombstone.
+    const author = await read(repos, "owner-1", first.nextCursor);
+    expect(author.changes).toEqual([
+      expect.objectContaining({ entity: "template", entityKey: "a1" }),
+    ]);
   });
 });
 
