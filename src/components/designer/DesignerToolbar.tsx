@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import { LayoutToggle, type DesignerLayout } from "./LayoutToggle";
 import { TemplateSwitcher } from "./TemplateSwitcher";
 
@@ -40,12 +41,18 @@ interface Props {
   onVisibilityChange: (makePublic: boolean) => void;
 }
 
-/** The Designer's top row: switch template, rename it (the one place a
- * template is renamed), New, Save and visibility. Save is the one manual
- * push to the server; offline it is disabled because viewing and printing
- * are all the cache can do. Visibility is publish/unpublish applied
- * immediately via the switch, whose Public/Private label already
- * describes the state. */
+/** A thin vertical rule between toolbar groups. */
+function Divider() {
+  return <span className="h-5 w-px shrink-0 bg-border" aria-hidden="true" />;
+}
+
+/** The Designer's top row, in three groups: which template (switch + rename),
+ * how the workspace looks (layout), and what happens to it (visibility, New,
+ * Save). Save is the one manual push to the server; offline it is disabled
+ * because viewing and printing are all the cache can do. Visibility is
+ * publish/unpublish applied immediately via the switch, whose Public/Private
+ * label already describes the state. Every control is 32 px tall so the row
+ * reads as one line. */
 export function DesignerToolbar({
   templates,
   currentTemplateId = null,
@@ -71,43 +78,57 @@ export function DesignerToolbar({
   const busy = pending != null;
   const published = !!remoteId && !!publishedAt;
   const errorId = "designer-template-name-error";
+  const invalid = !readOnly && !!nameError;
   return (
-    <div className="flex flex-wrap items-start gap-2">
-      {templates && onSelectTemplate && !noTemplate && (
-        <TemplateSwitcher
-          templates={templates}
-          currentTemplateId={currentTemplateId}
-          disabled={busy}
-          onSelect={(tpl) => onSelectTemplate(tpl.id)}
-        />
-      )}
-      {!noTemplate && (
-        <div className="min-w-[14rem] flex-1">
-          <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      {/* Group 1: the template. The switcher and the name share one frame, so
+          the name reads as the label of the picker beside it. */}
+      {!noTemplate ? (
+        <div className="min-w-[16rem] max-w-xl flex-1">
+          <div
+            data-slot="template-field"
+            className={cn(
+              "flex h-8 items-center rounded-md border bg-card ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+              invalid ? "border-danger" : "border-input",
+            )}
+          >
+            {templates && onSelectTemplate && (
+              <>
+                <TemplateSwitcher
+                  templates={templates}
+                  currentTemplateId={currentTemplateId}
+                  disabled={busy}
+                  onSelect={(tpl) => onSelectTemplate(tpl.id)}
+                  compact
+                />
+                <span className="h-4 w-px bg-border" aria-hidden="true" />
+              </>
+            )}
             {/* A saved copy still shows its name, in the same field, disabled. */}
             <Input
               value={templateName}
               onChange={(e) => onTemplateNameChange(e.target.value)}
               disabled={busy || readOnly}
               aria-label={t("designer.template_name")}
-              aria-invalid={!readOnly && nameError ? true : undefined}
-              aria-describedby={!readOnly && nameError ? errorId : undefined}
-              className="h-8 min-w-0 flex-1 font-medium"
+              aria-invalid={invalid ? true : undefined}
+              aria-describedby={invalid ? errorId : undefined}
+              className="h-full min-w-0 flex-1 border-0 bg-transparent px-2.5 font-medium shadow-none ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             {readOnly && (
-              <span className="shrink-0 text-xs text-muted-foreground">
+              <span className="shrink-0 pr-2.5 text-xs text-muted-foreground">
                 {t("designer.read_only")}
               </span>
             )}
           </div>
-          {!readOnly && nameError && (
+          {invalid && (
             <p id={errorId} role="alert" className="mt-1 text-xs text-danger">
               {nameError}
             </p>
           )}
         </div>
+      ) : (
+        <div className="flex-1" />
       )}
-      {noTemplate && <div className="flex-1" />}
       {dirty && !readOnly && !noTemplate && (
         <span className="flex h-8 items-center gap-1.5 text-xs text-muted-foreground">
           <span
@@ -117,25 +138,16 @@ export function DesignerToolbar({
           {t("designer.unsaved")}
         </span>
       )}
+
+      {/* Spacer: everything after it hugs the right edge. */}
+      <div className="hidden flex-1 lg:block" />
+
+      {/* Group 2: the workspace. */}
       {layout && onLayoutChange && (
         <LayoutToggle value={layout} onChange={onLayoutChange} />
       )}
-      <Button variant="outline" size="sm" onClick={onNew}>
-        <Plus className="h-4 w-4" aria-hidden="true" />
-        {t("designer.newTemplate")}
-      </Button>
-      {!noTemplate && !readOnly && (
-        <Button
-          size="sm"
-          onClick={onSave}
-          disabled={saveDisabled || busy}
-          title={saveTitle}
-          data-testid="designer-save"
-        >
-          <Save className="h-4 w-4" aria-hidden="true" />
-          {t("common.save")}
-        </Button>
-      )}
+
+      {/* Group 3: what happens to the template. */}
       {!noTemplate &&
         !readOnly &&
         (!remoteId ? (
@@ -143,7 +155,7 @@ export function DesignerToolbar({
             {t("designer.only_local")}
           </span>
         ) : (
-          <div className="flex h-8 items-center gap-2">
+          <div className="flex h-8 items-center gap-2" title={remoteId}>
             <Label htmlFor="template-visibility" className="text-xs">
               {published
                 ? t("designer.visibility_public")
@@ -161,8 +173,10 @@ export function DesignerToolbar({
                   : t("designer.visibility_private"),
               })}
             />
+            {/* The server id is for support and debugging, so it sits in a
+                tooltip instead of taking space in the row. */}
             <span
-              className="font-mono text-xs text-muted-foreground"
+              className="sr-only"
               title={remoteId}
               data-testid="designer-sync-id"
             >
@@ -170,6 +184,27 @@ export function DesignerToolbar({
             </span>
           </div>
         ))}
+      {(!noTemplate && !readOnly) || (layout && onLayoutChange) ? (
+        <Divider />
+      ) : null}
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={onNew}>
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          {t("designer.newTemplate")}
+        </Button>
+        {!noTemplate && !readOnly && (
+          <Button
+            size="sm"
+            onClick={onSave}
+            disabled={saveDisabled || busy}
+            title={saveTitle}
+            data-testid="designer-save"
+          >
+            <Save className="h-4 w-4" aria-hidden="true" />
+            {t("common.save")}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

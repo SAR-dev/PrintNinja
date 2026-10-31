@@ -354,7 +354,7 @@ describe("Designer page layout on desktop", () => {
       Array.from(files.querySelectorAll('[role="tab"]')).map(
         (t) => t.textContent,
       ),
-    ).toEqual(["HTML", "CSS", "README", "Sample data"]);
+    ).toEqual(["HTML", "CSS", "README"]);
     // Both are on screen at once: no switching tabs to see an edit.
     expect(screen.getByLabelText("HTML editor")).toBeInTheDocument();
     expect(screen.getByTitle("Canvas preview")).toBeInTheDocument();
@@ -391,13 +391,22 @@ describe("Designer page layout on desktop", () => {
     expect(controls.getByLabelText("Width (mm)")).toBeInTheDocument();
   });
 
-  it("shows the sample datasets in the editor, after the README tab, where they drive the canvas", async () => {
+  it("shows the sample datasets in the controls column, open by default, beside the editor and canvas they drive", async () => {
     renderDesigner();
     await screen.findByTitle("Canvas preview");
-    openTab("Sample data");
+    const controls = within(
+      await screen.findByRole("complementary", { name: "Designer controls" }),
+    );
     expect(
-      await screen.findByRole("radio", { name: "Use dataset Sample Order" }),
+      controls.getByRole("button", { name: "Sample data" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      await controls.findByRole("radio", { name: "Use dataset Sample Order" }),
     ).toBeChecked();
+    // Not a tab in the code editor any more.
+    expect(
+      screen.queryByRole("tab", { name: "Sample data" }),
+    ).not.toBeInTheDocument();
   });
 
   it("changing the page size in the accordion resizes the canvas without leaving the editor", async () => {
@@ -626,6 +635,23 @@ describe("Designer page, phase 3 polish on desktop", () => {
     expect(
       screen.getByRole("button", { name: "Expand controls" }),
     ).toBeInTheDocument();
+  });
+
+  it("opens the Sample data section from the icon rail on a narrow desktop", async () => {
+    setViewport("narrow-desktop");
+    window.localStorage.setItem(
+      "printninja.designer.openSections",
+      JSON.stringify(["page"]),
+    );
+    renderDesigner();
+    await screen.findByTitle("Canvas preview");
+    fireEvent.click(screen.getByRole("button", { name: "Open Sample data" }));
+    const aside = await screen.findByRole("complementary", {
+      name: "Designer controls",
+    });
+    expect(
+      within(aside).getByRole("button", { name: "Sample data" }),
+    ).toHaveAttribute("aria-expanded", "true");
   });
 
   it("shows the full controls column on a wide desktop, with no rail", async () => {

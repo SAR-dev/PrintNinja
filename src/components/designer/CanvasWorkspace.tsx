@@ -213,7 +213,8 @@ export function CanvasWorkspace({
             {t("designer.canvas_size", { w: pageWidthMm, h: pageHeightMm })}
           </span>
         </span>
-        <div className="flex items-center gap-1">
+        {/* One joined control: zoom level, − / + and the live percentage. */}
+        <div className="inline-flex h-8 items-center overflow-hidden rounded-md border border-input bg-background">
           <Select
             value={selectValue}
             onValueChange={(v) => {
@@ -223,7 +224,7 @@ export function CanvasWorkspace({
           >
             <SelectTrigger
               aria-label={t("designer.zoom_level")}
-              className="h-8 w-24 text-xs"
+              className="h-full w-[4.5rem] rounded-none border-0 bg-transparent px-2.5 text-xs shadow-none ring-offset-0 focus:ring-inset focus:ring-offset-0"
             >
               <SelectValue />
             </SelectTrigger>
@@ -239,10 +240,11 @@ export function CanvasWorkspace({
               )}
             </SelectContent>
           </Select>
+          <span className="h-4 w-px bg-border" aria-hidden="true" />
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-full w-8 rounded-none"
             aria-label={t("designer.zoom_out")}
             title={t("designer.zoom_out")}
             disabled={zoom <= MIN_ZOOM + 0.001}
@@ -250,13 +252,16 @@ export function CanvasWorkspace({
           >
             <ZoomOut className="h-4 w-4" />
           </Button>
-          <span className="w-12 text-center text-xs" aria-live="polite">
+          <span
+            className="w-12 text-center text-xs tabular-nums"
+            aria-live="polite"
+          >
             {pct}%
           </span>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-full w-8 rounded-none"
             aria-label={t("designer.zoom_in")}
             title={t("designer.zoom_in")}
             disabled={zoom >= MAX_ZOOM - 0.001}
@@ -296,7 +301,7 @@ export function CanvasWorkspace({
         onTouchEnd={onTouchEnd}
         onTouchCancel={onTouchEnd}
         className={cn(
-          "flex overflow-auto bg-muted p-4 [scrollbar-gutter:stable] [touch-action:pan-x_pan-y]",
+          "flex overflow-auto bg-muted p-4 [background-image:radial-gradient(hsl(var(--border))_1px,transparent_1px)] [background-size:16px_16px] [scrollbar-gutter:stable] [touch-action:pan-x_pan-y]",
           fill ? "min-h-0 flex-1" : "min-h-[62dvh]",
         )}
       >
