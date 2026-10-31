@@ -63,6 +63,60 @@ vi.mock("@tauri-apps/api/core", async (importOriginal) => {
   return { ...actual, invoke: (...a: unknown[]) => invoke(...a) };
 });
 
+// Share status reads the real client; pin its three inputs so tests
+// choose online or offline without a server.
+const shareStatus = vi.hoisted(() => ({
+  getServiceUrl: vi.fn(async () => null as string | null),
+  getSessionToken: vi.fn(async () => null as string | null),
+  fetchMe: vi.fn(async () => ({ handle: "" })),
+}));
+vi.mock("@/lib/share/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/share/client")>()),
+  ...shareStatus,
+}));
+
+// The create round-trip is real server + cache work; pin it so the
+// dialog's busy state is deterministic instead of network-timed.
+const createdTemplate = vi.hoisted(() => ({
+  current: null as null | ((v: unknown) => void),
+}));
+vi.mock("@/lib/share/save", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/share/save")>();
+  return {
+    ...actual,
+    createTemplateOnServer: (input: { name: string }) =>
+      new Promise((resolve) => {
+        createdTemplate.current = resolve as (v: unknown) => void;
+      }).then(() => ({
+        id: 99,
+        name: input.name,
+        page_w_mm: 102,
+        page_h_mm: 152,
+        orientation: "portrait",
+        html: "<p>x</p>",
+        css: "",
+      })),
+  };
+});
+vi.mock("@/lib/share/save", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/share/save")>();
+  return {
+    ...actual,
+    createTemplateOnServer: (input: { name: string }) =>
+      new Promise((resolve) => {
+        createdTemplate.current = resolve as (v: unknown) => void;
+      }).then(() => ({
+        id: 99,
+        name: input.name,
+        page_w_mm: 102,
+        page_h_mm: 152,
+        orientation: "portrait",
+        html: "<p>x</p>",
+        css: "",
+      })),
+  };
+});
+
 // Which layout the page renders: `lg` and up is the desktop workspace, below it the tabs.
 let desktop = false;
 // `wide` is the 1440 px breakpoint above which the controls column is not an icon rail.
@@ -341,6 +395,9 @@ describe("Designer page layout on desktop", () => {
   beforeEach(() => {
     window.localStorage.clear();
     setViewport("desktop");
+    shareStatus.getServiceUrl.mockResolvedValue(null);
+    shareStatus.getSessionToken.mockResolvedValue(null);
+    shareStatus.fetchMe.mockResolvedValue({ handle: "" });
   });
   afterEach(() => setViewport("phone"));
 
@@ -368,6 +425,34 @@ describe("Designer page layout on desktop", () => {
       expect(screen.queryByRole("tab", { name })).not.toBeInTheDocument();
     }
     expect(screen.queryByText("Properties")).not.toBeInTheDocument();
+  });
+
+  it("holds the New-template dialog still while creating", async () => {
+    createdTemplate.current = null;
+    shareStatus.getServiceUrl.mockResolvedValue("http://127.0.0.1:9");
+    shareStatus.getSessionToken.mockResolvedValue("tok");
+    renderDesigner();
+    await screen.findByTitle("Canvas preview");
+    fireEvent.click(screen.getByRole("button", { name: "New Template" }));
+    const dialog = await screen.findByRole("dialog");
+    const name = within(dialog).getByLabelText("Template name", {
+      selector: "input",
+    });
+    fireEvent.change(name, { target: { value: "Fresh Label" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+    // Busy: the button names the work, and the dialog takes no input.
+    expect(
+      within(dialog).getByRole("button", { name: "Creating…" }),
+    ).toBeDisabled();
+    expect(name).toBeDisabled();
+    // A second click cannot double-create.
+    fireEvent.click(within(dialog).getByRole("button", { name: "Creating…" }));
+    expect(createdTemplate.current).not.toBeNull();
+    await act(async () => {
+      createdTemplate.current!(null);
+    });
+    // Done: the dialog closes with the new template loaded.
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
   });
 
   it("puts the controls in an accordion with only Page Setup open", async () => {
