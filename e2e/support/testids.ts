@@ -50,6 +50,8 @@ export const testids = {
   classWarnings: "class-warnings",
   /** Designer toolbar: save the editor to the server. */
   designerSave: "designer-save",
+  /** Designer toolbar: explains a disabled Save on hover/focus. */
+  saveDisabledReason: "save-disabled-reason",
   /** Designer sync bar: visibility switch (Public/Private). */
   templateVisibility: "template-visibility",
   /** Designer overflow menu (phones): visibility checkbox, same action. */
