@@ -218,7 +218,7 @@ describe("DesignerToolbar", () => {
     expect(screen.queryByText("Unsaved changes")).toBeNull();
   });
 
-  it("shows the name of a read-only saved copy in a disabled field, and hides Save", () => {
+  it("shows the name of a read-only saved copy in a disabled field, and keeps Save disabled", () => {
     const onTemplateNameChange = vi.fn();
     render(
       <DesignerToolbar
@@ -239,7 +239,7 @@ describe("DesignerToolbar", () => {
     // Nothing to fix or save on a copy that cannot change.
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText("Unsaved changes")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
   it("has no Import or Export actions", () => {
@@ -318,7 +318,7 @@ describe("DesignerToolbar", () => {
     expect(onVisibilityChange).toHaveBeenCalled();
   });
 
-  it("hides Save and the switch on a saved copy from Community", () => {
+  it("keeps Save and the visibility switch on a saved copy, disabled, with the reason on focus", async () => {
     render(
       <DesignerToolbar
         {...base}
@@ -331,8 +331,39 @@ describe("DesignerToolbar", () => {
       />,
     );
     expect(screen.getByText("Read-only")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-    expect(screen.queryByTestId("template-visibility")).toBeNull();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.getByTestId("template-visibility")).toBeDisabled();
+
+    // A disabled button sends no hover or focus, so the reason hangs on its wrapper.
+    fireEvent.focus(screen.getByTestId("save-disabled-reason"));
+    expect(
+      (await screen.findAllByText(/saved copy from Community/)).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("explains why Save is disabled offline, and leaves a plain Save alone", () => {
+    const { rerender } = render(
+      <DesignerToolbar
+        {...base}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+        saveDisabled
+        saveTitle="Offline — connect to save to the server"
+      />,
+    );
+    expect(screen.getByTestId("save-disabled-reason")).toBeInTheDocument();
+    rerender(<DesignerToolbar {...base} onNew={vi.fn()} onSave={vi.fn()} />);
+    expect(screen.queryByTestId("save-disabled-reason")).toBeNull();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("lets the name field take all the free width", () => {
+    render(<DesignerToolbar {...base} onNew={vi.fn()} onSave={vi.fn()} />);
+    const wrapper = screen
+      .getByRole("textbox", { name: "Template name" })
+      .closest('[data-slot="template-field"]')!.parentElement!;
+    expect(wrapper.className).toContain("flex-1");
+    expect(wrapper.className).not.toMatch(/(^|\s)(max-w-|w-\[)/);
   });
 });
 
@@ -873,11 +904,19 @@ describe("EditorPane", () => {
   it("shows the README editor and its Save button on the README tab", () => {
     const p = props();
     render(<EditorPane {...p} />);
-    expect(screen.queryByText(/README — Label/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save README" }),
+    ).not.toBeInTheDocument();
     openTab("README");
-    expect(screen.getByText("README — Label")).toBeInTheDocument();
+    expect(screen.queryByText(/README — Label/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Save README" }));
     expect(p.onSaveReadme).toHaveBeenCalled();
+  });
+
+  it("disables Save README on a read-only copy", () => {
+    render(<EditorPane {...props()} readmeReadOnly />);
+    openTab("README");
+    expect(screen.getByRole("button", { name: "Save README" })).toBeDisabled();
   });
 
   it("shows notices under the HTML and CSS tabs, but not README", () => {

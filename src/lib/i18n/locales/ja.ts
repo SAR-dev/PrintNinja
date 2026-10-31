@@ -239,6 +239,9 @@ const ja: Translation = {
     custom_font_uploaded: "フォント「{{name}}」をアップロードしました",
     custom_font_failed: "フォントのアップロードに失敗しました: {{error}}",
     read_only: "読み取り専用",
+    reason_readonly: "コミュニティから保存したコピーのため、変更できません。",
+    reason_readonly_visibility:
+      "コミュニティから保存したコピーの公開設定は変更できません。",
     only_local: "このコンピューターのみ",
     visibility_public: "公開",
     visibility_private: "非公開",
@@ -1098,7 +1101,6 @@ const ja: Translation = {
     unit_jobs: "件",
   },
   readme: {
-    panel_title: "README — {{name}}",
     save: "READMEを保存",
     saving: "保存しています…",
     edit: "編集",
