@@ -238,6 +238,10 @@ const en = {
     custom_font_uploaded: 'Font "{{name}}" uploaded',
     custom_font_failed: "Font upload failed: {{error}}",
     read_only: "Read-only",
+    reason_readonly:
+      "This is a saved copy from Community, so it can’t be changed.",
+    reason_readonly_visibility:
+      "Visibility can’t be changed on a saved copy from Community.",
     only_local: "Only on this computer",
     visibility_public: "Public",
     visibility_private: "Private",
@@ -1069,7 +1073,6 @@ const en = {
     unit_jobs: "jobs",
   },
   readme: {
-    panel_title: "README — {{name}}",
     save: "Save README",
     saving: "Saving…",
     edit: "Edit",

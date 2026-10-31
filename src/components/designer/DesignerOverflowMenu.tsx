@@ -62,9 +62,21 @@ export function DesignerOverflowMenu({
             {t("designer.newTemplate")}
           </DropdownMenuItem>
           {readOnly ? (
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {t("designer.read_only")}
-            </DropdownMenuLabel>
+            // No hover on a phone, so the reason is printed under the item.
+            <>
+              <DropdownMenuCheckboxItem
+                data-testid="template-visibility-menu"
+                checked={published}
+                disabled
+              >
+                {published
+                  ? t("designer.visibility_public")
+                  : t("designer.visibility_private")}
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuLabel className="max-w-56 whitespace-normal pt-0 text-xs font-normal text-muted-foreground">
+                {t("designer.reason_readonly_visibility")}
+              </DropdownMenuLabel>
+            </>
           ) : !remoteId ? (
             <DropdownMenuLabel className="text-xs text-muted-foreground">
               {t("designer.only_local")}

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { DisabledReason } from "@/components/ui/disabled-reason";
 import { cn } from "@/lib/utils";
 import { LayoutToggle, type DesignerLayout } from "./LayoutToggle";
 import { TemplateSwitcher } from "./TemplateSwitcher";
@@ -34,7 +35,8 @@ interface Props {
   onTemplateNameChange: (name: string) => void;
   remoteId: string | null;
   publishedAt: string | null;
-  /** Saved (community) copies are read-only: save and visibility are hidden. */
+  /** Saved (community) copies are read-only: save and visibility stay in
+   * place but disabled, each with the reason on hover. */
   readOnly?: boolean;
   /** The action running right now, so controls disable while it runs. */
   pending: "save" | "visibility" | null;
@@ -79,12 +81,20 @@ export function DesignerToolbar({
   const published = !!remoteId && !!publishedAt;
   const errorId = "designer-template-name-error";
   const invalid = !readOnly && !!nameError;
+  // Save is disabled for a saved copy, offline, or while the name is invalid;
+  // the reason shown is the first one that applies.
+  const saveBlocked = saveDisabled || readOnly;
+  const saveReason = readOnly
+    ? t("designer.reason_readonly")
+    : saveDisabled
+      ? (saveTitle ?? nameError)
+      : undefined;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       {/* Group 1: the template. The switcher and the name share one frame, so
           the name reads as the label of the picker beside it. */}
       {!noTemplate ? (
-        <div className="min-w-[16rem] max-w-xl flex-1">
+        <div className="min-w-[16rem] flex-1">
           <div
             data-slot="template-field"
             className={cn(
@@ -107,12 +117,13 @@ export function DesignerToolbar({
             {/* A saved copy still shows its name, in the same field, disabled. */}
             <Input
               value={templateName}
+              title={templateName}
               onChange={(e) => onTemplateNameChange(e.target.value)}
               disabled={busy || readOnly}
               aria-label={t("designer.template_name")}
               aria-invalid={invalid ? true : undefined}
               aria-describedby={invalid ? errorId : undefined}
-              className="h-full min-w-0 flex-1 border-0 bg-transparent px-2.5 font-medium shadow-none ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="h-full min-w-0 flex-1 text-ellipsis border-0 bg-transparent px-2.5 font-medium shadow-none ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             {readOnly && (
               <span className="shrink-0 pr-2.5 text-xs text-muted-foreground">
@@ -139,18 +150,42 @@ export function DesignerToolbar({
         </span>
       )}
 
-      {/* Spacer: everything after it hugs the right edge. */}
-      <div className="hidden flex-1 lg:block" />
-
       {/* Group 2: the workspace. */}
       {layout && onLayoutChange && (
         <LayoutToggle value={layout} onChange={onLayoutChange} />
       )}
 
-      {/* Group 3: what happens to the template. */}
+      {/* Group 3: what happens to the template. On a saved copy the controls
+          stay put, disabled, and say why on hover. */}
       {!noTemplate &&
-        !readOnly &&
-        (!remoteId ? (
+        (readOnly ? (
+          <DisabledReason
+            reason={t("designer.reason_readonly_visibility")}
+            data-testid="visibility-disabled-reason"
+          >
+            <div className="flex h-8 items-center gap-2">
+              <Label
+                htmlFor="template-visibility"
+                className="text-xs text-muted-foreground"
+              >
+                {published
+                  ? t("designer.visibility_public")
+                  : t("designer.visibility_private")}
+              </Label>
+              <Switch
+                id="template-visibility"
+                data-testid="template-visibility"
+                checked={published}
+                disabled
+                aria-label={t("designer.visibility_toggle", {
+                  state: published
+                    ? t("designer.visibility_public")
+                    : t("designer.visibility_private"),
+                })}
+              />
+            </div>
+          </DisabledReason>
+        ) : !remoteId ? (
           <span className="flex h-8 items-center text-xs text-muted-foreground">
             {t("designer.only_local")}
           </span>
@@ -184,25 +219,28 @@ export function DesignerToolbar({
             </span>
           </div>
         ))}
-      {(!noTemplate && !readOnly) || (layout && onLayoutChange) ? (
-        <Divider />
-      ) : null}
+      {!noTemplate || (layout && onLayoutChange) ? <Divider /> : null}
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={onNew}>
           <Plus className="h-4 w-4" aria-hidden="true" />
           {t("designer.newTemplate")}
         </Button>
-        {!noTemplate && !readOnly && (
-          <Button
-            size="sm"
-            onClick={onSave}
-            disabled={saveDisabled || busy}
-            title={saveTitle}
-            data-testid="designer-save"
+        {!noTemplate && (
+          <DisabledReason
+            reason={saveReason}
+            data-testid="save-disabled-reason"
           >
-            <Save className="h-4 w-4" aria-hidden="true" />
-            {t("common.save")}
-          </Button>
+            <Button
+              size="sm"
+              onClick={onSave}
+              disabled={saveBlocked || busy}
+              title={saveReason ? undefined : saveTitle}
+              data-testid="designer-save"
+            >
+              <Save className="h-4 w-4" aria-hidden="true" />
+              {t("common.save")}
+            </Button>
+          </DisabledReason>
         )}
       </div>
     </div>

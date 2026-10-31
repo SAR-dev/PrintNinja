@@ -123,6 +123,8 @@ interface Props extends CodeProps {
   onReadmeChange: (value: string) => void;
   readmeSaving: boolean;
   onSaveReadme: () => void;
+  /** A saved copy: the README shows but cannot be edited or saved. */
+  readmeReadOnly?: boolean;
   /** Shown under the tabs while the HTML or CSS tab is open, such as the class-name warnings. */
   notices?: ReactNode;
   className?: string;
@@ -145,6 +147,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
       onReadmeChange,
       readmeSaving,
       onSaveReadme,
+      readmeReadOnly = false,
       notices,
       className,
     },
@@ -255,7 +258,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
         </TabsContent>
         <TabsContent
           value="readme"
-          className="mt-0 min-h-0 flex-1 overflow-auto p-3"
+          className="mt-0 min-h-0 flex-1 overflow-auto p-4 data-[state=active]:flex data-[state=active]:flex-col"
         >
           <ReadmePanel
             readme={readme}
@@ -263,6 +266,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
             templateName={templateName}
             saving={readmeSaving}
             onSave={onSaveReadme}
+            readOnly={readmeReadOnly}
           />
         </TabsContent>
       </Tabs>

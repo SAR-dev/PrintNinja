@@ -999,6 +999,7 @@ export function DesignerPage() {
         onReadmeChange={setReadme}
         readmeSaving={readmeSaving}
         onSaveReadme={() => void handleSaveReadme()}
+        readmeReadOnly={isReadOnly({ origin })}
         notices={
           <>
             <ClassWarnings html={debouncedHtml} />
@@ -1292,6 +1293,7 @@ export function DesignerPage() {
                       templateName={templateName}
                       saving={readmeSaving}
                       onSave={() => void handleSaveReadme()}
+                      readOnly={isReadOnly({ origin })}
                     />
                   </CardContent>
                 </Card>
