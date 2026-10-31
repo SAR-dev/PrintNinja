@@ -1,5 +1,5 @@
 import type { Browser, BrowserContext, Page } from "@playwright/test";
-import { apiRegister } from "./api.js";
+import { apiMe, apiRegister } from "./api.js";
 import { readStackState } from "./stack-state.js";
 import type { AgentSeed } from "./fakeAgent/store.js";
 
@@ -54,13 +54,21 @@ export async function installAgent(
 /** A fresh PC: default seed (onboarding done, service URL set, no token). */
 export async function pc(browser: Browser, seed: AgentSeed = {}): Promise<Pc> {
   const context = await browser.newContext();
+  const settings = {
+    onboarding_done: "true",
+    share_service_url: stack().apiUrl,
+    share_session_token: null,
+    ...(seed.settings ?? {}),
+  };
+  // A seeded token skips the login form, but the app's cache claim runs
+  // on every real sign-in: without the owner the first form login would
+  // wipe the cache as a "different account". Resolve it like login does.
+  if (settings.share_session_token && !settings.cache_owner_user_id) {
+    const me = await apiMe(settings.share_session_token);
+    settings.cache_owner_user_id = me.id;
+  }
   await installAgent(context, {
-    settings: {
-      onboarding_done: "true",
-      share_service_url: stack().apiUrl,
-      share_session_token: null,
-      ...(seed.settings ?? {}),
-    },
+    settings,
     ...(seed.templates !== undefined ? { templates: seed.templates } : {}),
     ...(seed.printers !== undefined ? { printers: seed.printers } : {}),
   });
