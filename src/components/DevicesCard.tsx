@@ -101,7 +101,9 @@ export function DevicesCard({ onPaired }: { onPaired?: () => void } = {}) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">
-          {t("settings_page.devices_title")}
+          {phone
+            ? t("settings_page.devices_title")
+            : t("settings_page.devices_pc_title")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -557,6 +559,40 @@ function PcSection() {
       <p className="text-xs text-muted-foreground">
         {t("settings_page.devices_provider_hint")}
       </p>
+
+      <div
+        className="space-y-1 rounded-md bg-muted/50 p-3"
+        data-testid="devices-steps"
+      >
+        <p className="text-xs font-medium">
+          {t("settings_page.devices_steps_title")}
+        </p>
+        <ol className="list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
+          <li>{t("settings_page.devices_step_1")}</li>
+          <li>{t("settings_page.devices_step_2")}</li>
+          <li>{t("settings_page.devices_step_3")}</li>
+        </ol>
+      </div>
+
+      {!status?.enabled && (
+        <p
+          className="text-xs text-muted-foreground"
+          data-testid="devices-off-hint"
+        >
+          {t("settings_page.devices_off_hint")}
+        </p>
+      )}
+
+      {sharing && (
+        <p
+          className="text-xs font-medium text-success"
+          data-testid="devices-status"
+        >
+          {t("settings_page.devices_status_on", {
+            count: status?.paired_count ?? devices.length,
+          })}
+        </p>
+      )}
 
       {status?.enabled && !sharing && (
         <div className="space-y-2 rounded-md border border-warning/40 p-3">
