@@ -188,10 +188,16 @@
     line-height: 1.35;
   }
   .readme-preview h1 {
-    font-size: 1.25rem;
+    font-size: 1.5rem;
+    margin-top: 0;
+    padding-bottom: 0.4em;
+    border-bottom: 1px solid hsl(var(--border));
   }
   .readme-preview h2 {
     font-size: 1.125rem;
+    margin-top: 1.75em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid hsl(var(--border));
   }
   .readme-preview h3 {
     font-size: 1rem;
@@ -216,14 +222,17 @@
   }
   .readme-preview pre {
     background-color: hsl(var(--muted));
-    padding: 0.75em;
+    padding: 0.75em 1em;
     border-radius: var(--radius);
     overflow: auto;
+    font-size: 0.8125rem;
+    line-height: 1.55;
   }
   .readme-preview :not(pre) > code {
     background-color: hsl(var(--muted));
-    padding: 0.1em 0.3em;
+    padding: 0.1em 0.35em;
     border-radius: calc(var(--radius) / 2);
+    font-size: 0.875em;
   }
   .readme-preview a {
     color: hsl(var(--primary));
@@ -236,6 +245,11 @@
   .readme-preview td {
     border: 1px solid hsl(var(--border));
     padding: 0.375em 0.625em;
+    text-align: left;
+  }
+  .readme-preview th {
+    background-color: hsl(var(--muted));
+    font-weight: 600;
   }
   .readme-preview hr {
     border-color: hsl(var(--border));

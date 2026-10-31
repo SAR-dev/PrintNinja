@@ -26,7 +26,7 @@ describe("ReadmeEditor preview", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/e\.g\. An 80mm/)).not.toBeInTheDocument();
     expect(
-      screen.queryByText(/Which \{\{helper\}\} produces/),
+      screen.queryByText(/Which \{\{helper}} produces/),
     ).not.toBeInTheDocument();
   });
 
@@ -90,5 +90,24 @@ describe("ReadmeEditor preview", () => {
     expect(preview).not.toBeNull();
     expect(preview?.querySelectorAll("p")).toHaveLength(2);
     expect(container.querySelector(".prose")).toBeNull();
+  });
+});
+
+describe("ReadmeEditor read-only", () => {
+  it("shows the text but disables the textarea and every tool", () => {
+    render(
+      <ReadmeEditor
+        value="# Docs"
+        onChange={vi.fn()}
+        templateName="Label"
+        readOnly
+      />,
+    );
+    expect(screen.getByRole("textbox")).toHaveAttribute("readonly");
+    for (const name of ["Bold", "Heading", "Link", "Reset"]) {
+      expect(
+        screen.getByRole("button", { name: new RegExp(name) }),
+      ).toBeDisabled();
+    }
   });
 });
