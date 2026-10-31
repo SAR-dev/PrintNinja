@@ -5,7 +5,7 @@ import { createPasswordHasher } from "../src/infra/security/passwordHasher.js";
 import { createSavedRepository } from "../src/infra/db/saved.js";
 import { createTemplateRepository } from "../src/infra/db/templates.js";
 import { createUserRepository } from "../src/infra/db/users.js";
-import { publishTemplate } from "../src/domain/templates/templates.js";
+import { publishTemplate } from "../src/domain/templates/index.js";
 import { putTemplate } from "../src/domain/templates/put.js";
 import { saveTemplate } from "../src/domain/templates/saved.js";
 
