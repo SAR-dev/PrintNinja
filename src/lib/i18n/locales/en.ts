@@ -323,7 +323,6 @@ const en = {
     toast_created_server: 'Template "{{name}}" created on the server',
     toast_created_local: 'Template "{{name}}" created locally',
     toast_readme_too_big: "README exceeds 64 KiB",
-    toast_readme_saved: "README saved locally — Save sends it to the server",
     toast_showing_canvas: "Showing the canvas",
     toast_dataset_deleted: "Dataset deleted",
     toast_delete_failed: "Delete failed: {{error}}",
@@ -1073,8 +1072,6 @@ const en = {
     unit_jobs: "jobs",
   },
   readme: {
-    save: "Save README",
-    saving: "Saving…",
     edit: "Edit",
     preview: "Preview",
     reset_title: "Reset README to scaffold?",

@@ -330,8 +330,6 @@ const ja: Translation = {
     toast_created_server: "テンプレート「{{name}}」をサーバーに作成しました",
     toast_created_local: "テンプレート「{{name}}」をローカルに作成しました",
     toast_readme_too_big: "READMEが64 KiBを超えています",
-    toast_readme_saved:
-      "READMEをローカルに保存しました。「保存」でサーバーに送信されます",
     toast_showing_canvas: "キャンバスを表示しています",
     toast_dataset_deleted: "データセットを削除しました",
     toast_delete_failed: "削除に失敗しました: {{error}}",
@@ -1101,8 +1099,6 @@ const ja: Translation = {
     unit_jobs: "件",
   },
   readme: {
-    save: "READMEを保存",
-    saving: "保存しています…",
     edit: "編集",
     preview: "プレビュー",
     reset_title: "READMEを初期テンプレートにリセットしますか？",
