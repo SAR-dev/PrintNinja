@@ -140,10 +140,11 @@ apksigner verify --verbose aligned.apk
 `zipalign` and `apksigner` are in the Android SDK under
 `build-tools/<version>/`. Sign **after** `zipalign`, never before.
 
-The `ANDROID_KEYSTORE_*` environment variables listed in `docs/RELEASE.md` only help if
-the Gradle project reads them. If you want builds to come out signed directly, add a
-signing config to the Android Gradle project that reads them, and check the result with
-`apksigner verify`.
+To get builds that come out signed directly, `scripts/patch-android-signing.mjs` adds a
+signing config to the generated Android Gradle project. It reads `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD` and the optional `ANDROID_KEYSTORE_ALIAS` (see `docs/RELEASE.md`
+and `docs/CI.md`); `release-local.mjs` and the hosted workflow both run it. Check the result
+with `apksigner verify`.
 
 An `.aab` is only needed for the Play Store. Sign it with `jarsigner` using the same
 keystore if you ever need one.
@@ -160,9 +161,10 @@ Updates work as long as every build is signed with the **same keystore**.
 
 ## Not the same thing: the Tauri updater key
 
-`TAURI_SIGNING_PRIVATE_KEY` in `docs/RELEASE.md` is for Tauri's built-in auto-updater
-signatures. It is separate from the code signing above and is only needed if the app uses
-the updater. Do not reuse the Windows `.pfx` or the Android keystore for it.
+Tauri's built-in auto-updater uses its own signing key (`TAURI_SIGNING_PRIVATE_KEY`). PrintNinja
+does not use the updater (it only shows an update badge, see `docs/RELEASE.md`), so no such key
+is needed today. If you add the updater later, generate a separate key; do not reuse the Windows
+`.pfx` or the Android keystore for it.
 
 ## Checklist before each release
 
