@@ -23,8 +23,8 @@ pnpm release patch --push      # also push main + the tag (tag only, no builds)
 
 (`pnpm release:patch`, `release:minor` and `release:major` are shortcuts.)
 
-The script (`scripts/release.mjs`, needs only Node and git) updates every place
-`release-local.mjs` checks:
+The script (`scripts/release.mjs`, needs only Node and git) updates these five
+places (`release-local.mjs` checks the first, second, third and fifth):
 - `package.json`
 - `src-tauri/tauri.conf.json`
 - `src-tauri/Cargo.toml` (`[package]` version)
@@ -68,10 +68,6 @@ because the release script refuses a dirty working tree, so commit the change fi
 Store your certificate as `scripts/certs/windows.pfx` (not committed).
 
 ```powershell
-# Set environment variables (Git Bash / pwsh)
-$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content ./scripts/certs/windows-private.key -Raw
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "your-password"
-
 # Build MSI only
 pnpm tauri:build -- --target x86_64-pc-windows-msvc --bundles msi
 
@@ -81,11 +77,11 @@ signtool sign /f ./scripts/certs/windows.pfx /p password /tr http://timestamp.di
 
 ### Android (APK / AAB)
 ```bash
-# Set the keystore path
-export ANDROID_KEYSTORE_PATH=./scripts/certs/android.keystore
+# Same variables release-local.mjs reads (see scripts/patch-android-signing.mjs)
+export ANDROID_KEYSTORE_BASE64=$(base64 -w0 scripts/certs/printninja.keystore)
 export ANDROID_KEYSTORE_PASSWORD=secret
-export ANDROID_KEY_ALIAS=printninja
-export ANDROID_KEY_PASSWORD=secret
+export ANDROID_KEYSTORE_ALIAS=printninja   # optional, this is the default
+node scripts/patch-android-signing.mjs
 
 # Build arm64-v8a only (modern mobiles)
 pnpm tauri android build --target aarch64
