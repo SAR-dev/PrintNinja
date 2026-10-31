@@ -12,7 +12,7 @@ Thanks for helping. This page covers how to set up, what to run before you push,
 
 ## Setup
 
-You need Node 22 or newer, pnpm 10 and Rust 1.90 (pinned in `rust-toolchain.toml`). For Android you also need Java 17 and the Android SDK and NDK.
+You need Node 22 (the `engines` field pins 22.x), pnpm 10 and Rust 1.90 (pinned in `rust-toolchain.toml`). For Android you also need Java 17 and the Android SDK and NDK.
 
 ```bash
 pnpm install

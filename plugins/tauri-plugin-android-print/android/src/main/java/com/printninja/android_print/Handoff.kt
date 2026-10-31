@@ -4,7 +4,7 @@ import java.io.File
 
 /**
  * Large writes cross the Rust→Kotlin bridge by file path instead of
- * base64 (see A4 in docs/PRINT_SPEED.md): the Rust side stages the bytes
+ * base64: the Rust side stages the bytes
  * under a unique name, and the write commands read and delete the file.
  * Either side's delete suffices, so a crash mid-print leaves at most one
  * orphaned file per print.

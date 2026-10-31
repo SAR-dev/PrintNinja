@@ -165,7 +165,7 @@ The backend works through the same stages for every job:
    is the request's explicit choice first, the design size second, A4 last —
    so an API or UI caller can print a template on different paper without
    touching the template. Orientation defaults to the template's stored
-   value, overridable per request. Raw HTML sent via the API defaults to A4.
+   value, overridable per request.
 2. **Open a job record.** A row is written to the jobs database in the
    *printing* state, stamped with the settings, the data, and the start
    time. It carries an idempotency key stored under a uniqueness constraint:
@@ -308,8 +308,9 @@ bytes and which transports exist.
   templates, and printers all live on the machine. Only remote data sources,
   cloud sync, and release checks degrade. (The "working offline" banner
   refers to the sharing service, not to printing.)
-- **Phone paired with a PC.** A phone is always paired: the app opens on a
-  pairing screen until a PC is paired, and every render (PDF included) is done
+- **Phone paired with a PC.** A phone needs a pair to print: the app opens on
+  Automation, an unpaired phone can still browse, and printing sends it to the
+  pairing screen first. Once paired, every render (PDF included) is done
   on that PC while it is on the same network and sharing. When the PC is off,
   asleep, or away, the job fails at once with a message that names the PC.
   Nothing is queued or retried automatically; the failed job stays in History
@@ -369,8 +370,8 @@ bytes are dropped.
 
 Producing the image or PDF (step 6 of §3) is by far the most expensive part
 of a print, and a phone does not do it at all. A phone is always paired with
-a PC (Windows or Linux) that renders for it, and the app stays on its pairing
-screen until one is paired. A desktop can also borrow a faster PC, but only to
+a PC (Windows or Linux) that renders for it, and printing sends it to the
+pairing screen until one is paired. A desktop can also borrow a faster PC, but only to
 be quicker, because it can render for itself. The direction is fixed: **a phone asks a PC, never
 the other way round**, so each device only shows its own half of the
 feature. A PC offers itself; a phone pairs with a PC.
@@ -543,8 +544,7 @@ which guest pairing has since narrowed to owners:
 
 ### Choosing a PC and asking it
 
-When "use my PC" is on (on a phone it has to be, or no job can print), each
-print first asks every paired PC, at the same time, whether it is available
+Each print first asks every paired PC, at the same time, whether it is available
 and able to render. The phone prefers a PC of
 the same operating family (rendering engines differ subtly between
 platforms), then the one with the best capability score, and asks exactly
@@ -587,8 +587,7 @@ The rules differ from a desktop's in three ways:
 - A busy PC is retried instead of abandoned: up to three more tries, waiting
   as long as the PC asks (or five seconds), never more than thirty seconds
   per wait. If it is still busy, the job fails as busy.
-- If "use my PC" is switched off, every job fails with a message telling the
-  user to turn auto rendering on.
+- With no PC paired, the job fails at once with a message saying so.
 
 A failed job stays in History and can be retried once the PC is back.
 

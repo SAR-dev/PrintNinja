@@ -74,8 +74,9 @@ adding a second library for the same job. Join class names with `cn()` from `src
   showing who is signed in must reload on `printninja:session-started` (broadcast by the
   login/register funnel, the mirror of `session-ended`). Forgetting this shows the old
   session after signing in again.
-- **Guest entry.** `SignInScreen` offers "Continue as guest" with a name
-  field: no account, no session, the app opens session-less, and the
+- **Guest entry.** `SignInScreen` offers "Continue as guest", which swaps the
+  card to a guest step (name field, Back, Continue): no account, no session,
+  the app opens session-less, and the
   handle (plus guest mode) is remembered in localStorage across
   restarts; any real sign-in clears both, so the next session end
   returns to the sign-in screen. Share-dependent views keep
@@ -106,7 +107,7 @@ top bar or sidebar.
   A single failed status read keeps the last known badge; it only disappears after three in a row.
 - **Sidebar** (desktop, `md` and up): grouped by the job being done, collapsible to icons.
   The collapsed state is remembered in `localStorage`.
-- **Bottom bar** (phones): the same items and labels as the sidebar.
+- **Bottom bar** (phones): Print, History, Templates and Printers, plus a More button for the rest (Designer, Automation, Settings). Labels match the sidebar.
 - **Main area**: `<main id="main">`, content capped at 1600 px, with a "Skip to content" link
   as the first focusable element.
 
@@ -119,7 +120,7 @@ shortcut help all read.
 |---|---|
 | Work | Print, History |
 | Build | Designer, Templates |
-| Admin | Printers, Settings |
+| Admin | Printers, Automation, Settings |
 
 Groups follow the job someone is doing, not the feature list. The Designer is active on both
 `/` and `/template/:id`.
@@ -130,7 +131,7 @@ Groups follow the job someone is doing, not the feature list. The Designer is ac
 |---|---|
 | `Ctrl+K` / `⌘K` | Open the command palette (pages, "New template", "Reprint last job", up to 50 templates) |
 | `?` | Show the shortcut list |
-| `G` then a letter | Go to a page: `P` Print, `H` History, `D` Designer, `T` Templates, `R` Printers, `S` Settings |
+| `G` then a letter | Go to a page: `P` Print, `H` History, `D` Designer, `T` Templates, `R` Printers, `A` Automation, `S` Settings |
 
 Letter shortcuts never fire while typing in an input, textarea, select, editable element or
 the code editor. "Reprint last job" asks for confirmation before it prints.

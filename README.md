@@ -7,7 +7,7 @@
 **Silent printing for Windows, Android and Linux.**
 Design a receipt or label in HTML and CSS, feed it JSON, and it prints. No print dialog, no driver dance, no fuss.
 
-[![Version](https://img.shields.io/badge/version-1.1.0-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
+[![Version](https://img.shields.io/badge/version-2.2.0-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-1.90-DEA584?logo=rust&logoColor=black)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
@@ -60,7 +60,7 @@ Download the installer for your system from the [Releases page](https://github.c
 | **Linux** | `.deb` or AppImage | Needs CUPS and a Chromium-family browser. The `.deb` pulls both in; the AppImage does not, so run `apt install chromium` (or install Chrome) first. |
 | **Android** | `.apk` | Android lets you install it after you allow installs from your browser. |
 
-Release builds are currently unsigned (see [`docs/SIGNING.md`](docs/SIGNING.md)), so Windows may ask you to confirm before it runs the installer. macOS is not a print target.
+Windows and Linux release builds are currently unsigned (see [`docs/SIGNING.md`](docs/SIGNING.md)), so Windows may ask you to confirm before it runs the installer. macOS is not a print target.
 
 ## Your first print
 
@@ -203,7 +203,7 @@ Other options include `url` (a data URL), `test=1`, `orientation`, `fit` and `pr
 - Tray icon, autostart, single instance, and a background service on Android
 - Press `Ctrl/Cmd+K` to find any page, template, printer, job or setting, then jump straight to it
 - Status badges in the top bar for every switch that changes behavior (see below)
-- Keyboard first: `G` then `P/H/D/T/R/S` for navigation
+- Keyboard first: `G` then `P/H/D/T/R/A/S` for navigation
 - Phone-friendly layouts with bottom navigation, card lists and a sticky Print bar
 - Comfortable or compact density, custom name and logo, IBM Plex fonts bundled for offline use
 - Accessibility target: WCAG 2.1 AA
@@ -244,8 +244,8 @@ If you are stuck, export logs from **Settings → Diagnostics** and attach them 
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): how data becomes dots on paper, including [borrowing a faster device](docs/ARCHITECTURE.md#9-borrowing-a-faster-device)
 - [`docs/UI_GUIDE.md`](docs/UI_GUIDE.md): design principles, components and status vocabulary
-- [`docs/PRINT_SPEED.md`](docs/PRINT_SPEED.md): print performance findings
 - [`docs/ENV.md`](docs/ENV.md): share service environment variables
+- [`docs/CI.md`](docs/CI.md): local checks, hosted workflow and scheduled jobs
 - [`docs/RELEASE.md`](docs/RELEASE.md) and [`docs/SIGNING.md`](docs/SIGNING.md): releasing and signing
 
 ## For developers
@@ -284,7 +284,7 @@ plugins/      Tauri plugin for Android printing (Kotlin)
 server/       Share service (Fastify, Prisma, OpenAPI contract in server/openapi)
 e2e/          Playwright suite with a fake desktop agent
 dev-printer/  Fake IPP printer for local development
-docs/         Architecture, shared rendering, UI guide, environment, release and signing
+docs/         Architecture, shared rendering, UI guide, environment, CI, release and signing
 scripts/      Release and versioning helpers
 ```
 

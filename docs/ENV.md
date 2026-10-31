@@ -55,9 +55,9 @@ any secret.
 
 ### `CRON_SECRET`
 Shared secret for `GET /v2/internal/cleanup` (purges expired sessions
-and tombstones older than the retention window). The scheduled
-`server-cleanup` workflow calls it with a Bearer token; without the
-secret the endpoint answers 404 (disabled). Generate with
+and tombstones older than the retention window). On Vercel, a Vercel
+Cron declared in `server/vercel.json` calls it daily with a Bearer
+token; without the secret the endpoint answers 404 (disabled). Generate with
 `openssl rand -hex 32` and never commit it. Not needed for the Docker
 or local entries, which run the same purges from their own timers.
 
@@ -142,8 +142,8 @@ deleted once at startup. There is no job queue. Default: `60`.
 ## Sync
 
 ### `SYNC_TOMBSTONE_DAYS`
-How many days deleted-record markers (tombstones) are kept. The hourly
-cleanup removes older ones. A sync cursor older than the oldest kept
+How many days deleted-record markers (tombstones) are kept. The periodic
+cleanup (hourly by default, daily on Vercel) removes older ones. A sync cursor older than the oldest kept
 tombstone answers `reset: true`. Default: `90`.
 
 ### `SYNC_PAGE_BYTES`

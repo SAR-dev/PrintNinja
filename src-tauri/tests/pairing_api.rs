@@ -289,6 +289,25 @@ async fn no_window_expired_wrong_locked_and_disabled() {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
+#[tokio::test]
+async fn guest_miss_names_the_invite_instead_of_sign_in() {
+    // No account and no matching invite: mistyped, revoked, or the
+    // owner's window code, which guests can never use. The answer names
+    // the invite instead of sending a guest to sign in.
+    let (db, window) = setup();
+    let mut body = claim_body("K7QM4XPD", "phone-9");
+    body["account_id"] = serde_json::json!("");
+    body["service_url"] = serde_json::json!("");
+    let (status, reply) = post_claim(router(&db, &window), body).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(reply["code"], "guest_invite_required");
+
+    // A signed-in caller with the same unknown code keeps the old
+    // answer: the window is shut, so pairing is unavailable.
+    let (status, _) = post_claim(router(&db, &window), claim_body("K7QM4XPD", "phone-1")).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
 // ── registry ────────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -503,7 +522,7 @@ async fn claim_without_phone_account_is_400_and_keeps_the_window() {
     bare.as_object_mut().unwrap().remove("service_url");
     let (status, body) = post_claim(router(&db, &window), bare).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["code"], "phone_sign_in_required");
+    assert_eq!(body["code"], "guest_invite_required");
     assert_eq!(paired_count(&db), 0, "no row on refusal");
 
     let (status, _) = post_claim(router(&db, &window), claim_body("K7QM4XPD", "phone-1")).await;
