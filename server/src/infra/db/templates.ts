@@ -211,10 +211,10 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
             _count: { select: { versions: true } },
           },
         });
-        if (publishedAt === null) {
-          // Mirrors go away with the publish; republishing re-emits them.
-          await tombstoneSavers(tx, id, current.ownerId);
-        } else {
+        // A (re)publish re-emits every saver's mirror. An unpublish emits
+        // nothing: the mirrors stay put, printable but withdrawn (the
+        // Saved tab badges them live), until a republish refreshes them.
+        if (publishedAt !== null) {
           await stampSavers(tx, id, current.ownerId);
         }
         return updated;
@@ -237,9 +237,9 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
             entityKey: id,
           },
         });
-        // Every saver's mirror goes too; the save rows survive so the
-        // manifest still reports the delete.
-        await tombstoneSavers(tx, id, current.ownerId);
+        // No saver tombstones: mirrors of a deleted template stay put
+        // like withdrawn ones (the manifest still reports the delete),
+        // and the save rows survive with them.
         await tx.template.delete({ where: { id } });
         return { ownerId: current.ownerId };
       });
@@ -410,22 +410,6 @@ async function stampSavers(
     await tx.savedTemplate.update({
       where: { userId_templateId: { userId, templateId } },
       data: { changeSeq: seq },
-    });
-  }
-}
-
-/** Unpublish and delete remove every saver's mirror: one tombstone per
- * saver lands the delete in each saver's own stream. Saved rows survive
- * (the manifest still reports them), so republishing restores the list. */
-async function tombstoneSavers(
-  tx: Prisma.TransactionClient,
-  templateId: string,
-  ownerId: string,
-): Promise<void> {
-  for (const userId of await saverIds(tx, templateId, ownerId)) {
-    const seq = await bumpSeq(tx, userId);
-    await tx.tombstone.create({
-      data: { userId, seq, entity: "template", entityKey: templateId },
     });
   }
 }
