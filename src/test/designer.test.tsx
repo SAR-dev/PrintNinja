@@ -870,8 +870,6 @@ describe("EditorPane", () => {
     onCssChange: vi.fn(),
     readme: "# Label docs",
     onReadmeChange: vi.fn(),
-    readmeSaving: false,
-    onSaveReadme: vi.fn(),
   });
   // Radix Tabs switch on mousedown, not click.
   const openTab = (name: string) => {
@@ -901,22 +899,26 @@ describe("EditorPane", () => {
     expect(container.querySelectorAll(".cm-editor")).toHaveLength(2);
   });
 
-  it("shows the README editor and its Save button on the README tab", () => {
-    const p = props();
-    render(<EditorPane {...p} />);
-    expect(
-      screen.queryByRole("button", { name: "Save README" }),
-    ).not.toBeInTheDocument();
+  it("shows the README editor on the README tab, with no Save of its own", () => {
+    render(<EditorPane {...props()} />);
     openTab("README");
     expect(screen.queryByText(/README — Label/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Save README" }));
-    expect(p.onSaveReadme).toHaveBeenCalled();
+    expect(screen.getByPlaceholderText(/Write your README/)).toHaveValue(
+      "# Label docs",
+    );
+    expect(
+      screen.queryByRole("button", { name: /Save README/ }),
+    ).not.toBeInTheDocument();
   });
 
-  it("disables Save README on a read-only copy", () => {
+  it("disables the README tools on a read-only copy", () => {
     render(<EditorPane {...props()} readmeReadOnly />);
     openTab("README");
-    expect(screen.getByRole("button", { name: "Save README" })).toBeDisabled();
+    expect(screen.getByPlaceholderText(/Write your README/)).toHaveAttribute(
+      "readonly",
+    );
+    expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
   });
 
   it("shows notices under the HTML and CSS tabs, but not README", () => {
@@ -1223,8 +1225,6 @@ describe("EditorPane insertAtCursor", () => {
           onCssChange={setCss}
           readme=""
           onReadmeChange={() => {}}
-          readmeSaving={false}
-          onSaveReadme={() => {}}
         />
         <output data-testid="html">{html}</output>
       </>

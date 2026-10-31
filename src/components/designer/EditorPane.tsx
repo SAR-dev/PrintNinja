@@ -121,9 +121,7 @@ export interface EditorPaneHandle {
 interface Props extends CodeProps {
   readme: string;
   onReadmeChange: (value: string) => void;
-  readmeSaving: boolean;
-  onSaveReadme: () => void;
-  /** A saved copy: the README shows but cannot be edited or saved. */
+  /** A saved copy: the README shows but cannot be edited. */
   readmeReadOnly?: boolean;
   /** Shown under the tabs while the HTML or CSS tab is open, such as the class-name warnings. */
   notices?: ReactNode;
@@ -145,8 +143,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
       onCssChange,
       readme,
       onReadmeChange,
-      readmeSaving,
-      onSaveReadme,
       readmeReadOnly = false,
       notices,
       className,
@@ -256,16 +252,16 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
             aria-label={t("designer.editor_css_label")}
           />
         </TabsContent>
+        {/* Edge to edge like the code tabs: the editor draws its own
+            toolbar and footer, so the tab adds no padding or second border. */}
         <TabsContent
           value="readme"
-          className="mt-0 min-h-0 flex-1 overflow-auto p-4 data-[state=active]:flex data-[state=active]:flex-col"
+          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col"
         >
           <ReadmePanel
             readme={readme}
             onChange={onReadmeChange}
             templateName={templateName}
-            saving={readmeSaving}
-            onSave={onSaveReadme}
             readOnly={readmeReadOnly}
           />
         </TabsContent>
