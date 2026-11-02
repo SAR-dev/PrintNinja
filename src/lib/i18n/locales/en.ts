@@ -548,6 +548,7 @@ const en = {
     remove_confirm: "Remove printer",
     found_system: "Found on this computer",
     found_network: "Found on this network",
+    fill: "Fill",
     no_network_printers:
       "No network printers found yet — scan to look for them.",
     rescan: "Rescan",
@@ -890,6 +891,14 @@ const en = {
       "The same address is paired more than once. Printing may use the dead entry.",
     devices_dedupe: "Remove duplicates",
     devices_dedupe_done: "Removed {{count}} duplicate entries.",
+    devices_nearby_title: "Nearby PCs",
+    devices_nearby_scanning: "Scanning…",
+    devices_nearby_scan: "Scan",
+    devices_nearby_searching: "Looking for PCs…",
+    devices_nearby_empty: "No nearby PCs found.",
+    devices_nearby_tap_fill: "Tap to fill",
+    devices_nearby_hint:
+      "Tap a PC to fill its address, then enter the 8-character code.",
     devices_remove: "Remove {{name}}",
     devices_phone_hint:
       "Your phone prints through your PC: the PC prepares every job and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. If the PC is off, asleep or blocked, prints fail until it answers; retry them from History.",

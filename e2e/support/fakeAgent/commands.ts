@@ -474,8 +474,25 @@ const implemented: Record<string, Handler> = {
   cache_list_synced_profiles: () => cache.library.listSyncedProfiles(),
   cache_forget_profile: (args) =>
     cache.library.forgetProfile(String(args["server_id"] ?? "")),
-  discover_network_printers: () => [],
-  discover_network_printers_mdns: () => [],
+  // No mDNS in e2e by default; a spec opts in with the
+  // `fake_discovered_printers` setting (a JSON array of discovered rows)
+  // to drive the "add from discovered" UI.
+  discover_network_printers: () => {
+    const override = getSetting("fake_discovered_printers");
+    if (!override) return [];
+    try {
+      return JSON.parse(override) as Array<{
+        id: string;
+        name: string;
+        address: string;
+        printer_type?: string;
+      }>;
+    } catch {
+      return [];
+    }
+  },
+  discover_network_printers_mdns: () =>
+    implemented.discover_network_printers({}),
   discover_peers_mdns: () => [],
   // Fonts: metadata plus in-memory bytes (test files are tiny).
   list_fonts: () =>

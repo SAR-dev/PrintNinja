@@ -233,14 +233,15 @@ export function PrinterSetupPage() {
       .catch(() => setSystemPrinters([]));
     // A paired PC (auto policy) unlocks the thermal languages on Android.
     void hasPairedProvider().then(setPairedProvider);
-    // Background mDNS browse for 30s after mount (one-shot, not continuous)
-    // so printers appear without an extra tap.
+    // Background mDNS browse after mount (one-shot, not continuous) so
+    // printers appear without an extra tap: an 8 s browse immediately,
+    // then a single 8 s re-browse at 15 s (~30 s window total).
     void agent("discover_network_printers", { timeout_secs: 8 })
       .then((list) => {
         if (list && list.length > 0) setNetworkPrinters(list);
       })
       .catch(() => {});
-    // Keep a low-frequency background scan for 30s: re-browse once at 15s
+    // Second low-frequency background scan at 15 s
     const bg = window.setTimeout(() => {
       void agent("discover_network_printers", { timeout_secs: 8 })
         .then((list) => {
@@ -872,7 +873,7 @@ export function PrinterSetupPage() {
                             }))
                           }
                         >
-                          Fill
+                          {t("printers.fill")}
                         </Button>
                         <Button size="sm" onClick={() => void addDiscovered(np)}>
                           {t("common.add")}

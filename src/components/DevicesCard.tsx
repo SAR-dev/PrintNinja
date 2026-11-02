@@ -1364,7 +1364,9 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
       {(nearbyPeers.length > 0 || scanningPeers) && (
         <div className="space-y-2 rounded-md border p-3" data-testid="devices-nearby">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">Nearby PCs</p>
+            <p className="text-sm font-medium">
+              {t("settings_page.devices_nearby_title")}
+            </p>
             <Button
               variant="ghost"
               size="sm"
@@ -1372,12 +1374,16 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
               disabled={scanningPeers}
               data-testid="devices-nearby-rescan"
             >
-              {scanningPeers ? "Scanning…" : "Scan"}
+              {scanningPeers
+                ? t("settings_page.devices_nearby_scanning")
+                : t("settings_page.devices_nearby_scan")}
             </Button>
           </div>
           {nearbyPeers.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              {scanningPeers ? "Looking for PCs…" : "No nearby PCs found."}
+              {scanningPeers
+                ? t("settings_page.devices_nearby_searching")
+                : t("settings_page.devices_nearby_empty")}
             </p>
           ) : (
             <div className="space-y-1">
@@ -1400,12 +1406,16 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
                       {peer.platform ? ` · ${peer.platform}` : ""}
                     </span>
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">Tap to fill</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {t("settings_page.devices_nearby_tap_fill")}
+                  </span>
                 </button>
               ))}
             </div>
           )}
-          <p className="text-xs text-muted-foreground">Tap a PC to fill its address, then enter the 8-character code.</p>
+          <p className="text-xs text-muted-foreground">
+            {t("settings_page.devices_nearby_hint")}
+          </p>
         </div>
       )}
 

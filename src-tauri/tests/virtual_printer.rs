@@ -1284,6 +1284,19 @@ async fn print_copies(copies: u32) -> Option<(usize, usize)> {
         .await
         .expect("the pipeline answers");
     assert!(response.success, "copies must print: {:?}", response.error);
+    // The fixture stores a raw job only after the client closes, in its
+    // own process — on a loaded machine it can still be flushing when the
+    // pipeline has already answered. Wait until every copy's marker has
+    // landed; save_job is one write, so by then all job files exist and
+    // the count below is race-free.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let landed = count_occurrences(&printer.received(), TINY_MARKER);
+        if landed >= copies as usize || Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(150));
+    }
     Some((
         stored_jobs(&printer),
         count_occurrences(&printer.received(), TINY_MARKER),

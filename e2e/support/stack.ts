@@ -115,11 +115,14 @@ async function startWorkerApi(
   worker: number,
 ): Promise<{ pid?: number }> {
   const databaseUrl = `file:${join(dbDir, `worker-${worker}.db`)}`;
+  // shell: true so Windows resolves pnpm.cmd (Node >= 22.7 refuses to
+  // spawn .cmd files without a shell); the args are fixed literals.
   execFileSync("pnpm", ["--filter", "server", "db:apply"], {
     env: { ...process.env, DATABASE_URL: databaseUrl },
     stdio: "pipe",
     cwd: repoDir,
     timeout: 120_000,
+    shell: true,
   });
 
   const port = BASE_API_PORT + worker;

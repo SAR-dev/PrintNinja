@@ -1862,15 +1862,12 @@ pub async fn discover_network_printers(
     Ok(found
         .into_iter()
         .map(|d| {
+            // resource_path arrives without its leading "/" (trimmed in
+            // service_info_to_printer), so both cases format identically.
             let address = if d.kind == "ipp" {
-                if let Some(rp) = d.resource_path.as_deref() {
-                    if rp.contains('/') {
-                        format!("{}:{}/{}", d.host, d.port, rp)
-                    } else {
-                        format!("{}:{}/{}", d.host, d.port, rp)
-                    }
-                } else {
-                    format!("{}:{}", d.host, d.port)
+                match d.resource_path.as_deref() {
+                    Some(rp) => format!("{}:{}/{}", d.host, d.port, rp),
+                    None => format!("{}:{}", d.host, d.port),
                 }
             } else {
                 format!("{}:{}", d.host, d.port)
