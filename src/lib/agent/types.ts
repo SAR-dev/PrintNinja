@@ -48,13 +48,24 @@ export interface DirtyRow {
   base_revision: number | null;
 }
 
-export interface SystemPrinterRow {
-  id: string;
+export interface DiscoveredPrinter {
   name: string;
-  address: string;
-  printer_type: string;
-  language: string;
-  status?: string;
+  host: string;
+  port: number;
+  kind: string;
+  resource_path?: string | null;
+  fullname: string;
+}
+
+export interface DiscoveredPeer {
+  host: string;
+  port: number;
+  provider_id: string;
+  platform: string;
+  protocol: number;
+  version: string;
+  name: string;
+  fullname: string;
 }
 
 export interface SyncStateRow {
@@ -414,7 +425,7 @@ export interface ApiHttpResponse {
   text: string;
 }
 
-/** Render-sharing provider state (see docs/ARCHITECTURE.md §9). */
+/** Render-sharing provider state (see docs/architecture/phone-and-pc-sharing.md). */
 export interface RenderShareStatus {
   enabled: boolean;
   secret_set: boolean;

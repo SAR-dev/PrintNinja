@@ -201,6 +201,34 @@ the app directly will not see your shell's exports — use the launcher's
 own env support, a wrapper script, or (for fleet installs) bake the
 behaviour into `VITE_DEFAULT_SHARE_URL`-style build config instead.
 
+### Webhooks (print callbacks)
+
+`POST /v1/print` accepts an optional `callback_url`; the app posts the
+job outcome to it after the print finishes (fire-and-forget: the print
+itself never waits on the callback, which is retried up to 3 times at
+5 s / 25 s / 125 s). All four variables are read by the desktop app's
+API server at request time — same seam family as
+`PRINTNINJA_PAIRING_TTL_SECS`, so set them in the environment the app
+launches with.
+
+- `PRINTNINJA_CALLBACK_SECRET` — HMAC secret. When set, the callback
+  body is signed `HMAC-SHA256` and sent as the `X-PrintNinja-Signature:
+  sha256=<hex>` header (hex of the raw body). Unset means the callback
+  is unsigned. Never commit it; rotate it like any secret.
+- `PRINTNINJA_CALLBACK_ALLOW_HTTP` — `1` to accept plain `http://`
+  callback URLs. Default (unset or anything else): only `https://` is
+  accepted.
+- `PRINTNINJA_CALLBACK_ALLOW_PRIVATE` — `1` to allow callback URLs that
+  resolve to private / loopback / link-local hosts. Default: such URLs
+  are rejected (`400 callback_url_invalid`).
+- `PRINTNINJA_CALLBACK_ALLOWLIST` — comma-separated exact-match host
+  allow-list (case-insensitive), e.g. `hooks.example.com,api.acme.com`.
+  When set, callback URLs whose host is not in the list are rejected.
+  Unset or empty means no allow-list; the other rules still apply.
+
+Every request is also refused when the URL is over 2048 characters or
+embeds credentials (`user:pass@`). Redirects are not followed.
+
 ### `VITE_UPDATE_API` / `VITE_UPDATE_REPO`
 Where the top-bar update badge looks for releases:
 `GET {VITE_UPDATE_API}/repos/{VITE_UPDATE_REPO}/releases/latest`.

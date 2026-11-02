@@ -1,4 +1,4 @@
-import { getSetting, seedPrinters, setSetting } from "./store.js";
+import { getSetting, seedJobs, seedPrinters, setSetting } from "./store.js";
 import { createFakeCache, type SyncChangeIn } from "./cache.js";
 
 // In-memory implementation of the IPC commands. Phase 1 implements the
@@ -109,6 +109,16 @@ function allSeededPrinters(): Array<Record<string, unknown>> {
     (p) => !seededPrinters.some((s) => s["name"] === p["name"]),
   );
   return [...seededPrinters, ...live];
+}
+
+// Jobs use the same snapshot + live-merge pattern: unit tests seed after
+// import and expect list_jobs to pick the jobs up.
+const seededJobs = seedJobs();
+function allSeededJobs(): Array<Record<string, unknown>> {
+  const live = seedJobs().filter(
+    (j) => !seededJobs.some((s) => s["id"] === j["id"]),
+  );
+  return [...seededJobs, ...live];
 }
 
 const implemented: Record<string, Handler> = {
@@ -380,6 +390,10 @@ const implemented: Record<string, Handler> = {
         req["address"] === undefined ? undefined : String(req["address"]),
       language:
         req["language"] === undefined ? undefined : String(req["language"]),
+      paper_width_mm:
+        req["paper_width_mm"] == null
+          ? undefined
+          : Number(req["paper_width_mm"]),
     });
   },
   update_printer: (args) => {
@@ -389,6 +403,9 @@ const implemented: Record<string, Handler> = {
       printer_type: String(req["printer_type"] ?? ""),
       address: String(req["address"] ?? ""),
       language: String(req["language"] ?? ""),
+      // The Rust UPDATE always writes the column (null clears it).
+      paper_width_mm:
+        req["paper_width_mm"] == null ? null : Number(req["paper_width_mm"]),
     });
   },
   delete_printer: (args) => {
@@ -474,6 +491,26 @@ const implemented: Record<string, Handler> = {
   cache_list_synced_profiles: () => cache.library.listSyncedProfiles(),
   cache_forget_profile: (args) =>
     cache.library.forgetProfile(String(args["server_id"] ?? "")),
+  // No mDNS in e2e by default; a spec opts in with the
+  // `fake_discovered_printers` setting (a JSON array of discovered rows)
+  // to drive the "add from discovered" UI.
+  discover_network_printers: () => {
+    const override = getSetting("fake_discovered_printers");
+    if (!override) return [];
+    try {
+      return JSON.parse(override) as Array<{
+        id: string;
+        name: string;
+        address: string;
+        printer_type?: string;
+      }>;
+    } catch {
+      return [];
+    }
+  },
+  discover_network_printers_mdns: () =>
+    implemented.discover_network_printers({}),
+  discover_peers_mdns: () => [],
   // Fonts: metadata plus in-memory bytes (test files are tiny).
   list_fonts: () =>
     cache.library.listFonts().map((r) => ({
@@ -525,6 +562,12 @@ const implemented: Record<string, Handler> = {
   cache_list_synced_settings: () => cache.library.listSyncedSettings(),
   cache_forget_setting: (args) =>
     cache.library.forgetSetting(String(args["key"] ?? "")),
+  // Print history, seed-driven (History page, README screenshots). An
+  // unknown id returns null rather than an error: History renders it as
+  // "no job", and no spec relies on the Rust NotFound here.
+  list_jobs: () => allSeededJobs(),
+  get_job: (args) =>
+    allSeededJobs().find((j) => j["id"] === Number(args["id"])) ?? null,
 };
 
 /** Every Rust command without real behavior yet (src-tauri/src/lib.rs).
@@ -533,8 +576,6 @@ const implemented: Record<string, Handler> = {
 const acknowledgedStubs: string[] = [
   "test_printer",
   "clear_publish_info",
-  "list_jobs",
-  "get_job",
   "reprint_job",
   "retry_job",
   "delete_job",
@@ -560,9 +601,7 @@ const acknowledgedStubs: string[] = [
   // against this canned provider; the pipeline path is covered in Rust.
   "peer_render_request",
   "refresh_background",
-  // Android-only mDNS discovery: no printers on the e2e desktop, so the
-  // empty list the Rust stub returns is the honest behavior here.
-  "discover_network_printers",
+  // mDNS discovery is implemented above
 ];
 
 const commands: Record<string, Handler> = {

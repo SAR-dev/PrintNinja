@@ -142,4 +142,14 @@ export const testids = {
   devicesAddrInput: "devices-addr-input",
   /** Settings API (phone): pair-again button for an unreachable pair. */
   devicesPairAgain: (id: string) => `devices-pair-again-${id}`,
+  /** Printers page: the "Found on this network" scan list in the Add sheet. */
+  printersScanNetwork: "printers-scan-network",
+  /** Printers page: one row of the discovered-printers scan list. */
+  discoveredPrinter: (id: string) => `discovered-printer-${id}`,
+  /** Designer pack chooser: one pack card (parameterized by pack id). */
+  packCard: (id: string) => `pack-card-${id}`,
+  /** Designer pack chooser: advance to the naming step. */
+  packNext: "pack-next",
+  /** Designer pack chooser: create the template from the pack. */
+  packCreate: "pack-create",
 } as const;

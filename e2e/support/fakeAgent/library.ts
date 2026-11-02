@@ -53,6 +53,7 @@ export interface FakePrinterRow {
   printer_type: string;
   address: string;
   language: string;
+  paper_width_mm: number | null;
 }
 
 const DATASETS_KEY = "fake-agent:datasets";
@@ -162,6 +163,10 @@ export function createFakeLibrary(deps: {
       nextFontId = Math.max(nextFontId, row.id + 1);
     }
   }
+  // A width is trusted only when it is a positive number; anything else
+  // (missing, string, 0) is null, like the Rust column's Option<i64>.
+  const widthOf = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.trunc(v) : null;
   const persistedPrinters = readRows<FakePrinterRow>(PRINTERS_KEY);
   if (persistedPrinters) {
     for (const row of persistedPrinters) {
@@ -171,6 +176,7 @@ export function createFakeLibrary(deps: {
         printer_type: row.printer_type ?? "ipp",
         address: row.address ?? "",
         language: row.language ?? "pdf",
+        paper_width_mm: widthOf(row.paper_width_mm),
       });
       nextPrinterId = Math.max(nextPrinterId, row.id + 1);
     }
@@ -184,6 +190,7 @@ export function createFakeLibrary(deps: {
           printer_type: String(p["printer_type"] ?? "ipp"),
           address: String(p["address"] ?? ""),
           language: String(p["language"] ?? "pdf"),
+          paper_width_mm: widthOf(p["paper_width_mm"]),
         });
       }
       if (printers.size > 0) persistAll();
@@ -240,6 +247,7 @@ export function createFakeLibrary(deps: {
       printer_type?: string;
       address?: string;
       language?: string;
+      paper_width_mm?: number | null;
     },
   ): FakePrinterRow {
     // Mirrors the Rust validation in commands/printer.rs so the
@@ -279,6 +287,7 @@ export function createFakeLibrary(deps: {
         printer_type,
         address: input.address ?? "",
         language,
+        paper_width_mm: widthOf(input.paper_width_mm),
       };
       printers.set(created.id, created);
       persistAll();
@@ -292,6 +301,8 @@ export function createFakeLibrary(deps: {
     row.printer_type = printer_type;
     if (input.address !== undefined) row.address = input.address;
     row.language = language;
+    // The Rust UPDATE always writes the column (null clears it).
+    row.paper_width_mm = widthOf(input.paper_width_mm);
     persistAll();
     return row;
   }
@@ -319,6 +330,7 @@ export function createFakeLibrary(deps: {
       printer_type?: string;
       address?: string;
       language?: string;
+      paper_width_mm?: number | null;
     }): FakePrinterRow {
       return upsertPrinter(undefined, input);
     },
@@ -329,6 +341,7 @@ export function createFakeLibrary(deps: {
         printer_type?: string;
         address?: string;
         language?: string;
+        paper_width_mm?: number | null;
       },
     ): FakePrinterRow {
       return upsertPrinter(id, input);
