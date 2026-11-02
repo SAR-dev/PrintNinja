@@ -49,6 +49,13 @@ import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { useCanPrint } from "@/lib/hooks/useCanPrint";
 import { notifySuccess, notifyError } from "@/lib/notify";
 import { usePrintStore } from "@/lib/store/printStore";
+import {
+  loadPrintPrefs,
+  prefsKey,
+  PRINT_PREFS_KEY,
+  type PrintPrefsMap,
+} from "@/lib/printPrefs";
+import { writeSetting } from "@/lib/settings";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
 import { listTemplates } from "@/lib/templates/listTemplates";
 import type { TemplateListRow } from "@/lib/templates/listTemplates";
@@ -94,6 +101,8 @@ function PrintForm() {
   const { printers, refresh: refreshSystemPrinters } = useSystemPrinters();
   const [templates, setTemplates] = useState<TemplateListRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // Per-printer remembered choices (F3); persisted under PRINT_PREFS_KEY.
+  const [printerPrefs, setPrinterPrefs] = useState<PrintPrefsMap>({});
 
   // One complete design document per record, laid out as in the Designer.
   // Paper, orientation, fit mode and margins are applied when drawing, so
@@ -240,20 +249,34 @@ function PrintForm() {
       try {
         // Saved printers plus OS ones, merged by the hook; this also
         // updates the list the dropdown shows.
-        const [p, tpl] = await Promise.all([
+        const [p, tpl, prefs] = await Promise.all([
           refreshSystemPrinters().catch(() => []),
           listTemplates().catch(() => []),
+          loadPrintPrefs().catch((): PrintPrefsMap => ({})),
         ]);
         if (cancelled) return;
         setTemplates(tpl);
-        const { printerId, templateId } = usePrintStore.getState();
-        if (p.length > 0 && !printerId)
-          usePrintStore.getState().setPrinterId(p[0].name);
+        setPrinterPrefs(prefs);
+        const st = usePrintStore.getState();
+        // The preselected printer's remembered template beats the plain
+        // first-template fallback; its paper is restored on the first load
+        // only, and only over an unset paper (a focus/pull reload must not
+        // clobber a live session's explicit choice).
+        const hadPaper = st.paperW != null || st.paperH != null;
+        const effPrinter = st.printerId || (p.length > 0 ? p[0].name : "");
+        if (effPrinter) st.setPrinterId(effPrinter);
+        const remembered = effPrinter ? prefs[prefsKey(effPrinter)] : undefined;
+        const rememberedTplOk =
+          !!remembered && tpl.some((x) => String(x.id) === remembered.template_id);
         if (
           tpl.length > 0 &&
-          !tpl.some((x) => String(x.id) === String(templateId))
+          !tpl.some((x) => String(x.id) === String(st.templateId))
         )
-          usePrintStore.getState().setTemplateId(String(tpl[0].id));
+          st.setTemplateId(rememberedTplOk ? remembered.template_id : String(tpl[0].id));
+        if (first && rememberedTplOk && !hadPaper) {
+          st.setPaperW(remembered.paper_w);
+          st.setPaperH(remembered.paper_h);
+        }
       } catch (e) {
         console.error("Failed to load printers/templates:", e);
       } finally {
@@ -507,6 +530,20 @@ function PrintForm() {
     }
   };
 
+  // Picking a printer brings back its last local choices (F3): the
+  // remembered template when it still exists, plus the remembered paper.
+  // Via-PC choices are the PC's own ids and never remembered here.
+  const onPrinterChange = (name: string) => {
+    store.setPrinterId(name);
+    if (viaPc) return;
+    const remembered = printerPrefs[prefsKey(name)];
+    if (!remembered) return;
+    const tpl = templates.find((x) => String(x.id) === remembered.template_id);
+    if (tpl) store.setTemplateId(String(tpl.id));
+    store.setPaperW(remembered.paper_w);
+    store.setPaperH(remembered.paper_h);
+  };
+
   const handlePrint = async (retry = false) => {
     if (!store.printerId) {
       notifyError(t("print.blocker_printer"));
@@ -519,6 +556,20 @@ function PrintForm() {
     if (store.copies < 1) {
       notifyError(t("print.blocker_copies"));
       return;
+    }
+    // Remember this printer's choices for its next visit (F3). Saved
+    // before the transport call so the prefs survive a failed print too.
+    if (!viaPc) {
+      const next: PrintPrefsMap = {
+        ...printerPrefs,
+        [prefsKey(store.printerId)]: {
+          template_id: store.templateId,
+          paper_w: store.paperW,
+          paper_h: store.paperH,
+        },
+      };
+      setPrinterPrefs(next);
+      void writeSetting(PRINT_PREFS_KEY, JSON.stringify(next));
     }
     // Print via PC: no local pipeline or transport call from here on.
     if (viaPc) {
@@ -731,6 +782,34 @@ function PrintForm() {
       ? "auto"
       : (PAPER_PRESETS.find((x) => x.w === store.paperW && x.h === store.paperH)
           ?.key ?? "custom");
+
+  // F3: warn when the sheet the print will use is wider than the chosen
+  // printer's registered paper width (e.g. an A4 template aimed at an
+  // 80 mm thermal). previewPaperW is the wide axis after the orientation
+  // swap, so landscape is covered too. OS printers have no registered
+  // width and never warn; 1 mm absorbs rounding.
+  const selectedPrinter = !viaPc
+    ? printers.find((p) => p.name === store.printerId)
+    : undefined;
+  const printerPaperWidth =
+    selectedPrinter?.paper_width_mm ?? null;
+  const paperMismatch =
+    Number.isFinite(printerPaperWidth) &&
+    (printerPaperWidth as number) > 0 &&
+    previewPaperW > (printerPaperWidth as number) + 1
+      ? t(
+          store.paperW == null && store.paperH == null
+            ? "print.paper_mismatch_template"
+            : "print.paper_mismatch_paper",
+          {
+            tw: designW,
+            th: designH,
+            pw2: effPaperW,
+            ph2: effPaperH,
+            pw: printerPaperWidth,
+          },
+        )
+      : "";
 
   // Design size comes from the template; the paper size below overrides it
   // per axis (null = template size). All controls live inline in this card.
@@ -986,10 +1065,7 @@ function PrintForm() {
                     {t("print.refresh")}
                   </Button>
                 </div>
-                <Select
-                  value={store.printerId}
-                  onValueChange={store.setPrinterId}
-                >
+                <Select value={store.printerId} onValueChange={onPrinterChange}>
                   <SelectTrigger
                     id="print-printer"
                     aria-label={t("print.printer")}
@@ -1026,6 +1102,14 @@ function PrintForm() {
                     )}
                   </SelectContent>
                 </Select>
+                {paperMismatch && (
+                  <p
+                    role="status"
+                    className="mt-1.5 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-xs text-warning"
+                  >
+                    {paperMismatch}
+                  </p>
+                )}
               </div>
               <div className={field}>
                 <Label htmlFor="print-template">{t("print.template")}</Label>

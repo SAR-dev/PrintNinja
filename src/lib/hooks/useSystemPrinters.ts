@@ -5,6 +5,13 @@ import type { PrinterRow, SystemPrinterRow } from "@/lib/agent/types";
 
 export type SystemPrinter = SystemPrinterRow;
 
+/** A Print page choice: a system printer plus, for saved printers, the
+ * paper width (mm) registered on the Printers page. OS-discovered
+ * printers carry no width, so the field is optional. */
+export type PrintPagePrinter = SystemPrinter & {
+  paper_width_mm?: number | null;
+};
+
 /**
  * The Print page's printer choices: printers saved on the Printers page
  * (network, USB, Bluetooth and system ones alike) plus whatever the OS
@@ -19,7 +26,7 @@ let systemCache: SystemPrinter[] | null = null;
 let systemCacheAt = 0;
 const TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-function fromSaved(p: PrinterRow): SystemPrinter {
+function fromSaved(p: PrinterRow): PrintPagePrinter {
   return {
     // Prefixed so a saved id can never collide with a system printer's id.
     id: `saved:${p.id}`,
@@ -28,6 +35,7 @@ function fromSaved(p: PrinterRow): SystemPrinter {
     printer_type: p.printer_type,
     language: p.language,
     status: p.status,
+    paper_width_mm: p.paper_width_mm ?? null,
   };
 }
 
@@ -35,9 +43,9 @@ function fromSaved(p: PrinterRow): SystemPrinter {
 export function mergePrinters(
   saved: PrinterRow[],
   system: SystemPrinter[],
-): SystemPrinter[] {
+): PrintPagePrinter[] {
   const seen = new Set<string>();
-  const out: SystemPrinter[] = [];
+  const out: PrintPagePrinter[] = [];
   for (const p of [...saved.map(fromSaved), ...system]) {
     const key = p.name.trim().toLowerCase();
     if (!key || seen.has(key)) continue;
@@ -70,7 +78,7 @@ async function loadSystem(force: boolean): Promise<SystemPrinter[]> {
 }
 
 export function useSystemPrinters() {
-  const [printers, setPrinters] = useState<SystemPrinter[]>([]);
+  const [printers, setPrinters] = useState<PrintPagePrinter[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

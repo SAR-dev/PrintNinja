@@ -501,6 +501,10 @@ const ja: Translation = {
     paper_width: "幅 (mm)",
     paper_height: "高さ (mm)",
     paper_note: "デザイン {{dw}}×{{dh}} mm → 用紙 {{pw}}×{{ph}} mm",
+    paper_mismatch_template:
+      "テンプレートは {{tw}}×{{th}} mm です。このプリンターは {{pw}} mm の用紙です。",
+    paper_mismatch_paper:
+      "用紙は {{pw2}}×{{ph2}} mm です。このプリンターは {{pw}} mm の用紙です。",
     test_hint: "内蔵ページを印刷して、プリンターの動作を確認します。",
     send_test: "テストページを送信",
     preview_sample: "サンプルデータ",

@@ -13,6 +13,7 @@ export type AgentSeed = {
     address?: string;
     printer_type?: string;
     language?: string;
+    paper_width_mm?: number | null;
   }>;
   /** Print history for list_jobs/get_job (HistoryJob shape). */
   jobs?: Array<Record<string, unknown>>;
