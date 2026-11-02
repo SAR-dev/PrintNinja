@@ -267,12 +267,15 @@ function PrintForm() {
         if (effPrinter) st.setPrinterId(effPrinter);
         const remembered = effPrinter ? prefs[prefsKey(effPrinter)] : undefined;
         const rememberedTplOk =
-          !!remembered && tpl.some((x) => String(x.id) === remembered.template_id);
+          !!remembered &&
+          tpl.some((x) => String(x.id) === remembered.template_id);
         if (
           tpl.length > 0 &&
           !tpl.some((x) => String(x.id) === String(st.templateId))
         )
-          st.setTemplateId(rememberedTplOk ? remembered.template_id : String(tpl[0].id));
+          st.setTemplateId(
+            rememberedTplOk ? remembered.template_id : String(tpl[0].id),
+          );
         if (first && rememberedTplOk && !hadPaper) {
           st.setPaperW(remembered.paper_w);
           st.setPaperH(remembered.paper_h);
@@ -791,8 +794,7 @@ function PrintForm() {
   const selectedPrinter = !viaPc
     ? printers.find((p) => p.name === store.printerId)
     : undefined;
-  const printerPaperWidth =
-    selectedPrinter?.paper_width_mm ?? null;
+  const printerPaperWidth = selectedPrinter?.paper_width_mm ?? null;
   const paperMismatch =
     Number.isFinite(printerPaperWidth) &&
     (printerPaperWidth as number) > 0 &&

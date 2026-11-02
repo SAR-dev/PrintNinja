@@ -229,7 +229,9 @@ describe("Designer page layout on a phone", () => {
       // New template now has a two-step chooser: pack first, then name.
       fireEvent.click(within(dialog).getByRole("button", { name: "Next" }));
       expect(
-        await within(dialog).findByLabelText("Template name", { selector: "input" }),
+        await within(dialog).findByLabelText("Template name", {
+          selector: "input",
+        }),
       ).toBeInTheDocument();
     } finally {
       invoke.mockImplementation(defaultImpl);

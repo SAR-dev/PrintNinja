@@ -23,10 +23,7 @@ describe("toast funnel", () => {
     for (const root of ROOTS) {
       for (const f of files(path.resolve(__dirname, root))) {
         // Normalize separators so the ALLOWED set matches on Windows too.
-      const rel = path
-        .relative(process.cwd(), f)
-        .split(path.sep)
-        .join("/");
+        const rel = path.relative(process.cwd(), f).split(path.sep).join("/");
         if (ALLOWED.has(rel)) continue;
         readFileSync(f, "utf8")
           .split("\n")

@@ -1362,7 +1362,10 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
       )}
 
       {(nearbyPeers.length > 0 || scanningPeers) && (
-        <div className="space-y-2 rounded-md border p-3" data-testid="devices-nearby">
+        <div
+          className="space-y-2 rounded-md border p-3"
+          data-testid="devices-nearby"
+        >
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium">
               {t("settings_page.devices_nearby_title")}
@@ -1400,7 +1403,9 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
                   }}
                 >
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">{peer.name}</span>
+                    <span className="block truncate text-sm font-medium">
+                      {peer.name}
+                    </span>
                     <span className="block truncate font-mono text-xs text-muted-foreground">
                       {peer.host}:{peer.port}
                       {peer.platform ? ` · ${peer.platform}` : ""}

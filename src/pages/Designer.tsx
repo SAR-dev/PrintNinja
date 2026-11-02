@@ -136,7 +136,9 @@ export function DesignerPage() {
       return "receipt";
     }
   });
-  const [newTemplateStep, setNewTemplateStep] = useState<"pack" | "name">("pack");
+  const [newTemplateStep, setNewTemplateStep] = useState<"pack" | "name">(
+    "pack",
+  );
   const openNewTemplateDialog = useCallback(() => {
     try {
       const last = localStorage.getItem("printninja.last_pack");
@@ -1657,12 +1659,16 @@ export function DesignerPage() {
         <DialogContent className="sm:max-w-[620px]">
           <DialogHeader>
             <DialogTitle>{t("designer.new_chooser_title")}</DialogTitle>
-            <DialogDescription>{t("designer.new_chooser_hint")}</DialogDescription>
+            <DialogDescription>
+              {t("designer.new_chooser_hint")}
+            </DialogDescription>
           </DialogHeader>
           {newTemplateStep === "pack" ? (
             <>
               <div className="space-y-3">
-                <p className="text-sm font-medium">{t("designer.new_step_pack")}</p>
+                <p className="text-sm font-medium">
+                  {t("designer.new_step_pack")}
+                </p>
                 <PackChooser
                   selectedId={newTemplatePackId}
                   onSelect={setNewTemplatePackId}
@@ -1678,7 +1684,8 @@ export function DesignerPage() {
                 <Button
                   onClick={() => {
                     if (!newTemplateName.trim()) {
-                      const key = `designer.pack_${newTemplatePackId}_name` as const;
+                      const key =
+                        `designer.pack_${newTemplatePackId}_name` as const;
                       const hint = t(key, { defaultValue: "" });
                       if (hint) setNewTemplateName(hint);
                     }
@@ -1693,7 +1700,9 @@ export function DesignerPage() {
           ) : (
             <>
               <div className="space-y-3">
-                <p className="text-sm font-medium">{t("designer.new_step_name")}</p>
+                <p className="text-sm font-medium">
+                  {t("designer.new_step_name")}
+                </p>
                 <div className="space-y-1">
                   <Label htmlFor="new-template-name">
                     {t("designer.template_name")}
