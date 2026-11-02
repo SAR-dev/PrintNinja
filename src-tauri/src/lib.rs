@@ -2,6 +2,7 @@ pub mod api;
 pub mod commands;
 mod data;
 pub mod db;
+pub mod discovery;
 mod deeplink;
 mod error;
 pub mod logfile;
@@ -101,7 +102,7 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_opener::init());
     // Phone side of pairing used to scan the PC's QR code; pairing is a
     // typed 8-character code now, so no camera plugin ships anymore
-    // (was QR scanner; now 8-char code — see docs/ARCHITECTURE.md §9 Pairing).
+    // (was QR scanner; now 8-char code — see docs/architecture/phone-and-pc-sharing.md#pairing).
 
     // A second launch (or deeplink) focuses the running window instead of
     // starting a second queue. Required once close-to-tray keeps the
@@ -370,6 +371,8 @@ pub fn run() {
             commands::print::print_html,
             commands::print::enumerate_system_printers,
             commands::print::discover_network_printers,
+            commands::print::discover_network_printers_mdns,
+            commands::print::discover_peers_mdns,
             commands::print::spike_test_print,
             commands::remote_print::remote_print,
             commands::remote_print::remote_printers,

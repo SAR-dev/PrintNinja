@@ -233,6 +233,23 @@ export function PrinterSetupPage() {
       .catch(() => setSystemPrinters([]));
     // A paired PC (auto policy) unlocks the thermal languages on Android.
     void hasPairedProvider().then(setPairedProvider);
+    // Background mDNS browse after mount (one-shot, not continuous) so
+    // printers appear without an extra tap: an 8 s browse immediately,
+    // then a single 8 s re-browse at 15 s (~30 s window total).
+    void agent("discover_network_printers", { timeout_secs: 8 })
+      .then((list) => {
+        if (list && list.length > 0) setNetworkPrinters(list);
+      })
+      .catch(() => {});
+    // Second low-frequency background scan at 15 s
+    const bg = window.setTimeout(() => {
+      void agent("discover_network_printers", { timeout_secs: 8 })
+        .then((list) => {
+          if (list && list.length > 0) setNetworkPrinters(list);
+        })
+        .catch(() => {});
+    }, 15000);
+    return () => window.clearTimeout(bg);
   }, [load]);
 
   const refreshSystem = async () => {
@@ -247,9 +264,8 @@ export function PrinterSetupPage() {
     }
   };
 
-  // mDNS scan for the add panel (Android only): listens for IPP and
-  // JetDirect advertisements and resolves each to host:port. Nothing
-  // is added by looking — tapping a found printer fills the form.
+  // mDNS scan for the add panel: listens for IPP and JetDirect
+  // advertisements via NsdManager on Android or mdns-sd on desktop.
   const scanNetwork = async () => {
     setScanningNet(true);
     try {
@@ -266,6 +282,28 @@ export function PrinterSetupPage() {
       );
     } finally {
       setScanningNet(false);
+    }
+  };
+
+  const addDiscovered = async (np: SystemPrinter) => {
+    const printerType = np.printer_type ?? "ipp";
+    const address = np.address;
+    const name = np.name;
+    try {
+      await agent("add_printer", {
+        req: {
+          name,
+          printer_type: printerType,
+          address,
+          language: printerType === "ipp" ? "pdf" : pairedProvider ? "escpos" : "pdf",
+          paper_width_mm: 80,
+          dpi: 203,
+        },
+      });
+      notifySuccess(t("printers.toast_added", { name }));
+      await load();
+    } catch (e) {
+      notifyError(t("printers.toast_save_failed", { error: describeError(e) }));
     }
   };
 
@@ -787,62 +825,71 @@ export function PrinterSetupPage() {
               </div>
             )}
 
-            {isAndroid() && (
-              <div className="rounded-md border p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs font-medium">
-                    {t("printers.found_network")}
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={scanNetwork}
-                    disabled={scanningNet}
-                  >
-                    {scanningNet
-                      ? t("printers.scanning")
-                      : t("printers.rescan")}
-                  </Button>
-                </div>
-                {networkPrinters.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {networkPrinters.map((np) => (
-                      <Button
-                        key={np.id}
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setForm((f) => ({
-                            ...f,
-                            name: np.name,
-                            address: np.address,
-                            printer_type: np.printer_type ?? "ipp",
-                            // A JetDirect box almost always fronts a
-                            // thermal head: default to ESC/POS when the
-                            // paired PC can render it, like USB/Bluetooth.
-                            // IPP queues keep PDF.
-                            language:
-                              (np.printer_type ?? "ipp") === "ipp"
-                                ? "pdf"
-                                : pairedProvider
-                                  ? "escpos"
-                                  : f.language,
-                          }))
-                        }
-                      >
-                        {np.name}
-                      </Button>
-                    ))}
-                  </div>
-                ) : (
-                  !scanningNet && (
-                    <p className="text-xs text-muted-foreground">
-                      {t("printers.no_network_printers")}
-                    </p>
-                  )
-                )}
+            <div className="rounded-md border p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium">
+                  {t("printers.found_network")}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={scanNetwork}
+                  disabled={scanningNet}
+                  data-testid="printers-scan-network"
+                >
+                  {scanningNet ? t("printers.scanning") : t("printers.rescan")}
+                </Button>
               </div>
-            )}
+              {networkPrinters.length > 0 ? (
+                <div className="space-y-1.5">
+                  {networkPrinters.map((np) => (
+                    <div
+                      key={np.id}
+                      className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
+                      data-testid={`discovered-printer-${np.id}`}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{np.name}</p>
+                        <p className="truncate font-mono text-xs text-muted-foreground">
+                          {np.address} · {np.printer_type ?? "ipp"}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setForm((f) => ({
+                              ...f,
+                              name: np.name,
+                              address: np.address,
+                              printer_type: np.printer_type ?? "ipp",
+                              language:
+                                (np.printer_type ?? "ipp") === "ipp"
+                                  ? "pdf"
+                                  : pairedProvider
+                                    ? "escpos"
+                                    : f.language,
+                            }))
+                          }
+                        >
+                          {t("printers.fill")}
+                        </Button>
+                        <Button size="sm" onClick={() => void addDiscovered(np)}>
+                          {t("common.add")}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                !scanningNet && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("printers.no_network_printers")}
+                  </p>
+                )
+              )}
+            </div>
 
             <div className={field}>
               <Label htmlFor="printer-name">{t("printers.form_name")}</Label>

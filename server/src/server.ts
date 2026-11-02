@@ -18,7 +18,7 @@ import { createUserRepository } from "./infra/db/users.js";
 import { createPasswordHasher } from "./infra/security/passwordHasher.js";
 import { createTokenService } from "./infra/security/tokens.js";
 
-// Process entry (REFACTORING.md section 5): load config, build app,
+// Process entry: load config, build app,
 // listen, and shut down cleanly — stop accepting, let in-flight
 // requests finish, close the database, then exit. Fail-fast: a bad
 // environment aborts here with the offending field named.

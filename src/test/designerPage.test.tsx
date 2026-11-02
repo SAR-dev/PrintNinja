@@ -224,9 +224,12 @@ describe("Designer page layout on a phone", () => {
         screen.queryByRole("tablist", { name: "Designer views" }),
       ).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "New Template" }));
-      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+      const dialog = await screen.findByRole("dialog");
+      expect(dialog).toBeInTheDocument();
+      // New template now has a two-step chooser: pack first, then name.
+      fireEvent.click(within(dialog).getByRole("button", { name: "Next" }));
       expect(
-        screen.getByLabelText("Template name", { selector: "input" }),
+        await within(dialog).findByLabelText("Template name", { selector: "input" }),
       ).toBeInTheDocument();
     } finally {
       invoke.mockImplementation(defaultImpl);
@@ -435,7 +438,9 @@ describe("Designer page layout on desktop", () => {
     await screen.findByTitle("Canvas preview");
     fireEvent.click(screen.getByRole("button", { name: "New Template" }));
     const dialog = await screen.findByRole("dialog");
-    const name = within(dialog).getByLabelText("Template name", {
+    // Advance from pack chooser to name step
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next" }));
+    const name = await within(dialog).findByLabelText("Template name", {
       selector: "input",
     });
     fireEvent.change(name, { target: { value: "Fresh Label" } });
