@@ -64,6 +64,25 @@ describe("useSystemPrinters", () => {
 });
 
 describe("mergePrinters", () => {
+  it("carries the saved paper width through, null when unregistered", () => {
+    const merged = mergePrinters(
+      [{ ...saved(1, "Thermal"), paper_width_mm: 80 }, saved(2, "Plain")],
+      [
+        {
+          id: "a",
+          name: "OS Printer",
+          address: "",
+          printer_type: "system",
+          language: "pdf",
+        },
+      ],
+    );
+    expect(merged[0].paper_width_mm).toBe(80);
+    expect(merged[1].paper_width_mm).toBeNull();
+    // OS-discovered printers have no registered width.
+    expect(merged[2].paper_width_mm ?? null).toBeNull();
+  });
+
   it("puts saved first and drops a system printer with the same name", () => {
     const merged = mergePrinters(
       [saved(1, "Zebra")],

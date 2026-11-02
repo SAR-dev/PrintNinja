@@ -488,6 +488,10 @@ const en = {
     paper_width: "Width (mm)",
     paper_height: "Height (mm)",
     paper_note: "Design {{dw}} × {{dh}} mm → paper {{pw}} × {{ph}} mm",
+    paper_mismatch_template:
+      "Template is {{tw}} × {{th}} mm; this printer uses {{pw}} mm paper.",
+    paper_mismatch_paper:
+      "Paper is {{pw2}} × {{ph2}} mm; this printer uses {{pw}} mm paper.",
     test_hint: "Prints a built-in page to check the printer pipeline.",
     send_test: "Send test page",
     preview_sample: "sample data",

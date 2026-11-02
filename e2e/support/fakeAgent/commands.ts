@@ -390,6 +390,8 @@ const implemented: Record<string, Handler> = {
         req["address"] === undefined ? undefined : String(req["address"]),
       language:
         req["language"] === undefined ? undefined : String(req["language"]),
+      paper_width_mm:
+        req["paper_width_mm"] == null ? undefined : Number(req["paper_width_mm"]),
     });
   },
   update_printer: (args) => {
@@ -399,6 +401,9 @@ const implemented: Record<string, Handler> = {
       printer_type: String(req["printer_type"] ?? ""),
       address: String(req["address"] ?? ""),
       language: String(req["language"] ?? ""),
+      // The Rust UPDATE always writes the column (null clears it).
+      paper_width_mm:
+        req["paper_width_mm"] == null ? null : Number(req["paper_width_mm"]),
     });
   },
   delete_printer: (args) => {
