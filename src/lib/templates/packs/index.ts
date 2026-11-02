@@ -30,4 +30,11 @@ export function getPack(id: string): TemplatePack | undefined {
   return PACKS.find((p) => p.id === id);
 }
 
-export { RECEIPT_PACK, DELIVERY_SLIP_PACK, INVOICE_PACK, SHIPPING_LABEL_PACK, KITCHEN_TICKET_PACK, BLANK_PACK };
+export {
+  RECEIPT_PACK,
+  DELIVERY_SLIP_PACK,
+  INVOICE_PACK,
+  SHIPPING_LABEL_PACK,
+  KITCHEN_TICKET_PACK,
+  BLANK_PACK,
+};

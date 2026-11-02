@@ -108,9 +108,7 @@ test("discovered mDNS printer can be added from the scan row", async ({
   await page.getByTestId(testids.printersScanNetwork).click();
   const row = page.getByTestId(testids.discoveredPrinter("net:10.0.0.5:631"));
   await expect(row).toBeVisible({ timeout: 15_000 });
-  await expect(
-    row.getByText("E2E ipp printer"),
-  ).toBeVisible();
+  await expect(row.getByText("E2E ipp printer")).toBeVisible();
 
   await row.getByRole("button", { name: "Add" }).click();
   await expect(page.getByText('Added "E2E ipp printer"')).toBeVisible({

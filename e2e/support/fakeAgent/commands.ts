@@ -391,7 +391,9 @@ const implemented: Record<string, Handler> = {
       language:
         req["language"] === undefined ? undefined : String(req["language"]),
       paper_width_mm:
-        req["paper_width_mm"] == null ? undefined : Number(req["paper_width_mm"]),
+        req["paper_width_mm"] == null
+          ? undefined
+          : Number(req["paper_width_mm"]),
     });
   },
   update_printer: (args) => {

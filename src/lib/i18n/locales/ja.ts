@@ -403,7 +403,8 @@ const ja: Translation = {
     conflict_take_server: "サーバーのコピーを採用",
     conflict_loading: "読み込んでいます…",
     new_chooser_title: "新規テンプレート",
-    new_chooser_hint: "スターターパックを選んでから、テンプレート名を入力します。",
+    new_chooser_hint:
+      "スターターパックを選んでから、テンプレート名を入力します。",
     new_step_pack: "パックを選ぶ",
     new_step_name: "名前を付ける",
     new_next: "次へ",

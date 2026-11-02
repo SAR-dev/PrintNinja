@@ -295,7 +295,8 @@ export function PrinterSetupPage() {
           name,
           printer_type: printerType,
           address,
-          language: printerType === "ipp" ? "pdf" : pairedProvider ? "escpos" : "pdf",
+          language:
+            printerType === "ipp" ? "pdf" : pairedProvider ? "escpos" : "pdf",
           paper_width_mm: 80,
           dpi: 203,
         },
@@ -849,7 +850,9 @@ export function PrinterSetupPage() {
                       data-testid={`discovered-printer-${np.id}`}
                     >
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{np.name}</p>
+                        <p className="truncate text-sm font-medium">
+                          {np.name}
+                        </p>
                         <p className="truncate font-mono text-xs text-muted-foreground">
                           {np.address} · {np.printer_type ?? "ipp"}
                         </p>
@@ -875,7 +878,10 @@ export function PrinterSetupPage() {
                         >
                           {t("printers.fill")}
                         </Button>
-                        <Button size="sm" onClick={() => void addDiscovered(np)}>
+                        <Button
+                          size="sm"
+                          onClick={() => void addDiscovered(np)}
+                        >
                           {t("common.add")}
                         </Button>
                       </div>
