@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Sets the app version in every file the release check compares:
 //   package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml,
-//   src-tauri/Cargo.lock, src/components/Layout.tsx
+//   src-tauri/Cargo.lock, src/components/Layout.tsx, README.md badge
 //
 //   pnpm version:set 1.0.0 [--dry-run]
 //
@@ -20,6 +20,7 @@ const FILES = {
 	cargo: "src-tauri/Cargo.toml",
 	lock: "src-tauri/Cargo.lock",
 	layout: "src/components/Layout.tsx",
+	readme: "README.md",
 };
 
 const read = (f) => readFileSync(join(ROOT, f), "utf8");
@@ -114,6 +115,8 @@ const updated = {
 	[FILES.cargo]: bumpCargoToml(read(FILES.cargo)),
 	[FILES.lock]: bumpCargoLock(read(FILES.lock)),
 	[FILES.layout]: replaceOnce(read(FILES.layout), /("v)\d+\.\d+\.\d+(")/, FILES.layout),
+	// The shields.io version badge at the top of the README.
+	[FILES.readme]: replaceOnce(read(FILES.readme), /(badge\/version-)\d+\.\d+\.\d+(-e43636)/, FILES.readme),
 };
 
 console.log(`Setting ${crate} to ${version}${dryRun ? " (dry run)" : ""}:`);

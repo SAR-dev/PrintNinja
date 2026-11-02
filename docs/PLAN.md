@@ -1,7 +1,7 @@
 # Feature Pack Plan — PrintNinja v2.5
 
 > Five features that close the loop between discovery, printing, and integration; §6–§9 add the follow-up work absorbed from the 2026-11 investigation (mobile redesign, documentation, extra features).
-> Status: **1–3 implemented (2026-11-02)** · Target: `v2.5` · Branch strategy: one branch per feature, merge to `develop`
+> Status: **1–3 and 7 implemented (2026-11-02)** · Target: `v2.5` · Branch strategy: one branch per feature, merge to `develop`
 
 ## Overview — sorted easy → hard
 
@@ -13,7 +13,7 @@
 | 4 | Direct thermal printing from Android | ~5–8 days | Android offers only PDF — ESC/POS, ZPL, TSPL, CPCL, raster are disabled | An Android phone drives a thermal head directly, no PC needed | ⬜ Planned |
 | 5 | Encrypted LAN traffic | ~2–3 weeks | All LAN traffic (pairing, render, print) is plain HTTP | LAN traffic is encrypted with pinned certificates | ⬜ Planned |
 | 6 | Mobile redesign (vertical-only, portrait lock) | ~2 weeks | Print page is 2.7 screens of 15 fields; horizontal layouts; Designer is a desktop tool on phones | One-column phone UI, viewer-mode Designer, three-step pairing | ⬜ Planned |
-| 7 | Documentation cleanup + restructure | ~1 week | README overloaded, stale version badge; ARCHITECTURE.md hard to enter | Split docs, glossary, diagrams, badge automation | ⬜ Planned |
+| 7 | Documentation cleanup + restructure | ~1 week | README overloaded, stale version badge; ARCHITECTURE.md hard to enter | Split docs, glossary, diagrams, badge automation | ✅ Implemented |
 | 8 | Extra feature backlog (F1, F3, F7–F9, F11–F13) | varies | See §8 backlog | QR pairing, mismatch warnings, Android share target, … | ⬜ Backlog |
 
 Why this order: 1 is frontend-only with no native/Rust/network risk; 2 is a small isolated Rust API addition; 3 adds cross-platform crates and multicast but is well-trodden; 4 needs `WebView` screenshot at exact dot size + device QA on real thermal heads; 5 touches every LAN path plus cert lifecycle and backwards compat. Dependencies are small — 5 benefits from 3 (`tls`+`fp` TXT) and from 4 (one fewer plain-HTTP printer path), otherwise each ships independently.
@@ -467,7 +467,7 @@ Knock-on changes:
 
 ---
 
-## 7. Documentation cleanup and restructure
+## 7. Documentation cleanup and restructure — ✅ Implemented (2026-11-02)
 
 > Absorbed from the 2026-11 investigation. Baseline: `tsc`, Biome (356 files) and 922 Vitest tests all pass on a fresh clone; 0 px horizontal overflow and no sub-44 px targets on the seven main routes; all internal doc links resolve.
 

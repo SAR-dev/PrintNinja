@@ -14,6 +14,8 @@ export type AgentSeed = {
     printer_type?: string;
     language?: string;
   }>;
+  /** Print history for list_jobs/get_job (HistoryJob shape). */
+  jobs?: Array<Record<string, unknown>>;
 };
 
 export type AgentState = {
@@ -34,7 +36,8 @@ export const SEED_KEY = "fake-agent:seed";
 
 /** Reads the one-shot seed. Fixtures write it base64-encoded (raw JSON
  * breaks the init script on quotes and </script>); raw JSON still
- * parses for hand-written seeds and older bundles. */
+ * parses for hand-written seeds and older bundles. Base64 is decoded as
+ * UTF-8 — bare atob mangles non-ASCII (e.g. an em dash in an error). */
 function readSeedValue(): AgentSeed {
   try {
     const raw = localStorage.getItem(SEED_KEY);
@@ -42,7 +45,8 @@ function readSeedValue(): AgentSeed {
     try {
       return JSON.parse(raw) as AgentSeed;
     } catch {
-      return JSON.parse(atob(raw)) as AgentSeed;
+      const bytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
+      return JSON.parse(new TextDecoder().decode(bytes)) as AgentSeed;
     }
   } catch {
     return {};
@@ -62,6 +66,16 @@ export function seedTemplates(): Array<Record<string, unknown>> {
   try {
     const seed = readSeedValue();
     return Array.isArray(seed.templates) ? seed.templates : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Print history pre-seeded for this context (History page, README shots). */
+export function seedJobs(): Array<Record<string, unknown>> {
+  try {
+    const seed = readSeedValue();
+    return Array.isArray(seed.jobs) ? seed.jobs : [];
   } catch {
     return [];
   }

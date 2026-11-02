@@ -7,7 +7,7 @@
 **Silent printing for Windows, Android and Linux.**
 Design a receipt or label in HTML and CSS, feed it JSON, and it prints. No print dialog, no driver dance, no fuss.
 
-[![Version](https://img.shields.io/badge/version-2.2.0-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
+[![Version](https://img.shields.io/badge/version-2.4.0-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-1.90-DEA584?logo=rust&logoColor=black)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
@@ -71,7 +71,14 @@ About five minutes, start to finish. The **Setup checklist** in Settings walks t
 3. **Print.** Open **Print**, choose the printer and template, add your data (test data, a JSON URL, or a CSV), set copies, check the preview and print.
 4. **Check the result.** **History** shows every job with a clear success or failure message. Reprint or retry from there.
 
+| Design a template with a live canvas | …then print it |
+|:---:|:---:|
+| ![Designer with live canvas](assets/designer.png) | ![Print page with preview](assets/print.png) |
+
 **No printer on your desk?** Start the bundled fake IPP printer and watch jobs land as PDFs:
+
+![History: every job with its outcome, and the real reason when it fails](assets/history.png)
+
 
 ```bash
 pnpm dev:printer  # ipp://localhost:6310/ipp/print
@@ -244,7 +251,14 @@ If you are stuck, export logs from **Settings → Diagnostics** and attach them 
 
 ## Documentation
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): how data becomes dots on paper, including [borrowing a faster device](docs/ARCHITECTURE.md#9-borrowing-a-faster-device)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the big picture — system map, pipeline, phone↔PC, and where a print can fail
+- [`docs/GLOSSARY.md`](docs/GLOSSARY.md): the plain meaning of every term the app uses
+- [`docs/architecture/rendering-and-layout.md`](docs/architecture/rendering-and-layout.md): how a design becomes pages and sheets
+- [`docs/architecture/printers-and-transports.md`](docs/architecture/printers-and-transports.md): transports, printer languages, per-OS notes
+- [`docs/architecture/queue-and-history.md`](docs/architecture/queue-and-history.md): the queue, timings, metrics and callbacks
+- [`docs/architecture/phone-and-pc-sharing.md`](docs/architecture/phone-and-pc-sharing.md): pairing, tokens, guests and Print via PC
+- [`docs/DECISIONS.md`](docs/DECISIONS.md): the recorded "why" behind the sharing rules
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): developer quick start, project layout, commands, release
 - [`docs/UI_GUIDE.md`](docs/UI_GUIDE.md): design principles, components and status vocabulary
 - [`docs/ENV.md`](docs/ENV.md): share service environment variables
 - [`docs/CI.md`](docs/CI.md): local checks, hosted workflow and scheduled jobs
@@ -252,100 +266,7 @@ If you are stuck, export logs from **Settings → Diagnostics** and attach them 
 
 ## For developers
 
-### How it works
-
-Printing is a chain of transformations, and every entry point (the Print page, the REST API, a deep link, a reprint from history) goes through the same one:
-
-```
-Data + Template → Design pages → Sheets → Image or PDF → Printer language → Wire → Paper
-```
-
-A template renders into design pages exactly as it looks in the Designer, with no knowledge of the paper. Only afterwards are those pages placed on physical sheets. One stage can even run on another machine, so a phone hands the image step to a paired PC and takes back finished bytes. Read the full story in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-### Quick start
-
-You need Node 22 (the `engines` field pins 22.x), pnpm 10 and Rust 1.90 (pinned in `rust-toolchain.toml`). For Android you also need Java 17 and the Android SDK and NDK.
-
-```bash
-git clone https://github.com/SAR-dev/PrintNinja.git
-cd PrintNinja
-pnpm install
-
-pnpm dev          # web preview at http://localhost:1420
-pnpm tauri:dev    # full desktop app
-```
-
-In a browser there is no Tauri backend, so settings fall back to `localStorage`.
-
-### Project layout
-
-```
-src/          React app: pages, components, stores, sync, template rendering
-src-tauri/    Rust core: print queue, transports, rendering, local API, SQLite
-plugins/      Tauri plugin for Android printing (Kotlin)
-server/       Share service (Fastify, Prisma, OpenAPI contract in server/openapi)
-e2e/          Playwright suite with a fake desktop agent
-dev-printer/  Fake IPP printer for local development
-docs/         Architecture, shared rendering, UI guide, environment, CI, release and signing
-scripts/      Release and versioning helpers
-```
-
-<details>
-<summary><b>Tech stack</b></summary>
-
-<br />
-
-| Area | Technology |
-|---|---|
-| Desktop and mobile shell | Tauri 2 (Windows MSI, Linux deb and AppImage, Android arm64) |
-| Core | Rust 1.90, Tokio, axum and tower-http (local API), reqwest (rustls), rusqlite (bundled SQLite) |
-| Rendering | Handlebars (Rust and JS), headless Edge over the DevTools protocol (Windows), headless Chromium (Linux), the system WebView (Android), `barcoders` and `qrcode`, `bwip-js` for previews |
-| Printing | IPP, raw TCP, Windows spooler (also USB and Bluetooth), CUPS (Linux), a Kotlin plugin for Android (WebView to PDF, `UsbManager`, RFCOMM) |
-| UI | React 18, TypeScript 5.6, Vite 6, Tailwind 3, shadcn/ui on Radix, Zustand, TanStack Query and Table, React Router 7, react-hook-form, i18next, cmdk, sonner |
-| Template CSS | Tailwind v4 `compile()`, run in the app and stored with each template version |
-| Editor | CodeMirror 6, `react-diff-viewer-continued`, `react-markdown` with `remark-gfm` |
-| API client | `openapi-fetch` with types generated by `openapi-typescript`, `zod` for validation |
-| Share service | Node, Fastify 5, Zod 4, Prisma 7 on Turso/libSQL (a local SQLite file in development), Argon2id, Swagger UI. Runs in Docker or on Vercel |
-| Security | HTML sanitizing, sandboxed preview iframes with a strict CSP, secrets redacted from stored jobs, rate limits |
-| Quality | Vitest and Testing Library, `cargo test`, Playwright with axe-core (desktop and phone projects), Biome, Clippy |
-
-</details>
-
-### Commands
-
-| Command | Purpose |
-|---|---|
-| `pnpm check` | Run the project checks locally (add `--rust` or `--e2e`; `pnpm check:full` before a release) |
-| `pnpm build` | Type-check and build the web app |
-| `pnpm test` | Unit tests (Vitest) |
-| `pnpm lint` | Biome |
-| `pnpm e2e` | Playwright end-to-end tests |
-| `pnpm gen:api` | Regenerate API types from `server/openapi/openapi.json` |
-| `pnpm tauri:build` | Build the installer for the current platform |
-| `pnpm --filter server dev` | Run the share service with reload |
-| `pnpm --filter server test` | Share service unit and integration tests |
-| `cargo test --manifest-path src-tauri/Cargo.toml` | Rust tests |
-
-Run `pnpm check` before you push. See [`docs/CI.md`](docs/CI.md).
-
-### Run the share service
-
-```bash
-cd server
-cp env.example .env
-docker compose up -d
-curl localhost:3001/v2/health
-```
-
-It uses a local SQLite file by default. For production, set `DATABASE_URL` (`libsql://…`) and `DATABASE_AUTH_TOKEN` for Turso Cloud. Every variable is listed in [`docs/ENV.md`](docs/ENV.md).
-
-### Release
-
-```bash
-pnpm release:patch   # bump + commit + tag (or release:minor / release:major)
-```
-
-Pushing a `v*` tag builds the installers on GitHub Actions and attaches them to a draft release. You can also build them on your own machines with `node scripts/release-local.mjs X.Y.Z --push`. See [`docs/RELEASE.md`](docs/RELEASE.md) and [`docs/SIGNING.md`](docs/SIGNING.md). Remember to bump the version badge at the top of this README when you ship.
+Everything a developer needs — quick start, project layout, tech stack, commands, running the share service, and how releases ship — lives in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). The architecture of the print pipeline is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and the `docs/architecture/` deep dives.
 
 ### Contributing
 

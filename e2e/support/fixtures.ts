@@ -45,8 +45,10 @@ export async function installAgent(
 ): Promise<void> {
   const { agentBundle } = stack();
   const encoded = Buffer.from(JSON.stringify(seed), "utf8").toString("base64");
+  // Stored raw: the agent bundle decodes it as UTF-8 (store.ts
+  // readSeedValue); decoding here with bare atob would mangle non-ASCII.
   await target.addInitScript({
-    content: `localStorage.setItem('fake-agent:seed', atob('${encoded}'))`,
+    content: `localStorage.setItem('fake-agent:seed', '${encoded}')`,
   });
   await target.addInitScript({ path: agentBundle });
 }

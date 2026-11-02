@@ -1,4 +1,4 @@
-import { getSetting, seedPrinters, setSetting } from "./store.js";
+import { getSetting, seedJobs, seedPrinters, setSetting } from "./store.js";
 import { createFakeCache, type SyncChangeIn } from "./cache.js";
 
 // In-memory implementation of the IPC commands. Phase 1 implements the
@@ -109,6 +109,16 @@ function allSeededPrinters(): Array<Record<string, unknown>> {
     (p) => !seededPrinters.some((s) => s["name"] === p["name"]),
   );
   return [...seededPrinters, ...live];
+}
+
+// Jobs use the same snapshot + live-merge pattern: unit tests seed after
+// import and expect list_jobs to pick the jobs up.
+const seededJobs = seedJobs();
+function allSeededJobs(): Array<Record<string, unknown>> {
+  const live = seedJobs().filter(
+    (j) => !seededJobs.some((s) => s["id"] === j["id"]),
+  );
+  return [...seededJobs, ...live];
 }
 
 const implemented: Record<string, Handler> = {
@@ -545,6 +555,12 @@ const implemented: Record<string, Handler> = {
   cache_list_synced_settings: () => cache.library.listSyncedSettings(),
   cache_forget_setting: (args) =>
     cache.library.forgetSetting(String(args["key"] ?? "")),
+  // Print history, seed-driven (History page, README screenshots). An
+  // unknown id returns null rather than an error: History renders it as
+  // "no job", and no spec relies on the Rust NotFound here.
+  list_jobs: () => allSeededJobs(),
+  get_job: (args) =>
+    allSeededJobs().find((j) => j["id"] === Number(args["id"])) ?? null,
 };
 
 /** Every Rust command without real behavior yet (src-tauri/src/lib.rs).
@@ -553,8 +569,6 @@ const implemented: Record<string, Handler> = {
 const acknowledgedStubs: string[] = [
   "test_printer",
   "clear_publish_info",
-  "list_jobs",
-  "get_job",
   "reprint_job",
   "retry_job",
   "delete_job",
