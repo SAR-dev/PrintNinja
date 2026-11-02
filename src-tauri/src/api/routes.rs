@@ -517,19 +517,17 @@ async fn print_job(
     match outcome {
         Ok(res) if res.success => {
             if let Some(url) = callback_url_for_dispatch {
-                crate::api::callback::dispatch_callback(
-                    crate::api::callback::CallbackDispatch {
-                        job_id: res.job_id.clone(),
-                        status: "success".into(),
-                        event: "print.succeeded".into(),
-                        printer: printer_name_for_cb,
-                        template: template_name_for_cb,
-                        error: None,
-                        duration_ms: res.duration_ms as u64,
-                        idempotency_key: idempotency_key_for_cb,
-                        callback_url: url,
-                    },
-                );
+                crate::api::callback::dispatch_callback(crate::api::callback::CallbackDispatch {
+                    job_id: res.job_id.clone(),
+                    status: "success".into(),
+                    event: "print.succeeded".into(),
+                    printer: printer_name_for_cb,
+                    template: template_name_for_cb,
+                    error: None,
+                    duration_ms: res.duration_ms as u64,
+                    idempotency_key: idempotency_key_for_cb,
+                    callback_url: url,
+                });
             }
             Ok((
                 StatusCode::OK,
@@ -543,19 +541,17 @@ async fn print_job(
         Ok(res) => {
             let err = res.error.clone().unwrap_or_else(|| "print failed".into());
             if let Some(url) = callback_url_for_dispatch {
-                crate::api::callback::dispatch_callback(
-                    crate::api::callback::CallbackDispatch {
-                        job_id: res.job_id.clone(),
-                        status: "failed".into(),
-                        event: "print.failed".into(),
-                        printer: printer_name_for_cb,
-                        template: template_name_for_cb,
-                        error: Some(err.clone()),
-                        duration_ms: res.duration_ms as u64,
-                        idempotency_key: idempotency_key_for_cb,
-                        callback_url: url,
-                    },
-                );
+                crate::api::callback::dispatch_callback(crate::api::callback::CallbackDispatch {
+                    job_id: res.job_id.clone(),
+                    status: "failed".into(),
+                    event: "print.failed".into(),
+                    printer: printer_name_for_cb,
+                    template: template_name_for_cb,
+                    error: Some(err.clone()),
+                    duration_ms: res.duration_ms as u64,
+                    idempotency_key: idempotency_key_for_cb,
+                    callback_url: url,
+                });
             }
             Err(ApiRejection::from(crate::error::AppError::Internal(err)))
         }

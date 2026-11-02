@@ -71,8 +71,8 @@ pub fn validate_callback_url_with_config(
         ));
     }
     // Parse
-    let parsed = url::Url::parse(url)
-        .map_err(|e| format!("callback_url is not a valid URL: {e}"))?;
+    let parsed =
+        url::Url::parse(url).map_err(|e| format!("callback_url is not a valid URL: {e}"))?;
 
     // No credentials
     if !parsed.username().is_empty() || parsed.password().is_some() {
@@ -129,8 +129,7 @@ pub fn hmac_sha256_hex(secret: &str, body: &[u8]) -> String {
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
     type HmacSha256 = Hmac<Sha256>;
-    let mut mac =
-        HmacSha256::new_from_slice(secret.as_bytes()).expect("hmac key from slice");
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("hmac key from slice");
     mac.update(body);
     hex::encode(mac.finalize().into_bytes())
 }
@@ -331,25 +330,18 @@ mod tests {
 
     #[test]
     fn validate_rejects_http_by_default() {
-        let err = validate_callback_url_with_config(
-            "http://pos.example.com/hooks",
-            false,
-            false,
-            ""
-        )
-        .unwrap_err();
+        let err =
+            validate_callback_url_with_config("http://pos.example.com/hooks", false, false, "")
+                .unwrap_err();
         assert!(err.contains("https"), "{err}");
     }
 
     #[test]
     fn validate_accepts_http_when_allowed() {
-        assert!(validate_callback_url_with_config(
-            "http://pos.example.com/hooks",
-            true,
-            false,
-            ""
-        )
-        .is_ok());
+        assert!(
+            validate_callback_url_with_config("http://pos.example.com/hooks", true, false, "")
+                .is_ok()
+        );
     }
 
     #[test]
@@ -362,26 +354,22 @@ mod tests {
             "https://169.254.1.1/hooks",
         ] {
             let err = validate_callback_url_with_config(url, false, false, "").unwrap_err();
-            assert!(err.contains("private") || err.contains("loopback"), "url {url}: {err}");
+            assert!(
+                err.contains("private") || err.contains("loopback"),
+                "url {url}: {err}"
+            );
         }
     }
 
     #[test]
     fn validate_accepts_private_when_allowed() {
-        assert!(validate_callback_url_with_config(
-            "https://192.168.1.10/hooks",
-            false,
-            true,
-            ""
-        )
-        .is_ok());
-        assert!(validate_callback_url_with_config(
-            "http://127.0.0.1/hooks",
-            true,
-            true,
-            ""
-        )
-        .is_ok());
+        assert!(
+            validate_callback_url_with_config("https://192.168.1.10/hooks", false, true, "")
+                .is_ok()
+        );
+        assert!(
+            validate_callback_url_with_config("http://127.0.0.1/hooks", true, true, "").is_ok()
+        );
     }
 
     #[test]
@@ -390,7 +378,7 @@ mod tests {
             "https://user:pass@pos.example.com/hooks",
             false,
             false,
-            ""
+            "",
         )
         .unwrap_err();
         assert!(err.contains("credentials"), "{err}");
@@ -399,8 +387,7 @@ mod tests {
     #[test]
     fn validate_rejects_too_long() {
         let long = format!("https://example.com/{}", "a".repeat(2048));
-        let err =
-            validate_callback_url_with_config(&long, false, false, "").unwrap_err();
+        let err = validate_callback_url_with_config(&long, false, false, "").unwrap_err();
         assert!(err.contains("too long"), "{err}");
     }
 
@@ -410,7 +397,7 @@ mod tests {
             "https://evil.com/hooks",
             false,
             false,
-            "pos.example.com,hooks.internal"
+            "pos.example.com,hooks.internal",
         )
         .unwrap_err();
         assert!(err.contains("allowlist"), "{err}");
@@ -437,9 +424,8 @@ mod tests {
 
     #[test]
     fn validate_rejects_non_https_scheme() {
-        let err =
-            validate_callback_url_with_config("ftp://example.com/hooks", false, false, "")
-                .unwrap_err();
+        let err = validate_callback_url_with_config("ftp://example.com/hooks", false, false, "")
+            .unwrap_err();
         assert!(err.contains("https"), "{err}");
     }
 
@@ -451,7 +437,7 @@ mod tests {
         let hex2 = hmac_sha256_hex(secret, body);
         assert_eq!(hex1, hex2);
         assert_eq!(hex1.len(), 64); // sha256 hex
-        // Different secret -> different hmac
+                                    // Different secret -> different hmac
         let hex3 = hmac_sha256_hex("other", body);
         assert_ne!(hex1, hex3);
         // Known vector: hmac_sha256("key", "The quick brown fox jumps over the lazy dog")

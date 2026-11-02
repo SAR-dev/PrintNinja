@@ -405,7 +405,12 @@ async fn two_simultaneous_requests_with_one_key_print_once() {
 /// `callback_url` validation: invalid URLs are refused with 400+code before
 /// any DB work; valid https URLs are accepted (best-effort callback after
 /// terminal state, not a silent drop).
+///
+/// `await_holding_lock` is allowed on purpose: env is process-global, so
+/// this test holds the test-serialization lock for its whole duration; the
+/// guard is task-local and never crosses a spawn boundary.
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
 async fn callback_url_is_refused_with_400_before_anything_runs() {
     let _env_guard = CALLBACK_ENV_LOCK.lock().unwrap();
     // Ensure clean env for this validation test
@@ -494,7 +499,10 @@ async fn callback_url_is_refused_with_400_before_anything_runs() {
     assert_eq!(n, 1, "valid callback_url must create a job");
 }
 
+/// Same env-serialization rationale as
+/// `callback_url_is_refused_with_400_before_anything_runs`.
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
 async fn callback_url_private_and_credentials_are_rejected() {
     let _env_guard = CALLBACK_ENV_LOCK.lock().unwrap();
     std::env::remove_var("PRINTNINJA_CALLBACK_ALLOW_HTTP");
@@ -507,7 +515,10 @@ async fn callback_url_private_and_credentials_are_rejected() {
     for (name, url) in [
         ("private", "https://192.168.1.10/done"),
         ("credentials", "https://user:pass@example.com/done"),
-        ("too_long", &format!("https://example.com/{}", "a".repeat(2048))),
+        (
+            "too_long",
+            &format!("https://example.com/{}", "a".repeat(2048)),
+        ),
     ] {
         let body = serde_json::json!({
             "template": "Receipt",
@@ -540,9 +551,13 @@ async fn callback_url_private_and_credentials_are_rejected() {
     }
 }
 
+/// Same env-serialization rationale as
+/// `callback_url_is_refused_with_400_before_anything_runs`.
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
 async fn callback_is_dispatched_on_success_or_failed_but_not_on_duplicate() {
     use std::sync::{Arc, Mutex as StdMutex};
+    type Captured = (axum::http::HeaderMap, Vec<u8>);
     let _env_guard = CALLBACK_ENV_LOCK.lock().unwrap();
     // Allow http + private for the local mock server
     std::env::set_var("PRINTNINJA_CALLBACK_ALLOW_HTTP", "1");
@@ -550,8 +565,7 @@ async fn callback_is_dispatched_on_success_or_failed_but_not_on_duplicate() {
     std::env::set_var("PRINTNINJA_CALLBACK_SECRET", "test-secret-123");
     std::env::remove_var("PRINTNINJA_CALLBACK_ALLOWLIST");
 
-    let received: Arc<StdMutex<Vec<(axum::http::HeaderMap, Vec<u8>)>>> =
-        Arc::new(StdMutex::new(Vec::new()));
+    let received: Arc<StdMutex<Vec<Captured>>> = Arc::new(StdMutex::new(Vec::new()));
     let received_clone = received.clone();
 
     // Mock POS server - captures raw bytes as Vec<u8> via String extractor to avoid extra crate
@@ -639,8 +653,7 @@ async fn callback_is_dispatched_on_success_or_failed_but_not_on_duplicate() {
         let sig_hex = &sig["sha256=".len()..];
         assert_eq!(sig_hex.len(), 64, "sha256 hex length");
         // Verify HMAC matches body
-        let expected =
-            printninja_lib::api::callback::hmac_sha256_hex("test-secret-123", body);
+        let expected = printninja_lib::api::callback::hmac_sha256_hex("test-secret-123", body);
         assert_eq!(sig_hex, expected, "hmac must match body");
 
         let json: serde_json::Value = serde_json::from_slice(body).unwrap();
@@ -671,7 +684,9 @@ async fn callback_is_dispatched_on_success_or_failed_but_not_on_duplicate() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let dup_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let dup_bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let dup_json: serde_json::Value = serde_json::from_slice(&dup_bytes).unwrap();
     assert_eq!(dup_json["status"], "duplicate");
 

@@ -54,7 +54,10 @@ pub fn browse_printers(timeout_ms: u64) -> Vec<DiscoveredPrinter> {
                         .unwrap_or("ipp");
                     if let Some(printer) = service_info_to_printer(&info, kind) {
                         if !is_private_host(&printer.host) {
-                            tracing::debug!("mdns printer host not private, skipping: {}", printer.host);
+                            tracing::debug!(
+                                "mdns printer host not private, skipping: {}",
+                                printer.host
+                            );
                             continue;
                         }
                         let key = format!("{}:{}", printer.host, printer.port);
@@ -97,11 +100,8 @@ fn service_info_to_printer(info: &ServiceInfo, kind: &str) -> Option<DiscoveredP
     };
 
     // prefer a private IP address; fall back to hostname if no addresses
-    let host = pick_private_address(info).unwrap_or_else(|| {
-        info.get_hostname()
-            .trim_end_matches('.')
-            .to_string()
-    });
+    let host = pick_private_address(info)
+        .unwrap_or_else(|| info.get_hostname().trim_end_matches('.').to_string());
 
     if host.is_empty() {
         return None;
@@ -206,11 +206,8 @@ fn service_info_to_peer(info: &ServiceInfo) -> Option<DiscoveredPeer> {
         name
     };
 
-    let host = pick_private_address(info).unwrap_or_else(|| {
-        info.get_hostname()
-            .trim_end_matches('.')
-            .to_string()
-    });
+    let host = pick_private_address(info)
+        .unwrap_or_else(|| info.get_hostname().trim_end_matches('.').to_string());
     if host.is_empty() {
         return None;
     }
@@ -224,10 +221,7 @@ fn service_info_to_peer(info: &ServiceInfo) -> Option<DiscoveredPeer> {
     let provider_id = props.get("id").cloned().unwrap_or_default();
     let platform = props.get("plat").cloned().unwrap_or_default();
     let version = props.get("ver").cloned().unwrap_or_default();
-    let protocol: u32 = props
-        .get("prot")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(1);
+    let protocol: u32 = props.get("prot").and_then(|v| v.parse().ok()).unwrap_or(1);
     let port: u16 = props
         .get("port")
         .and_then(|v| v.parse().ok())
@@ -263,7 +257,12 @@ fn advertiser_slot() -> &'static Mutex<Option<Advertiser>> {
 }
 
 /// Start advertising `_printninja._tcp` with TXT `prot,id,port,plat,ver`.
-pub fn start_advertise(port: u16, provider_id: &str, platform: &str, version: &str) -> Result<(), String> {
+pub fn start_advertise(
+    port: u16,
+    provider_id: &str,
+    platform: &str,
+    version: &str,
+) -> Result<(), String> {
     let mut slot = advertiser_slot()
         .lock()
         .map_err(|e| format!("advertiser lock poisoned: {e}"))?;
@@ -292,15 +291,8 @@ pub fn start_advertise(port: u16, provider_id: &str, platform: &str, version: &s
     let ips: Vec<IpAddr> = ip.into_iter().collect();
     let host_fqdn = format!("{host}.local.");
 
-    let mut service = ServiceInfo::new(
-        service_type,
-        &instance,
-        &host_fqdn,
-        &ips[..],
-        port,
-        props,
-    )
-    .map_err(|e| format!("service info failed: {e}"))?;
+    let mut service = ServiceInfo::new(service_type, &instance, &host_fqdn, &ips[..], port, props)
+        .map_err(|e| format!("service info failed: {e}"))?;
     if ips.is_empty() {
         service = service.enable_addr_auto();
     }
@@ -310,7 +302,10 @@ pub fn start_advertise(port: u16, provider_id: &str, platform: &str, version: &s
         .map_err(|e| format!("mdns register failed: {e}"))?;
 
     *slot = Some(Advertiser { daemon, fullname });
-    tracing::info!("mDNS advertised {MDNS_TTL} on port {port} id={} ", truncate_id(provider_id));
+    tracing::info!(
+        "mDNS advertised {MDNS_TTL} on port {port} id={} ",
+        truncate_id(provider_id)
+    );
     Ok(())
 }
 
@@ -391,8 +386,12 @@ mod tests {
     #[test]
     fn printer_kind_mapping_by_service_type() {
         // ensure constants cover expected types
-        assert!(PRINTER_SERVICES.iter().any(|(s, _)| s.contains("_ipp._tcp")));
-        assert!(PRINTER_SERVICES.iter().any(|(s, _)| s.contains("_pdl-datastream")));
+        assert!(PRINTER_SERVICES
+            .iter()
+            .any(|(s, _)| s.contains("_ipp._tcp")));
+        assert!(PRINTER_SERVICES
+            .iter()
+            .any(|(s, _)| s.contains("_pdl-datastream")));
     }
 
     #[test]
@@ -445,7 +444,10 @@ mod tests {
         );
         let peer = service_info_to_peer(&info).expect("peer");
         assert_eq!(peer.protocol, 1, "missing prot defaults to 1");
-        assert_eq!(peer.port, 17717, "missing port falls back to the record port");
+        assert_eq!(
+            peer.port, 17717,
+            "missing port falls back to the record port"
+        );
         assert_eq!(peer.provider_id, "");
         assert_eq!(peer.platform, "");
         assert_eq!(peer.version, "");
