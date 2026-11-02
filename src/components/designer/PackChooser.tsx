@@ -80,7 +80,10 @@ export function PackChooser({ selectedId, onSelect }: PackChooserProps) {
                 {desc}
               </p>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                {t("designer.pack_size", { w: pack.page_w_mm, h: pack.page_h_mm })}
+                {t("designer.pack_size", {
+                  w: pack.page_w_mm,
+                  h: pack.page_h_mm,
+                })}
               </p>
             </div>
             {isSelected && (

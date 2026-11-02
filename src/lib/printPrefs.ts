@@ -39,14 +39,18 @@ export function parsePrintPrefs(raw: string | null): PrintPrefsMap {
       return {};
     }
     const out: PrintPrefsMap = {};
-    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    for (const [key, entry] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
       if (typeof entry !== "object" || entry === null) continue;
       const p = entry as Record<string, unknown>;
       if (typeof p.template_id !== "string" || !p.template_id) continue;
       out[key] = {
         template_id: p.template_id,
-        paper_w: typeof p.paper_w === "number" && p.paper_w > 0 ? p.paper_w : null,
-        paper_h: typeof p.paper_h === "number" && p.paper_h > 0 ? p.paper_h : null,
+        paper_w:
+          typeof p.paper_w === "number" && p.paper_w > 0 ? p.paper_w : null,
+        paper_h:
+          typeof p.paper_h === "number" && p.paper_h > 0 ? p.paper_h : null,
       };
     }
     return out;

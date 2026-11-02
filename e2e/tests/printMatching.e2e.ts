@@ -86,12 +86,13 @@ test("warns on paper mismatch and remembers each printer's choices", async ({
   // Restart: the remembered template and paper for the preselected
   // printer come back from the agent's settings.
   await page.reload();
-  await expect(
-    page.getByRole("combobox", { name: "Template" }),
-  ).toHaveText("Matching A4", { timeout: 20_000 });
-  await expect(
-    page.getByRole("combobox", { name: "Paper size" }),
-  ).toHaveText("A4 (210 × 297 mm)");
+  await expect(page.getByRole("combobox", { name: "Template" })).toHaveText(
+    "Matching A4",
+    { timeout: 20_000 },
+  );
+  await expect(page.getByRole("combobox", { name: "Paper size" })).toHaveText(
+    "A4 (210 × 297 mm)",
+  );
   await expect(
     page.getByText("Paper is 210 × 297 mm; this printer uses 80 mm paper."),
   ).toBeVisible();
