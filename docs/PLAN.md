@@ -1,23 +1,23 @@
 # Feature Pack Plan — PrintNinja v2.5
 
 > Five features that close the loop between discovery, printing, and integration.
-> Status: **planning** · Target: `v2.5` · Branch strategy: one branch per feature, merge to `develop`
+> Status: **1–3 implemented (2026-11-02)** · Target: `v2.5` · Branch strategy: one branch per feature, merge to `develop`
 
 ## Overview — sorted easy → hard
 
-| # | Feature | Effort | Problem today | Outcome |
-|---|---------|--------|---------------|---------|
-| 1 | Starter template packs | ~2–3 days | New template always starts from one shipping-label example | Creator picks Receipt / Delivery Slip / Invoice / Label / Blank before editing |
-| 2 | Webhook callbacks (`callback_url`) | ~2–4 days | `POST /v1/print` with `callback_url` is rejected with 400; POS systems poll `/v1/jobs/{id}` instead | Successful/final jobs POST to the caller's URL |
-| 3 | Auto discovery (mDNS) | ~4–7 days | "Add printer" requires typing an IP; finding a PC requires a `/24` brute scan | Printers and PCs appear automatically on the same LAN |
-| 4 | Direct thermal printing from Android | ~5–8 days | Android offers only PDF — ESC/POS, ZPL, TSPL, CPCL, raster are disabled | An Android phone drives a thermal head directly, no PC needed |
-| 5 | Encrypted LAN traffic | ~2–3 weeks | All LAN traffic (pairing, render, print) is plain HTTP | LAN traffic is encrypted with pinned certificates |
+| # | Feature | Effort | Problem today | Outcome | Status |
+|---|---------|--------|---------------|---------|--------|
+| 1 | Starter template packs | ~2–3 days | New template always starts from one shipping-label example | Creator picks Receipt / Delivery Slip / Invoice / Label / Blank before editing | ✅ Implemented |
+| 2 | Webhook callbacks (`callback_url`) | ~2–4 days | `POST /v1/print` with `callback_url` is rejected with 400; POS systems poll `/v1/jobs/{id}` instead | Successful/final jobs POST to the caller's URL | ✅ Implemented |
+| 3 | Auto discovery (mDNS) | ~4–7 days | "Add printer" requires typing an IP; finding a PC requires a `/24` brute scan | Printers and PCs appear automatically on the same LAN | ✅ Implemented |
+| 4 | Direct thermal printing from Android | ~5–8 days | Android offers only PDF — ESC/POS, ZPL, TSPL, CPCL, raster are disabled | An Android phone drives a thermal head directly, no PC needed | ⬜ Planned |
+| 5 | Encrypted LAN traffic | ~2–3 weeks | All LAN traffic (pairing, render, print) is plain HTTP | LAN traffic is encrypted with pinned certificates | ⬜ Planned |
 
 Why this order: 1 is frontend-only with no native/Rust/network risk; 2 is a small isolated Rust API addition; 3 adds cross-platform crates and multicast but is well-trodden; 4 needs `WebView` screenshot at exact dot size + device QA on real thermal heads; 5 touches every LAN path plus cert lifecycle and backwards compat. Dependencies are small — 5 benefits from 3 (`tls`+`fp` TXT) and from 4 (one fewer plain-HTTP printer path), otherwise each ships independently.
 
 ---
 
-## 1. Starter template packs
+## 1. Starter template packs — ✅ Implemented (2026-11-02)
 
 ### Current state
 
@@ -76,9 +76,11 @@ Packs are **starters**, not community templates — they are not published, save
 
 Independent. No Rust, no server, no schema change. Docs: `docs/UI_GUIDE.md` Designer row and `README.md` "Make a template" section. Add a screenshot of the chooser to the README if desired.
 
+> ✅ **Implemented 2026-11-02** — packs in `src/lib/templates/packs/*`, chooser `src/components/designer/PackChooser.tsx`, `Designer.tsx` two-step dialog with `printninja.last_pack`, i18n in `en.ts`/`ja.ts`, `newTemplateContent(name, packId?)` backwards compatible.
+
 ---
 
-## 2. Webhook callbacks (`callback_url`)
+## 2. Webhook callbacks (`callback_url`) — ✅ Implemented (2026-11-02)
 
 ### Current state
 
@@ -144,9 +146,11 @@ Callbacks make the app fetch an attacker-controlled URL if the POS is compromise
 
 Independent of other features. No schema migration for v1 (in-memory retries). If retries need durability later, migration adds `print_jobs.callback_url`, `callback_attempts`, `callback_last_error` columns. Backwards compatible: omitting `callback_url` behaves exactly as today.
 
+> ✅ **Implemented 2026-11-02** — `src-tauri/src/api/callback.rs` validation/dispatch (SSRF hardening, HMAC `PRINTNINJA_CALLBACK_SECRET`), `routes.rs` fire-and-forget after terminal state (duplicate skips), `openapi.rs`, `Cargo.toml` `hmac`+`url`, tests `api_routes.rs` + unit.
+
 ---
 
-## 3. Auto discovery of printers and PCs (mDNS)
+## 3. Auto discovery of printers and PCs (mDNS) — ✅ Implemented (2026-11-02)
 
 ### Current state
 
@@ -212,6 +216,8 @@ Same browse loop, but for `_printninja._tcp`:
 ### Rollout
 
 Shippable independently. No migration, no schema change. Feature-flagged by `lan_access && sharing` — when both are off there is nothing to advertise or browse. Docs update: `docs/ARCHITECTURE.md` §4 "Discovery" paragraph and §9 "finding PCs" paragraph.
+
+> ✅ **Implemented 2026-11-02** — `src-tauri/src/discovery/*` (`mdns-sd` `browse_printers`/`browse_peers`, `start/stop_advertise` `_printninja._tcp`), `PrinterSetup.tsx`/`DevicesCard.tsx` scan + Nearby PCs, `agent/commands.ts`, `dev-printer/server.cjs` fake PC.
 
 ---
 
