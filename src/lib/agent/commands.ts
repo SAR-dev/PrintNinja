@@ -227,7 +227,7 @@ export interface AgentCommands {
     ApiHttpResponse,
   ];
   // Shared rendering: this device as a render provider for a paired
-  // device on the same LAN (see docs/ARCHITECTURE.md §9). Pairing is a
+  // device on the same LAN (see docs/architecture/phone-and-pc-sharing.md). Pairing is a
   // one-time 8-character code; each phone gets its own token.
   get_render_status: [{}, RenderShareStatus];
   set_render_sharing: [{ enabled: boolean }, string];

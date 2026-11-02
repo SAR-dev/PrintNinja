@@ -25,7 +25,7 @@ export interface Stack {
   close: () => Promise<void>;
 }
 
-// Shared wiring for every entry point (REFACTORING.md section 5):
+// Shared wiring for every entry point:
 // load config, build the database client, the repository deps and the
 // app. Fail-fast: a bad environment aborts here with the offending
 // field named. Scheduling (timers), startup purges and listening stay

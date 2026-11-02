@@ -19,7 +19,7 @@ import type {
 } from "./schemas/templates.js";
 import type { AuthResponse, UserResponse } from "./schemas/auth.js";
 
-// Domain object to response shape (REFACTORING.md section 5). Dates
+// Domain object to response shape. Dates
 // leave the service as RFC 3339 UTC with Z (P16: no local-time text).
 export function toUserResponse(user: UserRecord): UserResponse {
   return {
