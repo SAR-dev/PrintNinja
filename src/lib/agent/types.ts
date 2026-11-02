@@ -57,15 +57,6 @@ export interface DiscoveredPrinter {
   fullname: string;
 }
 
-export interface DiscoveredPrinter {
-  name: string;
-  host: string;
-  port: number;
-  kind: string;
-  resource_path?: string | null;
-  fullname: string;
-}
-
 export interface DiscoveredPeer {
   host: string;
   port: number;

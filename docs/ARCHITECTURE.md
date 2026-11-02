@@ -208,6 +208,31 @@ The backend works through the same stages for every job:
    update only applies while the job is still *printing*, so a cancelled job
    can never be resurrected as successful.
 
+### Webhooks (print callbacks)
+
+`POST /v1/print` accepts an optional `callback_url`. When it is present
+and the job closes (step 8), the server fires one `POST` to it carrying
+the outcome — `event` (`print.succeeded` / `print.failed`), `job_id`,
+`status`, `printer`, `template`, `error`, `duration_ms`, `timestamp` and
+the idempotency key — from a background task, so the print response is
+never delayed by it. Delivery is best-effort: four attempts spaced
+5 s / 25 s / 125 s, a 10 s timeout, no redirects, and a 64 KiB response
+cap; an outcome is not resent if the app restarts. The `X-PrintNinja-Event`
+and `X-PrintNinja-Job-Id` headers carry the same for filtering, and when
+`PRINTNINJA_CALLBACK_SECRET` is set the body is signed as
+`X-PrintNinja-Signature: sha256=<hex>` (HMAC-SHA256 of the raw body).
+
+The URL is validated **before any DB work**, and a bad one answers `400`
+with `code: callback_url_invalid`: `https://` only, at most 2048
+characters, no embedded credentials, and no private / loopback /
+link-local hosts — the same SSRF posture as the data-URL rules of step 3.
+`PRINTNINJA_CALLBACK_ALLOW_HTTP`, `PRINTNINJA_CALLBACK_ALLOW_PRIVATE`
+and `PRINTNINJA_CALLBACK_ALLOWLIST` (a comma-separated exact-match host
+list) relax the first three rules deliberately; all four variables are
+documented in `ENV.md`. Duplicate requests (a replayed idempotency key)
+fire no second callback, and logs keep only a host-plus-truncated-path
+form of the URL, never the full one.
+
 ## 4. How the bytes reach the printer
 
 Printers are configured with a type (how to reach them) and a language (what
@@ -229,7 +254,14 @@ they understand):
   the device as a CUPS raw queue instead (e.g. `sudo lpadmin -p Label -m raw -v usb://... -E` or `bluetooth://... -E` and add the queue as type `system`). A raw queue passes `application/octet-stream` bytes unchanged, so ESC/POS, ZPL, TSPL, CPCL and raster reach the head exactly as encoded.
 
 Discovery lists the machine's OS queues (Windows spooler, CUPS) and, on
-Android, USB devices; it does not find network printers on any platform. A
+Android, USB devices. On top of that, a bounded mDNS browse finds network
+printers on the LAN — the IPP services `_ipp._tcp` and `_ipps._tcp`
+(become type `ipp`) and the raw-TCP services `_pdl-datastream._tcp` and
+`_printer._tcp` (become type `raw_tcp`) — so a printer that advertises
+itself appears in the list with its address, and a tap adds it without
+typing anything. Hosts that do not resolve to a private address are
+skipped, and the browse is one-shot (a few seconds per tap, plus a short
+automatic window after the page opens), never a continuous scan. A
 test print runs the entire pipeline end to end with mock data to prove a new
 printer works. For Windows system, USB and Bluetooth printers the connectivity
 test only checks the queue's status and sends nothing.
@@ -399,7 +431,13 @@ including bringing up the local server so phones on the Wi-Fi can reach
 it. The phone types the code; the PC answers a discovery hello whenever
 sharing is on (with a flag for whether a window is open), and the phone
 otherwise probes its own /24 for it, with a typed address as fallback —
-so a guest invite is discoverable with no window open.
+so a guest invite is discoverable with no window open. On the same local
+network there is a third path, mDNS: a PC with sharing on advertises a
+`_printninja._tcp` service (TXT carrying protocol, provider id, port,
+platform and version), and phones browse that type to list nearby PCs in
+the pairing screen — a tap fills in the address, after which the
+code-entry flow is the same. The advertisement goes up when the local
+server starts and down when sharing turns off.
 
 Both devices must be signed in to the same account on the same server:
 the claim carries the phone's account id and service URL, the PC

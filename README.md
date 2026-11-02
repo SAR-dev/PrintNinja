@@ -108,7 +108,7 @@ Three things to know:
 - **`{{barcode}}` draws the barcode.** `{{barcode "code128" order.tracking}}` renders an inline SVG from the data, so no image files are needed. QR codes work the same way with `"qrcode"`.
 - **The page size is the paper.** Set 80 mm wide in Page Setup for roll paper (or 102 × 152 mm for a 4×6 label); the canvas previews exactly that. Utility classes such as `p-2` and `font-bold` are compiled into the printout, and anything the network cannot reach at print time (remote images, web fonts) will not load — embed them as `data:` URIs instead.
 
-Every new template starts from a worked shipping-label example using these same pieces, so there is always something concrete to edit down. Publish it from the Designer when you want it listed for the community in **Templates**.
+Every new template starts from a **starter pack** — Receipt, Delivery Slip, Invoice, Shipping Label, Kitchen Ticket or Blank — chosen in the two-step New Template dialog (pick a pack, then name your copy). The pack is a worked example built from these same pieces, so there is always something concrete to edit down. Publish it from the Designer when you want it listed for the community in **Templates**.
 
 ## Print from your phone
 
@@ -118,7 +118,7 @@ Phones are small and Android cannot make every printer language. So PrintNinja l
 
 1. On the PC, open **Automation → Phones** and turn sharing on. One switch does everything, including starting the local server.
 2. The PC shows an 8-character code. It expires after about 90 seconds; ask for a new one if it runs out.
-3. On the phone, open **Automation → PC** (the same tab, named for what you pair with) and type the code. The phone finds the PC on its own, or you can type the PC's address.
+3. On the phone, open **Automation → PC** (the same tab, named for what you pair with) and type the code. The phone finds the PC on its own (an mDNS scan of the LAN, shown as **Nearby PCs**), or you can type the PC's address.
 4. Both devices must be signed in to the same account on the same server.
 
 **Let someone borrow your PC without an account.** On the PC, choose **Invite guest** and pick how long the invite lasts (24 hours by default), how many times it can be used, and whether the guest may print or only render. The guest enters a name, taps **Continue as guest** on the sign-in screen and types the code. Guests can use templates by name, but can never read or change them.
@@ -153,6 +153,7 @@ curl -X POST http://127.0.0.1:17717/v1/print \
 - **No API keys.** Calls from the PC itself (scripts, your POS software) work as they are. Other devices on the network must be paired with the PC, and they present their own device token.
 - **Safe retries.** Replaying an `Idempotency-Key` never prints a second copy.
 - **Honest answers.** The response reports the real outcome (printed, or why not), and `GET /v1/jobs/{id}` tracks any job. Jobs can also be retried or cancelled.
+- **Callbacks.** Add `"callback_url": "https://…"` to a print request and the app POSTs the outcome (`print.succeeded` / `print.failed`) to it after the job finishes, retrying a few times on failure. Only `https` URLs are accepted (private hosts unless you opt in), and with a shared secret set the body is signed with an `X-PrintNinja-Signature` HMAC. See `docs/ENV.md` for the `PRINTNINJA_CALLBACK_*` switches.
 - **Observable.** Health, metrics in JSON and Prometheus format, and a live OpenAPI document at `/v1/openapi.json`.
 - **Try it in the app.** **Automation → Try the API** lets you send requests against the live spec (desktop app only).
 
@@ -183,6 +184,7 @@ Other options include `url` (a data URL), `test=1`, `orientation`, `fit` and `pr
 
 **Printers**
 - Network (IPP, raw TCP 9100) and system printers on Windows and Linux
+- LAN scan finds IPP and raw printers on the network over mDNS; a discovered printer is added in one tap
 - USB and Bluetooth through the Windows spooler, or directly on Android
 - Printer languages: PDF, ESC/POS, ZPL, TSPL, CPCL and raster (Android prints PDF only for now)
 - Status checks before a raw job is sent, and timeouts so a stuck printer never hangs a job

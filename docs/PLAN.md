@@ -1,6 +1,6 @@
 # Feature Pack Plan — PrintNinja v2.5
 
-> Five features that close the loop between discovery, printing, and integration.
+> Five features that close the loop between discovery, printing, and integration; §6–§9 add the follow-up work absorbed from the 2026-11 investigation (mobile redesign, documentation, extra features).
 > Status: **1–3 implemented (2026-11-02)** · Target: `v2.5` · Branch strategy: one branch per feature, merge to `develop`
 
 ## Overview — sorted easy → hard
@@ -12,6 +12,9 @@
 | 3 | Auto discovery (mDNS) | ~4–7 days | "Add printer" requires typing an IP; finding a PC requires a `/24` brute scan | Printers and PCs appear automatically on the same LAN | ✅ Implemented |
 | 4 | Direct thermal printing from Android | ~5–8 days | Android offers only PDF — ESC/POS, ZPL, TSPL, CPCL, raster are disabled | An Android phone drives a thermal head directly, no PC needed | ⬜ Planned |
 | 5 | Encrypted LAN traffic | ~2–3 weeks | All LAN traffic (pairing, render, print) is plain HTTP | LAN traffic is encrypted with pinned certificates | ⬜ Planned |
+| 6 | Mobile redesign (vertical-only, portrait lock) | ~2 weeks | Print page is 2.7 screens of 15 fields; horizontal layouts; Designer is a desktop tool on phones | One-column phone UI, viewer-mode Designer, three-step pairing | ⬜ Planned |
+| 7 | Documentation cleanup + restructure | ~1 week | README overloaded, stale version badge; ARCHITECTURE.md hard to enter | Split docs, glossary, diagrams, badge automation | ⬜ Planned |
+| 8 | Extra feature backlog (F1, F3, F7–F9, F11–F13) | varies | See §8 backlog | QR pairing, mismatch warnings, Android share target, … | ⬜ Backlog |
 
 Why this order: 1 is frontend-only with no native/Rust/network risk; 2 is a small isolated Rust API addition; 3 adds cross-platform crates and multicast but is well-trodden; 4 needs `WebView` screenshot at exact dot size + device QA on real thermal heads; 5 touches every LAN path plus cert lifecycle and backwards compat. Dependencies are small — 5 benefits from 3 (`tls`+`fp` TXT) and from 4 (one fewer plain-HTTP printer path), otherwise each ships independently.
 
@@ -362,6 +365,197 @@ Bundle a Noise_IK handshake (or `snow` crate) between the desktop and phone, wit
 
 ---
 
+## 6. Mobile redesign — vertical-only, portrait-locked
+
+> Absorbed from the 2026-11 investigation. Scope: phone UI only; desktop stays unchanged.
+
+### Confirmed design decisions
+
+| # | Decision |
+|---|---|
+| D1 | **Vertical-only**: one column, no side-by-side fields, no horizontal tab strips, no sideways scrolling |
+| D2 | **Keep the bottom navigation** (Print, History, Templates, Printers, More) — the one deliberate horizontal element; at most five items, extras behind **More** |
+| D3 | **Portrait lock** on phones (tablets/Chromebooks rotate freely) |
+| D4 | **Phone Designer = viewer**: view + sample data only; editing happens on a computer |
+| D5 | README in English for now; Japanese README later |
+| D6 | Screenshots generated from the web preview with the fake agent; replaced with real-device captures later |
+
+### The vertical-only rule (enforced by tests)
+
+1. One field per row, full width.
+2. No horizontally scrolling strips — tab bars, chip rows and filter rows are replaced (table below).
+3. No horizontal pan — previews, the Designer canvas and the code editor fit the screen width.
+4. Wide content reflows — tables are already card lists; any remaining multi-column grid collapses to one column.
+5. Stacked actions — full-width buttons, primary first.
+6. Portrait only (D3).
+7. Enforced in `e2e/tests/mobile.mobile.e2e.ts` (already checks sideways scroll and 44 px targets) with two new assertions per route: (a) no element inside `main` with computed `overflow-x: auto/scroll` and `scrollWidth > clientWidth`; (b) no two visible form controls in the same form share the same vertical position. Add the rule to `docs/UI_GUIDE.md` under "Responsive and touch".
+
+Replacements for the horizontal patterns:
+
+| Today (horizontal) | Vertical replacement |
+|---|---|
+| Templates tab strip (Mine/Saved/Community) | Full-width view picker (bottom sheet) or three stacked choices; current view in the page subtitle |
+| Printers filter tabs (All/Network/USB/Bluetooth) | One full-width "Show: All printers" picker |
+| Automation tab row | A vertical list of sections that opens each one (Settings-list style) |
+| Designer tab row + Save | Section picker at top, Save as a sticky bottom bar |
+| History search + filters side by side | Search on one row, Filters full-width below |
+| Data URL beside GET/POST selector | Method on its own row under the URL |
+| Copies beside Pages · Orientation beside Fit · four margins across | Stacked, one per row (or one "Margins" screen in the options sheet) |
+| Wrapping pill buttons · truncated sort label | Full-width stacked buttons; label above a full-width select |
+
+Prefer one shared primitive (e.g. `ResponsiveTabs` — tabs on desktop, picker/section list on phones) over per-page ad-hoc layouts.
+
+Horizontal code to convert (line numbers at v2.4.0, will shift): `Print.tsx` ~769/~1116/~1223 `grid-cols-2`, ~1281 `grid-cols-4` (margins); `PrinterSetup.tsx` ~859/~952 `grid-cols-2`, ~681 filter tab list; `Automation.tsx` ~87 tab list; `Designer.tsx` ~1283 `overflow-x-auto` tabs; `Settings.tsx` ~504 `flex-row overflow-x-auto`; `History.tsx` ~1213 `grid-cols-2`; `src/mobile.css` `tabs-list` horizontal flex row.
+
+### Portrait lock implementation (D3)
+
+1. **Manifest patch step** — `src-tauri/gen/android/` is git-ignored and generated in CI (`tauri android init --ci`), so a script in `scripts/` (called by both CI jobs and the local release script) sets `android:screenOrientation="portrait"` on the main activity after `init` and fails loudly if the attribute is missing afterwards.
+2. **Phone-only lock** — `sensorPortrait` on small screens only (resource qualifier or runtime screen-width check) so tablets keep rotating.
+3. **Remove dead code** — `LANDSCAPE_QUERY` in `src/lib/hooks/useMediaQuery.ts` and the `shortLandscape` branches in `src/components/Layout.tsx`; delete the landscape cases from the phone e2e project and `UI_GUIDE.md`.
+4. **Web preview** — browsers can't be locked; show a "Rotate your phone" hint when a narrow window is wider than tall, or just keep the single column.
+
+**Accessibility (needs explicit sign-off):** the portrait lock is a documented exception to WCAG 2.1 AA **1.3.4 Orientation** (the README promises AA). Mitigations: tablets rotate freely; record the exception in `docs/UI_GUIDE.md` under "Accessibility"; keep every screen usable with large text and zoom. Fallback if not accepted: keep rotation enabled and render the same single column in landscape.
+
+### Print page rebuild (task-first, vertical)
+
+Goal: a first-time user prints in **three taps** after pairing, a returning user in **one**. Top to bottom:
+
+1. Title + status chip ("● Connected: Front Desk PC", links to pairing).
+2. **Template** — picker with thumbnail.
+3. **Printer** — picker + mismatch warning (e.g. "Template is 210×297 mm; this printer uses 80 mm").
+4. **Data** — Sample data / From a link (full-width URL input).
+5. **Copies** stepper.
+6. **Preview** inline directly under the inputs (today it is last — move it up).
+7. **Layout options** → bottom sheet: Paper size, Orientation, Fit mode, Margins (four stacked), Page range, Grayscale, Send test page. Summary line on the main page when anything is non-default ("Fit to width · Portrait · 5 mm margins").
+8. Sticky **Print** button.
+
+Also: remember the last template and printer; plain-language "Pages" label + one sentence of help; on failure show a non-technical error with a single **Retry** or **Open History** action. This supersedes the contradictory "advanced fields" comments in `Print.tsx` (~1092/~1114).
+
+### Pairing and first-run
+
+Replace the jargon paragraph with three numbered steps, one visible at a time: (1) "On your computer, open **PrintNinja → Phones** and turn on sharing." (2) "Type the 8-letter code shown there." — large single input, auto-capitalize, auto-advance. (3) "Connected to *Front Desk PC*." + Print. Always-on status line ("Connected to …" / "PC not found, check Wi-Fi") with **Try again**.
+
+### Designer viewer mode (D4)
+
+Sections chosen from a picker (no tab strip): **Preview** (full-width, fit, vertical scroll only), **Sample data** (editable — the one thing a phone user may adjust; sticky bottom **Save**), **README** (read-only), **Code** (read-only, line-wrapped, no horizontal scroll), **Details** (template **name** in the header instead of the raw ID fragment, size, sync state, last saved).
+
+Not offered on phones: HTML/CSS editing, page setup, version restore, publishing — replaced by the notice *"Templates are edited on a computer. Changes sync to this phone automatically."*
+
+Knock-on changes:
+- Templates page: hide/disable **New template** and **Clone** on phones (show the notice); keep **Open** and **Use**.
+- Command palette: remove "New template" on phones.
+- Print page: add **Preview** access to the selected template.
+- Sync: show "Updated 2 min ago" on cards; offer **Sync** for a stale copy.
+- Code reduction: phones no longer need the code editor's touch handling or canvas editing controls (simplifies `Designer.tsx`).
+- Tests: phone Designer e2e asserts read-only behavior and the absence of editing controls.
+- Later follow-up: an optional "Send me the link" action.
+
+### Other mobile fixes
+
+- **Naming:** on phones "Automation" → **"Connect to PC"** (or "PC & sharing"); "Printer Setup" → **"Printers"**; "Print via PC" gets a plain sentence ("Print on the PC's printers instead of this phone's").
+- **History:** stacked search and filters; job cards show status (icon, color, word), template, printer, time; **Reprint** as the primary action.
+- **Errors:** map low-level errors to human sentences at the IPC layer; clear toasts on route change; fix the sign-in subtitle shown on phones ("Printing still works from this PC").
+
+### Constraints
+
+- One deliberate refresh of the phone e2e screenshot baselines after the redesign (not on unrelated PRs).
+- Every new string needs `en.ts` + `ja.ts` entries (key-drift test fails otherwise).
+- Colors stay on existing tokens (`src/test/tokens.test.ts`).
+- Scope changes to the phone query; desktop unchanged.
+- Remove (not leave untested) the landscape-phone code paths.
+- Extract new pieces from `Print.tsx`/`Designer.tsx` into components rather than growing those files.
+
+---
+
+## 7. Documentation cleanup and restructure
+
+> Absorbed from the 2026-11 investigation. Baseline: `tsc`, Biome (356 files) and 922 Vitest tests all pass on a fresh clone; 0 px horizontal overflow and no sub-44 px targets on the seven main routes; all internal doc links resolve.
+
+### Repository hygiene
+
+- Delete `TODO.md` (all four items already marked implemented).
+- Fix the dangling `REFACTORING.md` references in `server/src/boot.ts`, `server/src/server.ts`, `server/src/http/mappers.ts`.
+- Delete merged remote branches `guest-pairing-ux` and `pair-guest-automation-ux` (0 commits ahead of `develop`).
+
+### README (findings R1–R6)
+
+- Bump the version badge (says 2.2.0, project is 2.4.0) — and **automate it in the release script** instead of by hand.
+- Add screenshots: Designer with live canvas, Print page, History with a failure message, phone pairing, phone Print (D6: generated from the web preview + fake agent).
+- Split the three audiences: end users (what, screenshots, install, first print, phone, automate, troubleshoot) stay in README; developer quick start/layout/commands/tech stack move to `docs/DEVELOPMENT.md`; the integrator `curl` example stays.
+- Add `docs/GLOSSARY.md` (IPP, ESC/POS, CUPS, design page, sheet, pairing, shared rendering, "Print via PC").
+- Group the ~45 flat feature bullets by value; add a phone walkthrough with visuals.
+- Keep: the "Why PrintNinja" 3-step pitch, the worked parcel-tag example, the `curl` example, the badge table, and the symptom-then-fix troubleshooting.
+
+### ARCHITECTURE.md (findings A1–A7)
+
+Today: ~5,850 words, ~74 inline identifiers despite the "no code" claim, one ASCII diagram for a 9-stage pipeline, §9 "Borrowing a faster device" is ~40% of the file, changelog/decision-log text mixed in, placement math before the backend pipeline, no role-based entry. Proposed structure:
+
+```
+README.md                      end users: what, screenshots, install, first print, phone, automate, troubleshoot
+docs/
+  GLOSSARY.md                  plain-language terms
+  ARCHITECTURE.md              ~1,200 words: system map, pipeline, phone↔PC diagram, "read next" by role
+  architecture/
+    rendering-and-layout.md    design size vs paper size, fit modes, pagination
+    printers-and-transports.md network, system, USB, Bluetooth; printer languages; per-OS notes
+    queue-and-history.md       queue, retention, timings, metrics, logs
+    phone-and-pc-sharing.md    pairing, tokens, guests, Print via PC, failure behavior, security
+  DECISIONS.md                 dated decisions (moved out of ARCHITECTURE.md)
+  DEVELOPMENT.md               quick start, layout, commands, tech stack (moved out of README)
+```
+
+Documentation rules to adopt:
+1. Every doc starts with "Who this is for" and "What you will know after reading".
+2. Overview docs contain no code identifiers; deep dives may.
+3. Every system gets a Mermaid diagram: system map (phone, PC, printers, share service); the pipeline with the one stage that can run elsewhere highlighted; phone↔PC sequence (pair → render request → bytes back → print → history); a "Where does my print fail?" decision tree.
+4. Plain word first, technical term second ("the PC that renders for your phone (shared rendering)").
+5. No version history inside explanatory text — history goes to `CHANGELOG.md`/`DECISIONS.md`.
+6. The README version badge is updated by the release script, not by hand.
+
+Keep the clear sentence-by-sentence writing and the "why" behind the rules (never re-layout a design; phones ask PCs and never the reverse).
+
+---
+
+## 8. Extra feature backlog
+
+From the investigation's F1–F13. Already covered by this plan: F2 starter packs = feature 1, F6 webhooks = feature 2, F4 discovery = feature 3, F5 Android thermal = feature 4, F10 encrypted LAN = feature 5. Remaining:
+
+| # | Feature | Why now | Effort | Value |
+|---|---|---|---|---|
+| F1 | **QR-code pairing** — scan the PC's screen instead of typing 8 characters | Pairing is the main phone friction; fits the vertical three-step flow | Small–Med | Very high |
+| F3 | **Smart printer/template matching** — paper-size mismatch warning, per-printer default template and paper | Prevents wasted paper; no new concepts | Small | High |
+| F7 | **Android share target + camera scan** — share a PDF/photo to print; scan a barcode to fill a field | Makes the phone a real input device, not just a remote | Med | High |
+| F8 | **Printer alerts and routing rules** — low-paper/offline notification, template→printer defaults, failover printer | Builds on existing status checks | Med | Med–High |
+| F9 | **CSV column-mapping UI** for bulk prints | Users shape JSON by hand today | Med | Medium |
+| F11 | **Visual or block template builder** (optional AI-assisted template from a photo or sample) | Lowers the HTML/CSS barrier for non-developers | Large | High |
+| F12 | **Dark mode and more languages** (one light theme, EN+JA today) | Warehouses/outdoors; broader reach | Med | Medium |
+| F13 | **Per-template guest permissions and roles** | Explicitly excluded in the current design; revisit if teams grow | Med | Situational |
+
+Suggested order: F3 quick win first, then F1 alongside the mobile redesign, then F7/F8/F9 as integration work, F11 as a larger project, F12/F13 when there is demand.
+
+---
+
+## 9. Follow-up roadmap and risks
+
+### Ordering (after features 1–5)
+
+1. **Documentation cleanup + restructure** (~1 week) — repo hygiene, README restructure with screenshots/glossary/badge automation, ARCHITECTURE.md split per §7, decisions to `DECISIONS.md`.
+2. **Mobile redesign** (~2 weeks) — vertical-only rule in `UI_GUIDE.md` + e2e assertions, portrait lock (manifest patch, tablet exception, dead-code removal, WCAG note), `ResponsiveTabs` primitive → Templates/Printers/Automation/Designer/Settings, Designer viewer mode, Print page + pairing rebuild, naming/errors/copy, refresh phone snapshots, `pnpm check:full`.
+3. **Quick-win features** (~1 week) — F3 mismatch warnings, F1 QR pairing.
+4. **Larger features** — F7, F8, F9, F11, F12, F13 as demand dictates.
+
+Each change lands on `develop` in small conventional-commit PRs with a regression test, as `CONTRIBUTING.md` requires.
+
+### Risks and open items
+
+1. **WCAG 1.3.4 (Orientation):** accept the portrait-lock exception explicitly or fall back to a rotatable single column.
+2. **Phone template authoring is removed** — revisit with a minimal "edit text only" mode if usage shows it matters.
+3. **Generated Android project** — the orientation patch must run on every `tauri android init`; CI must verify it.
+4. **Browser-preview limits** — the investigation saw the phone UI in a desktop browser with a fake backend; at least one real Android device pass is needed before sign-off on the redesign.
+5. **Snapshot churn** — one deliberate refresh of the phone e2e baselines after the redesign.
+
+---
+
 ## Cross-cutting concerns
 
 ### Ordering
@@ -374,7 +568,7 @@ Bundle a Noise_IK handshake (or `snow` crate) between the desktop and phone, wit
 5. Encrypted LAN traffic         — ~2–3w, every LAN path + cert lifecycle + backwards compat (hardest)
 ```
 
-5 benefits from 3 (`tls`+`fp` TXT) and from 4 (one fewer plain-HTTP printer path); otherwise each ships independently. If the POS webhook is urgent, ship 2 first. If the template chooser is needed for a demo, ship 1 first — it has no dependencies.
+5 benefits from 3 (`tls`+`fp` TXT) and from 4 (one fewer plain-HTTP printer path); otherwise each ships independently. Workstreams 6–8 (investigation follow-ups) are sequenced in §9. If the POS webhook is urgent, ship 2 first. If the template chooser is needed for a demo, ship 1 first — it has no dependencies.
 
 ### Versioning and branching
 

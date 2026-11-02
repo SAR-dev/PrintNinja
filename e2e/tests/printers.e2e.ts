@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { pc, signedSeed } from "../support/fixtures";
+import { testids } from "../support/testids";
 
 // Printer management against the fake agent, whose addPrinter mirrors
 // the Rust validation in commands/printer.rs (empty name, unknown
@@ -79,6 +80,49 @@ test("printers add, reject duplicates, test and remove", async ({
   await expect(
     page.getByRole("button", { name: "Test print on E2E JetDirect" }),
   ).toBeHidden();
+});
+
+// Feature 3 (docs/PLAN.md): a discovered mDNS row can be added straight
+// from the scan list. The fake agent has no network, so the spec opts
+// in with the `fake_discovered_printers` setting (see commands.ts).
+test("discovered mDNS printer can be added from the scan row", async ({
+  browser,
+}) => {
+  const seeded = await signedSeed(browser, "mdns", {
+    settings: {
+      fake_discovered_printers: JSON.stringify([
+        {
+          id: "net:10.0.0.5:631",
+          name: "E2E ipp printer",
+          address: "10.0.0.5:631",
+          printer_type: "ipp",
+        },
+      ]),
+    },
+  });
+  const page = await seeded.context.newPage();
+  await page.goto("/printers");
+
+  // The "Found on this network" scan list lives inside the Add sheet.
+  await openAdd(page);
+  await page.getByTestId(testids.printersScanNetwork).click();
+  const row = page.getByTestId(testids.discoveredPrinter("net:10.0.0.5:631"));
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await expect(
+    row.getByText("E2E ipp printer"),
+  ).toBeVisible();
+
+  await row.getByRole("button", { name: "Add" }).click();
+  await expect(page.getByText('Added "E2E ipp printer"')).toBeVisible({
+    timeout: 15_000,
+  });
+  // The quick-add leaves the sheet open, and Radix marks everything behind
+  // an open dialog inert — close it before asserting on the table row.
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "Test print on E2E ipp printer" }),
+    { timeout: 15_000 },
+  ).toBeVisible();
 });
 
 test("printer validation rejects bad types, languages and unknown ids", async ({

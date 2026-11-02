@@ -386,6 +386,7 @@ fn lan_ip_for_mdns() -> Option<IpAddr> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::Ipv4Addr;
 
     #[test]
     fn printer_kind_mapping_by_service_type() {
@@ -400,13 +401,73 @@ mod tests {
         assert_eq!(sanitize_instance(""), "PC");
     }
 
+    fn peer_info(addrs: &[IpAddr], port: u16, props: HashMap<String, String>) -> ServiceInfo {
+        ServiceInfo::new(
+            PEER_SERVICE,
+            "PrintNinja-TestPC",
+            "testpc.local.",
+            addrs,
+            port,
+            props,
+        )
+        .unwrap()
+    }
+
     #[test]
-    fn txt_parse_peer_defaults() {
-        // TXT missing prot -> 1, missing port -> info port, etc. Logic tested via service_info_to_peer with mocked info is hard without daemon.
-        // Instead verify parsing helper logic via direct props
-        let props: HashMap<String, String> = HashMap::new();
-        let prot: u32 = props.get("prot").and_then(|v| v.parse().ok()).unwrap_or(1);
-        assert_eq!(prot, 1);
+    fn service_info_to_peer_parses_txt() {
+        let info = peer_info(
+            &[IpAddr::V4(Ipv4Addr::new(192, 168, 1, 5))],
+            17717,
+            HashMap::from([
+                ("prot".to_string(), "2".to_string()),
+                ("id".to_string(), "abc123".to_string()),
+                ("port".to_string(), "4001".to_string()),
+                ("plat".to_string(), "windows".to_string()),
+                ("ver".to_string(), "2.5.0".to_string()),
+            ]),
+        );
+        let peer = service_info_to_peer(&info).expect("peer");
+        assert_eq!(peer.name, "PrintNinja-TestPC");
+        assert_eq!(peer.host, "192.168.1.5");
+        assert_eq!(peer.port, 4001, "TXT port overrides the record port");
+        assert_eq!(peer.provider_id, "abc123");
+        assert_eq!(peer.platform, "windows");
+        assert_eq!(peer.protocol, 2);
+        assert_eq!(peer.version, "2.5.0");
+    }
+
+    #[test]
+    fn service_info_to_peer_defaults() {
+        let info = peer_info(
+            &[IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5))],
+            17717,
+            HashMap::new(),
+        );
+        let peer = service_info_to_peer(&info).expect("peer");
+        assert_eq!(peer.protocol, 1, "missing prot defaults to 1");
+        assert_eq!(peer.port, 17717, "missing port falls back to the record port");
+        assert_eq!(peer.provider_id, "");
+        assert_eq!(peer.platform, "");
+        assert_eq!(peer.version, "");
+    }
+
+    #[test]
+    fn service_info_to_printer_strips_rp_slash() {
+        let addrs = [IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20))];
+        let info = ServiceInfo::new(
+            "_ipp._tcp.local.",
+            "HP-OfficeJet",
+            "hp.local.",
+            &addrs[..],
+            631,
+            HashMap::from([("rp".to_string(), "/printers/laser".to_string())]),
+        )
+        .unwrap();
+        let p = service_info_to_printer(&info, "ipp").expect("printer");
+        assert_eq!(p.name, "HP-OfficeJet");
+        assert_eq!(p.host, "192.168.1.20");
+        assert_eq!(p.port, 631);
+        assert_eq!(p.resource_path.as_deref(), Some("printers/laser"));
     }
 
     #[test]
