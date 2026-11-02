@@ -65,7 +65,7 @@ type TestState =
   | { state: "error"; message: string };
 
 /**
- * Automation → Phones tab: shared rendering (see docs/ARCHITECTURE.md §9).
+ * Automation → Phones tab: shared rendering (see docs/architecture/phone-and-pc-sharing.md#what-travels-and-what-never-does).
  *
  * One direction only: a phone asks a PC to make its PDFs. So each device
  * shows just its own half. The PC opens a 30-second pairing window and
@@ -1068,6 +1068,10 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
   const [accountChecked, setAccountChecked] = useState(false);
   const codeInputRef = useRef<HTMLInputElement>(null);
   const cancelledRef = useRef(false);
+  const [nearbyPeers, setNearbyPeers] = useState<
+    import("@/lib/agent/types").DiscoveredPeer[]
+  >([]);
+  const [scanningPeers, setScanningPeers] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -1093,6 +1097,22 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
     };
   }, [load]);
   useEffect(() => onSessionStarted(() => void load()), [load]);
+
+  const scanPeers = useCallback(async () => {
+    setScanningPeers(true);
+    try {
+      const peers = await agent("discover_peers_mdns", { timeout_secs: 5 });
+      if (!cancelledRef.current) setNearbyPeers(peers ?? []);
+    } catch {
+      // mDNS may be unavailable in web preview; keep empty
+    } finally {
+      if (!cancelledRef.current) setScanningPeers(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void scanPeers();
+  }, [scanPeers]);
 
   const savePairs = async (next: RenderPair[]) => {
     setPairs(next);
@@ -1338,6 +1358,64 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
           >
             {t("settings_page.devices_dedupe")}
           </Button>
+        </div>
+      )}
+
+      {(nearbyPeers.length > 0 || scanningPeers) && (
+        <div className="space-y-2 rounded-md border p-3" data-testid="devices-nearby">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">
+              {t("settings_page.devices_nearby_title")}
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void scanPeers()}
+              disabled={scanningPeers}
+              data-testid="devices-nearby-rescan"
+            >
+              {scanningPeers
+                ? t("settings_page.devices_nearby_scanning")
+                : t("settings_page.devices_nearby_scan")}
+            </Button>
+          </div>
+          {nearbyPeers.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {scanningPeers
+                ? t("settings_page.devices_nearby_searching")
+                : t("settings_page.devices_nearby_empty")}
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {nearbyPeers.map((peer) => (
+                <button
+                  key={`${peer.host}:${peer.port}:${peer.provider_id}`}
+                  type="button"
+                  data-testid={`devices-nearby-${peer.host}-${peer.port}`}
+                  className="flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left hover:bg-accent"
+                  onClick={() => {
+                    setAddress(`${peer.host}:${peer.port}`);
+                    setShowAdvanced(true);
+                    setFormError("");
+                  }}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{peer.name}</span>
+                    <span className="block truncate font-mono text-xs text-muted-foreground">
+                      {peer.host}:{peer.port}
+                      {peer.platform ? ` · ${peer.platform}` : ""}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {t("settings_page.devices_nearby_tap_fill")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {t("settings_page.devices_nearby_hint")}
+          </p>
         </div>
       )}
 

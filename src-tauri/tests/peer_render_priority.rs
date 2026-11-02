@@ -1,4 +1,4 @@
-//! The provider's own prints come first (see docs/ARCHITECTURE.md §9).
+//! The provider's own prints come first (see docs/architecture/phone-and-pc-sharing.md#the-pcs-own-prints-come-first).
 //!
 //! While this device renders for itself, `POST /v1/render` answers 429
 //! with `Retry-After`, so a phone that asked simply renders locally and a
