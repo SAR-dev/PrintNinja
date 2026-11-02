@@ -120,9 +120,9 @@ Two different borrowings exist. In **shared rendering** the PC only produces
 the image or PDF and the phone prints on its own printer. In **Print via PC**
 the whole job runs on the PC's printers with the PC's templates, and the phone
 polls for the outcome; there is no silent fallback to local printing. The full
-rules — including what happens when the PC is off, busy, or refuses — are in
-[phone and PC sharing](./architecture/phone-and-pc-sharing.md), and the
-reasons behind each rule are in [DECISIONS.md](./DECISIONS.md).
+rules — including what happens when the PC is off, busy, or refuses, and the
+reasons behind each rule — are in
+[phone and PC sharing](./architecture/phone-and-pc-sharing.md).
 
 ## Where does my print fail?
 
@@ -169,7 +169,7 @@ timings, so the answer is in History, not in the log.
 | Add a printer or pick a language | [printers and transports](./architecture/printers-and-transports.md) |
 | Debug a slow, stuck or failed job | [queue and history](./architecture/queue-and-history.md) |
 | Pair, share, or review what a PC is told | [phone and PC sharing](./architecture/phone-and-pc-sharing.md) |
-| Know *why* a sharing rule exists | [DECISIONS.md](./DECISIONS.md) |
+| Know *why* a sharing rule exists | [phone and PC sharing](./architecture/phone-and-pc-sharing.md#design-decisions) |
 | Learn a term's plain meaning | [GLOSSARY.md](./GLOSSARY.md) |
 | Build, run or change the codebase | [DEVELOPMENT.md](./DEVELOPMENT.md) |
 | Design UI or reuse a component | [UI_GUIDE.md](./UI_GUIDE.md) |

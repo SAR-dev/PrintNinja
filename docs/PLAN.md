@@ -499,8 +499,7 @@ docs/
     rendering-and-layout.md    design size vs paper size, fit modes, pagination
     printers-and-transports.md network, system, USB, Bluetooth; printer languages; per-OS notes
     queue-and-history.md       queue, retention, timings, metrics, logs
-    phone-and-pc-sharing.md    pairing, tokens, guests, Print via PC, failure behavior, security
-  DECISIONS.md                 dated decisions (moved out of ARCHITECTURE.md)
+    phone-and-pc-sharing.md    pairing, tokens, guests, Print via PC, failure behavior, security, design decisions
   DEVELOPMENT.md               quick start, layout, commands, tech stack (moved out of README)
 ```
 
@@ -509,7 +508,7 @@ Documentation rules to adopt:
 2. Overview docs contain no code identifiers; deep dives may.
 3. Every system gets a Mermaid diagram: system map (phone, PC, printers, share service); the pipeline with the one stage that can run elsewhere highlighted; phone↔PC sequence (pair → render request → bytes back → print → history); a "Where does my print fail?" decision tree.
 4. Plain word first, technical term second ("the PC that renders for your phone (shared rendering)").
-5. No version history inside explanatory text — history goes to `CHANGELOG.md`/`DECISIONS.md`.
+5. No version history inside explanatory text — history goes to `CHANGELOG.md`.
 6. The README version badge is updated by the release script, not by hand.
 
 Keep the clear sentence-by-sentence writing and the "why" behind the rules (never re-layout a design; phones ask PCs and never the reverse).
@@ -539,7 +538,7 @@ Suggested order: F3 quick win first, then F1 alongside the mobile redesign, then
 
 ### Ordering (after features 1–5)
 
-1. **Documentation cleanup + restructure** (~1 week) — repo hygiene, README restructure with screenshots/glossary/badge automation, ARCHITECTURE.md split per §7, decisions to `DECISIONS.md`.
+1. **Documentation cleanup + restructure** (~1 week) — repo hygiene, README restructure with screenshots/glossary/badge automation, ARCHITECTURE.md split per §7, design decisions recorded in `phone-and-pc-sharing.md`.
 2. **Mobile redesign** (~2 weeks) — vertical-only rule in `UI_GUIDE.md` + e2e assertions, portrait lock (manifest patch, tablet exception, dead-code removal, WCAG note), `ResponsiveTabs` primitive → Templates/Printers/Automation/Designer/Settings, Designer viewer mode, Print page + pairing rebuild, naming/errors/copy, refresh phone snapshots, `pnpm check:full`.
 3. **Quick-win features** (~1 week) — F3 mismatch warnings, F1 QR pairing.
 4. **Larger features** — F7, F8, F9, F11, F12, F13 as demand dictates.
