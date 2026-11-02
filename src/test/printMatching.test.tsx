@@ -110,7 +110,9 @@ describe("paper size mismatch warning", () => {
     renderPage();
     // Thermal 80 (80 mm) + Shipping label (100×150) are both preselected.
     expect(
-      await screen.findByText("Template is 100 × 150 mm; this printer uses 80 mm paper."),
+      await screen.findByText(
+        "Template is 100 × 150 mm; this printer uses 80 mm paper.",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -150,14 +152,17 @@ describe("per-printer remembered choices", () => {
 
     // Fresh app: empty store, prefs still in localStorage.
     unmount();
-    usePrintStore.setState({ printerId: "", templateId: "", paperW: null, paperH: null });
+    usePrintStore.setState({
+      printerId: "",
+      templateId: "",
+      paperW: null,
+      paperH: null,
+    });
     renderPage();
     // Thermal 80 is preselected and its remembered template beats the
     // first-listed one (Shipping label); the paper comes back too.
     expect(await screen.findByText("A4 sheet")).toBeInTheDocument();
-    await waitFor(() =>
-      expect(usePrintStore.getState().paperW).toBe(210),
-    );
+    await waitFor(() => expect(usePrintStore.getState().paperW).toBe(210));
     expect(usePrintStore.getState().paperH).toBe(297);
     // The remembered state is exactly the mismatching one, so the warning
     // comes back with it.
