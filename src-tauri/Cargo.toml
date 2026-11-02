@@ -41,6 +41,8 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 http-body-util = "0.1"
 sha2 = "0.10"
+hmac = "0.12"
+url = "2"
 urlencoding = "2"
 hex = "0.4"
 rand = "0.8"
@@ -55,6 +57,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std", "
 # it but the call site lives behind the Windows cfg.
 png = "0.17"
 tauri-plugin-opener = "2"
+mdns-sd = "0.13"
 # euid check for the persistent Chromium launch: running as root without
 # `--no-sandbox` is unsupported, and the flag must be decided at launch,
 # not from refused stderr like the one-shot retry can.

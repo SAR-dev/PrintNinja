@@ -380,16 +380,23 @@ async fn print_job(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
-    // `callback_url` was accepted and ignored (P12): there is no callback
-    // runner, so a caller that relied on one would never learn the outcome.
-    // Refused before any DB work — a request the server will not honour
-    // creates no job.
-    if let Some(callback) = &req.callback_url {
-        return Err(ApiRejection::BadRequest(format!(
-            "`callback_url` is not supported (got `{callback}`); \
-             poll `GET /v1/jobs/{{id}}` for the outcome"
-        )));
-    }
+    // `callback_url` is validated before any DB work (SSRF hardening).
+    // Invalid URLs are refused with 400 + code `callback_url_invalid`;
+    // valid URLs are accepted and trigger a best-effort POST after the job
+    // reaches a terminal state (success or failed). Duplicates do not fire
+    // a second callback.
+    let callback_url: Option<String> = match &req.callback_url {
+        Some(url) => {
+            if let Err(reason) = crate::api::callback::validate_callback_url(url) {
+                return Err(ApiRejection::BadRequestWithCode(
+                    reason,
+                    "callback_url_invalid",
+                ));
+            }
+            Some(url.clone())
+        }
+        None => None,
+    };
 
     // Remote-job limits (ARCHITECTURE §9), refused before any DB work: a
     // request the server will not honour creates no job.
@@ -454,6 +461,15 @@ async fn print_job(
     // Run the real pipeline. This used to insert a row with
     // `status = 'queued'` and return 202 without printing anything, so every
     // API caller got a cheerful "queued" and no paper.
+    let printer_name_for_cb = req.printer.clone();
+    let template_name_for_cb = req
+        .template
+        .clone()
+        .or(req.template_server_id.clone())
+        .unwrap_or_default();
+    let idempotency_key_for_cb = idempotency_key.clone();
+    let callback_url_for_dispatch = callback_url.clone();
+
     let print_req = crate::commands::print::PrintRequest {
         printer_name: req.printer.clone(),
         html: String::new(),
@@ -499,21 +515,53 @@ async fn print_job(
             .await;
 
     match outcome {
-        Ok(res) if res.success => Ok((
-            StatusCode::OK,
-            Json(json!({
-                "job_id": res.job_id,
-                "status": "success",
-                "duration_ms": res.duration_ms,
-            })),
-        )),
+        Ok(res) if res.success => {
+            if let Some(url) = callback_url_for_dispatch {
+                crate::api::callback::dispatch_callback(
+                    crate::api::callback::CallbackDispatch {
+                        job_id: res.job_id.clone(),
+                        status: "success".into(),
+                        event: "print.succeeded".into(),
+                        printer: printer_name_for_cb,
+                        template: template_name_for_cb,
+                        error: None,
+                        duration_ms: res.duration_ms as u64,
+                        idempotency_key: idempotency_key_for_cb,
+                        callback_url: url,
+                    },
+                );
+            }
+            Ok((
+                StatusCode::OK,
+                Json(json!({
+                    "job_id": res.job_id,
+                    "status": "success",
+                    "duration_ms": res.duration_ms,
+                })),
+            ))
+        }
         Ok(res) => {
-            let err = res.error.unwrap_or_else(|| "print failed".into());
+            let err = res.error.clone().unwrap_or_else(|| "print failed".into());
+            if let Some(url) = callback_url_for_dispatch {
+                crate::api::callback::dispatch_callback(
+                    crate::api::callback::CallbackDispatch {
+                        job_id: res.job_id.clone(),
+                        status: "failed".into(),
+                        event: "print.failed".into(),
+                        printer: printer_name_for_cb,
+                        template: template_name_for_cb,
+                        error: Some(err.clone()),
+                        duration_ms: res.duration_ms as u64,
+                        idempotency_key: idempotency_key_for_cb,
+                        callback_url: url,
+                    },
+                );
+            }
             Err(ApiRejection::from(crate::error::AppError::Internal(err)))
         }
         // Lost the insert race for this key: the unique index recorded the
         // winner's row before either request printed, so report that job
-        // instead of printing again (P12).
+        // instead of printing again (P12). Duplicate must NOT fire a second callback.
         Err(crate::error::AppError::DuplicateJob(id)) => Ok((
             StatusCode::OK,
             Json(json!({
@@ -804,6 +852,13 @@ impl IntoResponse for ApiRejection {
             }
             return (StatusCode::CONFLICT, Json(Value::Object(body))).into_response();
         }
+        if let AppError::ValidationWithCode { message, code } = &self.0 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": message, "code": code })),
+            )
+                .into_response();
+        }
         let (status, msg) = match &self.0 {
             AppError::NotFound(m) => (StatusCode::NOT_FOUND, m.clone()),
             AppError::Validation(m) => (StatusCode::BAD_REQUEST, m.clone()),
@@ -821,6 +876,13 @@ impl ApiRejection {
     #[allow(non_snake_case)]
     fn BadRequest(m: String) -> Self {
         ApiRejection(AppError::Validation(m))
+    }
+    #[allow(non_snake_case)]
+    fn BadRequestWithCode(m: String, code: &str) -> Self {
+        ApiRejection(AppError::ValidationWithCode {
+            message: m,
+            code: code.to_string(),
+        })
     }
     #[allow(non_snake_case)]
     fn Conflict(m: String, code: &str, details: Value) -> Self {

@@ -474,6 +474,9 @@ const implemented: Record<string, Handler> = {
   cache_list_synced_profiles: () => cache.library.listSyncedProfiles(),
   cache_forget_profile: (args) =>
     cache.library.forgetProfile(String(args["server_id"] ?? "")),
+  discover_network_printers: () => [],
+  discover_network_printers_mdns: () => [],
+  discover_peers_mdns: () => [],
   // Fonts: metadata plus in-memory bytes (test files are tiny).
   list_fonts: () =>
     cache.library.listFonts().map((r) => ({
@@ -560,9 +563,7 @@ const acknowledgedStubs: string[] = [
   // against this canned provider; the pipeline path is covered in Rust.
   "peer_render_request",
   "refresh_background",
-  // Android-only mDNS discovery: no printers on the e2e desktop, so the
-  // empty list the Rust stub returns is the honest behavior here.
-  "discover_network_printers",
+  // mDNS discovery is implemented above
 ];
 
 const commands: Record<string, Handler> = {

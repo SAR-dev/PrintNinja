@@ -2,6 +2,7 @@ pub mod api;
 pub mod commands;
 mod data;
 pub mod db;
+pub mod discovery;
 mod deeplink;
 mod error;
 pub mod logfile;
@@ -370,6 +371,8 @@ pub fn run() {
             commands::print::print_html,
             commands::print::enumerate_system_printers,
             commands::print::discover_network_printers,
+            commands::print::discover_network_printers_mdns,
+            commands::print::discover_peers_mdns,
             commands::print::spike_test_print,
             commands::remote_print::remote_print,
             commands::remote_print::remote_printers,

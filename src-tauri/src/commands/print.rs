@@ -1811,15 +1811,16 @@ pub fn enumerate_system_printers() -> AppResult<Vec<crate::transport::PrinterInf
 /// Discover network printers over mDNS (`_ipp._tcp` and JetDirect
 /// `_pdl-datastream._tcp`), resolved to IP and port.
 ///
-/// Android only: the Kotlin plugin listens for advertisements for up to
-/// `timeout_secs` (2–30, default 8) and resolves each one. Everywhere
-/// else this is an empty list rather than an error, so the setup screen
-/// renders "no printers found" instead of failing.
+/// Android: the Kotlin plugin listens for advertisements.
+/// Desktop (Linux/Windows): `mdns-sd` crate browses the same four printer
+/// service types. Always returns an empty list rather than an error, so the
+/// setup screen renders "no printers found" instead of failing.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn discover_network_printers(
     app: tauri::AppHandle,
     timeout_secs: Option<u8>,
 ) -> AppResult<Vec<crate::transport::PrinterInfo>> {
+    let _ = &app;
     #[cfg(target_os = "android")]
     {
         use tauri_plugin_android_print::AndroidPrintExt;
@@ -1831,7 +1832,7 @@ pub async fn discover_network_printers(
         .await
         .map_err(|e| AppError::Internal(format!("discovery task failed: {e}")))?
         .map_err(|e| AppError::Internal(format!("network discovery failed: {e}")))?;
-        Ok(found
+        return Ok(found
             .into_iter()
             .map(|d| {
                 // IPP keeps the advertised resource path; JetDirect is host:port.
@@ -1850,13 +1851,73 @@ pub async fn discover_network_printers(
                     status: "unknown".to_string(),
                 }
             })
-            .collect())
+            .collect());
     }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = (app, timeout_secs);
-        Ok(vec![])
-    }
+    // Desktop mDNS via mdns-sd (Linux/Windows); no-op on other platforms but still returns empty gracefully
+    let secs = timeout_secs.unwrap_or(8).clamp(2, 30);
+    let timeout_ms = u64::from(secs) * 1000;
+    let found = tokio::task::spawn_blocking(move || crate::discovery::browse_printers(timeout_ms))
+        .await
+        .map_err(|e| AppError::Internal(format!("discovery task failed: {e}")))?;
+    Ok(found
+        .into_iter()
+        .map(|d| {
+            let address = if d.kind == "ipp" {
+                if let Some(rp) = d.resource_path.as_deref() {
+                    if rp.contains('/') {
+                        format!("{}:{}/{}", d.host, d.port, rp)
+                    } else {
+                        format!("{}:{}/{}", d.host, d.port, rp)
+                    }
+                } else {
+                    format!("{}:{}", d.host, d.port)
+                }
+            } else {
+                format!("{}:{}", d.host, d.port)
+            };
+            let printer_type = if d.kind == "raw_tcp" {
+                crate::transport::PrinterType::RawTcp
+            } else {
+                crate::transport::PrinterType::Ipp
+            };
+            crate::transport::PrinterInfo {
+                id: format!("net:{}:{}", d.host, d.port),
+                name: d.name,
+                address,
+                printer_type,
+                language: crate::transport::PrinterLanguage::Pdf,
+                status: "unknown".to_string(),
+            }
+        })
+        .collect())
+}
+
+/// mDNS-specific printer discovery that returns the raw discovered rows
+/// (with `kind` and `resource_path`). Useful for CI and for the UI that
+/// wants to distinguish `ipp` vs `raw_tcp` without re-parsing the address.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn discover_network_printers_mdns(
+    timeout_secs: Option<u8>,
+) -> AppResult<Vec<crate::discovery::DiscoveredPrinter>> {
+    let secs = timeout_secs.unwrap_or(8).clamp(2, 30);
+    let timeout_ms = u64::from(secs) * 1000;
+    let found = tokio::task::spawn_blocking(move || crate::discovery::browse_printers(timeout_ms))
+        .await
+        .map_err(|e| AppError::Internal(format!("discovery task failed: {e}")))?;
+    Ok(found)
+}
+
+/// Discover nearby PrintNinja PCs (`_printninja._tcp`) on the LAN.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn discover_peers_mdns(
+    timeout_secs: Option<u8>,
+) -> AppResult<Vec<crate::discovery::DiscoveredPeer>> {
+    let secs = timeout_secs.unwrap_or(8).clamp(2, 30);
+    let timeout_ms = u64::from(secs) * 1000;
+    let found = tokio::task::spawn_blocking(move || crate::discovery::browse_peers(timeout_ms))
+        .await
+        .map_err(|e| AppError::Internal(format!("discovery task failed: {e}")))?;
+    Ok(found)
 }
 
 /// Spike command: print a hard-coded test page
