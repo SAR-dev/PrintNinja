@@ -3,21 +3,150 @@
 > Five features that close the loop between discovery, printing, and integration.
 > Status: **planning** · Target: `v2.5` · Branch strategy: one branch per feature, merge to `develop`
 
-## Overview
+## Overview — sorted easy → hard
 
-| # | Feature | Problem today | Outcome |
-|---|---------|--------------|---------|
-| 1 | Auto discovery (mDNS) | "Add printer" requires typing an IP; finding a PC requires a `/24` brute scan | Printers and PCs appear automatically on the same LAN |
-| 2 | Direct thermal printing from Android | Android offers only PDF — ESC/POS, ZPL, TSPL, CPCL, raster are disabled | An Android phone drives a thermal head directly, no PC needed |
-| 3 | Webhook callbacks (`callback_url`) | `POST /v1/print` with `callback_url` is rejected with 400; POS systems poll `/v1/jobs/{id}` instead | Successful/final jobs POST to the caller's URL |
-| 4 | Starter template packs | New template always starts from one shipping-label example | Creator picks Receipt / Delivery Slip / Invoice / Label / Blank before editing |
-| 5 | Encrypted LAN traffic | All LAN traffic (pairing, render, print) is plain HTTP | LAN traffic is encrypted with pinned certificates |
+| # | Feature | Effort | Problem today | Outcome |
+|---|---------|--------|---------------|---------|
+| 1 | Starter template packs | ~2–3 days | New template always starts from one shipping-label example | Creator picks Receipt / Delivery Slip / Invoice / Label / Blank before editing |
+| 2 | Webhook callbacks (`callback_url`) | ~2–4 days | `POST /v1/print` with `callback_url` is rejected with 400; POS systems poll `/v1/jobs/{id}` instead | Successful/final jobs POST to the caller's URL |
+| 3 | Auto discovery (mDNS) | ~4–7 days | "Add printer" requires typing an IP; finding a PC requires a `/24` brute scan | Printers and PCs appear automatically on the same LAN |
+| 4 | Direct thermal printing from Android | ~5–8 days | Android offers only PDF — ESC/POS, ZPL, TSPL, CPCL, raster are disabled | An Android phone drives a thermal head directly, no PC needed |
+| 5 | Encrypted LAN traffic | ~2–3 weeks | All LAN traffic (pairing, render, print) is plain HTTP | LAN traffic is encrypted with pinned certificates |
 
-Dependencies between the five are small and explicit. Sections below call them out so the features can ship in any order except where noted.
+Why this order: 1 is frontend-only with no native/Rust/network risk; 2 is a small isolated Rust API addition; 3 adds cross-platform crates and multicast but is well-trodden; 4 needs `WebView` screenshot at exact dot size + device QA on real thermal heads; 5 touches every LAN path plus cert lifecycle and backwards compat. Dependencies are small — 5 benefits from 3 (`tls`+`fp` TXT) and from 4 (one fewer plain-HTTP printer path), otherwise each ships independently.
 
 ---
 
-## 1. Auto discovery of printers and PCs (mDNS)
+## 1. Starter template packs
+
+### Current state
+
+- Every new template starts from one example: `src/lib/templates/defaultTemplate.ts` — `DEFAULT_TEMPLATE_HTML` (shipping label 4×6, 102×152 mm) + `DEFAULT_TEMPLATE_CSS` + `DEFAULT_MOCK_DATA` + `defaultTemplateReadme`. Created via `newTemplateContent(name)` in `Designer.tsx:createNewTemplate` (server-first `createTemplateOnServer`, local fallback). No choice is offered.
+- `docs/ARCHITECTURE.md` §2 mentions templates as HTML+placeholders; `docs/UI_GUIDE.md` Templates row describes Mine/Saved/Community.
+
+### Design
+
+#### Pack catalogue
+
+Add a new module `src/lib/templates/packs/` — one file per pack, each exporting `{ id, name, description, icon, page_w_mm, page_h_mm, html, css, readme, mockData }`. Packs are **bundled code**, not server rows — they work offline and need no migration.
+
+Proposed packs for v1 (5 + blank):
+
+| Pack | Page | Preview | Data shape |
+|------|------|---------|------------|
+| **Receipt** (80 mm roll) | 80×200 mm | Header, items table with `{{#each order.items}}`, subtotal/tax/total, footer | `order.{id,date,cashier,items:{name,qty,price,total},subtotal,tax,discount,total,payment}` |
+| **Delivery Slip** | 80×200 mm or 102×152 mm | From/To blocks, contents list, barcode | Variant of current shipping label, tuned for courier use |
+| **Invoice** (A4) | 210×297 mm | Seller/buyer blocks, line table with totals, due date, payment ref | `seller`, `buyer`, `invoice.{number,date,due,items,subtotal,tax,total,notes}` |
+| **Shipping Label** (4×6) | 102×152 mm | Current `DEFAULT_TEMPLATE_HTML` as-is | `store`, `customer`, `order.{id,tracking,items}` |
+| **Kitchen Ticket** (80 mm) | 80×150 mm | Large order number, items with modifiers, notes, timestamp | `ticket.{number,table,items:{name,qty,mods,note},createdAt}` |
+| **Blank** | 80×200 mm | Minimal body with one `{{message}}` placeholder | `{ message: "Hello" }` |
+
+Each pack's `html` uses Tailwind classes and the same helpers (`{{barcode}}`, `{{currency}}`, `{{date}}`) as real templates — the Designer preview renders them identically. `css` stays `DEFAULT_TEMPLATE_CSS`. `readme` follows `defaultTemplateReadme` shape (What it prints / Data contract / Placeholders / Printer requirements / Changelog) with the pack's own table.
+
+Selection is **exclusive**: one pack per new template. No multi-pack merge.
+
+#### Creator flow
+
+Replace the current "New template" dialog (single name field) with a two-step chooser:
+
+1. **Step 1 — Pick a pack.** Grid of 6 cards (5 packs + Blank), each showing a `PaperThumb`-style thumbnail (scaled HTML preview or a static SVG illustration), name, and one-line description. Cards are keyboard-navigable, `aria-selected`. Default selection: Receipt (most common POS case) or the last-used pack remembered in `localStorage` (`printninja.last_pack`).
+2. **Step 2 — Name it.** Same name field as today (unique check, offline guard). The name default can be hinted from the pack (e.g., "Receipt" → "Receipt", but the user still types it).
+
+On confirm: `newTemplateContent(name, packId)` returns the pack's content instead of the single default. The rest of `createNewTemplate` (server-first `createTemplateOnServer` + local fallback) is untouched — only the content source changes. The mock data for the chosen pack can be auto-inserted as a dataset if the user has no datasets yet (optional, not required for v1).
+
+Backwards compatible: `newTemplateContent(name)` with no `packId` keeps returning the shipping label (existing tests and deep links that call it without a pack still work).
+
+#### Where packs live vs Community
+
+Packs are **starters**, not community templates — they are not published, saved, or synced. They only affect the `New template` action. The Templates → Community tab is unchanged. A future "Save as starter" (team-shared packs) is out of scope.
+
+### Files to touch
+
+- New: `src/lib/templates/packs/index.ts` (catalogue, `getPack(id)`, `PACKS` list), `src/lib/templates/packs/receipt.ts`, `deliverySlip.ts`, `invoice.ts`, `shippingLabel.ts` (refactor existing `DEFAULT_TEMPLATE_HTML` here), `kitchenTicket.ts`, `blank.ts`, plus `packs/__tests__/` if the pack contract is tested.
+- Modify: `src/lib/templates/defaultTemplate.ts` (re-export from packs, keep `DEFAULT_TEMPLATE_HTML` for backwards compat), `src/pages/Designer.tsx` (new chooser dialog, `createNewTemplate(packId)`), `src/components/designer/` maybe new `PackChooser.tsx`, `src/lib/i18n/locales/en.ts`+`ja.ts` (pack names, descriptions, chooser strings), `src/test/` (update the default-template drift test to cover every pack's placeholder-vs-data-contract table).
+- Thumbnails: `src/components/PaperThumb.tsx` already renders a scaled preview — reuse it for pack cards, or use static SVGs if live render is too heavy for the grid.
+
+### Tests
+
+- Unit: every pack's HTML renders without Handlebars errors against its mock data; `compileTemplateCss(pack.html)` succeeds; readme's placeholder table covers every `{{…}}` in the HTML (same drift guard as today, per pack).
+- Frontend: chooser shows 6 cards, selects one, creates a template with that pack's HTML; Blank creates a minimal template; cancelling the chooser creates nothing.
+- e2e: Designer → New → pick Invoice → name → Save → assert the created template's HTML contains the invoice markers.
+
+### Rollout
+
+Independent. No Rust, no server, no schema change. Docs: `docs/UI_GUIDE.md` Designer row and `README.md` "Make a template" section. Add a screenshot of the chooser to the README if desired.
+
+---
+
+## 2. Webhook callbacks (`callback_url`)
+
+### Current state
+
+- `POST /v1/print` accepts `callback_url?: string` in `PrintJobRequest` (`src-tauri/src/api/routes.rs:266`) but **unconditionally rejects it with 400** before any DB work (`routes.rs:383`). Rationale in the comment (P12): *"there is no callback runner, so a caller that relied on one would never learn the outcome."* Test `src-tauri/tests/api_routes.rs:403 callback_url_is_refused_with_400_before_anything_runs` pins this.
+- Polling (`GET /v1/jobs/{id}`, `GET /v1/jobs`, `POST /v1/jobs/{id}/retry`, `DELETE /v1/jobs/{id}`) is the only async completion path. `docs/ARCHITECTURE.md` never mentions webhooks.
+- No `webhooks` table, no runner, no signing.
+- OpenAPI (`src-tauri/src/api/openapi.rs:88/126`) documents `callback_url` as 400.
+
+### Design
+
+Turn `400` into a **best-effort POST** after the job reaches a terminal state. POS systems need "printed" notifications, not another poll loop.
+
+#### Contract
+
+- **Request:** `POST /v1/print` with `callback_url: "https://pos.example.com/hooks/printninja"` (HTTPS only by default; see SSRF below). Any other fields unchanged. `Idempotency-Key` semantics unchanged — a duplicate still returns `duplicate` and **does not** fire a second callback.
+- **Validation (before any DB work, same place the 400 lives today):**
+  - Must be `https://` (configurable strict flag; `http://` allowed only when `PRINTNINJA_CALLBACK_ALLOW_HTTP=1` for on-prem POS inside the LAN).
+  - Host must not be private/loopback/link-local unless `PRINTNINJA_CALLBACK_ALLOW_PRIVATE=1`. Default: **block private** (reuse `is_private_host` from `peer_consume.rs`).
+  - URL length ≤ 2048, scheme+host parse must succeed, no credentials (`user:pass@` rejected).
+  - On validation failure: `400` with `code: callback_url_invalid` and a message naming the reason (same shape as `template_missing` 409).
+- **Delivery:** after `run_print` finishes and the job row is in `success` **or** `failed` (not `queued`/`printing` — `run_print` is synchronous today, so there is no intermediate state to notify about; if a queued worker path is added later, the same dispatch runs on the `printing → terminal` transition in `worker.rs`):
+  - `POST callback_url` with `Content-Type: application/json`, body:
+    ```json
+    {
+      "event": "print.succeeded" | "print.failed",
+      "job_id": "123",
+      "status": "success" | "failed",
+      "printer": "Front Desk",
+      "template": "Receipt",
+      "error": null | "…",
+      "duration_ms": 842,
+      "timestamp": "2026-05-01T12:34:56.789Z",
+      "idempotency_key": "order-1042" | null
+    }
+    ```
+  - Headers: `X-PrintNinja-Event: print.succeeded|print.failed`, `X-PrintNinja-Job-Id: 123`, `User-Agent: PrintNinja/2.5`.
+  - **Signing (recommended):** `X-PrintNinja-Signature: sha256=<hex(hmac_sha256(secret, raw_body))>` where `secret` is per-callback or a global `PRINTNINJA_CALLBACK_SECRET`. POS verifies HMAC to prove the POST came from this PrintNinja. Secret is optional; when absent the header is omitted. Document both.
+- **Reliability:**
+  - **Retries:** 3 attempts with exponential backoff (e.g., 5 s, 25 s, 125 s). Each attempt has a 10 s connect+read timeout. Failures are logged (`warn`) with `job_id`, `callback_url` host (not full URL in logs), `status`, `attempt`, `error`. No infinite retry — a dead POS should not fill the log.
+  - **Execution:** fire-and-forget `tokio::spawn` after the job row is committed, so the `POST /v1/print` response is **not** delayed. The API response still reports `success`/`failed` synchronously as today — the callback is additive, not a replacement.
+  - **No DB queue for v1:** retries live in memory (the spawned task). If the app restarts between attempts, the remaining retries are lost. Acceptable for LAN POS: the POS can still poll `GET /v1/jobs/{id}`. A durable retry table (`callback_deliveries`) is a follow-up if operators ask for it — design leaves room (job row can carry `callback_url`, `callback_attempts`, `callback_last_error`).
+- **Loopback vs LAN:** same auth gate as the print itself (`require_paired_or_local` already ran). A LAN caller that was allowed to print is allowed to set a callback — no extra permission. Loopback callers are always allowed.
+- **OpenAPI:** update `src-tauri/src/api/openapi.rs` — `callback_url` 400 becomes 400 only for invalid URLs; valid URLs produce a job plus a best-effort callback (documented under `POST /v1/print` responses). Add `X-PrintNinja-*` headers to the spec.
+
+#### SSRF hardening
+
+Callbacks make the app fetch an attacker-controlled URL if the POS is compromised or the print was triggered via a deep link / paired phone. Defences:
+
+- Private-IP block by default (above).
+- `http://` blocked by default.
+- URL length cap, no credentials, host allowlist optional (`PRINTNINJA_CALLBACK_ALLOWLIST=pos.example.com,hooks.internal` — when set, only those hosts are allowed).
+- Body size of the callback **response** is ignored (cap 64 KiB, never rendered). The app never follows redirects from the callback POST automatically (single hop only, or 0 with `redirect: manual`).
+- Log redaction: never log the full callback URL with query params (log `host` + `path` truncated).
+
+### Files to touch
+
+- Rust: `src-tauri/src/api/routes.rs` (replace the 400 with validation + dispatch), new `src-tauri/src/api/callback.rs` (validate, sign, `dispatch_callback(job, url)` with retry loop), `src-tauri/src/commands/print.rs` if the worker path needs the same dispatch, `src-tauri/src/api/openapi.rs` (spec), `Cargo.toml` maybe `hmac`+`sha2` if not already present (sha2 already is).
+- Tests: `src-tauri/tests/api_routes.rs` (update the 400 test to assert valid URL succeeds, invalid URL still 400; add `callback_is_dispatched_on_success` with a `wiremock`/`httptest` fake POS that asserts the POST body and optional HMAC), `src-tauri/src/api/callback.rs` unit tests (private-IP block, http block, allowlist, HMAC).
+- Frontend: optional — `src/pages/Automation.tsx` or `ApiExplorer.tsx` show the callback example in the Try-the-API panel. Not required for POS callers (they use `curl`).
+- Docs: `docs/ARCHITECTURE.md` §3 step 8 or §9 (new "Webhooks" subsection), `README.md` Automate it section.
+
+### Rollout
+
+Independent of other features. No schema migration for v1 (in-memory retries). If retries need durability later, migration adds `print_jobs.callback_url`, `callback_attempts`, `callback_last_error` columns. Backwards compatible: omitting `callback_url` behaves exactly as today.
+
+---
+
+## 3. Auto discovery of printers and PCs (mDNS)
 
 ### Current state
 
@@ -86,7 +215,7 @@ Shippable independently. No migration, no schema change. Feature-flagged by `lan
 
 ---
 
-## 2. Direct thermal printing from Android (ESC/POS, ZPL, TSPL)
+## 4. Direct thermal printing from Android (ESC/POS, ZPL, TSPL)
 
 ### Current state
 
@@ -140,135 +269,6 @@ Thermal heads are typically 203 dpi (8 dots/mm). Reuse `dots_for_mm` and the `Pr
 ### Rollout
 
 Shippable after discovery (or before — no hard dependency). No schema migration. Gate by capability: `canRaster = Android && webViewScreenshotAvailable`. If the probe says no, the UI still shows PDF only and `need_peer` keeps borrowing a PC — no behaviour change for unsupported devices.
-
----
-
-## 3. Webhook callbacks (`callback_url`)
-
-### Current state
-
-- `POST /v1/print` accepts `callback_url?: string` in `PrintJobRequest` (`src-tauri/src/api/routes.rs:266`) but **unconditionally rejects it with 400** before any DB work (`routes.rs:383`). Rationale in the comment (P12): *"there is no callback runner, so a caller that relied on one would never learn the outcome."* Test `src-tauri/tests/api_routes.rs:403 callback_url_is_refused_with_400_before_anything_runs` pins this.
-- Polling (`GET /v1/jobs/{id}`, `GET /v1/jobs`, `POST /v1/jobs/{id}/retry`, `DELETE /v1/jobs/{id}`) is the only async completion path. `docs/ARCHITECTURE.md` never mentions webhooks.
-- No `webhooks` table, no runner, no signing.
-- OpenAPI (`src-tauri/src/api/openapi.rs:88/126`) documents `callback_url` as 400.
-
-### Design
-
-Turn `400` into a **best-effort POST** after the job reaches a terminal state. POS systems need "printed" notifications, not another poll loop.
-
-#### Contract
-
-- **Request:** `POST /v1/print` with `callback_url: "https://pos.example.com/hooks/printninja"` (HTTPS only by default; see SSRF below). Any other fields unchanged. `Idempotency-Key` semantics unchanged — a duplicate still returns `duplicate` and **does not** fire a second callback.
-- **Validation (before any DB work, same place the 400 lives today):**
-  - Must be `https://` (configurable strict flag; `http://` allowed only when `PRINTNINJA_CALLBACK_ALLOW_HTTP=1` for on-prem POS inside the LAN).
-  - Host must not be private/loopback/link-local unless `PRINTNINJA_CALLBACK_ALLOW_PRIVATE=1`. Default: **block private** (reuse `is_private_host` from `peer_consume.rs`).
-  - URL length ≤ 2048, scheme+host parse must succeed, no credentials (`user:pass@` rejected).
-  - On validation failure: `400` with `code: callback_url_invalid` and a message naming the reason (same shape as `template_missing` 409).
-- **Delivery:** after `run_print` finishes and the job row is in `success` **or** `failed` (not `queued`/`printing` — `run_print` is synchronous today, so there is no intermediate state to notify about; if a queued worker path is added later, the same dispatch runs on the `printing → terminal` transition in `worker.rs`):
-  - `POST callback_url` with `Content-Type: application/json`, body:
-    ```json
-    {
-      "event": "print.succeeded" | "print.failed",
-      "job_id": "123",
-      "status": "success" | "failed",
-      "printer": "Front Desk",
-      "template": "Receipt",
-      "error": null | "…",
-      "duration_ms": 842,
-      "timestamp": "2026-05-01T12:34:56.789Z",
-      "idempotency_key": "order-1042" | null
-    }
-    ```
-  - Headers: `X-PrintNinja-Event: print.succeeded|print.failed`, `X-PrintNinja-Job-Id: 123`, `User-Agent: PrintNinja/2.5`.
-  - **Signing (recommended):** `X-PrintNinja-Signature: sha256=<hex(hmac_sha256(secret, raw_body))>` where `secret` is per-callback or a global `PRINTNINJA_CALLBACK_SECRET`. POS verifies HMAC to prove the POST came from this PrintNinja. Secret is optional; when absent the header is omitted. Document both.
-- **Reliability:**
-  - **Retries:** 3 attempts with exponential backoff (e.g., 5 s, 25 s, 125 s). Each attempt has a 10 s connect+read timeout. Failures are logged (`warn`) with `job_id`, `callback_url` host (not full URL in logs), `status`, `attempt`, `error`. No infinite retry — a dead POS should not fill the log.
-  - **Execution:** fire-and-forget `tokio::spawn` after the job row is committed, so the `POST /v1/print` response is **not** delayed. The API response still reports `success`/`failed` synchronously as today — the callback is additive, not a replacement.
-  - **No DB queue for v1:** retries live in memory (the spawned task). If the app restarts between attempts, the remaining retries are lost. Acceptable for LAN POS: the POS can still poll `GET /v1/jobs/{id}`. A durable retry table (`callback_deliveries`) is a follow-up if operators ask for it — design leaves room (job row can carry `callback_url`, `callback_attempts`, `callback_last_error`).
-- **Loopback vs LAN:** same auth gate as the print itself (`require_paired_or_local` already ran). A LAN caller that was allowed to print is allowed to set a callback — no extra permission. Loopback callers are always allowed.
-- **OpenAPI:** update `src-tauri/src/api/openapi.rs` — `callback_url` 400 becomes 400 only for invalid URLs; valid URLs produce a job plus a best-effort callback (documented under `POST /v1/print` responses). Add `X-PrintNinja-*` headers to the spec.
-
-#### SSRF hardening
-
-Callbacks make the app fetch an attacker-controlled URL if the POS is compromised or the print was triggered via a deep link / paired phone. Defences:
-
-- Private-IP block by default (above).
-- `http://` blocked by default.
-- URL length cap, no credentials, host allowlist optional (`PRINTNINJA_CALLBACK_ALLOWLIST=pos.example.com,hooks.internal` — when set, only those hosts are allowed).
-- Body size of the callback **response** is ignored (cap 64 KiB, never rendered). The app never follows redirects from the callback POST automatically (single hop only, or 0 with `redirect: manual`).
-- Log redaction: never log the full callback URL with query params (log `host` + `path` truncated).
-
-### Files to touch
-
-- Rust: `src-tauri/src/api/routes.rs` (replace the 400 with validation + dispatch), new `src-tauri/src/api/callback.rs` (validate, sign, `dispatch_callback(job, url)` with retry loop), `src-tauri/src/commands/print.rs` if the worker path needs the same dispatch, `src-tauri/src/api/openapi.rs` (spec), `Cargo.toml` maybe `hmac`+`sha2` if not already present (sha2 already is).
-- Tests: `src-tauri/tests/api_routes.rs` (update the 400 test to assert valid URL succeeds, invalid URL still 400; add `callback_is_dispatched_on_success` with a `wiremock`/`httptest` fake POS that asserts the POST body and optional HMAC), `src-tauri/src/api/callback.rs` unit tests (private-IP block, http block, allowlist, HMAC).
-- Frontend: optional — `src/pages/Automation.tsx` or `ApiExplorer.tsx` show the callback example in the Try-the-API panel. Not required for POS callers (they use `curl`).
-- Docs: `docs/ARCHITECTURE.md` §3 step 8 or §9 (new "Webhooks" subsection), `README.md` Automate it section.
-
-### Rollout
-
-Independent of other features. No schema migration for v1 (in-memory retries). If retries need durability later, migration adds `print_jobs.callback_url`, `callback_attempts`, `callback_last_error` columns. Backwards compatible: omitting `callback_url` behaves exactly as today.
-
----
-
-## 4. Starter template packs
-
-### Current state
-
-- Every new template starts from one example: `src/lib/templates/defaultTemplate.ts` — `DEFAULT_TEMPLATE_HTML` (shipping label 4×6, 102×152 mm) + `DEFAULT_TEMPLATE_CSS` + `DEFAULT_MOCK_DATA` + `defaultTemplateReadme`. Created via `newTemplateContent(name)` in `Designer.tsx:createNewTemplate` (server-first `createTemplateOnServer`, local fallback). No choice is offered.
-- `docs/ARCHITECTURE.md` §2 mentions templates as HTML+placeholders; `docs/UI_GUIDE.md` Templates row describes Mine/Saved/Community.
-
-### Design
-
-#### Pack catalogue
-
-Add a new module `src/lib/templates/packs/` — one file per pack, each exporting `{ id, name, description, icon, page_w_mm, page_h_mm, html, css, readme, mockData }`. Packs are **bundled code**, not server rows — they work offline and need no migration.
-
-Proposed packs for v1 (5 + blank):
-
-| Pack | Page | Preview | Data shape |
-|------|------|---------|------------|
-| **Receipt** (80 mm roll) | 80×200 mm | Header, items table with `{{#each order.items}}`, subtotal/tax/total, footer | `order.{id,date,cashier,items:{name,qty,price,total},subtotal,tax,discount,total,payment}` |
-| **Delivery Slip** | 80×200 mm or 102×152 mm | From/To blocks, contents list, barcode | Variant of current shipping label, tuned for courier use |
-| **Invoice** (A4) | 210×297 mm | Seller/buyer blocks, line table with totals, due date, payment ref | `seller`, `buyer`, `invoice.{number,date,due,items,subtotal,tax,total,notes}` |
-| **Shipping Label** (4×6) | 102×152 mm | Current `DEFAULT_TEMPLATE_HTML` as-is | `store`, `customer`, `order.{id,tracking,items}` |
-| **Kitchen Ticket** (80 mm) | 80×150 mm | Large order number, items with modifiers, notes, timestamp | `ticket.{number,table,items:{name,qty,mods,note},createdAt}` |
-| **Blank** | 80×200 mm | Minimal body with one `{{message}}` placeholder | `{ message: "Hello" }` |
-
-Each pack's `html` uses Tailwind classes and the same helpers (`{{barcode}}`, `{{currency}}`, `{{date}}`) as real templates — the Designer preview renders them identically. `css` stays `DEFAULT_TEMPLATE_CSS`. `readme` follows `defaultTemplateReadme` shape (What it prints / Data contract / Placeholders / Printer requirements / Changelog) with the pack's own table.
-
-Selection is **exclusive**: one pack per new template. No multi-pack merge.
-
-#### Creator flow
-
-Replace the current "New template" dialog (single name field) with a two-step chooser:
-
-1. **Step 1 — Pick a pack.** Grid of 6 cards (5 packs + Blank), each showing a `PaperThumb`-style thumbnail (scaled HTML preview or a static SVG illustration), name, and one-line description. Cards are keyboard-navigable, `aria-selected`. Default selection: Receipt (most common POS case) or the last-used pack remembered in `localStorage` (`printninja.last_pack`).
-2. **Step 2 — Name it.** Same name field as today (unique check, offline guard). The name default can be hinted from the pack (e.g., "Receipt" → "Receipt", but the user still types it).
-
-On confirm: `newTemplateContent(name, packId)` returns the pack's content instead of the single default. The rest of `createNewTemplate` (server-first `createTemplateOnServer` + local fallback) is untouched — only the content source changes. The mock data for the chosen pack can be auto-inserted as a dataset if the user has no datasets yet (optional, not required for v1).
-
-Backwards compatible: `newTemplateContent(name)` with no `packId` keeps returning the shipping label (existing tests and deep links that call it without a pack still work).
-
-#### Where packs live vs Community
-
-Packs are **starters**, not community templates — they are not published, saved, or synced. They only affect the `New template` action. The Templates → Community tab is unchanged. A future "Save as starter" (team-shared packs) is out of scope.
-
-### Files to touch
-
-- New: `src/lib/templates/packs/index.ts` (catalogue, `getPack(id)`, `PACKS` list), `src/lib/templates/packs/receipt.ts`, `deliverySlip.ts`, `invoice.ts`, `shippingLabel.ts` (refactor existing `DEFAULT_TEMPLATE_HTML` here), `kitchenTicket.ts`, `blank.ts`, plus `packs/__tests__/` if the pack contract is tested.
-- Modify: `src/lib/templates/defaultTemplate.ts` (re-export from packs, keep `DEFAULT_TEMPLATE_HTML` for backwards compat), `src/pages/Designer.tsx` (new chooser dialog, `createNewTemplate(packId)`), `src/components/designer/` maybe new `PackChooser.tsx`, `src/lib/i18n/locales/en.ts`+`ja.ts` (pack names, descriptions, chooser strings), `src/test/` (update the default-template drift test to cover every pack's placeholder-vs-data-contract table).
-- Thumbnails: `src/components/PaperThumb.tsx` already renders a scaled preview — reuse it for pack cards, or use static SVGs if live render is too heavy for the grid.
-
-### Tests
-
-- Unit: every pack's HTML renders without Handlebars errors against its mock data; `compileTemplateCss(pack.html)` succeeds; readme's placeholder table covers every `{{…}}` in the HTML (same drift guard as today, per pack).
-- Frontend: chooser shows 6 cards, selects one, creates a template with that pack's HTML; Blank creates a minimal template; cancelling the chooser creates nothing.
-- e2e: Designer → New → pick Invoice → name → Save → assert the created template's HTML contains the invoice markers.
-
-### Rollout
-
-Independent. No Rust, no server, no schema change. Docs: `docs/UI_GUIDE.md` Designer row and `README.md` "Make a template" section. Add a screenshot of the chooser to the README if desired.
 
 ---
 
@@ -361,21 +361,14 @@ Bundle a Noise_IK handshake (or `snow` crate) between the desktop and phone, wit
 ### Ordering
 
 ```
-Phase 1 (independent, any order):
-  1. Starter template packs        — frontend only, no Rust, fastest to ship
-  3. Webhook callbacks             — Rust API only, no UI, POS unblocked
-
-Phase 2 (after Phase 1 or in parallel):
-  2. Direct thermal from Android   — Kotlin + Rust render, needs device QA
-  1. Auto discovery (mDNS)         — Rust + Kotlin, new crates, needs LAN QA
-
-Phase 3 (hardest, after 1+2):
-  5. Encrypted LAN traffic         — touches every LAN path, needs cert lifecycle QA
-                                  — depends on (1) for mDNS `tls`+`fp` TXT
-                                  — benefits from (2) being done (one fewer plain-HTTP printer path)
+1. Starter template packs        — ~2–3d, frontend-only, no native/Rust/network  → ship first
+2. Webhook callbacks             — ~2–4d, small isolated Rust API (SSRF hardening is the risk)
+3. Auto discovery (mDNS)         — ~4–7d, cross-platform crates + multicast, LAN QA
+4. Direct thermal from Android   — ~5–8d, WebView screenshot at exact dot size, device QA
+5. Encrypted LAN traffic         — ~2–3w, every LAN path + cert lifecycle + backwards compat (hardest)
 ```
 
-If the POS webhook is urgent, ship (3) first. If the template chooser is needed for a demo, ship (4) first — it has no dependencies.
+5 benefits from 3 (`tls`+`fp` TXT) and from 4 (one fewer plain-HTTP printer path); otherwise each ships independently. If the POS webhook is urgent, ship 2 first. If the template chooser is needed for a demo, ship 1 first — it has no dependencies.
 
 ### Versioning and branching
 
@@ -415,60 +408,60 @@ If the POS webhook is urgent, ship (3) first. If the template chooser is needed 
 ## Appendix: file map
 
 ```
-docs/PLAN-feature-pack.md          ← this plan
+docs/PLAN.md                         ← this plan
 
 src-tauri/
   src/
     discovery/
       mod.rs
-      mdns_windows.rs              (1)
-      mdns_linux.rs                (1)
-      types.rs                     (1)
+      mdns_windows.rs              (3)
+      mdns_linux.rs                (3)
+      types.rs                     (3)
     api/
-      callback.rs                  (3)
-      routes.rs                    (3)
-      openapi.rs                   (3)
+      callback.rs                  (2)
+      routes.rs                    (2)
+      openapi.rs                   (2)
       mod.rs                       (5 cert store)
     commands/
-      api.rs                       (1,5)
-      printer.rs                   (1)
-      print.rs                     (2 gate)
+      api.rs                       (3,5)
+      printer.rs                   (3)
+      print.rs                     (4 gate)
     render/
-      mod.rs                       (2)
+      mod.rs                       (4)
     transport/
       mod.rs                       (5 ipps)
     db/
       schema.sql                   (5 pins)
-  Cargo.toml                       (1,3,5)
+  Cargo.toml                       (2,3,5)
 
 plugins/tauri-plugin-android-print/
   android/src/main/java/…/
     AndroidPrintPlugin.kt          (2,5)
-    MdnsDiscovery.kt               (1 reuse)
-  src/mobile.rs                    (1,2)
+    MdnsDiscovery.kt               (3 reuse)
+  src/mobile.rs                    (3,4)
 
 src/
   lib/
     templates/
       packs/
-        index.ts                   (4)
-        receipt.ts                 (4)
-        deliverySlip.ts            (4)
-        invoice.ts                 (4)
-        shippingLabel.ts           (4)
-        kitchenTicket.ts           (4)
-        blank.ts                   (4)
-      defaultTemplate.ts           (4 refactor)
-    agent/commands.ts              (1,5)
+        index.ts                   (1)
+        receipt.ts                 (1)
+        deliverySlip.ts            (1)
+        invoice.ts                 (1)
+        shippingLabel.ts           (1)
+        kitchenTicket.ts           (1)
+        blank.ts                   (1)
+      defaultTemplate.ts           (1 refactor)
+    agent/commands.ts              (3,5)
     pairing.ts                     (5)
   pages/
-    Designer.tsx                   (4)
-    PrinterSetup.tsx               (1,2)
-    Automation.tsx                 (3,5)
+    Designer.tsx                   (1)
+    PrinterSetup.tsx               (3,4)
+    Automation.tsx                 (2,5)
   components/
-    DevicesCard.tsx                (1,5)
-    designer/PackChooser.tsx       (4)
+    DevicesCard.tsx                (3,5)
+    designer/PackChooser.tsx       (1)
 
-dev-printer/server.cjs             (1)
+dev-printer/server.cjs             (3)
 ```
 

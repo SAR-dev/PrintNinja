@@ -39,6 +39,8 @@ import type {
   SyncStateRow,
   SyncedDatasetRow,
   SystemPrinterRow,
+  DiscoveredPrinter,
+  DiscoveredPeer,
   TemplateRow,
   UploadFontReq,
 } from "./types";
@@ -143,6 +145,8 @@ export interface AgentCommands {
   test_printer: [{ id: number }, null];
   enumerate_system_printers: [{}, SystemPrinterRow[]];
   discover_network_printers: [{ timeout_secs?: number }, SystemPrinterRow[]];
+  discover_network_printers_mdns: [{ timeout_secs?: number }, DiscoveredPrinter[]];
+  discover_peers_mdns: [{ timeout_secs?: number }, DiscoveredPeer[]];
   // Printing
   print_html: [{ req: PrintHtmlReq }, PrintResponse];
   spike_test_print: [{}, PrintResponse];

@@ -193,6 +193,34 @@ function main() {
     zeroconf: opts.mdns,
   });
 
+  // Second fake advertisement for peer discovery: _printninja._tcp so CI
+  // can test browse_peers without real hardware. Uses the same bonjour
+  // stack as ipp-printer's zeroconf.
+  let printNinjaService = null;
+  let bonjourInstance = null;
+  if (opts.mdns) {
+    try {
+      const bonjour = require("bonjour")();
+      bonjourInstance = bonjour;
+      printNinjaService = bonjour.publish({
+        name: "PrintNinja-Test-PC",
+        type: "printninja",
+        protocol: "tcp",
+        port: 17717,
+        txt: {
+          prot: "1",
+          id: "dev-provider-id",
+          port: "17717",
+          plat: "linux",
+          ver: "2.5.0",
+        },
+      });
+      console.log("  mDNS:               advertising _printninja._tcp (PrintNinja-Test-PC)");
+    } catch (e) {
+      console.warn("  mDNS:               _printninja._tcp advertise failed:", e.message);
+    }
+  }
+
   // Report the simulated fault from Get-Printer-Attributes.
   if (opts.fault) {
     const reason = fault.reason ?? opts.fault;
@@ -268,6 +296,8 @@ function main() {
 
   const shutdown = () => {
     console.log("\nshutting down");
+    if (printNinjaService) try { printNinjaService.stop(() => {}); } catch {}
+    if (bonjourInstance) try { bonjourInstance.destroy(); } catch {}
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 500).unref();
   };

@@ -52,6 +52,35 @@ fn bool_from_settings(db: &DbState, key: &str, default: bool) -> bool {
         .unwrap_or(default)
 }
 
+/// Refresh mDNS `_printninja._tcp` advertisement.
+///
+/// Advertises when the API server is running on the LAN (reachable from
+/// other devices). Stops otherwise. Called after every state change that
+/// affects reachability: `launch_server`, `stop_api_server`, and
+/// `set_render_sharing`.
+fn refresh_mdns_advertise(db: &DbState) {
+    let running = RUNNING.load(Ordering::Relaxed);
+    let (lan, port, provider_id) = match db.lock() {
+        Ok(g) => {
+            let conn = g.connection();
+            let lan = bool_from_conn(conn, "api_lan_access", false);
+            let port = port_from_conn(conn, "api_port", 17717);
+            let provider_id = crate::db::ensure_provider_id(conn).unwrap_or_default();
+            (lan, port, provider_id)
+        }
+        Err(_) => return,
+    };
+    if running && lan {
+        let platform = std::env::consts::OS;
+        let version = env!("CARGO_PKG_VERSION");
+        if let Err(e) = crate::discovery::start_advertise(port, &provider_id, platform, version) {
+            tracing::warn!("mDNS advertise failed: {e}");
+        }
+    } else {
+        crate::discovery::stop_advertise();
+    }
+}
+
 /// Whether the API server starts with the app (Settings → API).
 /// Opt-in, off by default — an open port must never be a surprise.
 pub fn api_autostart_enabled(conn: &rusqlite::Connection) -> bool {
@@ -256,6 +285,8 @@ pub async fn launch_server(
     // Pin the live address in the Android notification right away: the
     // spawned task below has not bound yet, but the listener already has.
     notify_android_api_state(&app, true, Some(&addr));
+    // Advertise _printninja._tcp while LAN is reachable (mDNS is link-local, no internet exposure)
+    refresh_mdns_advertise(&db);
     tauri::async_runtime::spawn(async move {
         tracing::info!("API server listening on {}", log_addr);
 
@@ -274,6 +305,8 @@ pub async fn launch_server(
 
         RUNNING.store(false, Ordering::Relaxed);
         tracing::info!("API server stopped");
+        // Stop mDNS advertise (link-local, no longer reachable)
+        crate::discovery::stop_advertise();
 
         // Drop the address from the pinned notification: reached on an
         // explicit stop and on a listener error alike, since both end
@@ -508,6 +541,8 @@ pub async fn stop_api_server() -> AppResult<()> {
         }
         tokio::time::sleep(std::time::Duration::from_millis(STOP_WAIT_STEP_MS)).await;
     }
+    // Ensure mDNS advertise is cleaned even if the server task already did
+    crate::discovery::stop_advertise();
     Ok(())
 }
 
@@ -569,6 +604,8 @@ pub fn set_render_sharing(db: State<DbState>, enabled: bool) -> AppResult<String
         "render_share_enabled",
         if enabled { "true" } else { "false" },
     )?;
+    drop(guard);
+    refresh_mdns_advertise(&db);
     Ok(String::new())
 }
 

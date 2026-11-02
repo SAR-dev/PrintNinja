@@ -12,6 +12,8 @@ use tower::ServiceExt;
 
 type Db = Arc<Mutex<Database>>;
 
+static CALLBACK_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn setup() -> Db {
     // A UUID, not a timestamp: Windows' clock is coarse enough that parallel
     // tests could get the same file name and share (and lock) one SQLite DB.
@@ -400,19 +402,25 @@ async fn two_simultaneous_requests_with_one_key_print_once() {
     );
 }
 
-/// P12: `callback_url` is accepted-and-ignored nowhere — there is no
-/// callback runner, so a caller that relied on one would never learn the
-/// outcome. Refused with 400 before any DB work: a request the server will
-/// not honour creates no job.
+/// `callback_url` validation: invalid URLs are refused with 400+code before
+/// any DB work; valid https URLs are accepted (best-effort callback after
+/// terminal state, not a silent drop).
 #[tokio::test]
 async fn callback_url_is_refused_with_400_before_anything_runs() {
+    let _env_guard = CALLBACK_ENV_LOCK.lock().unwrap();
+    // Ensure clean env for this validation test
+    std::env::remove_var("PRINTNINJA_CALLBACK_ALLOW_HTTP");
+    std::env::remove_var("PRINTNINJA_CALLBACK_ALLOW_PRIVATE");
+    std::env::remove_var("PRINTNINJA_CALLBACK_ALLOWLIST");
+    std::env::remove_var("PRINTNINJA_CALLBACK_SECRET");
     let db = setup();
     seed_printers_and_templates(&db);
 
-    let body = serde_json::json!({
+    // Invalid: http (https only by default) must be refused with code callback_url_invalid and create no job.
+    let bad_body = serde_json::json!({
         "template": "Receipt",
         "printer": "Desk",
-        "callback_url": "https://example.com/done"
+        "callback_url": "http://example.com/done"
     })
     .to_string();
 
@@ -423,7 +431,7 @@ async fn callback_url_is_refused_with_400_before_anything_runs() {
                 .method("POST")
                 .uri("/v1/print")
                 .header("content-type", "application/json")
-                .body(axum::body::Body::from(body))
+                .body(axum::body::Body::from(bad_body))
                 .unwrap(),
         )
         .await
@@ -431,9 +439,8 @@ async fn callback_url_is_refused_with_400_before_anything_runs() {
     assert_eq!(
         res.status(),
         StatusCode::BAD_REQUEST,
-        "callback_url must be refused, not silently dropped"
+        "invalid callback_url must be refused"
     );
-
     let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
         .await
         .unwrap();
@@ -442,13 +449,243 @@ async fn callback_url_is_refused_with_400_before_anything_runs() {
         msg.contains("callback_url"),
         "the refusal names the field: {msg}"
     );
-
+    assert!(
+        msg.contains("callback_url_invalid"),
+        "the refusal carries code callback_url_invalid: {msg}"
+    );
     let guard = db.lock().unwrap();
     let n: i64 = guard
         .connection()
         .query_row("SELECT COUNT(*) FROM print_jobs", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(n, 0, "nothing runs for a refused request");
+    assert_eq!(n, 0, "nothing runs for a refused invalid callback_url");
+
+    // Valid https URL must be accepted (not 400) and must create a job row.
+    // The print itself will fail on CI (no spooler) but that is a 500 with a row, not a 400.
+    drop(guard);
+    let good_body = serde_json::json!({
+        "template": "Receipt",
+        "printer": "Desk",
+        "callback_url": "https://example.com/done"
+    })
+    .to_string();
+    let app = router(&db);
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/print")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(good_body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_ne!(
+        res.status(),
+        StatusCode::BAD_REQUEST,
+        "valid https callback_url must not be 400"
+    );
+    let guard = db.lock().unwrap();
+    let n: i64 = guard
+        .connection()
+        .query_row("SELECT COUNT(*) FROM print_jobs", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 1, "valid callback_url must create a job");
+}
+
+#[tokio::test]
+async fn callback_url_private_and_credentials_are_rejected() {
+    let _env_guard = CALLBACK_ENV_LOCK.lock().unwrap();
+    std::env::remove_var("PRINTNINJA_CALLBACK_ALLOW_HTTP");
+    std::env::remove_var("PRINTNINJA_CALLBACK_ALLOW_PRIVATE");
+    std::env::remove_var("PRINTNINJA_CALLBACK_ALLOWLIST");
+    std::env::remove_var("PRINTNINJA_CALLBACK_SECRET");
+    let db = setup();
+    seed_printers_and_templates(&db);
+
+    for (name, url) in [
+        ("private", "https://192.168.1.10/done"),
+        ("credentials", "https://user:pass@example.com/done"),
+        ("too_long", &format!("https://example.com/{}", "a".repeat(2048))),
+    ] {
+        let body = serde_json::json!({
+            "template": "Receipt",
+            "printer": "Desk",
+            "callback_url": url
+        })
+        .to_string();
+        let app = router(&db);
+        let res = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/print")
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            res.status(),
+            StatusCode::BAD_REQUEST,
+            "case {name} with url {url} must be 400"
+        );
+        let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let msg = String::from_utf8_lossy(&bytes);
+        assert!(msg.contains("callback_url_invalid"), "case {name}: {msg}");
+    }
+}
+
+#[tokio::test]
+async fn callback_is_dispatched_on_success_or_failed_but_not_on_duplicate() {
+    use std::sync::{Arc, Mutex as StdMutex};
+    let _env_guard = CALLBACK_ENV_LOCK.lock().unwrap();
+    // Allow http + private for the local mock server
+    std::env::set_var("PRINTNINJA_CALLBACK_ALLOW_HTTP", "1");
+    std::env::set_var("PRINTNINJA_CALLBACK_ALLOW_PRIVATE", "1");
+    std::env::set_var("PRINTNINJA_CALLBACK_SECRET", "test-secret-123");
+    std::env::remove_var("PRINTNINJA_CALLBACK_ALLOWLIST");
+
+    let received: Arc<StdMutex<Vec<(axum::http::HeaderMap, Vec<u8>)>>> =
+        Arc::new(StdMutex::new(Vec::new()));
+    let received_clone = received.clone();
+
+    // Mock POS server - captures raw bytes as Vec<u8> via String extractor to avoid extra crate
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let mock_app = axum::Router::new().route(
+        "/hook",
+        axum::routing::post(move |headers: axum::http::HeaderMap, body: String| {
+            let received_clone = received_clone.clone();
+            async move {
+                received_clone
+                    .lock()
+                    .unwrap()
+                    .push((headers, body.into_bytes()));
+                axum::http::StatusCode::OK
+            }
+        }),
+    );
+    tokio::spawn(async move {
+        axum::serve(listener, mock_app).await.unwrap();
+    });
+
+    let db = setup();
+    seed_printers_and_templates(&db);
+    let callback_url = format!("http://127.0.0.1:{port}/hook");
+
+    // First print with callback - should dispatch (even though print fails on CI, it still reaches terminal failed state)
+    let body = serde_json::json!({
+        "template": "Receipt",
+        "printer": "Desk",
+        "callback_url": callback_url
+    })
+    .to_string();
+
+    let app = router(&db);
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/print")
+                .header("content-type", "application/json")
+                .header("idempotency-key", "cb-test-1")
+                .body(axum::body::Body::from(body.clone()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // Could be 500 (print failed) or 200 (if somehow succeeded) - either is not 400
+    assert_ne!(res.status(), StatusCode::BAD_REQUEST);
+
+    // Wait for the spawned callback (first attempt is immediate, plus a bit for the print pipeline)
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+    let count = received.lock().unwrap().len();
+    assert_eq!(count, 1, "callback must be dispatched once (got {count})");
+
+    // Validate headers and body of the dispatched callback
+    {
+        let guard = received.lock().unwrap();
+        let (headers, body) = &guard[0];
+        let event = headers
+            .get("x-printninja-event")
+            .expect("X-PrintNinja-Event")
+            .to_str()
+            .unwrap();
+        assert!(
+            event == "print.succeeded" || event == "print.failed",
+            "event must be print.succeeded or print.failed, got {event}"
+        );
+        let job_id = headers
+            .get("x-printninja-job-id")
+            .expect("X-PrintNinja-Job-Id")
+            .to_str()
+            .unwrap();
+        assert!(!job_id.is_empty(), "job_id header present");
+        let ua = headers.get("user-agent").unwrap().to_str().unwrap();
+        assert_eq!(ua, "PrintNinja/2.5");
+        // HMAC signature when secret set
+        let sig = headers
+            .get("x-printninja-signature")
+            .expect("X-PrintNinja-Signature")
+            .to_str()
+            .unwrap();
+        assert!(sig.starts_with("sha256="), "signature format {sig}");
+        let sig_hex = &sig["sha256=".len()..];
+        assert_eq!(sig_hex.len(), 64, "sha256 hex length");
+        // Verify HMAC matches body
+        let expected =
+            printninja_lib::api::callback::hmac_sha256_hex("test-secret-123", body);
+        assert_eq!(sig_hex, expected, "hmac must match body");
+
+        let json: serde_json::Value = serde_json::from_slice(body).unwrap();
+        assert_eq!(json["job_id"].as_str().unwrap(), job_id);
+        assert!(json["printer"].as_str().is_some());
+        assert!(json["timestamp"].is_string());
+        assert_eq!(json["idempotency_key"].as_str().unwrap(), "cb-test-1");
+        // event/status coherence
+        if event == "print.succeeded" {
+            assert_eq!(json["status"], "success");
+        } else {
+            assert_eq!(json["status"], "failed");
+        }
+    }
+
+    // Duplicate with same idempotency key must NOT fire a second callback
+    let app = router(&db);
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/print")
+                .header("content-type", "application/json")
+                .header("idempotency-key", "cb-test-1")
+                .body(axum::body::Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let dup_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let dup_json: serde_json::Value = serde_json::from_slice(&dup_bytes).unwrap();
+    assert_eq!(dup_json["status"], "duplicate");
+
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    let count_after = received.lock().unwrap().len();
+    assert_eq!(
+        count_after, 1,
+        "duplicate must not dispatch a second callback (still {count_after})"
+    );
+
+    // Cleanup env vars for other tests
+    std::env::remove_var("PRINTNINJA_CALLBACK_ALLOW_HTTP");
+    std::env::remove_var("PRINTNINJA_CALLBACK_ALLOW_PRIVATE");
+    std::env::remove_var("PRINTNINJA_CALLBACK_SECRET");
 }
 
 /// P12's `data` half: the handler treats `data` as optional, so a print

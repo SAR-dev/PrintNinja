@@ -86,6 +86,7 @@ import {
   NEW_TEMPLATE_PAGE_H_MM,
   newTemplateContent,
 } from "@/lib/templates/defaultTemplate";
+import { PackChooser } from "@/components/designer/PackChooser";
 import { useCompiledCss } from "@/lib/templates/useCompiledCss";
 import { listTemplates } from "@/lib/templates/listTemplates";
 import { formatCss, formatHtml } from "@/lib/utils/format";
@@ -128,6 +129,26 @@ export function DesignerPage() {
   const [creatingTemplate, setCreatingTemplate] = useState(false);
   // Name problems show under the field, not as a toast.
   const [newNameError, setNewNameError] = useState("");
+  const [newTemplatePackId, setNewTemplatePackId] = useState(() => {
+    try {
+      return localStorage.getItem("printninja.last_pack") || "receipt";
+    } catch {
+      return "receipt";
+    }
+  });
+  const [newTemplateStep, setNewTemplateStep] = useState<"pack" | "name">("pack");
+  const openNewTemplateDialog = useCallback(() => {
+    try {
+      const last = localStorage.getItem("printninja.last_pack");
+      if (last) setNewTemplatePackId(last);
+      else setNewTemplatePackId("receipt");
+    } catch {
+      setNewTemplatePackId("receipt");
+    }
+    setNewTemplateStep("pack");
+    setNewNameError("");
+    setShowNewTemplateDialog(true);
+  }, []);
   const [htmlCode, setHtmlCode] = useState(DEFAULT_TEMPLATE_HTML);
   const [cssCode, setCssCode] = useState(DEFAULT_TEMPLATE_CSS);
   // No template exists until one is opened or made: an empty Designer is
@@ -728,7 +749,12 @@ export function DesignerPage() {
     let keepDialogOpen = false;
     setCreatingTemplate(true);
     try {
-      const start = newTemplateContent(name);
+      const start = newTemplateContent(name, newTemplatePackId);
+      try {
+        localStorage.setItem("printninja.last_pack", newTemplatePackId);
+      } catch {
+        /* ignore */
+      }
       const created = await createTemplateOnServer({
         name,
         page_w_mm: start.page_w_mm,
@@ -741,8 +767,8 @@ export function DesignerPage() {
       const tpl = {
         id: created.id,
         name: created.name,
-        html: DEFAULT_TEMPLATE_HTML,
-        css: DEFAULT_TEMPLATE_CSS,
+        html: start.html,
+        css: start.css,
         page_w_mm: created.page_w_mm,
         page_h_mm: created.page_h_mm,
         orientation: created.orientation,
@@ -765,7 +791,12 @@ export function DesignerPage() {
       const id = templates.length
         ? Math.max(...templates.map((t) => t.id)) + 1
         : 1;
-      const start = newTemplateContent(name);
+      const start = newTemplateContent(name, newTemplatePackId);
+      try {
+        localStorage.setItem("printninja.last_pack", newTemplatePackId);
+      } catch {
+        /* ignore */
+      }
       const tpl = {
         id,
         name,
@@ -1018,7 +1049,7 @@ export function DesignerPage() {
     currentTemplateId,
     loadTemplate: (tpl: (typeof templates)[number]) =>
       unlessDiscarding(() => loadTemplate(tpl)),
-    onNew: () => setShowNewTemplateDialog(true),
+    onNew: () => openNewTemplateDialog(),
     templateName,
     setTemplateName,
     pageWidth,
@@ -1094,7 +1125,7 @@ export function DesignerPage() {
             dirty={dirty}
             layout={layout}
             onLayoutChange={setLayout}
-            onNew={() => unlessDiscarding(() => setShowNewTemplateDialog(true))}
+            onNew={() => unlessDiscarding(() => openNewTemplateDialog())}
             onSave={() => void handleSave()}
             saveDisabled={offline || isReadOnly({ origin }) || !!nameError}
             saveTitle={
@@ -1115,7 +1146,7 @@ export function DesignerPage() {
           description={t("pages.designer")}
         >
           <DesignerOverflowMenu
-            onNew={() => setShowNewTemplateDialog(true)}
+            onNew={() => openNewTemplateDialog()}
             published={!!remoteId && !!publishedAt}
             remoteId={remoteId}
             readOnly={isReadOnly({ origin })}
@@ -1153,7 +1184,7 @@ export function DesignerPage() {
             description={t("designer.no_templates_hint")}
             action={{
               label: t("designer.newTemplate"),
-              onClick: () => setShowNewTemplateDialog(true),
+              onClick: () => openNewTemplateDialog(),
             }}
           />
         </Card>
@@ -1612,61 +1643,106 @@ export function DesignerPage() {
         </DialogContent>
       </Dialog>
 
-      {/* New Template Dialog */}
+      {/* New Template Dialog — two-step chooser */}
       <Dialog
         open={showNewTemplateDialog}
-        onOpenChange={setShowNewTemplateDialog}
+        onOpenChange={(open) => {
+          setShowNewTemplateDialog(open);
+          if (!open) {
+            setNewTemplateStep("pack");
+            setNewNameError("");
+          }
+        }}
       >
-        <DialogContent>
+        <DialogContent className="sm:max-w-[620px]">
           <DialogHeader>
-            <DialogTitle>{t("designer.newTemplate")}</DialogTitle>
+            <DialogTitle>{t("designer.new_chooser_title")}</DialogTitle>
+            <DialogDescription>{t("designer.new_chooser_hint")}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="new-template-name">
-                {t("designer.template_name")}
-              </Label>
-              <Input
-                id="new-template-name"
-                placeholder={t("designer.new_name_example")}
-                value={newTemplateName}
-                onChange={(e) => {
-                  setNewTemplateName(e.target.value);
-                  setNewNameError("");
-                }}
-                aria-describedby={
-                  newNameError ? "new-template-name-error" : undefined
-                }
-                disabled={creatingTemplate}
-              />
-              {newNameError && (
-                <p
-                  id="new-template-name-error"
-                  role="alert"
-                  className="text-xs text-danger"
+          {newTemplateStep === "pack" ? (
+            <>
+              <div className="space-y-3">
+                <p className="text-sm font-medium">{t("designer.new_step_pack")}</p>
+                <PackChooser
+                  selectedId={newTemplatePackId}
+                  onSelect={setNewTemplatePackId}
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowNewTemplateDialog(false)}
                 >
-                  {newNameError}
-                </p>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowNewTemplateDialog(false)}
-              disabled={creatingTemplate}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              onClick={() => void createNewTemplate()}
-              disabled={creatingTemplate}
-            >
-              {creatingTemplate
-                ? t("designer.new_creating")
-                : t("designer.new_create")}
-            </Button>
-          </DialogFooter>
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (!newTemplateName.trim()) {
+                      const key = `designer.pack_${newTemplatePackId}_name` as const;
+                      const hint = t(key, { defaultValue: "" });
+                      if (hint) setNewTemplateName(hint);
+                    }
+                    setNewTemplateStep("name");
+                  }}
+                  data-testid="pack-next"
+                >
+                  {t("designer.new_next")}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <div className="space-y-3">
+                <p className="text-sm font-medium">{t("designer.new_step_name")}</p>
+                <div className="space-y-1">
+                  <Label htmlFor="new-template-name">
+                    {t("designer.template_name")}
+                  </Label>
+                  <Input
+                    id="new-template-name"
+                    placeholder={t("designer.new_name_example")}
+                    value={newTemplateName}
+                    onChange={(e) => {
+                      setNewTemplateName(e.target.value);
+                      setNewNameError("");
+                    }}
+                    aria-describedby={
+                      newNameError ? "new-template-name-error" : undefined
+                    }
+                    disabled={creatingTemplate}
+                    autoFocus
+                  />
+                  {newNameError && (
+                    <p
+                      id="new-template-name-error"
+                      role="alert"
+                      className="text-xs text-danger"
+                    >
+                      {newNameError}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setNewTemplateStep("pack")}
+                  disabled={creatingTemplate}
+                >
+                  {t("designer.new_back")}
+                </Button>
+                <Button
+                  onClick={() => void createNewTemplate()}
+                  disabled={creatingTemplate}
+                  data-testid="pack-create"
+                >
+                  {creatingTemplate
+                    ? t("designer.new_creating")
+                    : t("designer.new_create")}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
