@@ -169,7 +169,8 @@ impl PdfRenderer {
         }
 
         let mut args: Vec<String> = [
-            "--headless",
+            "--headless=new",
+            "--disable-features=msEdgeStartupBoost",
             "--disable-gpu",
             "--no-first-run",
             "--no-default-browser-check",
@@ -311,7 +312,8 @@ impl PdfRenderer {
         }
 
         let mut args: Vec<String> = [
-            "--headless",
+            "--headless=new",
+            "--disable-features=msEdgeStartupBoost",
             "--disable-gpu",
             "--no-first-run",
             "--no-default-browser-check",
@@ -817,7 +819,8 @@ pub fn warm_up_edge(cache_dir: PathBuf) {
         }
         // Same switches as `webview2_print_to_pdf`, so the same code paths load.
         let mut args: Vec<String> = [
-            "--headless",
+            "--headless=new",
+            "--disable-features=msEdgeStartupBoost",
             "--disable-gpu",
             "--no-first-run",
             "--no-default-browser-check",

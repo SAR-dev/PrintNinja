@@ -504,7 +504,10 @@ impl Browser {
         let mut cmd = tokio::process::Command::new(&cfg.browser);
         cmd.args(&cfg.leading_args)
             .args([
-                "--headless",
+                "--headless=new",
+                // A resident Edge (startup boost) would take our command line
+                // and exit 0, which looks like "profile in use".
+                "--disable-features=msEdgeStartupBoost",
                 "--disable-gpu",
                 "--no-first-run",
                 "--no-default-browser-check",
