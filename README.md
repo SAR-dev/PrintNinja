@@ -7,7 +7,7 @@
 **Silent printing for Windows, Android and Linux.**
 Design a receipt or label in HTML and CSS, feed it JSON, and it prints. No print dialog, no driver dance, no fuss.
 
-[![Version](https://img.shields.io/badge/version-2.2.0-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
+[![Version](https://img.shields.io/badge/version-3.0.0-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-1.90-DEA584?logo=rust&logoColor=black)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
@@ -71,7 +71,14 @@ About five minutes, start to finish. The **Setup checklist** in Settings walks t
 3. **Print.** Open **Print**, choose the printer and template, add your data (test data, a JSON URL, or a CSV), set copies, check the preview and print.
 4. **Check the result.** **History** shows every job with a clear success or failure message. Reprint or retry from there.
 
+| Design a template with a live canvas | …then print it |
+|:---:|:---:|
+| ![Designer with live canvas](assets/designer.png) | ![Print page with preview](assets/print.png) |
+
 **No printer on your desk?** Start the bundled fake IPP printer and watch jobs land as PDFs:
+
+![History: every job with its outcome, and the real reason when it fails](assets/history.png)
+
 
 ```bash
 pnpm dev:printer  # ipp://localhost:6310/ipp/print
@@ -108,7 +115,7 @@ Three things to know:
 - **`{{barcode}}` draws the barcode.** `{{barcode "code128" order.tracking}}` renders an inline SVG from the data, so no image files are needed. QR codes work the same way with `"qrcode"`.
 - **The page size is the paper.** Set 80 mm wide in Page Setup for roll paper (or 102 × 152 mm for a 4×6 label); the canvas previews exactly that. Utility classes such as `p-2` and `font-bold` are compiled into the printout, and anything the network cannot reach at print time (remote images, web fonts) will not load — embed them as `data:` URIs instead.
 
-Every new template starts from a worked shipping-label example using these same pieces, so there is always something concrete to edit down. Publish it from the Designer when you want it listed for the community in **Templates**.
+Every new template starts from a **starter pack** — Receipt, Delivery Slip, Invoice, Shipping Label, Kitchen Ticket or Blank — chosen in the two-step New Template dialog (pick a pack, then name your copy). The pack is a worked example built from these same pieces, so there is always something concrete to edit down. Publish it from the Designer when you want it listed for the community in **Templates**.
 
 ## Print from your phone
 
@@ -118,7 +125,7 @@ Phones are small and Android cannot make every printer language. So PrintNinja l
 
 1. On the PC, open **Automation → Phones** and turn sharing on. One switch does everything, including starting the local server.
 2. The PC shows an 8-character code. It expires after about 90 seconds; ask for a new one if it runs out.
-3. On the phone, open **Automation → PC** (the same tab, named for what you pair with) and type the code. The phone finds the PC on its own, or you can type the PC's address.
+3. On the phone, open **Automation → PC** (the same tab, named for what you pair with) and type the code. The phone finds the PC on its own (an mDNS scan of the LAN, shown as **Nearby PCs**), or you can type the PC's address.
 4. Both devices must be signed in to the same account on the same server.
 
 **Let someone borrow your PC without an account.** On the PC, choose **Invite guest** and pick how long the invite lasts (24 hours by default), how many times it can be used, and whether the guest may print or only render. The guest enters a name, taps **Continue as guest** on the sign-in screen and types the code. Guests can use templates by name, but can never read or change them.
@@ -153,6 +160,7 @@ curl -X POST http://127.0.0.1:17717/v1/print \
 - **No API keys.** Calls from the PC itself (scripts, your POS software) work as they are. Other devices on the network must be paired with the PC, and they present their own device token.
 - **Safe retries.** Replaying an `Idempotency-Key` never prints a second copy.
 - **Honest answers.** The response reports the real outcome (printed, or why not), and `GET /v1/jobs/{id}` tracks any job. Jobs can also be retried or cancelled.
+- **Callbacks.** Add `"callback_url": "https://…"` to a print request and the app POSTs the outcome (`print.succeeded` / `print.failed`) to it after the job finishes, retrying a few times on failure. Only `https` URLs are accepted (private hosts unless you opt in), and with a shared secret set the body is signed with an `X-PrintNinja-Signature` HMAC. See `docs/ENV.md` for the `PRINTNINJA_CALLBACK_*` switches.
 - **Observable.** Health, metrics in JSON and Prometheus format, and a live OpenAPI document at `/v1/openapi.json`.
 - **Try it in the app.** **Automation → Try the API** lets you send requests against the live spec (desktop app only).
 
@@ -183,6 +191,7 @@ Other options include `url` (a data URL), `test=1`, `orientation`, `fit` and `pr
 
 **Printers**
 - Network (IPP, raw TCP 9100) and system printers on Windows and Linux
+- LAN scan finds IPP and raw printers on the network over mDNS; a discovered printer is added in one tap
 - USB and Bluetooth through the Windows spooler, or directly on Android
 - Printer languages: PDF, ESC/POS, ZPL, TSPL, CPCL and raster (Android prints PDF only for now)
 - Status checks before a raw job is sent, and timeouts so a stuck printer never hangs a job
@@ -242,7 +251,13 @@ If you are stuck, export logs from **Settings → Diagnostics** and attach them 
 
 ## Documentation
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): how data becomes dots on paper, including [borrowing a faster device](docs/ARCHITECTURE.md#9-borrowing-a-faster-device)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the big picture — system map, pipeline, phone↔PC, and where a print can fail
+- [`docs/GLOSSARY.md`](docs/GLOSSARY.md): the plain meaning of every term the app uses
+- [`docs/architecture/rendering-and-layout.md`](docs/architecture/rendering-and-layout.md): how a design becomes pages and sheets
+- [`docs/architecture/printers-and-transports.md`](docs/architecture/printers-and-transports.md): transports, printer languages, per-OS notes
+- [`docs/architecture/queue-and-history.md`](docs/architecture/queue-and-history.md): the queue, timings, metrics and callbacks
+- [`docs/architecture/phone-and-pc-sharing.md`](docs/architecture/phone-and-pc-sharing.md): pairing, tokens, guests and Print via PC, plus the recorded "why" behind the rules
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): developer quick start, project layout, commands, release
 - [`docs/UI_GUIDE.md`](docs/UI_GUIDE.md): design principles, components and status vocabulary
 - [`docs/ENV.md`](docs/ENV.md): share service environment variables
 - [`docs/CI.md`](docs/CI.md): local checks, hosted workflow and scheduled jobs
@@ -250,100 +265,7 @@ If you are stuck, export logs from **Settings → Diagnostics** and attach them 
 
 ## For developers
 
-### How it works
-
-Printing is a chain of transformations, and every entry point (the Print page, the REST API, a deep link, a reprint from history) goes through the same one:
-
-```
-Data + Template → Design pages → Sheets → Image or PDF → Printer language → Wire → Paper
-```
-
-A template renders into design pages exactly as it looks in the Designer, with no knowledge of the paper. Only afterwards are those pages placed on physical sheets. One stage can even run on another machine, so a phone hands the image step to a paired PC and takes back finished bytes. Read the full story in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-### Quick start
-
-You need Node 22 (the `engines` field pins 22.x), pnpm 10 and Rust 1.90 (pinned in `rust-toolchain.toml`). For Android you also need Java 17 and the Android SDK and NDK.
-
-```bash
-git clone https://github.com/SAR-dev/PrintNinja.git
-cd PrintNinja
-pnpm install
-
-pnpm dev          # web preview at http://localhost:1420
-pnpm tauri:dev    # full desktop app
-```
-
-In a browser there is no Tauri backend, so settings fall back to `localStorage`.
-
-### Project layout
-
-```
-src/          React app: pages, components, stores, sync, template rendering
-src-tauri/    Rust core: print queue, transports, rendering, local API, SQLite
-plugins/      Tauri plugin for Android printing (Kotlin)
-server/       Share service (Fastify, Prisma, OpenAPI contract in server/openapi)
-e2e/          Playwright suite with a fake desktop agent
-dev-printer/  Fake IPP printer for local development
-docs/         Architecture, shared rendering, UI guide, environment, CI, release and signing
-scripts/      Release and versioning helpers
-```
-
-<details>
-<summary><b>Tech stack</b></summary>
-
-<br />
-
-| Area | Technology |
-|---|---|
-| Desktop and mobile shell | Tauri 2 (Windows MSI, Linux deb and AppImage, Android arm64) |
-| Core | Rust 1.90, Tokio, axum and tower-http (local API), reqwest (rustls), rusqlite (bundled SQLite) |
-| Rendering | Handlebars (Rust and JS), headless Edge over the DevTools protocol (Windows), headless Chromium (Linux), the system WebView (Android), `barcoders` and `qrcode`, `bwip-js` for previews |
-| Printing | IPP, raw TCP, Windows spooler (also USB and Bluetooth), CUPS (Linux), a Kotlin plugin for Android (WebView to PDF, `UsbManager`, RFCOMM) |
-| UI | React 18, TypeScript 5.6, Vite 6, Tailwind 3, shadcn/ui on Radix, Zustand, TanStack Query and Table, React Router 7, react-hook-form, i18next, cmdk, sonner |
-| Template CSS | Tailwind v4 `compile()`, run in the app and stored with each template version |
-| Editor | CodeMirror 6, `react-diff-viewer-continued`, `react-markdown` with `remark-gfm` |
-| API client | `openapi-fetch` with types generated by `openapi-typescript`, `zod` for validation |
-| Share service | Node, Fastify 5, Zod 4, Prisma 7 on Turso/libSQL (a local SQLite file in development), Argon2id, Swagger UI. Runs in Docker or on Vercel |
-| Security | HTML sanitizing, sandboxed preview iframes with a strict CSP, secrets redacted from stored jobs, rate limits |
-| Quality | Vitest and Testing Library, `cargo test`, Playwright with axe-core (desktop and phone projects), Biome, Clippy |
-
-</details>
-
-### Commands
-
-| Command | Purpose |
-|---|---|
-| `pnpm check` | Run the project checks locally (add `--rust` or `--e2e`; `pnpm check:full` before a release) |
-| `pnpm build` | Type-check and build the web app |
-| `pnpm test` | Unit tests (Vitest) |
-| `pnpm lint` | Biome |
-| `pnpm e2e` | Playwright end-to-end tests |
-| `pnpm gen:api` | Regenerate API types from `server/openapi/openapi.json` |
-| `pnpm tauri:build` | Build the installer for the current platform |
-| `pnpm --filter server dev` | Run the share service with reload |
-| `pnpm --filter server test` | Share service unit and integration tests |
-| `cargo test --manifest-path src-tauri/Cargo.toml` | Rust tests |
-
-Run `pnpm check` before you push. See [`docs/CI.md`](docs/CI.md).
-
-### Run the share service
-
-```bash
-cd server
-cp env.example .env
-docker compose up -d
-curl localhost:3001/v2/health
-```
-
-It uses a local SQLite file by default. For production, set `DATABASE_URL` (`libsql://…`) and `DATABASE_AUTH_TOKEN` for Turso Cloud. Every variable is listed in [`docs/ENV.md`](docs/ENV.md).
-
-### Release
-
-```bash
-pnpm release:patch   # bump + commit + tag (or release:minor / release:major)
-```
-
-Pushing a `v*` tag builds the installers on GitHub Actions and attaches them to a draft release. You can also build them on your own machines with `node scripts/release-local.mjs X.Y.Z --push`. See [`docs/RELEASE.md`](docs/RELEASE.md) and [`docs/SIGNING.md`](docs/SIGNING.md). Remember to bump the version badge at the top of this README when you ship.
+Everything a developer needs — quick start, project layout, tech stack, commands, running the share service, and how releases ship — lives in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). The architecture of the print pipeline is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and the `docs/architecture/` deep dives.
 
 ### Contributing
 

@@ -1,3 +1,4 @@
+pub mod callback;
 pub mod openapi;
 pub mod pair_code;
 pub mod pair_routes;
