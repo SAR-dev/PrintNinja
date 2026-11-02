@@ -14,7 +14,9 @@ test("warns on paper mismatch and remembers each printer's choices", async ({
   const seeded = await signedSeed(browser, "matching", {
     templates: [
       {
-        name: "Matching Label",
+        // "A Label" sorts first — the preselect takes the first template
+        // by name, and this spec wants the 100 mm label preselected.
+        name: "A Label",
         server_id: crypto.randomUUID(),
         html: "<p>label</p>",
         page_w: 100,
@@ -44,7 +46,7 @@ test("warns on paper mismatch and remembers each printer's choices", async ({
   await page.goto("/print");
 
   // Preselect is the first printer (Thermal 80) with the first template
-  // (the 100 mm label) — 20 mm too wide for an 80 mm thermal.
+  // by name ("A Label", 100 × 150) — 20 mm too wide for an 80 mm thermal.
   await expect(
     page.getByText("Template is 100 × 150 mm; this printer uses 80 mm paper."),
   ).toBeVisible({ timeout: 20_000 });

@@ -19,7 +19,10 @@ use std::net::IpAddr;
 /// concurrently.
 fn lock() -> std::sync::MutexGuard<'static, ()> {
     static GUARD: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-    GUARD.get_or_init(|| std::sync::Mutex::new(())).lock().unwrap()
+    GUARD
+        .get_or_init(|| std::sync::Mutex::new(()))
+        .lock()
+        .unwrap()
 }
 
 /// A non-loopback private address to advertise on; None means "skip".

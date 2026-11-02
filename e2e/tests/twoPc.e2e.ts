@@ -93,8 +93,10 @@ test("F3 create on PC A appears on PC B", async ({ browser }) => {
   const pageA = await pcA.context.newPage();
   await openDesignerOn(pageA, "Starter");
 
-  // New template: the dialog creates server-first, then caches locally.
+  // New template: the dialog is a two-step chooser (pack, then name) and
+  // creates server-first, then caches locally.
   await pageA.getByRole("button", { name: "New template" }).click();
+  await pageA.getByTestId("pack-next").click();
   await pageA.getByPlaceholder("My Template").fill("Shared Idea");
   await pageA.getByRole("button", { name: "Create", exact: true }).click();
   await expect(
