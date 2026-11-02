@@ -235,9 +235,11 @@ pub struct WindowsSpooler {
 /// (`None`) are never cached: a transient denial must recover on the next
 /// job, not stick for the TTL.
 #[cfg(windows)]
-static OFFERED_DATATYPES: std::sync::LazyLock<
-    std::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, Vec<String>)>>,
-> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+type OfferedTypes = std::collections::HashMap<String, (std::time::Instant, Vec<String>)>;
+
+#[cfg(windows)]
+static OFFERED_DATATYPES: std::sync::LazyLock<std::sync::Mutex<OfferedTypes>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(OfferedTypes::new()));
 
 #[cfg(windows)]
 const DATATYPES_TTL: std::time::Duration = std::time::Duration::from_secs(60 * 60);

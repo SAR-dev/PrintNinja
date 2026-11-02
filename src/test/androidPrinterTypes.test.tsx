@@ -116,9 +116,10 @@ describe("printer types per platform", () => {
     await screen.findByText(/No printers yet|All \(/);
     fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));
     const panel = await screen.findByRole("dialog");
+    // mDNS scan is now available on all platforms (discover_network_printers via mdns-sd on desktop)
     expect(
       within(panel).queryByText(/Found on this network/),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
   });
 
   it("on Android scans the LAN and fills the form from a found printer", async () => {
@@ -172,7 +173,10 @@ describe("printer types per platform", () => {
     expect(
       await within(panel).findByText("Found on this network"),
     ).toBeInTheDocument();
-    fireEvent.click(await within(panel).findByText("Counter JetDirect"));
+    const row = await within(panel).findByTestId(
+      "discovered-printer-net:192.168.1.21:9100",
+    );
+    fireEvent.click(within(row).getByRole("button", { name: "Fill" }));
     // JetDirect fills host:port + raw_tcp; unpaired Android keeps PDF.
     expect(within(panel).getByLabelText("Address")).toHaveValue(
       "192.168.1.21:9100",

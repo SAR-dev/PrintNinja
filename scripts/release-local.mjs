@@ -147,6 +147,7 @@ for (const [f, want] of [
   ["src-tauri/tauri.conf.json", `"version": "${current}"`],
   ["src-tauri/Cargo.toml", `version = "${current}"`],
   ["src/components/Layout.tsx", `"v${current}"`],
+  ["README.md", `badge/version-${current}-e43636`],
 ]) checkManifest(f, want);
 if (out("git", ["tag", "-l", tag])) die(`tag ${tag} already exists locally`);
 try {
@@ -190,7 +191,7 @@ if (!skipChecks) {
 
 // ---- commit + tag --------------------------------------------------------
 
-sh("git", ["add", "--", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "src/components/Layout.tsx"]);
+sh("git", ["add", "--", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "src/components/Layout.tsx", "README.md"]);
 try {
   execFileSync("git", ["-c", "user.name=Release", "-c", "user.email=release@local", "commit", "-m", `release: ${tag}`, "-m", `Release printninja ${version}`], { cwd: ROOT, stdio: "inherit" });
 } catch {

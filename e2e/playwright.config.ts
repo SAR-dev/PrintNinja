@@ -23,6 +23,10 @@ const projects = browsers.map((name) => {
     name: "chromium",
     use: { ...devices["Desktop Chrome"] },
     testIgnore: "**/*.mobile.e2e.ts",
+    // A cold Vite dev server plus parallel workers can eat the default
+    // 30s budget before a slow spec reaches its later actions (same
+    // reasoning as the Firefox extension above).
+    timeout: 60_000,
   };
 });
 

@@ -8,6 +8,8 @@ pub enum AppError {
     NotFound(String),
     #[error("Validation error: {0}")]
     Validation(String),
+    #[error("Validation error: {message}")]
+    ValidationWithCode { message: String, code: String },
     #[error("Internal error: {0}")]
     Internal(String),
     /// The request is well-formed but the target state conflicts (ARCHITECTURE

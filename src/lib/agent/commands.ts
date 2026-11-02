@@ -39,6 +39,8 @@ import type {
   SyncStateRow,
   SyncedDatasetRow,
   SystemPrinterRow,
+  DiscoveredPrinter,
+  DiscoveredPeer,
   TemplateRow,
   UploadFontReq,
 } from "./types";
@@ -143,6 +145,11 @@ export interface AgentCommands {
   test_printer: [{ id: number }, null];
   enumerate_system_printers: [{}, SystemPrinterRow[]];
   discover_network_printers: [{ timeout_secs?: number }, SystemPrinterRow[]];
+  discover_network_printers_mdns: [
+    { timeout_secs?: number },
+    DiscoveredPrinter[],
+  ];
+  discover_peers_mdns: [{ timeout_secs?: number }, DiscoveredPeer[]];
   // Printing
   print_html: [{ req: PrintHtmlReq }, PrintResponse];
   spike_test_print: [{}, PrintResponse];
@@ -223,7 +230,7 @@ export interface AgentCommands {
     ApiHttpResponse,
   ];
   // Shared rendering: this device as a render provider for a paired
-  // device on the same LAN (see docs/ARCHITECTURE.md §9). Pairing is a
+  // device on the same LAN (see docs/architecture/phone-and-pc-sharing.md). Pairing is a
   // one-time 8-character code; each phone gets its own token.
   get_render_status: [{}, RenderShareStatus];
   set_render_sharing: [{ enabled: boolean }, string];

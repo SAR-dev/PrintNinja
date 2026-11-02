@@ -7,7 +7,7 @@
 //! locally. Sharing can only speed a print up, never fail it.
 //!
 //! The trust root is the pairing secret the operator typed from device
-//! B's screen (see docs/ARCHITECTURE.md §9 Pairing). Hosts are restricted to
+//! B's screen (see docs/architecture/phone-and-pc-sharing.md#pairing). Hosts are restricted to
 //! LAN names and private addresses, so a pasted secret cannot turn the
 //! command into a proxy for the public internet.
 
@@ -398,7 +398,7 @@ pub fn inline_fonts(conn: &rusqlite::Connection, html: &str) -> String {
 /// loopback, and link-local IPs plus `.local` / single-label LAN names;
 /// anything else (public IPs, weird characters) is refused before any
 /// socket opens.
-pub(crate) fn is_private_host(host: &str) -> bool {
+pub fn is_private_host(host: &str) -> bool {
     if let Ok(ip) = host.parse::<std::net::IpAddr>() {
         return match ip {
             std::net::IpAddr::V4(v4) => v4.is_private() || v4.is_loopback() || v4.is_link_local(),
