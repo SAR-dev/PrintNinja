@@ -95,7 +95,9 @@ describe("patchMainActivity", () => {
       "import android.content.pm.ActivityInfo\nimport android.os.Bundle",
     );
     const out = patchMainActivity(src);
-    expect(out.match(/import android.content\.pm\.ActivityInfo/g)).toHaveLength(1);
+    expect(out.match(/import android.content\.pm\.ActivityInfo/g)).toHaveLength(
+      1,
+    );
   });
 
   it("returns the source unchanged when no onCreate anchor exists", () => {
