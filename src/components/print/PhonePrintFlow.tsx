@@ -358,23 +358,18 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
               aria-expanded={pickerOpen}
               onClick={() => setPickerOpen(true)}
             >
-              <span className="flex min-w-0 items-center gap-3">
-                <TemplateThumb
-                  tpl={props.viaPc ? null : (selectedLocal ?? null)}
-                />
-                <span className="min-w-0 text-left">
-                  <span className="block truncate">
-                    {templateName ?? t("print.template_placeholder")}
-                  </span>
-                  {!props.viaPc && selectedLocal && (
-                    <span className="block text-xs text-muted-foreground">
-                      {t("designer.pack_size", {
-                        w: selectedLocal.page_w_mm,
-                        h: selectedLocal.page_h_mm,
-                      })}
-                    </span>
-                  )}
+              <span className="min-w-0 text-left">
+                <span className="block truncate">
+                  {templateName ?? t("print.template_placeholder")}
                 </span>
+                {!props.viaPc && selectedLocal && (
+                  <span className="block text-xs text-muted-foreground">
+                    {t("designer.pack_size", {
+                      w: selectedLocal.page_w_mm,
+                      h: selectedLocal.page_h_mm,
+                    })}
+                  </span>
+                )}
               </span>
               <ChevronDown
                 className="h-4 w-4 shrink-0 text-muted-foreground"
