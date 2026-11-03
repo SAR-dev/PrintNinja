@@ -35,6 +35,23 @@ E2E_DOCS_ENABLED=true E2E_BROWSERS=chromium,firefox \
 pnpm e2e
 ```
 
+## Refreshing screenshot baselines in CI
+
+The `app-e2e` baselines (`e2e/tests/*-snapshots/`) are environment-bound:
+they must be rendered by the same runner the suite runs on, or the font
+metrics drift and the comparisons fail. Regenerate them on CI, not on a
+local machine:
+
+1. Add the Actions variable `E2E_UPDATE_SNAPSHOTS` with the value `true`
+   (Settings → Secrets and variables → Actions → Variables).
+2. Push a commit (any) to a branch that has a pull request into `main`;
+   the `app-e2e` job then runs with `--update-snapshots` and uploads the
+   refreshed files as the `e2e-snapshots` artifact.
+3. Download the artifact, copy the files over `e2e/tests/*-snapshots/`,
+   commit and push.
+4. Delete the `E2E_UPDATE_SNAPSHOTS` variable and let the next run verify
+   the new baselines for real.
+
 ## Releasing
 
 ```bash
