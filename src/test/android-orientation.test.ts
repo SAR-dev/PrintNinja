@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 // biome-ignore format: single line keeps the ts-expect-error on the error line
 // @ts-expect-error plain .mjs script without types
-import { patchOrientation, orientationFiles } from "../../scripts/patch-android-orientation.mjs";
+import { patchOrientation, patchMainActivity } from "../../scripts/patch-android-orientation.mjs";
 
 const MANIFEST = `<manifest>
   <application>
@@ -10,15 +10,26 @@ const MANIFEST = `<manifest>
 </manifest>`;
 
 const EXPECTED_TAG =
-  '<activity android:name=".MainActivity" android:launchMode="singleTask" android:screenOrientation="@string/app_orientation"/>';
+  '<activity android:name=".MainActivity" android:launchMode="singleTask" android:screenOrientation="unspecified"/>';
 
 describe("patchOrientation", () => {
-  it("adds the orientation attribute to the main activity", () => {
+  it("sets a literal orientation on the main activity", () => {
     expect(patchOrientation(MANIFEST)).toContain(EXPECTED_TAG);
   });
 
   it("is idempotent", () => {
     const out = patchOrientation(MANIFEST);
+    expect(patchOrientation(out)).toBe(out);
+  });
+
+  it("normalizes a resource reference left by the old string-resource version", () => {
+    const pre = MANIFEST.replace(
+      'android:launchMode="singleTask"',
+      'android:launchMode="singleTask" android:screenOrientation="@string/app_orientation"',
+    );
+    const out = patchOrientation(pre);
+    expect(out).toContain(EXPECTED_TAG);
+    expect(out).not.toContain("@string/app_orientation");
     expect(patchOrientation(out)).toBe(out);
   });
 
@@ -52,14 +63,45 @@ describe("patchOrientation", () => {
   });
 });
 
-describe("orientationFiles", () => {
-  it("locks phones and frees tablets", () => {
-    const files = orientationFiles();
-    expect(files["values/orientation.xml"]).toContain(
-      '<string name="app_orientation">portrait</string>',
+const ACTIVITY = `package com.printninja.desktop
+
+import android.os.Bundle
+import app.tauri.bridge.TauriActivity
+
+class MainActivity : TauriActivity() {
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+  }
+}`;
+
+describe("patchMainActivity", () => {
+  it("locks phones and frees tablets in onCreate", () => {
+    const out = patchMainActivity(ACTIVITY);
+    expect(out).toContain("import android.content.pm.ActivityInfo");
+    expect(out).toContain("smallestScreenWidthDp < 600");
+    expect(out).toContain("ActivityInfo.SCREEN_ORIENTATION_PORTRAIT");
+    expect(out).toContain("ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED");
+    expect(out).toContain("super.onCreate(savedInstanceState)");
+  });
+
+  it("is idempotent", () => {
+    const out = patchMainActivity(ACTIVITY);
+    expect(patchMainActivity(out)).toBe(out);
+  });
+
+  it("does not duplicate the import when one is already present", () => {
+    const src = ACTIVITY.replace(
+      "import android.os.Bundle",
+      "import android.content.pm.ActivityInfo\nimport android.os.Bundle",
     );
-    expect(files["values-sw600dp/orientation.xml"]).toContain(
-      '<string name="app_orientation">unspecified</string>',
+    const out = patchMainActivity(src);
+    expect(out.match(/import android.content\.pm\.ActivityInfo/g)).toHaveLength(
+      1,
     );
+  });
+
+  it("returns the source unchanged when no onCreate anchor exists", () => {
+    const src = "package com.printninja.desktop\n\nclass MainActivity";
+    expect(patchMainActivity(src)).toBe(src);
   });
 });
