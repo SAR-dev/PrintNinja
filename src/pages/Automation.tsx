@@ -7,6 +7,7 @@ import { DevicesCard } from "@/components/DevicesCard";
 import { PrintViaPcCard } from "@/components/PrintViaPcCard";
 import { PageHeader } from "@/components/PageHeader";
 import { useFlashField } from "@/lib/hooks/useFlashField";
+import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { isAndroid } from "@/lib/platform";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiExplorerPanel } from "@/pages/ApiExplorer";
@@ -39,6 +40,9 @@ export function parseAutomationTab(raw: string | null): AutomationTab {
  */
 export function AutomationPage() {
   const { t } = useTranslation();
+  // A phone has no automations to configure; here the page is the
+  // pairing screen, so it is named for that (PLAN §6).
+  const isPhone = useMediaQuery(PHONE_QUERY);
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = parseAutomationTab(searchParams.get("tab"));
   // Palette deep-link (`?tab=&field=`): the control lives in a tab that
@@ -76,7 +80,7 @@ export function AutomationPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={t("nav.automation")}
+        title={t(isPhone ? "nav.connect_pc" : "nav.automation")}
         description={t("pages.automation")}
       />
       <Tabs

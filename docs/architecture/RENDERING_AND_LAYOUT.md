@@ -116,6 +116,6 @@ to a single shared table of expected results, so a change to one that isn't
 mirrored in the other fails a test instead of silently making the preview
 lie.
 
-See also: [printers and transports](./printers-and-transports.md) (what the
-produced bytes become), [queue and history](./queue-and-history.md) (what
+See also: [printers and transports](./PRINTERS_AND_TRANSPORTS.md) (what the
+produced bytes become), [queue and history](./QUEUE_AND_HISTORY.md) (what
 happens to the job), and the [glossary](../GLOSSARY.md) for the plain words.

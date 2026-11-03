@@ -8,7 +8,12 @@ import {
   UserRound,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
+import {
+  dismissNotify,
+  notifySuccess,
+  notifyError,
+  notifyInfo,
+} from "@/lib/notify";
 import { AppLogo } from "@/components/AppLogo";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -33,10 +38,10 @@ import {
   isActivePath,
 } from "@/lib/shell/nav";
 import { useGlobalShortcuts } from "@/lib/shell/useGlobalShortcuts";
-import { LANDSCAPE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { useShareStatus } from "@/lib/shell/useShareStatus";
 import { useShellStatus, type ShellStatus } from "@/lib/shell/useShellStatus";
 import { cacheNow, useSyncStatus } from "@/lib/sync/useSyncStatus";
+import { LANDSCAPE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { usePrefs } from "@/lib/prefs/PrefsProvider";
 import { agent } from "@/lib/agent/commands";
 import { getAppVersion } from "@/lib/appUpdate";
@@ -343,6 +348,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, [location.pathname]);
+
+  // Stale toasts say something about the page you were just on. A phone
+  // carries one screen at a time, so a route change clears them (PLAN §6).
+  useEffect(() => {
+    dismissNotify();
+  }, [location.pathname]);
   // Print-via-PC mode hides the pages that stop meaning anything: local
   // printers and the designer (templates sync down; they are not drawn
   // here). Mobile bar and More sheet only — desktop keeps everything,
@@ -523,7 +534,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <PcStatusBanner />
 
       <div className="flex min-h-0 flex-1">
-        {/* Sidebar: grouped by job. Landscape phones force the icon rail. */}
+        {/* Sidebar: grouped by job. Desktops only — phones use the bottom bar. */}
         <aside
           className={cn(
             "hidden shrink-0 flex-col border-r bg-card transition-[width] duration-150 md:flex",
@@ -712,7 +723,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   )}
                 >
                   <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  {t(item.labelKey)}
+                  {t(item.phoneLabelKey ?? item.labelKey)}
                 </Link>
               </li>
             ))}

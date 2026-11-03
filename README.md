@@ -253,10 +253,10 @@ If you are stuck, export logs from **Settings → Diagnostics** and attach them 
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the big picture — system map, pipeline, phone↔PC, and where a print can fail
 - [`docs/GLOSSARY.md`](docs/GLOSSARY.md): the plain meaning of every term the app uses
-- [`docs/architecture/rendering-and-layout.md`](docs/architecture/rendering-and-layout.md): how a design becomes pages and sheets
-- [`docs/architecture/printers-and-transports.md`](docs/architecture/printers-and-transports.md): transports, printer languages, per-OS notes
-- [`docs/architecture/queue-and-history.md`](docs/architecture/queue-and-history.md): the queue, timings, metrics and callbacks
-- [`docs/architecture/phone-and-pc-sharing.md`](docs/architecture/phone-and-pc-sharing.md): pairing, tokens, guests and Print via PC, plus the recorded "why" behind the rules
+- [`docs/architecture/RENDERING_AND_LAYOUT.md`](docs/architecture/RENDERING_AND_LAYOUT.md): how a design becomes pages and sheets
+- [`docs/architecture/PRINTERS_AND_TRANSPORTS.md`](docs/architecture/PRINTERS_AND_TRANSPORTS.md): transports, printer languages, per-OS notes
+- [`docs/architecture/QUEUE_AND_HISTORY.md`](docs/architecture/QUEUE_AND_HISTORY.md): the queue, timings, metrics and callbacks
+- [`docs/architecture/PHONE_AND_PC_SHARING.md`](docs/architecture/PHONE_AND_PC_SHARING.md): pairing, tokens, guests and Print via PC, plus the recorded "why" behind the rules
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): developer quick start, project layout, commands, release
 - [`docs/UI_GUIDE.md`](docs/UI_GUIDE.md): design principles, components and status vocabulary
 - [`docs/ENV.md`](docs/ENV.md): share service environment variables

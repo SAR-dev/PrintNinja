@@ -6,7 +6,7 @@ import {
 } from "@/lib/platform";
 import { hasPairedProvider } from "@/lib/pairing";
 import { TimeoutError, withTimeout } from "@/lib/withTimeout";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { PageHeader } from "@/components/PageHeader";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
@@ -55,6 +55,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
+import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { validatePrinterForm } from "@/lib/printerSchema";
 import type { PrinterRow } from "@/lib/agent/types";
 
@@ -134,6 +135,9 @@ const TEST_TIMEOUT_MS = 80_000;
 
 export function PrinterSetupPage() {
   const { t } = useTranslation();
+  // Phones don't set up printers; they print through the PC. The title
+  // says what the page is on a phone (PLAN §6).
+  const isPhone = useMediaQuery(PHONE_QUERY);
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [systemPrinters, setSystemPrinters] = useState<SystemPrinter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,7 +147,6 @@ export function PrinterSetupPage() {
   const [networkPrinters, setNetworkPrinters] = useState<SystemPrinter[]>([]);
   const [scanningNet, setScanningNet] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<PrinterRow | null>(null);
-  const tabListRef = useRef<HTMLDivElement>(null);
 
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -163,19 +166,6 @@ export function PrinterSetupPage() {
       cancelled = true;
     };
   }, []);
-  // A mid-word cut tab reads broken on a phone: keep the active one in
-  // view when the tab changes — but only when it is actually cut off,
-  // so loading never shifts a fully-visible strip.
-  useEffect(() => {
-    const list = tabListRef.current;
-    const active = list?.querySelector('[data-state="active"]');
-    if (!list || !active) return;
-    const r = active.getBoundingClientRect();
-    const lr = list.getBoundingClientRect();
-    if (r.left < lr.left || r.right > lr.right) {
-      active.scrollIntoView({ inline: "center", block: "nearest" });
-    }
-  }, [tab]);
   const [form, setForm] = useState({
     name: "",
     printer_type: "ipp",
@@ -683,7 +673,10 @@ export function PrinterSetupPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title={t("printers.title")} description={t("pages.printers")}>
+      <PageHeader
+        title={t(isPhone ? "nav.printers" : "printers.title")}
+        description={t("pages.printers")}
+      >
         <Button variant="outline" size="sm" onClick={load}>
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
           {t("printers.refresh")}
@@ -716,11 +709,8 @@ export function PrinterSetupPage() {
       )}
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        {/* Edge fade signals the row scrolls on phones. */}
-        <TabsList
-          ref={tabListRef}
-          className="[mask-image:linear-gradient(to_right,black_calc(100%-12px),transparent)]"
-        >
+        {/* Stacked full-width filter rows on phones (mobile.css). */}
+        <TabsList>
           {visibleGroups.map((g) => (
             <TabsTrigger key={g.key} value={g.key}>
               {t(g.labelKey)} ({counts(g.types)})

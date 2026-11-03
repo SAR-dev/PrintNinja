@@ -561,13 +561,16 @@ export function TemplatesPage() {
                 <Printer className="h-4 w-4" aria-hidden="true" />
                 {t("templates.action_print")}
               </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={syncing != null}
-                onSelect={() => void handleClone(tpl)}
-              >
-                <CopyPlus className="h-4 w-4" aria-hidden="true" />
-                {t("templates.action_clone")}
-              </DropdownMenuItem>
+              {/* Cloning makes a new template: a PC-side action (PLAN §6, D4). */}
+              {!isPhone && (
+                <DropdownMenuItem
+                  disabled={syncing != null}
+                  onSelect={() => void handleClone(tpl)}
+                >
+                  <CopyPlus className="h-4 w-4" aria-hidden="true" />
+                  {t("templates.action_clone")}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onSelect={() => setRemoveTarget(tpl)}
                 className="text-danger focus:text-danger"
@@ -860,6 +863,13 @@ export function TemplatesPage() {
         description={t("pages.templates")}
       />
 
+      {/* Phones view and print templates; the PC edits them (PLAN §6, D4). */}
+      {isPhone && (
+        <div className="rounded-lg border border-info/30 bg-info-soft px-4 py-3 text-sm text-info">
+          {t("designer.viewer_notice")}
+        </div>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="mine">
@@ -916,10 +926,13 @@ export function TemplatesPage() {
             empty={{
               title: t("templates.empty_mine_title"),
               description: t("templates.empty_mine_desc"),
-              action: {
-                label: t("templates.empty_mine_action"),
-                onClick: () => navigate("/"),
-              },
+              // Creating a template is a PC-side action (PLAN §6, D4).
+              action: isPhone
+                ? undefined
+                : {
+                    label: t("templates.empty_mine_action"),
+                    onClick: () => navigate("/"),
+                  },
             }}
           />
         </TabsContent>

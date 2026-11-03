@@ -149,7 +149,7 @@ the code editor. "Reprint last job" asks for confirmation before it prints.
 
 | Route | Page | Main building blocks |
 |---|---|---|
-| `/` and `/template/:id` | Designer | `PageHeader` with `DesignerToolbar` (New, template-name field, Save, Public/Private switch with sync id; read-only copies hide Save and the switch, phones use `DesignerOverflowMenu`); at `lg` and up a workspace that fills the viewport: `ControlsAccordion` (Templates, Page Setup, Helpers, Custom input), `EditorPane` (tabs **HTML**, **CSS**, **README**, **Sample data**) and `CanvasWorkspace` (toolbar with Fit/zoom, then `CanvasPane`), the last two split by a draggable `ResizableHandle`. Below `lg`: a Settings sheet, then tabs **Canvas**, **Code** (`CodeEditors`), **README** and **Sample data**. An empty account holds `Loading…`, then an `EmptyState` with the New action. **New Template** is a two-step dialog — pick a starter pack (Receipt, Delivery Slip, Invoice, Shipping Label, Kitchen Ticket, Blank), then name the copy — and the pack's body becomes the created template; the last-used pack is remembered for the next time |
+| `/` and `/template/:id` | Designer | `PageHeader` with `DesignerToolbar` (New, template-name field, Save, Public/Private switch with sync id; read-only copies hide Save and the switch). On phones the page is a read-only viewer instead — `PhoneDesignerViewer`: a section picker (**Preview**, **Sample data**, **README**, **Code**, **Details**) with a sticky Save; sample data is the only thing a phone may edit (see [Responsive and touch](#responsive-and-touch)). At `lg` and up a workspace that fills the viewport: `ControlsAccordion` (Templates, Page Setup, Helpers, Custom input), `EditorPane` (tabs **HTML**, **CSS**, **README**, **Sample data**) and `CanvasWorkspace` (toolbar with Fit/zoom, then `CanvasPane`), the last two split by a draggable `ResizableHandle`. Below `lg`: a Settings sheet, then tabs **Canvas**, **Code** (`CodeEditors`), **README** and **Sample data**. An empty account holds `Loading…`, then an `EmptyState` with the New action. **New Template** is a two-step dialog — pick a starter pack (Receipt, Delivery Slip, Invoice, Shipping Label, Kitchen Ticket, Blank), then name the copy — and the pack's body becomes the created template; the last-used pack is remembered for the next time |
 | `/templates` | Templates | Tabs **Mine**, **Saved**, **Community**. Mine and Saved are `DataTable`s (phones use cards with a row menu); Community is a card gallery with sort and a preview dialog. Saved rows offer Print, Clone (your own timestamped copy under Mine) and Remove; Community rows offer a save star |
 | `/print` | Print | "Print job" card (printer, template, copies, options such as grayscale and test data), a live preview, and a banner that says "Print sent" or "Print failed". On Android without a paired PC it redirects to `/pair` instead of rendering |
 | `/pair` | Pairing | `PairingGate` as a route (not a whole-app block): greets the session or guest handle, pairs over LAN via `DevicesCard`, then returns to where the person came from. With PC sharing on, `DevicesCard` also offers a **Nearby PCs** mDNS scan: tapping a PC fills its address, then the person enters the 8-character code. Unpaired Android phones can browse the app; printing — the Print page and the API explorer's `/v1/print` — redirects or disables here |
@@ -417,6 +417,21 @@ than hardcoding the product name in new UI, and use `AppLogo` to show the logo.
   link's accessible name carries it. Do not rely on the word being visible on a phone.
 - The top and bottom bars respect the device safe areas (`env(safe-area-inset-*)`).
 - On touch screens, buttons, inputs, selects and palette rows keep a 44 px minimum height.
+- **Phones are portrait-only and vertical-only.** The Android build locks phones to portrait
+  (tablets at 600 dp and up keep rotating; see [Windows and Android](#windows-and-android)).
+  On phones everything is one column: no horizontal strips or pan zones, no side-by-side form
+  controls, actions stacked full width. The mobile e2e spec enforces both, per route.
+- **The phone Designer is a viewer.** Templates are edited on a computer, so phones show
+  `PhoneDesignerViewer`: a notice that says so, a full-width section picker (Preview,
+  Sample data, README, Code, Details) and a sticky Save. Sample data is the only thing a
+  phone may adjust — HTML/CSS editing, page setup, version restore and publishing are
+  not offered, and **New template** / **Clone** are hidden (Templates page, command
+  palette). The phone e2e spec asserts the absence of editing controls.
+- **Phone naming follows the job, not the desktop menu:** the Automation page is
+  **Connect to PC** (its pairing screen), Printer Setup is **Printers**, and the
+  sign-in subtitle says printing still works from the PC.
+- **Toasts clear on route change:** a phone carries one screen at a time, so leaving a
+  page never carries its messages along.
 - Test at 390 px and 1440 px, and at 125% and 150% Windows scaling (see
   [Windows and Android](#windows-and-android)).
 
@@ -434,6 +449,11 @@ than hardcoding the product name in new UI, and use `AppLogo` to show the logo.
   return it to the control that opened them (Radix does this; do not break it with custom
   portals).
 - Respect `prefers-reduced-motion`.
+- **One declared WCAG 2.1 AA exception: §1.3.4 Orientation.** Phones are locked to portrait
+  (see [Responsive and touch](#responsive-and-touch)). The exception requires sign-off before
+  shipping: it holds because the layout is vertical-only, so nothing in the app loses
+  function in a fixed orientation. Revisit the sign-off whenever a phone surface could
+  depend on width.
 
 ## Copy and translation
 
@@ -472,7 +492,8 @@ than hardcoding the product name in new UI, and use `AppLogo` to show the logo.
 
 ## Tests that guard the UI
 
-All run with `pnpm test` (Vitest) and in `pnpm check`. A failing one blocks the release.
+All run with `pnpm test` (Vitest) and in `pnpm check`; the e2e row runs with `pnpm e2e`. A
+failing one blocks the release.
 
 | Test | What it enforces |
 |---|---|
@@ -482,6 +503,8 @@ All run with `pnpm test` (Vitest) and in `pnpm check`. A failing one blocks the 
 | `src/test/components.test.tsx` | `StatusBadge` (word and icon for every state), `PageHeader`, `DataTable` (sorting, keyboard, loading, empty) and `ConfirmDialog` |
 | `src/test/shell.test.tsx` | Navigation groups, unique go-to keys, `Ctrl+K`, `G` then a letter, the help dialog, and that nothing fires while typing |
 | `src/test/android-theme.test.ts` | The Android theme patch gives light bars and is safe to run twice |
+| `src/test/android-orientation.test.ts` | The Android orientation patch locks the phone to portrait, leaves tablets free, and is safe to run twice |
+| `e2e/tests/mobile.mobile.e2e.ts` | Phone layout per route: no sideways scroll, 44 px tap targets, vertical-only (no horizontal-overflow container in `main`, no side-by-side data-entry controls), screenshot baseline and axe |
 
 When you add a page, add it to `ROUTES` in the smoke test. When you add a status, the
 `StatusBadge` table is the only place to change.
@@ -493,7 +516,8 @@ When you add a page, add it to `ROUTES` in the smoke test. When you add a status
   app name from branding.
 - **Android:** the project in `src-tauri/gen/android` is generated. After `tauri android init`,
   run `node scripts/patch-android-theme.mjs` (`scripts/release-local.mjs` does this) for light status and navigation
-  bars.
+  bars, and `node scripts/patch-android-orientation.mjs` to lock phones to portrait while
+  tablets at 600 dp and up keep rotating.
 - **Scaling check (manual):** screens must stay usable at 125% and 150% Windows scaling.
   `scripts/capture-screens.mjs` takes screenshots of every route:
     1. `pnpm dev` in one terminal.
