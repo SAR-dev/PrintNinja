@@ -105,7 +105,9 @@ vi.mock("@/lib/hooks/useSystemPrinters", () => ({
     refresh: async () => [{ id: "1", name: "Dock Zebra" }],
   }),
 }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
+}));
 
 const job = (over: Partial<HistoryJob>): HistoryJob => ({
   id: 1,
@@ -149,7 +151,7 @@ function Where() {
 }
 
 describe("phone shell", () => {
-  it("bottom bar has five slots and More opens Designer, Automation and Settings", async () => {
+  it("bottom bar has five slots and More opens Designer, Connect to PC and Settings", async () => {
     window.matchMedia = phoneMatchMedia as typeof window.matchMedia;
     render(
       <MemoryRouter initialEntries={["/history"]}>
@@ -169,7 +171,9 @@ describe("phone shell", () => {
 
     fireEvent.click(within(bar).getByRole("button", { name: "More" }));
     const dialog = await screen.findByRole("dialog");
-    for (const name of ["Designer", "Automation", "Settings"])
+    // On a phone the Automation page is the pairing screen, so it is
+    // named for what it does there (PLAN §6).
+    for (const name of ["Designer", "Connect to PC", "Settings"])
       expect(within(dialog).getByRole("link", { name })).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("link", { name: "Designer" }));
     await waitFor(() =>
@@ -212,7 +216,7 @@ describe("phone shell", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).queryByRole("link", { name: "Designer" })).toBeNull();
     expect(
-      within(dialog).getByRole("link", { name: "Automation" }),
+      within(dialog).getByRole("link", { name: "Connect to PC" }),
     ).toBeInTheDocument();
   });
 });
@@ -272,7 +276,7 @@ describe("phone Print page", () => {
     expect(print).toHaveClass("w-full");
   });
 
-  it("keeps data fields visible but disabled while test data is on", async () => {
+  it("test data swaps the data link out for the sample note", async () => {
     usePrintStore.setState({ useTestData: true });
     render(
       <MemoryRouter>
@@ -280,13 +284,13 @@ describe("phone Print page", () => {
       </MemoryRouter>,
     );
     await screen.findByTestId("print-action-bar");
-    // No separate section: the fields stay inline, disabled in test mode.
-    expect(
-      screen.queryByRole("button", { name: /Advanced options/ }),
-    ).toBeNull();
-    const url = screen.getByLabelText("Data URL") as HTMLInputElement;
-    expect(url).toBeDisabled();
-    expect(screen.getByLabelText("Pages")).toBeInTheDocument();
+    // Test mode: the URL field is replaced by the sample note, not just
+    // disabled — a phone shows one thing at a time.
+    expect(screen.queryByLabelText("Data URL")).not.toBeInTheDocument();
+    // Back to a data link and the field is on screen, enabled.
+    fireEvent.click(screen.getByRole("radio", { name: "From a link" }));
+    const url = await screen.findByLabelText("Data URL");
+    expect(url).toBeEnabled();
   });
 
   it("caps the preview at 40vh, expands on tap and collapses from the header", async () => {
@@ -311,7 +315,9 @@ describe("phone Print page", () => {
     expect(
       screen.getByRole("button", { name: "Show preview" }),
     ).toHaveAttribute("aria-expanded", "false");
-    expect(document.getElementById("print-preview-body")).toHaveClass("hidden");
+    expect(document.getElementById("print-preview-body-phone")).toHaveClass(
+      "hidden",
+    );
   });
 });
 
@@ -680,15 +686,11 @@ describe("phone History cards", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
-  it("card menu reprints a job", async () => {
+  it("reprints a job from its card", async () => {
     renderPage();
     await screen.findByText("#1");
-    fireEvent.pointerDown(
-      screen.getByRole("button", { name: "Actions for job 1" }),
-    );
-    fireEvent.click(
-      await screen.findByRole("menuitem", { name: "Reprint job 1" }),
-    );
+    // Reprint is the card's primary one-tap action, not a menu item.
+    fireEvent.click(screen.getByRole("button", { name: "Reprint job 1" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Reprint job #1?")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Reprint" }));
@@ -791,56 +793,64 @@ describe("phone Designer page", () => {
       </MemoryRouter>,
     );
 
-  it("opens controls from a Settings sheet and keeps sections collapsed", async () => {
+  // PLAN §6, D4: the phone Designer is a read-only viewer — a notice, a
+  // section picker, and a sticky Save for the one thing a phone may edit
+  // (sample data). None of the desktop editor exists here.
+
+  it("is a read-only viewer: notice and section picker, no editor", async () => {
     renderDesigner();
-    await screen.findByRole("tablist", { name: "Designer views" });
-    expect(screen.queryByRole("button", { name: "Templates" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    const dialog = await screen.findByRole("dialog");
-    for (const name of ["Templates", "Page Setup"]) {
-      expect(within(dialog).getByRole("button", { name })).toHaveAttribute(
-        "aria-expanded",
-        "false",
-      );
-    }
-    fireEvent.click(within(dialog).getByRole("button", { name: "Page Setup" }));
-    expect(within(dialog).getByLabelText("Width (mm)")).toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    // The header names the open template; the notice says phones don't edit.
+    expect(
+      await screen.findByRole("heading", { name: "Shipping label" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("designer-phone-notice")).toHaveTextContent(
+      /edited on a computer/,
     );
+    expect(screen.getByTestId("designer-phone-sections")).toBeInTheDocument();
+    // The desktop editor controls do not exist on a phone.
+    expect(
+      screen.queryByRole("tablist", { name: "Designer views" }),
+    ).toBeNull();
+    expect(document.querySelector("div.cm-editor")).toBeNull();
   });
 
-  it("sticks the view tabs with a reachable Save", async () => {
+  it("offers sample data as the one editable section, with a sticky Save", async () => {
     renderDesigner();
-    const tablist = await screen.findByRole("tablist", {
-      name: "Designer views",
-    });
-    expect(tablist.closest("div.sticky")).not.toBeNull();
-    // Phones keep one Save: the sticky shortcut. The header toolbar
-    // (New, Save, visibility) lives behind the overflow menu instead.
-    const saves = screen.getAllByRole("button", { name: "Save" });
-    expect(saves).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "More" })).toBeInTheDocument();
+    await screen.findByTestId("designer-phone-sections");
+    fireEvent.click(screen.getByTestId("designer-phone-sections"));
+    fireEvent.click(await screen.findByRole("option", { name: "Sample data" }));
+    // The dataset panel is on screen, with the built-in fallback dataset.
+    expect(
+      screen.getByRole("radio", { name: "Use dataset Sample Order" }),
+    ).toBeInTheDocument();
+    // The phone keeps one Save: the sticky one, disabled until something
+    // changes.
+    const save = screen.getByTestId("designer-phone-save");
+    expect(save.closest("div.sticky")).not.toBeNull();
+    expect(save).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(1);
   });
 
-  it("shows real page dimensions on the canvas toolbar", async () => {
+  it("shows the real page size in the Details section", async () => {
     renderDesigner();
-    await screen.findByTitle("Canvas preview");
-    expect(screen.getByText(/\d+ × \d+ mm/)).toBeInTheDocument();
+    await screen.findByTestId("designer-phone-sections");
+    fireEvent.click(screen.getByTestId("designer-phone-sections"));
+    fireEvent.click(await screen.findByRole("option", { name: "Details" }));
+    // The hydrated template is 100 × 150 mm.
+    expect(screen.getByText("100 × 150 mm")).toBeInTheDocument();
   });
 
-  it("offers a Done button that dismisses the keyboard on the Code tab", async () => {
+  it("shows the code read-only, with no editing controls", async () => {
     renderDesigner();
-    await screen.findByRole("tablist", { name: "Designer views" });
-    const tab = screen.getByRole("tab", { name: "Code" });
-    fireEvent.mouseDown(tab);
-    fireEvent.click(tab);
-    const done = await screen.findByRole("button", { name: "Done" });
-    (screen.getByRole("tab", { name: "Canvas" }) as HTMLElement).focus();
-    expect(document.activeElement).toHaveTextContent("Canvas");
-    fireEvent.click(done);
-    expect(document.activeElement).toBe(document.body);
+    await screen.findByTestId("designer-phone-sections");
+    fireEvent.click(screen.getByTestId("designer-phone-sections"));
+    fireEvent.click(await screen.findByRole("option", { name: "Code" }));
+    // The template's HTML is visible, line-wrapped in a plain block —
+    // no CodeMirror pane, no textarea. (formatHtml re-indents, so match
+    // the pre's text, not a single line.)
+    expect(document.querySelector("pre")?.textContent).toContain("Hi");
+    expect(document.querySelector("div.cm-editor")).toBeNull();
+    expect(document.querySelector("textarea")).toBeNull();
   });
 });
 

@@ -235,6 +235,7 @@ if (sdkManager && process.env.ANDROID_KEYSTORE_BASE64 && process.env.ANDROID_KEY
   // ships placeholder art (placeholder icons otherwise).
   copyDir(join(ROOT, "src-tauri/icons/android"), join(genDir, "app/src/main/res"));
   sh("node", ["scripts/patch-android-theme.mjs"]);
+  sh("node", ["scripts/patch-android-orientation.mjs"]);
   sh("node", ["scripts/patch-android-signing.mjs"], {
     env: {
       ...buildEnv,

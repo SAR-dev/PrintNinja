@@ -8,11 +8,17 @@ import { testids } from "../support/testids";
 // The phone smoke spec. Runs on the two
 // mobile projects (Pixel 7 at 390x844, small at 360x640), where the
 // coarse-pointer rules and card layouts apply. Every route gets the same
-// four checks: no sideways scrolling, 44px tap targets, a review
+// six checks: no sideways scrolling, vertical-only layout (no horizontal
+// pan strips, no side-by-side form controls), 44px tap targets, a review
 // screenshot, and an axe pass.
 //
-// Refreshing baselines after an intentional visual change:
+// Refreshing baselines after an intentional visual change — both mobile
+// projects, or the small one's baselines stay stale:
 //   pnpm --filter e2e exec playwright test --project=mobile-pixel7 --update-snapshots
+//   pnpm --filter e2e exec playwright test --project=mobile-small --update-snapshots
+// Local runs mint the baselines for the local platform only. The CI
+// baselines (-linux) are font-bound to the runner; refresh those through
+// the E2E_UPDATE_SNAPSHOTS Actions variable (docs/CI.md), not locally.
 
 const ROUTES = [
   "/templates",
@@ -113,7 +119,72 @@ async function checkRoute(
     `sideways scroll on ${label}: scrollWidth ${overflow.scrollWidth} > innerWidth ${overflow.innerWidth}`,
   ).toBeLessThanOrEqual(overflow.innerWidth);
 
-  // 2. Every visible button, link and tab is thumb-sized.
+  // 2. Vertical-only, part one: no element inside main is a horizontal pan
+  //    strip (overflow-x auto/scroll with content wider than itself).
+  const panStrips = await page.evaluate(() => {
+    const out: string[] = [];
+    for (const el of Array.from(document.querySelectorAll("main *"))) {
+      const style = getComputedStyle(el);
+      if (!/^(auto|scroll)$/.test(style.overflowX)) continue;
+      if (el.scrollWidth > el.clientWidth + 1) {
+        const cls = (el as Element).getAttribute("class") || "";
+        out.push(
+          `${el.tagName.toLowerCase()}${cls ? ` .${cls.split(/\s+/).join(".")}` : ""} (overflow-x: ${style.overflowX})`,
+        );
+      }
+    }
+    return out;
+  });
+  expect(
+    panStrips,
+    `horizontal pan strips on ${label}: ${JSON.stringify(panStrips)}`,
+  ).toEqual([]);
+
+  // 3. Vertical-only, part two: two visible data-entry controls never
+  //    share a row (side-by-side inputs are a desktop layout). One
+  //    containing the other is not a row; buttons are excluded so an
+  //    input with its own action button stays legal.
+  const sideBySide = await page.evaluate(() => {
+    const visible = (el: HTMLElement) => {
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return false;
+      const style = getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden")
+        return false;
+      return typeof el.checkVisibility === "function"
+        ? el.checkVisibility()
+        : true;
+    };
+    const controls = Array.from(
+      document.querySelectorAll<HTMLElement>("input, select, textarea"),
+    ).filter(visible);
+    const out: string[] = [];
+    for (let i = 0; i < controls.length; i++) {
+      for (let j = i + 1; j < controls.length; j++) {
+        const a = controls[i];
+        const b = controls[j];
+        if (a.contains(b) || b.contains(a)) continue;
+        const ra = a.getBoundingClientRect();
+        const rb = b.getBoundingClientRect();
+        const rowOverlap =
+          Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+        const gap = Math.max(ra.left, rb.left) - Math.min(ra.right, rb.right);
+        if (rowOverlap > 4 && gap > 4) {
+          const name = (el: HTMLElement) => el.name || el.id || "";
+          out.push(
+            `${a.tagName.toLowerCase()} "${name(a)}" beside ${b.tagName.toLowerCase()} "${name(b)}"`,
+          );
+        }
+      }
+    }
+    return out;
+  });
+  expect(
+    sideBySide,
+    `side-by-side form controls on ${label}: ${JSON.stringify(sideBySide)}`,
+  ).toEqual([]);
+
+  // 4. Every visible button, link and tab is thumb-sized.
   const small = await page.evaluate((): SmallTarget[] => {
     const out: SmallTarget[] = [];
     for (const el of document.querySelectorAll("button, a, [role='tab']")) {
@@ -157,7 +228,7 @@ async function checkRoute(
     `undersized tap targets on ${label}: ${JSON.stringify(unexpected)}`,
   ).toEqual([]);
 
-  // 3. Review screenshot (Playwright appends project and platform).
+  // 5. Review screenshot (Playwright appends project and platform).
   await expect(page).toHaveScreenshot(shotName, {
     animations: "disabled",
     caret: "initial",
@@ -165,7 +236,7 @@ async function checkRoute(
     maxDiffPixelRatio: 0.02,
   });
 
-  // 4. Axe at the phone viewport (same rule disables as the unit pass).
+  // 6. Axe at the phone viewport (same rule disables as the unit pass).
   // The sandboxed preview iframes hold generated template output, not
   // app chrome; axe cannot message into the opaque origin and hangs,
   // so they are excluded from the run.
@@ -173,6 +244,7 @@ async function checkRoute(
     .disableRules(["color-contrast", "region"])
     .exclude("iframe[title='Canvas preview']")
     .exclude("iframe[title='Print preview']")
+    .exclude("iframe[title='Template preview']")
     .analyze();
   expect(
     results.violations.flatMap((v) =>
@@ -201,6 +273,15 @@ test("phone checks pass on the designer", async ({ page }) => {
     .dispatchEvent("pointerdown");
   await page.getByRole("menuitem", { name: "Edit" }).click();
   await expect(page).toHaveURL(/\/template\/\d+/);
+
+  // The phone Designer is a read-only viewer (PLAN §6, D4): the notice
+  // and the section picker are on screen, and none of the editing
+  // controls exist — no CodeMirror panes, no textareas.
+  await expect(page.getByTestId(testids.designerPhoneNotice)).toBeVisible();
+  await expect(page.getByTestId(testids.designerPhoneSections)).toBeVisible();
+  await expect(page.locator("div.cm-editor")).toHaveCount(0);
+  await expect(page.locator("textarea")).toHaveCount(0);
+
   await checkRoute(page, "designer", "designer.png");
 });
 

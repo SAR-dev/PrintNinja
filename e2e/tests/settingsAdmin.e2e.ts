@@ -107,20 +107,20 @@ test("settings admin: shared-rendering phone pairs by code, tests, removes", asy
     timeout: 15_000,
   });
 
-  // A short code is refused before the backend is asked.
-  await page.getByTestId(testids.devicesCodeInput).fill("K7Q");
-  await expect(page.getByTestId(testids.devicesCodeSubmit)).toBeDisabled();
+  const codeInput = page.getByTestId(testids.devicesCodeInput);
+
+  // A short code is refused before the backend is asked: it stays in the
+  // field, because auto-submit only fires at a complete code.
+  await codeInput.fill("K7Q");
+  await expect(codeInput).toHaveValue("K7Q");
 
   // Characters outside the alphabet never reach the field.
-  await page.getByTestId(testids.devicesCodeInput).fill("01oi");
-  await expect(page.getByTestId(testids.devicesCodeInput)).toHaveValue("");
-  await page.getByTestId(testids.devicesCodeInput).fill("k7qm-4xpd!!01");
-  await expect(page.getByTestId(testids.devicesCodeInput)).toHaveValue(
-    "K7QM4XPD",
-  );
+  await codeInput.fill("01oi");
+  await expect(codeInput).toHaveValue("");
 
-  // The e2e code pairs, and the canned provider proves it straight away.
-  await page.getByTestId(testids.devicesCodeSubmit).click();
+  // The e2e code pairs the moment it is complete (auto-submit, no button),
+  // and the canned provider proves it straight away.
+  await codeInput.fill("k7qm-4xpd!!01");
   const row = page.locator(`[data-testid^="${testids.devicesPairPrefix}"]`, {
     hasText: "Studio PC",
   });
@@ -128,8 +128,7 @@ test("settings admin: shared-rendering phone pairs by code, tests, removes", asy
   await expect(row.getByText(/Score 800/)).toBeVisible();
 
   // A wrong code surfaces the backend's reason.
-  await page.getByTestId(testids.devicesCodeInput).fill("AAAAAAAA");
-  await page.getByTestId(testids.devicesCodeSubmit).click();
+  await codeInput.fill("AAAAAAAA");
   await expect(page.getByRole("alert")).toContainText("Wrong code");
 
   // Test can be run again by hand.
@@ -164,8 +163,9 @@ test("settings admin: shared-rendering manual address is tucked away but works",
   await expect(page.getByTestId(testids.devicesAddrInput)).toBeHidden();
   await page.getByTestId(testids.devicesAdvanced).locator("summary").click();
   await page.getByTestId(testids.devicesAddrInput).fill("192.168.1.20:17717");
+  // The address is filled in first, so the auto-submit picks it up when
+  // the code completes.
   await page.getByTestId(testids.devicesCodeInput).fill("K7QM4XPD");
-  await page.getByTestId(testids.devicesCodeSubmit).click();
   await expect(
     page.locator(`[data-testid^="${testids.devicesPairPrefix}"]`, {
       hasText: "Studio PC",

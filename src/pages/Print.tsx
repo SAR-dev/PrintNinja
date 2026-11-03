@@ -15,18 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Printer,
-  Zap,
-  CheckCircle2,
-  XCircle,
-  ChevronDown,
-  RefreshCw,
-} from "lucide-react";
+import { Printer, Zap, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { TimingBreakdown } from "@/components/TimingBreakdown";
 import { formatSeconds } from "@/lib/timings";
-import { cn } from "@/lib/utils";
 import { useSystemPrinters } from "@/lib/hooks/useSystemPrinters";
 import {
   fetchPcPrinters,
@@ -62,13 +54,8 @@ import type { TemplateListRow } from "@/lib/templates/listTemplates";
 import { compileTemplateCss } from "@/lib/templates/compileTemplateCss";
 import { PrintPreview } from "@/components/PrintPreview";
 import { resolvePaper } from "@/lib/render/printLayout";
-
-/** Physical paper sheets offered as one-tap presets (mm). */
-const PAPER_PRESETS = [
-  { key: "a4", w: 210, h: 297, labelKey: "print.paper_a4" },
-  { key: "letter", w: 216, h: 279, labelKey: "print.paper_letter" },
-  { key: "photo", w: 100, h: 150, labelKey: "print.paper_photo" },
-] as const;
+import { PAPER_PRESETS } from "@/lib/paperPresets";
+import { PhonePrintFlow } from "@/components/print/PhonePrintFlow";
 
 export function PrintPage() {
   const location = useLocation();
@@ -114,14 +101,10 @@ function PrintForm() {
   // preview effect does not write a "Compiled Tailwind CSS" version on
   // every render of the same template.
   const cssBackfilled = useRef<Set<number>>(new Set());
-  // Phone-only layout: the sticky action bar below. Desktop keeps the single
-  // in-card Print button (jsdom has no matchMedia, so tests see that one too).
+  // The phone renders its own single-column flow (PhonePrintFlow, PLAN §6)
+  // from the same handlers and derived values; the JSX below is desktop
+  // and tablet only. jsdom has no matchMedia, so tests see that one too.
   const isPhone = useMediaQuery(PHONE_QUERY);
-  // Phone preview: collapsible, capped at ~40vh, tap to expand.
-  // Desktop always shows the full preview, so these only matter on phones.
-  const [previewOpen, setPreviewOpen] = useState(true);
-  const [previewExpanded, setPreviewExpanded] = useState(false);
-  const showPreviewBody = !isPhone || previewOpen;
 
   // Print via PC (ARCHITECTURE §9): when the flag is on, the dialog talks to the
   // chosen paired PC instead of the local pipeline — no local transport
@@ -880,6 +863,51 @@ function PrintForm() {
     </>
   );
 
+  if (isPhone) {
+    return (
+      <PhonePrintFlow
+        viaPc={viaPc}
+        viaPcPair={viaPcPair}
+        pcUnpaired={pcUnpaired}
+        pairs={pairs}
+        pcPrinters={pcPrinters}
+        pcCached={pcCached}
+        pcFailed={pcFailed}
+        pcTemplates={pcTemplates}
+        pcTemplate={pcTemplate}
+        onPcTemplateChange={setPcTemplate}
+        pcTemplatesCached={pcTemplatesCached}
+        printedVia={printedVia}
+        remoteCode={remoteCode}
+        onPickViaPcDevice={pickViaPcDevice}
+        onExitViaPc={() => setViaPc(false)}
+        printers={printers}
+        templates={templates}
+        onPrinterChange={onPrinterChange}
+        onRefreshPrinters={() => void loadPrinters()}
+        refreshingPrinters={refreshingPrinters}
+        previewPages={previewPages}
+        previewError={previewError}
+        previewNotice={previewNotice}
+        previewTemplate={previewTemplate}
+        designW={designW}
+        designH={designH}
+        effPaperW={effPaperW}
+        effPaperH={effPaperH}
+        previewPaperW={previewPaperW}
+        previewPaperH={previewPaperH}
+        paperPreset={paperPreset}
+        paperMismatch={paperMismatch}
+        canPrint={canPrint}
+        blocker={blocker}
+        onPrint={() => void handlePrint(false)}
+        onRetry={() => void handlePrint(true)}
+        onSyncTemplates={handleSyncTemplates}
+        onSpikeTest={handleSpikeTest}
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader title={t("print.title")} description={t("pages.print")} />
@@ -1440,24 +1468,19 @@ function PrintForm() {
               </div>
 
               <div className="space-y-2 pt-1">
-                {/* Phone: the sticky bar owns the Print button (below). Two
-                    buttons with the same name would break the tests' single
-                    "Print" lookup, so this one is desktop/tablet only. */}
-                {!isPhone && (
-                  <Button
-                    size="lg"
-                    className="w-full"
-                    onClick={() => void handlePrint(false)}
-                    disabled={!canPrint}
-                    title={blocker || undefined}
-                    aria-describedby={blocker ? "print-blocker" : undefined}
-                  >
-                    <Printer className="h-5 w-5" aria-hidden="true" />
-                    {store.status === "printing"
-                      ? t("print.printing")
-                      : t("print.print")}
-                  </Button>
-                )}
+                <Button
+                  size="lg"
+                  className="w-full"
+                  onClick={() => void handlePrint(false)}
+                  disabled={!canPrint}
+                  title={blocker || undefined}
+                  aria-describedby={blocker ? "print-blocker" : undefined}
+                >
+                  <Printer className="h-5 w-5" aria-hidden="true" />
+                  {store.status === "printing"
+                    ? t("print.printing")
+                    : t("print.print")}
+                </Button>
                 {blocker && (
                   <p
                     id="print-blocker"
@@ -1510,34 +1533,8 @@ function PrintForm() {
                   </p>
                 ) : null}
               </div>
-              {isPhone && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-expanded={previewOpen}
-                  aria-controls="print-preview-body"
-                  aria-label={
-                    previewOpen
-                      ? t("print.preview_collapse")
-                      : t("print.preview_expand")
-                  }
-                  onClick={() => setPreviewOpen((v) => !v)}
-                >
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform",
-                      previewOpen && "rotate-180",
-                    )}
-                    aria-hidden="true"
-                  />
-                </Button>
-              )}
             </CardHeader>
-            <CardContent
-              id="print-preview-body"
-              className={cn(!showPreviewBody && "hidden")}
-            >
+            <CardContent id="print-preview-body">
               {previewNotice && !previewError ? (
                 <p className="mb-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning">
                   {previewNotice}
@@ -1549,15 +1546,7 @@ function PrintForm() {
                 </p>
               ) : previewPages.length > 0 ? (
                 <div
-                  className={cn(
-                    "overflow-auto rounded-md border bg-muted p-4",
-                    // Phones: ~40vh until tapped, then most of the screen.
-                    isPhone
-                      ? previewExpanded
-                        ? "max-h-[70vh]"
-                        : "max-h-[40vh]"
-                      : "max-h-[60vh]",
-                  )}
+                  className="max-h-[60vh] overflow-auto rounded-md border bg-muted p-4"
                   tabIndex={0}
                   role="region"
                   aria-label={t("print.preview_region")}
@@ -1584,65 +1573,10 @@ function PrintForm() {
                   {t("print.no_preview")}
                 </p>
               )}
-              {isPhone && previewPages.length > 0 && !previewError && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="mt-2 w-full"
-                  aria-pressed={previewExpanded}
-                  onClick={() => setPreviewExpanded((v) => !v)}
-                >
-                  {previewExpanded
-                    ? t("print.preview_less")
-                    : t("print.tap_expand")}
-                </Button>
-              )}
             </CardContent>
           </Card>
         </div>
       </div>
-
-      {/* Sticky action bar on phones: full-width Print always a
-          thumb-reach away, above the bottom nav. The printer is picked
-          in the settings card above; the bar owns just the Print button
-          so there is exactly one "Print" lookup for tests. */}
-      {isPhone && (
-        <div
-          className="sticky bottom-0 z-10 -mx-4 border-t bg-card/95 px-4 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pt-2 backdrop-blur md:hidden"
-          data-slot="action-bar"
-          data-testid="print-action-bar"
-        >
-          <Button
-            size="lg"
-            className="min-h-11 w-full"
-            onClick={() => void handlePrint(false)}
-            disabled={!canPrint}
-            title={blocker || undefined}
-            aria-describedby={blocker ? "print-blocker-phone" : undefined}
-          >
-            <Printer className="h-5 w-5" aria-hidden="true" />
-            {store.status === "printing"
-              ? t("print.printing")
-              : t("print.print")}
-          </Button>
-          {blocker && (
-            <p
-              id="print-blocker-phone"
-              className="mt-1 text-xs text-muted-foreground"
-            >
-              {blocker}{" "}
-              {pcUnpaired && (
-                <Link
-                  to="/automation?tab=phones"
-                  className="underline underline-offset-2"
-                >
-                  {t("shell.pc_pair_again")}
-                </Link>
-              )}
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
 }

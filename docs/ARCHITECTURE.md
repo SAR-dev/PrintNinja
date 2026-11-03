@@ -83,10 +83,10 @@ private-network blocking), render the design pages, place the pages on
 sheets, produce the output — the step that may run on the paired PC — send
 the bytes once per copy, and close the job as success or failure with the
 reason. The full walk-through is in the deep dives
-[rendering and layout](./architecture/rendering-and-layout.md) and
-[printers and transports](./architecture/printers-and-transports.md); the
+[rendering and layout](./architecture/RENDERING_AND_LAYOUT.md) and
+[printers and transports](./architecture/PRINTERS_AND_TRANSPORTS.md); the
 queue, timings and callback webhooks are in
-[queue and history](./architecture/queue-and-history.md).
+[queue and history](./architecture/QUEUE_AND_HISTORY.md).
 
 ## How a phone and a PC work together
 
@@ -122,7 +122,7 @@ the whole job runs on the PC's printers with the PC's templates, and the phone
 polls for the outcome; there is no silent fallback to local printing. The full
 rules — including what happens when the PC is off, busy, or refuses, and the
 reasons behind each rule — are in
-[phone and PC sharing](./architecture/phone-and-pc-sharing.md).
+[phone and PC sharing](./architecture/PHONE_AND_PC_SHARING.md).
 
 ## Where does my print fail?
 
@@ -165,11 +165,11 @@ timings, so the answer is in History, not in the log.
 
 | You want to… | Read |
 |---|---|
-| Understand how a design becomes pages | [rendering and layout](./architecture/rendering-and-layout.md) |
-| Add a printer or pick a language | [printers and transports](./architecture/printers-and-transports.md) |
-| Debug a slow, stuck or failed job | [queue and history](./architecture/queue-and-history.md) |
-| Pair, share, or review what a PC is told | [phone and PC sharing](./architecture/phone-and-pc-sharing.md) |
-| Know *why* a sharing rule exists | [phone and PC sharing](./architecture/phone-and-pc-sharing.md#design-decisions) |
+| Understand how a design becomes pages | [rendering and layout](./architecture/RENDERING_AND_LAYOUT.md) |
+| Add a printer or pick a language | [printers and transports](./architecture/PRINTERS_AND_TRANSPORTS.md) |
+| Debug a slow, stuck or failed job | [queue and history](./architecture/QUEUE_AND_HISTORY.md) |
+| Pair, share, or review what a PC is told | [phone and PC sharing](./architecture/PHONE_AND_PC_SHARING.md) |
+| Know *why* a sharing rule exists | [phone and PC sharing](./architecture/PHONE_AND_PC_SHARING.md#design-decisions) |
 | Learn a term's plain meaning | [GLOSSARY.md](./GLOSSARY.md) |
 | Build, run or change the codebase | [DEVELOPMENT.md](./DEVELOPMENT.md) |
 | Design UI or reuse a component | [UI_GUIDE.md](./UI_GUIDE.md) |

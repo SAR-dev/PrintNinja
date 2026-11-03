@@ -77,6 +77,6 @@ in `ENV.md`. Duplicate requests (a replayed idempotency key) fire no second
 callback, and logs keep only a host-plus-truncated-path form of the URL,
 never the full one.
 
-See also: [phone and PC sharing](./phone-and-pc-sharing.md) (the jobs a phone
+See also: [phone and PC sharing](./PHONE_AND_PC_SHARING.md) (the jobs a phone
 sends through a PC, and how both histories record it), and the
 [glossary](../GLOSSARY.md).

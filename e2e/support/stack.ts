@@ -160,11 +160,32 @@ async function startWorkerApi(
   });
   service.unref();
 
+  // Capture the server's output so a failed health check shows why the
+  // process never came up (bind error, missing module, …). Draining the
+  // pipes also keeps a chatty server from stalling on a full buffer.
+  let serverLogs = "";
+  const appendLog = (chunk: Buffer | string): void => {
+    serverLogs = (serverLogs + chunk.toString()).slice(-8000);
+  };
+  service.stdout?.on("data", appendLog);
+  service.stderr?.on("data", appendLog);
+  service.on("error", (error) => {
+    appendLog(`[server spawn error: ${error.message}]\n`);
+  });
+  service.on("exit", (code, signal) => {
+    appendLog(`[server exited code=${code} signal=${signal}]\n`);
+  });
+
+  // 90s: a CPU-starved machine (indexing IDEs, antivirus) can take far
+  // longer than the healthy ~4s just to load the server's native
+  // bindings; a healthy server never gets slower than this.
   try {
-    await waitForHealth(apiUrl, 30_000);
+    await waitForHealth(apiUrl, 90_000);
   } catch (error) {
     service.kill();
-    throw error;
+    throw new Error(
+      `${(error as Error).message}\n--- server output ---\n${serverLogs.slice(-4000)}`,
+    );
   }
   return { pid: service.pid };
 }

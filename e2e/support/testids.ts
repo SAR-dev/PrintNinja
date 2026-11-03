@@ -132,10 +132,8 @@ export const testids = {
   devicesClearAll: "devices-clear-all",
   /** Settings API (PC): confirm removing every paired phone. */
   devicesClearConfirm: "devices-clear-confirm",
-  /** Settings API (phone): 8-character code input. */
+  /** Settings API (phone): 8-character code input (auto-submits when complete). */
   devicesCodeInput: "devices-code-input",
-  /** Settings API (phone): pair with the typed code. */
-  devicesCodeSubmit: "devices-code-submit",
   /** Settings API (phone): collapsed manual-address section. */
   devicesAdvanced: "devices-advanced",
   /** Settings API (phone): manual PC-address field. */
@@ -152,4 +150,8 @@ export const testids = {
   packNext: "pack-next",
   /** Designer pack chooser: create the template from the pack. */
   packCreate: "pack-create",
+  /** Phone Designer viewer: the "edit on a computer" notice. */
+  designerPhoneNotice: "designer-phone-notice",
+  /** Phone Designer viewer: the full-width section picker. */
+  designerPhoneSections: "designer-phone-sections",
 } as const;
