@@ -375,6 +375,12 @@ jobs:
       - name: Generate Android project if not committed
         run: |
           if [ ! -d src-tauri/gen/android ]; then pnpm exec tauri android init --ci; fi
+      # Phones stay portrait (single-column layout is guaranteed by the
+      # vertical-only rule); tablets (sw600dp+) keep rotating freely. The
+      # release job runs the same script; here it compiles the patched
+      # Kotlin on every PR instead of first on the release tag.
+      - name: Lock phone orientation to portrait
+        run: node scripts/patch-android-orientation.mjs
       - name: Make gradlew executable
         run: chmod +x src-tauri/gen/android/gradlew || true
       # Debug variant: compiles the Rust crate for aarch64 and every Kotlin
