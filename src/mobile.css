@@ -190,25 +190,26 @@
     transform-origin: right center;
   }
 
-  /* ---------- Segmented tabs ---------- */
+  /* ---------- Segmented tabs ----------
+     On phones a tab strip becomes a vertical list of full-width rows —
+     the vertical-only rule in the mobile e2e spec. This one rule converts
+     every page's horizontal tab strip (Templates, Printers, Automation)
+     into the stacked-choice layout the plan asks for. */
   [data-slot="tabs-list"] {
     display: flex;
+    flex-direction: column;
     width: 100%;
     gap: 0.25rem;
     padding: 0.25rem;
-    min-height: 3rem;
     border-radius: 1rem;
-    scrollbar-width: none;
-  }
-  [data-slot="tabs-list"]::-webkit-scrollbar {
-    display: none;
   }
   [data-slot="tabs-trigger"] {
-    flex: 1 0 auto;
+    width: 100%;
+    justify-content: flex-start;
     /* 44px: the e2e phone spec asserts every visible tab is at least
        44x44, same as buttons. */
     min-height: 2.75rem;
-    padding-inline: 0.5rem;
+    padding-inline: 0.75rem;
     border-radius: 0.75rem;
     font-size: 0.8125rem;
     font-weight: 600;
@@ -416,6 +417,15 @@
   /* Primary action first and full width, like a native action sheet. */
   [data-slot="dialog-content"] [data-slot="button"] {
     width: 100%;
+  }
+
+  /* ---------- Phone designer viewer ----------
+     The viewer's sample-data section reuses the desktop panel, whose
+     per-row Edit/Delete icon buttons are 24px. Every control on a phone
+     gets the 44px floor (the e2e phone spec asserts it). */
+  .viewer-sample [data-slot="button"] {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
   }
 }
 

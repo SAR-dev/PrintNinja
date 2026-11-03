@@ -13,6 +13,12 @@ export interface NavItem {
   path: string;
   icon: LucideIcon;
   labelKey: string;
+  /**
+   * Phone-only label, where the desktop name doesn't fit the phone job.
+   * Phones have no automations to configure — the page is the pairing
+   * screen, so it is named for what it does there (PLAN §6).
+   */
+  phoneLabelKey?: string;
   /** Second key of the "G then key" go-to shortcut. */
   shortcut: string;
 }
@@ -65,6 +71,7 @@ export const NAV_GROUPS: NavGroup[] = [
         path: "/automation",
         icon: Workflow,
         labelKey: "nav.automation",
+        phoneLabelKey: "nav.connect_pc",
         shortcut: "a",
       },
       {

@@ -15,6 +15,11 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // The Designer's desktop suites mount the heaviest trees (preview iframe
+    // included); under a full parallel run they need 5–8s of wall time, past
+    // the default 5s test timeout. Twenty seconds leaves headroom for CI
+    // without masking a genuine hang.
+    testTimeout: 20_000,
     setupFiles: ["./src/test/setup.ts"],
     globals: true,
     exclude: [

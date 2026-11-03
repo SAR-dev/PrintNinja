@@ -37,6 +37,7 @@ const ja: Translation = {
     settings: "設定",
     templates: "テンプレート",
     automation: "自動化",
+    connect_pc: "PCに接続",
     more: "その他",
     more_title: "その他",
     group_work: "作業",
@@ -205,6 +206,17 @@ const ja: Translation = {
   },
   designer: {
     title: "デザイナー",
+    // スマホ閲覧ビューアー (D4): セクション・通知・詳細 — 編集はPCで。
+    viewer_preview: "プレビュー",
+    viewer_details: "詳細",
+    viewer_section_aria: "表示するものを選択",
+    viewer_notice:
+      "テンプレートはPCで編集します。変更はこのスマホに自動で同期されます。",
+    viewer_details_size: "サイズ",
+    viewer_details_sync: "同期",
+    viewer_details_last_saved: "最終保存",
+    viewer_details_never: "なし",
+    viewer_preview_title: "テンプレートのプレビュー",
     via_pc_note:
       "PC経由印刷がオンの間、テンプレートはサーバーから同期されます — ここでは編集しません。",
     newTemplate: "新規テンプレート",
@@ -530,6 +542,24 @@ const ja: Translation = {
     preview_truncated:
       "{{total}}ページ中、最初の{{shown}}ページを表示しています。印刷にはすべて含まれます。",
     preview_unavailable: "プレビューを表示できません: {{error}}",
+    // スマホ向けフロー（PLAN §6）：短い文と、1行1項目のラベル。
+    phone: {
+      data: "データ",
+      data_sample: "サンプルデータ",
+      data_link: "リンクから",
+      copies_decrease: "部数を減らす",
+      copies_increase: "部数を増やす",
+      copies_hint: "1部ごとにジョブ全体を再送信します。",
+      pages_hint: "1ページに1件の注文が入ります。3ページなら3枚印刷されます。",
+      template_picker: "テンプレートを選ぶ",
+      layout_options: "レイアウトの設定",
+      layout_default: "デフォルトのレイアウト",
+      sum_paper: "用紙 {{pw}} × {{ph}} mm",
+      sum_margins: "余白 {{t}}/{{r}}/{{b}}/{{l}} mm",
+      sum_range: "範囲 {{range}}",
+      open_history: "履歴を開く",
+      failed_sentence: "印刷を完了できませんでした。",
+    },
   },
   printers: {
     title: "プリンター設定",
@@ -988,7 +1018,7 @@ const ja: Translation = {
       "サインインしていません — ペアリングするにはサインインしてください。",
     via_pc_title: "PC経由で印刷",
     via_pc_hint:
-      "このスマートフォンで印刷する代わりに、ペアリング済みのPCに印刷ジョブを送信します。フォールバックはありません。PCに到達できない場合、ジョブは失敗します。",
+      "このスマホではなく、PCのプリンターで印刷します。PCに到達できない場合は、ジョブは失敗します。",
     via_pc_switch: "PC経由で印刷",
     via_pc_no_pairs:
       "先にPCとペアリングしてください — その後このスイッチが有効になります。",
@@ -1013,6 +1043,16 @@ const ja: Translation = {
     devices_address_changed:
       "{{name}}に接続できません。アドレスが変わった場合は、もう一度ペアリングしてください。",
     devices_pair_again: "もう一度ペアリング",
+    // スマホペアリング (PLAN §6): 番号付き3ステップを1つずつ表示 + 常時表示ステータス行。
+    devices_pair_step_pc:
+      "PCで PrintNinja を開き、「スマホ」タブで共有をオンにしてください。",
+    devices_pair_step_code: "そこに表示される8文字のコードを入力してください。",
+    devices_pair_step_done: "{{name}} に接続しました。",
+    devices_status_connected: "{{name}} に接続済み",
+    devices_status_not_connected: "未接続",
+    devices_status_checking: "接続を確認中…",
+    devices_status_pc_not_found: "PCが見つかりません。Wi-Fiを確認してください",
+    devices_try_again: "もう一度試す",
     trusted_hint: "ここに登録した送信元は、印刷確認シートを省略します。",
     trusted_empty:
       "信頼する送信元はまだありません。すべてのディープリンクで確認が求められます。",

@@ -499,9 +499,11 @@ export function SettingsPage() {
               </span>
             </div>
           ) : (
+            // Desktop/tablet only (phones take the back-button branch
+            // above): a vertical section rail.
             <TabsList
               aria-label={t("settings_page.sections_aria")}
-              className="h-auto w-full shrink-0 flex-row items-stretch justify-start gap-1 overflow-x-auto bg-transparent p-0 md:w-56 md:flex-col md:overflow-visible"
+              className="h-auto w-full shrink-0 gap-1 bg-transparent p-0 md:w-56 md:flex-col"
             >
               {SECTION_META.map((s) => (
                 <TabsTrigger

@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL
 );
 
--- Pairing-code device registry (docs/architecture/phone-and-pc-sharing.md#pairing): one row
+-- Pairing-code device registry (docs/architecture/PHONE_AND_PC_SHARING.md#pairing): one row
 -- per paired phone. The PC stores only `sha256(token)` (`token_hash`),
 -- never the token. `display_name` is the PC user's rename and wins over
 -- the phone-reported `name`; it survives re-pairing of the same `id`.

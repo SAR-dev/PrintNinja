@@ -581,6 +581,10 @@ jobs:
       # Light status and navigation bars, to match the app's single light theme.
       - name: Apply light Android theme
         run: node scripts/patch-android-theme.mjs
+      # Phones stay portrait (single-column layout is guaranteed by the
+      # vertical-only rule); tablets (sw600dp+) keep rotating freely.
+      - name: Lock phone orientation to portrait
+        run: node scripts/patch-android-orientation.mjs
       - name: Make gradlew executable
         run: chmod +x src-tauri/gen/android/gradlew || true
       # Pin both variants to the shared keystore so every release APK

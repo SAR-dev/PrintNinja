@@ -24,6 +24,7 @@ import {
 } from "@/lib/shell/automationSearch";
 import { SETTING_SEARCH_ENTRIES } from "@/lib/shell/settingsSearch";
 import { isAndroid } from "@/lib/platform";
+import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { agent } from "@/lib/agent/commands";
 import type { HistoryJob, PrinterRow } from "@/lib/agent/types";
 import type { SettingsSection } from "@/lib/setup/checklist";
@@ -75,6 +76,8 @@ export function CommandPalette({
   onReprintJob,
 }: Props) {
   const { t } = useTranslation();
+  // Creating a template is a PC-side action (PLAN §6, D4).
+  const isPhone = useMediaQuery(PHONE_QUERY);
   const [templates, setTemplates] = useState<
     Array<{ id: number; name: string }>
   >([]);
@@ -266,14 +269,16 @@ export function CommandPalette({
               })}
             </Command.Group>
             <Command.Group heading={t("shell.group_actions")} className={GROUP}>
-              <Command.Item
-                value="action new template"
-                onSelect={() => run(() => onNavigate("/"))}
-                className={ITEM}
-              >
-                <FilePlus className="h-4 w-4" aria-hidden="true" />
-                {t("shell.new_template")}
-              </Command.Item>
+              {!isPhone && (
+                <Command.Item
+                  value="action new template"
+                  onSelect={() => run(() => onNavigate("/"))}
+                  className={ITEM}
+                >
+                  <FilePlus className="h-4 w-4" aria-hidden="true" />
+                  {t("shell.new_template")}
+                </Command.Item>
+              )}
               <Command.Item
                 value="action reprint last job"
                 onSelect={() => run(onReprintLast)}

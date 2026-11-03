@@ -821,9 +821,10 @@ export function HistoryPage() {
       clear: () => store.setFilter({ dateTo: "" }),
     });
 
-  // Phone card: job + status stay visible without
-  // horizontal scrolling; row actions move into a ⋯ menu; tapping the card
-  // opens the details via the DataTable's onRowActivate.
+  // Phone card: job + status + template stay visible without horizontal
+  // scrolling. The repeat action (Reprint, or Retry for failed jobs) is
+  // the primary card action, one tap; the ⋯ menu keeps the rest. Tapping
+  // the card opens the details via the DataTable's onRowActivate.
   const historyCard = (job: HistoryJob) => (
     <div className="flex items-center gap-3">
       <JobAvatar status={job.status} />
@@ -833,6 +834,7 @@ export function HistoryPage() {
           <JobStatusBadge status={job.status} />
         </div>
         <p className="truncate text-xs text-muted-foreground">
+          {job.template_id != null && `Template #${job.template_id} · `}
           {printerName(job.printer_id)} · {fmtTime(job)} · {job.source}
         </p>
         {job.error && (
@@ -842,8 +844,28 @@ export function HistoryPage() {
       <div
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
-        className="shrink-0"
+        className="flex shrink-0 items-center gap-1"
       >
+        {job.status === "failed" ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setConfirm({ kind: "retry", job })}
+          >
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            {t("history.retry")}
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={t("history.reprint_menu_item", { id: job.id })}
+            title={t("history.reprint")}
+            onClick={() => setConfirm({ kind: "reprint", job })}
+          >
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -859,19 +881,6 @@ export function HistoryPage() {
               <Eye className="h-4 w-4" aria-hidden="true" />
               {t("history.view_menu_item", { id: job.id })}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setConfirm({ kind: "reprint", job })}
-            >
-              <RotateCcw className="h-4 w-4" aria-hidden="true" />
-              {t("history.reprint_menu_item", { id: job.id })}
-            </DropdownMenuItem>
-            {job.status === "failed" && (
-              <DropdownMenuItem
-                onSelect={() => setConfirm({ kind: "retry", job })}
-              >
-                {t("history.retry")}
-              </DropdownMenuItem>
-            )}
             <DropdownMenuItem
               onSelect={() => setConfirm({ kind: "delete", job })}
               className="text-danger focus:text-danger"

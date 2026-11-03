@@ -35,6 +35,7 @@ const en = {
     settings: "Settings",
     templates: "Templates",
     automation: "Automation",
+    connect_pc: "Connect to PC",
     more: "More",
     more_title: "More",
     group_work: "Work",
@@ -203,6 +204,17 @@ const en = {
   },
   designer: {
     title: "Designer",
+    // Phone viewer (D4): sections, notice and details — the phone never edits.
+    viewer_preview: "Preview",
+    viewer_details: "Details",
+    viewer_section_aria: "Choose what to view",
+    viewer_notice:
+      "Templates are edited on a computer. Changes sync to this phone automatically.",
+    viewer_details_size: "Size",
+    viewer_details_sync: "Sync",
+    viewer_details_last_saved: "Last saved",
+    viewer_details_never: "Never",
+    viewer_preview_title: "Template preview",
     via_pc_note:
       "Templates sync down from the server while Print via PC is on — they are not drawn here.",
     newTemplate: "New Template",
@@ -516,6 +528,25 @@ const en = {
     preview_truncated:
       "Showing first {{shown}} of {{total}} pages — the print has them all.",
     preview_unavailable: "Preview unavailable: {{error}}",
+    // The phone flow (PLAN §6): plain sentences and one-field-per-row
+    // labels; the desktop form keeps the keys above.
+    phone: {
+      data: "Data",
+      data_sample: "Sample data",
+      data_link: "From a link",
+      copies_decrease: "Decrease copies",
+      copies_increase: "Increase copies",
+      copies_hint: "Each copy re-sends the whole job.",
+      pages_hint: "Each page holds one order. 3 pages prints three sheets.",
+      template_picker: "Choose template",
+      layout_options: "Layout options",
+      layout_default: "Default layout",
+      sum_paper: "Paper {{pw}} × {{ph}} mm",
+      sum_margins: "Margins {{t}}/{{r}}/{{b}}/{{l}} mm",
+      sum_range: "Range {{range}}",
+      open_history: "Open history",
+      failed_sentence: "The print didn't go through.",
+    },
   },
   printers: {
     title: "Printer Setup",
@@ -963,7 +994,7 @@ const en = {
     devices_account_signed_out: "Not signed in — sign in to pair.",
     via_pc_title: "Print via PC",
     via_pc_hint:
-      "Send print jobs to a paired PC instead of printing on this phone. No fallback: if the PC is unreachable, the job fails.",
+      "Print on the PC's printers instead of this phone's. If the PC can't be reached, the job fails.",
     via_pc_switch: "Print via PC",
     via_pc_no_pairs: "Pair a PC first — then this switch turns on.",
     via_pc_device: "Print on",
@@ -986,6 +1017,17 @@ const en = {
     devices_address_changed:
       "Can't reach {{name}}. If its address changed, pair again.",
     devices_pair_again: "Pair again",
+    // Phone pairing (PLAN §6): three numbered steps, one visible at a time,
+    // plus the always-on status line.
+    devices_pair_step_pc:
+      "On your computer, open PrintNinja → Phones and turn on sharing.",
+    devices_pair_step_code: "Type the 8-letter code shown there.",
+    devices_pair_step_done: "Connected to {{name}}.",
+    devices_status_connected: "Connected to {{name}}",
+    devices_status_not_connected: "Not connected",
+    devices_status_checking: "Checking connection…",
+    devices_status_pc_not_found: "PC not found, check Wi-Fi",
+    devices_try_again: "Try again",
     trusted_hint: "Sources listed here skip the print confirmation sheet.",
     trusted_empty:
       "No trusted sources yet — every deep link asks for confirmation.",

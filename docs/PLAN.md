@@ -496,10 +496,10 @@ docs/
   GLOSSARY.md                  plain-language terms
   ARCHITECTURE.md              ~1,200 words: system map, pipeline, phone↔PC diagram, "read next" by role
   architecture/
-    rendering-and-layout.md    design size vs paper size, fit modes, pagination
-    printers-and-transports.md network, system, USB, Bluetooth; printer languages; per-OS notes
-    queue-and-history.md       queue, retention, timings, metrics, logs
-    phone-and-pc-sharing.md    pairing, tokens, guests, Print via PC, failure behavior, security, design decisions
+    RENDERING_AND_LAYOUT.md    design size vs paper size, fit modes, pagination
+    PRINTERS_AND_TRANSPORTS.md network, system, USB, Bluetooth; printer languages; per-OS notes
+    QUEUE_AND_HISTORY.md       queue, retention, timings, metrics, logs
+    PHONE_AND_PC_SHARING.md    pairing, tokens, guests, Print via PC, failure behavior, security, design decisions
   DEVELOPMENT.md               quick start, layout, commands, tech stack (moved out of README)
 ```
 
@@ -538,7 +538,7 @@ Suggested order: F3 quick win first, then F1 alongside the mobile redesign, then
 
 ### Ordering (after features 1–5)
 
-1. **Documentation cleanup + restructure** (~1 week) — repo hygiene, README restructure with screenshots/glossary/badge automation, ARCHITECTURE.md split per §7, design decisions recorded in `phone-and-pc-sharing.md`.
+1. **Documentation cleanup + restructure** (~1 week) — repo hygiene, README restructure with screenshots/glossary/badge automation, ARCHITECTURE.md split per §7, design decisions recorded in `PHONE_AND_PC_SHARING.md`.
 2. **Mobile redesign** (~2 weeks) — vertical-only rule in `UI_GUIDE.md` + e2e assertions, portrait lock (manifest patch, tablet exception, dead-code removal, WCAG note), `ResponsiveTabs` primitive → Templates/Printers/Automation/Designer/Settings, Designer viewer mode, Print page + pairing rebuild, naming/errors/copy, refresh phone snapshots, `pnpm check:full`.
 3. **Quick-win features** (~1 week) — F3 mismatch warnings, F1 QR pairing.
 4. **Larger features** — F7, F8, F9, F11, F12, F13 as demand dictates.
