@@ -12,8 +12,13 @@ import { testids } from "../support/testids";
 // pan strips, no side-by-side form controls), 44px tap targets, a review
 // screenshot, and an axe pass.
 //
-// Refreshing baselines after an intentional visual change:
+// Refreshing baselines after an intentional visual change — both mobile
+// projects, or the small one's baselines stay stale:
 //   pnpm --filter e2e exec playwright test --project=mobile-pixel7 --update-snapshots
+//   pnpm --filter e2e exec playwright test --project=mobile-small --update-snapshots
+// Local runs mint the baselines for the local platform only. The CI
+// baselines (-linux) are font-bound to the runner; refresh those through
+// the E2E_UPDATE_SNAPSHOTS Actions variable (docs/CI.md), not locally.
 
 const ROUTES = [
   "/templates",
