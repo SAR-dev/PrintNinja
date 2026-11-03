@@ -8,6 +8,11 @@ export default defineConfig({
     // a running container, never in the default pass.
     include: ["test/**/*.test.ts"],
     exclude: ["test/e2e/**"],
+    // The OpenAPI validation and the concurrent-writes test are CPU-heavy
+    // (real Argon2 hashing, full document generation) and can exceed the
+    // default 5s under a parallel check:full run. Twenty seconds leaves
+    // headroom without masking a genuine hang.
+    testTimeout: 20_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],

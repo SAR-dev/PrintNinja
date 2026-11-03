@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { agent } from "@/lib/agent/commands";
 import type {
   PairedDevice,
@@ -65,7 +67,7 @@ type TestState =
   | { state: "error"; message: string };
 
 /**
- * Automation → Phones tab: shared rendering (see docs/architecture/phone-and-pc-sharing.md#what-travels-and-what-never-does).
+ * Automation → Phones tab: shared rendering (see docs/architecture/PHONE_AND_PC_SHARING.md#what-travels-and-what-never-does).
  *
  * One direction only: a phone asks a PC to make its PDFs. So each device
  * shows just its own half. The PC opens a 30-second pairing window and
@@ -1054,6 +1056,7 @@ function PcSection() {
 /** Phone: type the PC's code. Renders always go to the paired PC. */
 function PhoneSection({ onPaired }: { onPaired?: () => void }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [pairs, setPairs] = useState<RenderPair[]>([]);
   const [tests, setTests] = useState<Record<string, TestState>>({});
   const [code, setCode] = useState("");
@@ -1171,10 +1174,12 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
     codeInputRef.current?.scrollIntoView({ block: "center" });
   };
 
-  const submit = async () => {
+  // Auto-advance (PLAN §6): the input submits itself the moment the code
+  // is complete, so `input` may differ from the committed state mid-flight.
+  const submit = async (input: string = code) => {
     setFormError("");
-    const normalized = normalizePairingCode(code);
-    if (!isCompletePairingCode(code)) {
+    const normalized = normalizePairingCode(input);
+    if (!isCompletePairingCode(input)) {
       setFormError(t("settings_page.devices_code_invalid"));
       return;
     }
@@ -1231,10 +1236,61 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
     }
   };
 
-  const complete = isCompletePairingCode(code);
+  // Always-on status line (PLAN §6): one sentence about the connection,
+  // plus Try again wherever a re-test or a re-pair would help.
+  const firstPair = pairs[0];
+  const firstTest = firstPair ? tests[firstPair.id] : undefined;
+  let statusText = t("settings_page.devices_status_not_connected");
+  let statusTone = "text-muted-foreground";
+  let statusTryAgain: (() => void) | null = () =>
+    pairAgain(firstPair ?? ({} as RenderPair));
+  if (firstPair) {
+    if (firstTest?.state === "ok") {
+      statusText = t("settings_page.devices_status_connected", {
+        name: firstPair.name,
+      });
+      statusTone = "text-success";
+      statusTryAgain = null;
+    } else if (firstTest?.state === "error") {
+      statusText = t("settings_page.devices_status_pc_not_found");
+      statusTone = "text-warning";
+      statusTryAgain = () => void testPair(firstPair);
+    } else {
+      statusText = t("settings_page.devices_status_checking");
+      statusTryAgain = null;
+    }
+  }
 
   return (
     <div className="space-y-3">
+      <div
+        data-testid="devices-status"
+        role="status"
+        className="flex items-center justify-between gap-2 rounded-md border p-3"
+      >
+        <p className={cn("min-w-0 truncate text-sm font-medium", statusTone)}>
+          {statusText}
+        </p>
+        {statusTryAgain && (
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="devices-try-again"
+            disabled={firstTest?.state === "busy"}
+            onClick={statusTryAgain}
+          >
+            {t("settings_page.devices_try_again")}
+          </Button>
+        )}
+      </div>
+
+      {pairs.length === 0 && (
+        <p className="text-sm">
+          <span className="mr-1 font-semibold">1.</span>
+          {t("settings_page.devices_pair_step_pc")}
+        </p>
+      )}
+
       {pairs.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {t("settings_page.devices_no_pairs")}
@@ -1395,7 +1451,7 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
                   key={`${peer.host}:${peer.port}:${peer.provider_id}`}
                   type="button"
                   data-testid={`devices-nearby-${peer.host}-${peer.port}`}
-                  className="flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left hover:bg-accent"
+                  className="flex w-full min-h-11 items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left hover:bg-accent"
                   onClick={() => {
                     setAddress(`${peer.host}:${peer.port}`);
                     setShowAdvanced(true);
@@ -1425,6 +1481,12 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
       )}
 
       <div className="space-y-2 rounded-md border p-3">
+        {pairs.length === 0 && (
+          <p className="text-sm">
+            <span className="mr-1 font-semibold">2.</span>
+            {t("settings_page.devices_pair_step_code")}
+          </p>
+        )}
         <Label htmlFor="devices-code">
           {t("settings_page.devices_code_entry_label")}
         </Label>
@@ -1440,39 +1502,32 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
               : t("settings_page.devices_account_signed_out")}
           </p>
         )}
-        <div className="flex gap-2">
-          <Input
-            id="devices-code"
-            ref={codeInputRef}
-            data-testid="devices-code-input"
-            placeholder="XXXXXXXX"
-            autoComplete="off"
-            autoCapitalize="characters"
-            spellCheck={false}
-            className="font-mono uppercase placeholder:opacity-50"
-            value={code}
-            onChange={(e) => {
-              setCode(filterPairingInput(e.target.value));
-              setFormError("");
-            }}
-          />
-          <Button
-            data-testid="devices-code-submit"
-            disabled={busy || !complete}
-            onClick={() => void submit()}
-          >
-            <Plus className="h-4 w-4" />
-            {busy
-              ? t("settings_page.devices_pairing_searching")
-              : t("settings_page.devices_pair_submit")}
-          </Button>
-        </div>
+        {/* One large input, no button: a complete code pairs by itself
+            (auto-advance). !-important beats the 3rem phone rule in
+            mobile.css, which wins the cascade at equal specificity. */}
+        <Input
+          id="devices-code"
+          ref={codeInputRef}
+          data-testid="devices-code-input"
+          placeholder="XXXXXXXX"
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          className="!h-14 font-mono !text-2xl uppercase !tracking-widest placeholder:opacity-50"
+          value={code}
+          onChange={(e) => {
+            const next = filterPairingInput(e.target.value);
+            setCode(next);
+            setFormError("");
+            if (!busy && isCompletePairingCode(next)) void submit(next);
+          }}
+        />
         {busy && (
           <p className="text-xs text-muted-foreground">
             {t("settings_page.devices_pairing_searching")}
           </p>
         )}
-        {code && !complete && (
+        {code && !isCompletePairingCode(code) && (
           <p className="text-xs text-muted-foreground">
             {t("settings_page.devices_code_hint_short", {
               code,
@@ -1511,6 +1566,25 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
           </div>
         </details>
       </div>
+
+      {/* Step 3: pairing is done — the only thing left is to print. */}
+      {firstPair && (
+        <div className="space-y-2 rounded-md border p-3">
+          <p className="text-sm">
+            <span className="mr-1 font-semibold">3.</span>
+            {t("settings_page.devices_pair_step_done", {
+              name: firstPair.name,
+            })}
+          </p>
+          <Button
+            data-testid="devices-print-now"
+            className="w-full"
+            onClick={() => navigate("/print")}
+          >
+            {t("nav.print")}
+          </Button>
+        </div>
+      )}
 
       {formError && (
         <p role="alert" className="text-xs text-danger">

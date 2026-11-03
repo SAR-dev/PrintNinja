@@ -1,8 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { ReactElement } from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import "@/lib/i18n";
 import { PairingGate } from "@/components/PairingGate";
 import { toast } from "sonner";
+
+// The gate's embedded Devices UI navigates (e.g. Print after pairing),
+// so the standalone renders need a router.
+function renderGate(ui: ReactElement) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
 
 function phoneMode() {
   const ua = vi
@@ -30,7 +38,7 @@ beforeEach(() => {
 
 describe("PairingGate", () => {
   it("explains the PC requirement and shows the pairing UI", async () => {
-    const view = render(<PairingGate onPaired={() => {}} />);
+    const view = renderGate(<PairingGate onPaired={() => {}} />);
     expect(
       await screen.findByText(/Pair your PC to start printing/),
     ).toBeInTheDocument();
@@ -42,7 +50,7 @@ describe("PairingGate", () => {
 
   it("lets the app through once a pair lands", async () => {
     const onPaired = vi.fn();
-    const view = render(<PairingGate onPaired={onPaired} />);
+    const view = renderGate(<PairingGate onPaired={onPaired} />);
     await screen.findByText(/Pair your PC to start printing/);
     expect(onPaired).not.toHaveBeenCalled();
 
@@ -61,7 +69,7 @@ describe("PairingGate", () => {
 
   it("stays put while unpaired", async () => {
     const onPaired = vi.fn();
-    const view = render(<PairingGate onPaired={onPaired} />);
+    const view = renderGate(<PairingGate onPaired={onPaired} />);
     await screen.findByText(/Pair your PC to start printing/);
     // Longer than one poll: still no pair, still no pass.
     await new Promise((r) => setTimeout(r, 2500));
@@ -75,7 +83,7 @@ describe("PairingGate", () => {
       .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
     (window as any).__TAURI_INTERNALS__ = {}; // leave web mode: real pairing form
     try {
-      const view = render(<PairingGate onPaired={() => {}} />);
+      const view = renderGate(<PairingGate onPaired={() => {}} />);
       await screen.findByTestId("devices-code-input");
       // Nothing configured: no session, so the sign-in hint shows.
       expect(
@@ -116,7 +124,7 @@ describe("PairingGate", () => {
       }),
     );
     try {
-      render(<PairingGate onPaired={() => {}} />);
+      renderGate(<PairingGate onPaired={() => {}} />);
       await screen.findByTestId("devices-code-input");
       expect(
         await screen.findByTestId("devices-account-line"),
@@ -159,10 +167,10 @@ describe("PairingGate", () => {
       }
     });
     try {
-      const view = render(<PairingGate onPaired={() => {}} />);
+      const view = renderGate(<PairingGate onPaired={() => {}} />);
       const input = await screen.findByTestId("devices-code-input");
+      // Auto-submit: a complete code pairs by itself, no button to press.
       fireEvent.change(input, { target: { value: "k7qm-4xpd" } });
-      fireEvent.click(screen.getByTestId("devices-code-submit"));
       await waitFor(() =>
         expect(invoke).toHaveBeenCalledWith(
           "pair_with_code",
@@ -211,7 +219,7 @@ describe("PairingGate", () => {
 
     try {
       const onPaired = vi.fn();
-      const view = render(<PairingGate onPaired={onPaired} />);
+      const view = renderGate(<PairingGate onPaired={onPaired} />);
       const input = await screen.findByTestId("devices-code-input");
       expect(onPaired).not.toHaveBeenCalled();
       // Example code in XYZ letters, dimmed so it reads as a hint.
@@ -220,7 +228,6 @@ describe("PairingGate", () => {
 
       const t0 = Date.now();
       fireEvent.change(input, { target: { value: "k7qm-4xpd" } });
-      fireEvent.click(screen.getByTestId("devices-code-submit"));
 
       // Direct signal, not the 2000ms poll: well inside one tick.
       await waitFor(() => expect(onPaired).toHaveBeenCalled(), {
@@ -238,7 +245,7 @@ describe("PairingGate", () => {
 describe("PairingGate welcome", () => {
   it("greets the signed-in handle", async () => {
     localStorage.setItem("printninja-session-handle", "sam");
-    const view = render(<PairingGate onPaired={() => {}} />);
+    const view = renderGate(<PairingGate onPaired={() => {}} />);
     expect(await screen.findByText(/Welcome sam/)).toBeInTheDocument();
     view.unmount();
   });
@@ -246,7 +253,7 @@ describe("PairingGate welcome", () => {
   it("greets the guest handle in guest mode", async () => {
     localStorage.setItem("printninja-guest-mode", "true");
     localStorage.setItem("printninja-guest-handle", "guest-ana");
-    const view = render(<PairingGate onPaired={() => {}} />);
+    const view = renderGate(<PairingGate onPaired={() => {}} />);
     expect(await screen.findByText(/Welcome guest-ana/)).toBeInTheDocument();
     view.unmount();
   });
@@ -255,13 +262,13 @@ describe("PairingGate welcome", () => {
     localStorage.setItem("printninja-guest-mode", "true");
     localStorage.setItem("printninja-guest-handle", "guest-ana");
     localStorage.setItem("printninja-session-handle", "sam");
-    const view = render(<PairingGate onPaired={() => {}} />);
+    const view = renderGate(<PairingGate onPaired={() => {}} />);
     expect(await screen.findByText(/Welcome sam/)).toBeInTheDocument();
     view.unmount();
   });
 
   it("stays nameless with no identity", async () => {
-    const view = render(<PairingGate onPaired={() => {}} />);
+    const view = renderGate(<PairingGate onPaired={() => {}} />);
     expect(
       await screen.findByText(/Pair your PC to start printing/),
     ).toBeInTheDocument();
@@ -302,7 +309,7 @@ describe("pair Test button", () => {
     const done = phoneMode();
     try {
       pairedBackend({ protocol: 1, can_render: true, score: 800, cores: 8 });
-      render(<PairingGate onPaired={() => {}} />);
+      renderGate(<PairingGate onPaired={() => {}} />);
       fireEvent.click(await screen.findByTestId("devices-pair-test-pc-1"));
       await waitFor(() =>
         expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
@@ -319,7 +326,7 @@ describe("pair Test button", () => {
     const done = phoneMode();
     try {
       pairedBackend(new Error("Shop PC is blocked or unreachable"));
-      render(<PairingGate onPaired={() => {}} />);
+      renderGate(<PairingGate onPaired={() => {}} />);
       fireEvent.click(await screen.findByTestId("devices-pair-test-pc-1"));
       await waitFor(() =>
         expect(vi.mocked(toast.error)).toHaveBeenCalledWith(

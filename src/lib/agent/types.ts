@@ -425,7 +425,7 @@ export interface ApiHttpResponse {
   text: string;
 }
 
-/** Render-sharing provider state (see docs/architecture/phone-and-pc-sharing.md). */
+/** Render-sharing provider state (see docs/architecture/PHONE_AND_PC_SHARING.md). */
 export interface RenderShareStatus {
   enabled: boolean;
   secret_set: boolean;

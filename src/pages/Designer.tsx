@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/resizable";
 import {
   DESKTOP_QUERY,
+  PHONE_QUERY,
   WIDE_QUERY,
   useMediaQuery,
 } from "@/lib/hooks/useMediaQuery";
@@ -87,6 +88,7 @@ import {
   newTemplateContent,
 } from "@/lib/templates/defaultTemplate";
 import { PackChooser } from "@/components/designer/PackChooser";
+import { PhoneDesignerViewer } from "@/components/designer/PhoneDesignerViewer";
 import { useCompiledCss } from "@/lib/templates/useCompiledCss";
 import { listTemplates } from "@/lib/templates/listTemplates";
 import { formatCss, formatHtml } from "@/lib/utils/format";
@@ -173,6 +175,8 @@ export function DesignerPage() {
   }, []);
   // Which tab is open on a phone. On desktop the canvas and editor are always both on screen.
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
+  // Phones get the read-only viewer (PLAN §6, D4); tablets keep the tabs.
+  const isPhone = useMediaQuery(PHONE_QUERY);
   // Desktop workspace preferences, remembered across launches.
   const [layout, setLayout] = usePersistentState<DesignerLayout>(
     "printninja.designer.layout",
@@ -1142,6 +1146,13 @@ export function DesignerPage() {
             onVisibilityChange={(v) => void handleVisibilityChange(v)}
           />
         </div>
+      ) : isPhone ? (
+        // The viewer shows the open template: the header names it, and the
+        // overflow menu's editing actions do not exist on a phone.
+        <PageHeader
+          title={templateName || t("designer.title")}
+          description={t("pages.designer")}
+        />
       ) : (
         <PageHeader
           title={t("designer.title")}
@@ -1184,10 +1195,15 @@ export function DesignerPage() {
           <EmptyState
             title={t("designer.no_templates_yet")}
             description={t("designer.no_templates_hint")}
-            action={{
-              label: t("designer.newTemplate"),
-              onClick: () => openNewTemplateDialog(),
-            }}
+            // Creating a template is a PC-side action (PLAN §6, D4).
+            action={
+              isPhone
+                ? undefined
+                : {
+                    label: t("designer.newTemplate"),
+                    onClick: () => openNewTemplateDialog(),
+                  }
+            }
           />
         </Card>
       ) : isDesktop ? (
@@ -1265,6 +1281,31 @@ export function DesignerPage() {
             </ResizablePanelGroup>
           )}
         </div>
+      ) : isPhone ? (
+        // Phones: read-only viewer — preview, sample data (the one edit a
+        // phone makes), README, code and details. PLAN §6, D4.
+        <PhoneDesignerViewer
+          templateName={templateName}
+          pageWidthMm={pageWidth}
+          pageHeightMm={pageHeight}
+          html={htmlCode}
+          css={cssCode}
+          debouncedHtml={debouncedHtml}
+          debouncedCss={debouncedCss}
+          compiledCss={compiledCss}
+          sampleData={sampleData}
+          samplePanel={renderSampleDataPanel(false)}
+          readme={readme}
+          dirty={dirty}
+          offline={offline}
+          readOnly={isReadOnly({ origin })}
+          nameError={nameError}
+          hasTemplate={currentTemplateDbId != null}
+          published={!!remoteId && !!publishedAt}
+          publishedAt={publishedAt}
+          saving={pending === "save"}
+          onSave={() => void handleSave()}
+        />
       ) : (
         <div className="space-y-4">
           {/* The canvas is the first thing on screen: controls live in a

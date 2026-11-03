@@ -261,7 +261,29 @@ jobs:
           key: playwright-${{ hashFiles('pnpm-lock.yaml') }}
       - name: Install Chromium with system dependencies
         run: pnpm --filter e2e exec playwright install --with-deps chromium
-      - run: pnpm e2e
+      # E2E_UPDATE_SNAPSHOTS (Actions variable, empty by default): when set
+      # to "true" the suite rewrites the committed screenshot baselines
+      # instead of comparing against them and publishes the refreshed
+      # files as the e2e-snapshots artifact. Baselines depend on the
+      # environment (fonts), so they must be regenerated in the same
+      # environment as CI: set the variable, push, download the artifact,
+      # commit the files, remove the variable. See docs/CI.md.
+      - name: Run the Playwright suite
+        env:
+          E2E_UPDATE_SNAPSHOTS: ${{ vars.E2E_UPDATE_SNAPSHOTS }}
+        run: |
+          if [ "$E2E_UPDATE_SNAPSHOTS" = "true" ]; then
+            pnpm --filter e2e exec playwright test --update-snapshots
+          else
+            pnpm e2e
+          fi
+      - name: Upload refreshed snapshot baselines
+        if: vars.E2E_UPDATE_SNAPSHOTS == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-snapshots
+          path: e2e/tests/*-snapshots
+          retention-days: 7
       - name: Upload the HTML report on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -581,6 +603,10 @@ jobs:
       # Light status and navigation bars, to match the app's single light theme.
       - name: Apply light Android theme
         run: node scripts/patch-android-theme.mjs
+      # Phones stay portrait (single-column layout is guaranteed by the
+      # vertical-only rule); tablets (sw600dp+) keep rotating freely.
+      - name: Lock phone orientation to portrait
+        run: node scripts/patch-android-orientation.mjs
       - name: Make gradlew executable
         run: chmod +x src-tauri/gen/android/gradlew || true
       # Pin both variants to the shared keystore so every release APK

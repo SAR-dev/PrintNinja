@@ -52,7 +52,7 @@ Terms are written *plain word first, technical name second*.
 ## Where to go deeper
 
 - [Architecture overview](./ARCHITECTURE.md) — the system map and pipeline
-- [Rendering and layout](./architecture/rendering-and-layout.md) — design pages, fit modes, pagination
-- [Printers and transports](./architecture/printers-and-transports.md) — transports, languages, per-OS notes
-- [Queue, memory, and history](./architecture/queue-and-history.md) — the queue, timings, webhooks
-- [Phone and PC sharing](./architecture/phone-and-pc-sharing.md) — pairing, tokens, guests, Print via PC
+- [Rendering and layout](./architecture/RENDERING_AND_LAYOUT.md) — design pages, fit modes, pagination
+- [Printers and transports](./architecture/PRINTERS_AND_TRANSPORTS.md) — transports, languages, per-OS notes
+- [Queue, memory, and history](./architecture/QUEUE_AND_HISTORY.md) — the queue, timings, webhooks
+- [Phone and PC sharing](./architecture/PHONE_AND_PC_SHARING.md) — pairing, tokens, guests, Print via PC

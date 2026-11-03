@@ -59,6 +59,48 @@ function stripHtmlComments() {
   };
 }
 
+/**
+ * Rendered Markdown: GFM with HTML comments stripped and links
+ * sanitized (no rehype-raw: raw HTML stays as text, the XSS guarantee).
+ * Shared by the editor's preview tab and the phone's read-only README
+ * view, so the two render the same pipeline.
+ */
+export function MarkdownPreview({
+  text,
+  emptyHint,
+}: {
+  text: string;
+  emptyHint: string;
+}) {
+  return (
+    <div className="readme-preview mx-auto max-w-[72ch]">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, stripHtmlComments]}
+        components={{
+          a: ({ href, children, ...props }) => {
+            const safe = href && /^(https?:\/\/|mailto:)/i.test(href);
+            if (!safe) {
+              return <span {...props}>{children}</span>;
+            }
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                {...props}
+              >
+                {children}
+              </a>
+            );
+          },
+        }}
+      >
+        {text || emptyHint}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
 interface ReadmeEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -202,32 +244,7 @@ export function ReadmeEditor({
 
   const preview = (
     <div className="min-h-0 flex-1 overflow-auto bg-card px-6 py-5">
-      <div className="readme-preview mx-auto max-w-[72ch]">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, stripHtmlComments]}
-          // No rehype-raw: raw HTML stays as text, which is the XSS guarantee
-          components={{
-            a: ({ href, children, ...props }) => {
-              const safe = href && /^(https?:\/\/|mailto:)/i.test(href);
-              if (!safe) {
-                return <span {...props}>{children}</span>;
-              }
-              return (
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  {...props}
-                >
-                  {children}
-                </a>
-              );
-            },
-          }}
-        >
-          {value || t("readme.empty_hint")}
-        </ReactMarkdown>
-      </div>
+      <MarkdownPreview text={value} emptyHint={t("readme.empty_hint")} />
     </div>
   );
 

@@ -445,7 +445,6 @@ describe("Automation → Phones and server", () => {
         expect(await screen.findByTestId("devices-share-toggle")).toBeVisible();
         expect(screen.queryByTestId("devices-policy-toggle")).toBeNull();
         expect(screen.queryByTestId("devices-code-input")).toBeNull();
-        expect(screen.queryByTestId("devices-code-submit")).toBeNull();
       } finally {
         webMode();
       }
@@ -1030,7 +1029,6 @@ describe("Automation → Phones and server", () => {
         phoneBackend();
         openApi();
         expect(await screen.findByTestId("devices-code-input")).toBeVisible();
-        expect(screen.getByTestId("devices-code-submit")).toBeVisible();
         expect(screen.queryByTestId("devices-share-toggle")).toBeNull();
         expect(screen.getByText(/No PC paired yet/)).toBeInTheDocument();
         // The manual address is tucked away until asked for.
@@ -1075,19 +1073,24 @@ describe("Automation → Phones and server", () => {
       }
     });
 
-    it("normalizes the code as typed and enables Pair when complete", async () => {
+    it("normalizes the code as typed and pairs it when complete", async () => {
       appMode();
       try {
         phoneBackend();
         openApi();
         const input = await screen.findByTestId("devices-code-input");
-        const submit = screen.getByTestId("devices-code-submit");
-        expect(submit).toBeDisabled();
         // Lowercase, dashes and spaces are accepted; other characters
         // never reach the field. Displayed uppercased with no hyphen.
         fireEvent.change(input, { target: { value: "k7qm-4xpd!!01" } });
-        expect(input).toHaveValue("K7QM4XPD");
-        expect(submit).toBeEnabled();
+        // A complete code pairs by itself — no button to press.
+        await waitFor(() =>
+          expect(invoke).toHaveBeenCalledWith(
+            "pair_with_code",
+            expect.objectContaining({ code: "K7QM4XPD" }),
+          ),
+        );
+        // The field clears once it has done its job.
+        expect(input).toHaveValue("");
       } finally {
         webMode();
       }
@@ -1101,7 +1104,6 @@ describe("Automation → Phones and server", () => {
         fireEvent.change(await screen.findByTestId("devices-code-input"), {
           target: { value: "k7qm-4xpd" },
         });
-        fireEvent.click(screen.getByTestId("devices-code-submit"));
 
         await waitFor(() => expect(savedPairs()).toHaveLength(1));
         expect(savedPairs()![0]).toMatchObject({
@@ -1153,7 +1155,6 @@ describe("Automation → Phones and server", () => {
         fireEvent.change(await screen.findByTestId("devices-code-input"), {
           target: { value: "K7QM4XPD" },
         });
-        fireEvent.click(screen.getByTestId("devices-code-submit"));
         await waitFor(() => expect(savedPairs()).toHaveLength(2));
         expect(savedSetting("render_policy")).toBeNull();
       } finally {
@@ -1183,7 +1184,6 @@ describe("Automation → Phones and server", () => {
         fireEvent.change(screen.getByTestId("devices-code-input"), {
           target: { value: "K7QM4XPD" },
         });
-        fireEvent.click(screen.getByTestId("devices-code-submit"));
         await waitFor(() => expect(savedPairs()).toHaveLength(1));
         // After the PC removed the phone, pairing again swaps the token in.
         expect(savedPairs()![0]).toMatchObject({
@@ -1205,7 +1205,6 @@ describe("Automation → Phones and server", () => {
           target: { value: "short" },
         });
         expect(screen.getByTestId("devices-code-input")).toHaveValue("SHRT");
-        expect(screen.getByTestId("devices-code-submit")).toBeDisabled();
         expect(calls("pair_with_code")).toHaveLength(0);
         expect(savedPairs()).toBeNull();
       } finally {
@@ -1223,7 +1222,6 @@ describe("Automation → Phones and server", () => {
         fireEvent.change(await screen.findByTestId("devices-code-input"), {
           target: { value: "AAAAAAAA" },
         });
-        fireEvent.click(screen.getByTestId("devices-code-submit"));
         expect(await screen.findByRole("alert")).toHaveTextContent(
           "Wrong code",
         );
@@ -1240,13 +1238,14 @@ describe("Automation → Phones and server", () => {
       try {
         phoneBackend();
         openApi();
-        fireEvent.change(await screen.findByTestId("devices-code-input"), {
-          target: { value: "K7QM4XPD" },
-        });
+        // The address is filled in first (in the advanced section), so
+        // the auto-submit picks it up when the code completes.
         fireEvent.change(screen.getByTestId("devices-addr-input"), {
           target: { value: "192.168.1.20:17717" },
         });
-        fireEvent.click(screen.getByTestId("devices-code-submit"));
+        fireEvent.change(await screen.findByTestId("devices-code-input"), {
+          target: { value: "K7QM4XPD" },
+        });
         await waitFor(() => expect(savedPairs()).toHaveLength(1));
         expect(invoke).toHaveBeenCalledWith(
           "pair_with_code",

@@ -1,4 +1,4 @@
-//! Pairing-code flow (docs/architecture/phone-and-pc-sharing.md#pairing): hello + claim,
+//! Pairing-code flow (docs/architecture/PHONE_AND_PC_SHARING.md#pairing): hello + claim,
 //! the window state machine, the per-device token gate, and the device
 //! registry. Driven through the real router with `oneshot`, so
 //! routing/middleware bugs surface here. Time is injected by opening

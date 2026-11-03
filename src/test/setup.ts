@@ -1,4 +1,11 @@
 import "@testing-library/jest-dom/vitest";
+import { configure } from "@testing-library/react";
+
+// Under a full parallel run, jsdom renders slower than the default 1s
+// async wait; the sandboxed preview iframes (designer canvas, template
+// preview) are the slowest mounts and timed out under load. Ten seconds
+// is the budget even the heaviest local runs (check:full) need.
+configure({ asyncUtilTimeout: 10_000 });
 
 // Mock Tauri API for browser tests
 (globalThis as any).__TAURI_INTERNALS__ = undefined;

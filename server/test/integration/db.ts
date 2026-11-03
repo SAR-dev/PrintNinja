@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,6 +23,44 @@ export interface TestStack {
   stop: () => Promise<void>;
 }
 
+const isBusyFileError = (err: unknown): boolean =>
+  err instanceof Error &&
+  ((err as NodeJS.ErrnoException).code === "EPERM" ||
+    (err as NodeJS.ErrnoException).code === "EBUSY");
+
+/**
+ * Deletes a directory from a short-lived detached child process, retrying
+ * for up to a minute. Used when the current process cannot delete the
+ * directory (see sweepForLockedDir); the child is a separate process, so it
+ * succeeds as soon as the lock goes away — typically right after the
+ * vitest worker that held it exits.
+ */
+function sweepInChildProcess(dir: string): void {
+  const child = spawn(
+    process.execPath,
+    [
+      "-e",
+      `const fs = require("node:fs");
+const dir = process.env.PN_TEST_CLEAN_DIR;
+const deadline = Date.now() + 60_000;
+(function sweep() {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    if (Date.now() < deadline) setTimeout(sweep, 500);
+  }
+})();`,
+    ],
+    {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+      env: { ...process.env, PN_TEST_CLEAN_DIR: dir },
+    },
+  );
+  child.unref();
+}
+
 /**
  * One local SQLite file per test file (no containers, no network), migrated
  * with the same runner production boots with — so integration always
@@ -36,7 +75,18 @@ export async function startTestDatabase(): Promise<TestStack> {
     db,
     stop: async () => {
       await db.$disconnect();
-      rmSync(dir, { recursive: true, force: true });
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch (err) {
+        if (!isBusyFileError(err)) throw err;
+        // On this Windows setup the libsql native binding keeps the
+        // database file locked until the very process that opened it
+        // exits — close() and $disconnect() do not release the handle —
+        // so no in-process retry can ever succeed. A detached child
+        // (which does not hold the handle) sweeps it as soon as the
+        // lock goes away; the worst case is a leftover %TEMP% dir.
+        sweepInChildProcess(dir);
+      }
     },
   };
 }

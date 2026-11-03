@@ -112,6 +112,6 @@ and which transports exist.
 - **macOS** is not a print target: rendering and delivery both report
   unsupported rather than failing mysteriously.
 
-See also: [rendering and layout](./rendering-and-layout.md) (how the pages
-get here), [queue and history](./queue-and-history.md) (how the job is
+See also: [rendering and layout](./RENDERING_AND_LAYOUT.md) (how the pages
+get here), [queue and history](./QUEUE_AND_HISTORY.md) (how the job is
 tracked), and the [glossary](../GLOSSARY.md).
