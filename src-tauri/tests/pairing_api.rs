@@ -75,6 +75,7 @@ fn router(db: &Db, window: &Window) -> axum::Router {
             window: window.clone(),
         },
         false,
+        None,
     )
 }
 

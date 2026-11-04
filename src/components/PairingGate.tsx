@@ -8,12 +8,12 @@ import { hasPairedProvider } from "@/lib/pairing";
 import { getWelcomeName } from "@/lib/share/client";
 
 /**
- * Mandatory pairing screen, Android only. The phone never renders
- * locally — every print is bought from the paired PC — so an unpaired
- * phone cannot print at all, and the app opens here until one is
- * paired. The full pairing UI (scan, paste, manual entry, test) is the
- * same `DevicesCard` Settings uses; a poll notices the new pair (and
- * the auto policy the first pair switches on) and lets the app through.
+ * Pairing screen, Android only. Not a wall in front of the app — since
+ * PLAN §4 the phone renders thermal jobs itself, so this screen is
+ * only the way to PDF printing and Print via PC. The full pairing UI
+ * (scan, paste, manual entry, test) is the same `DevicesCard` Settings
+ * uses; a poll notices the new pair (and the auto policy the first
+ * pair switches on) and returns to where the person came from.
  */
 export function PairingGate({ onPaired }: { onPaired: () => void }) {
   const { t } = useTranslation();

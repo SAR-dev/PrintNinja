@@ -177,29 +177,39 @@ describe("printer types per platform", () => {
       "discovered-printer-net:192.168.1.21:9100",
     );
     fireEvent.click(within(row).getByRole("button", { name: "Fill" }));
-    // JetDirect fills host:port + raw_tcp; unpaired Android keeps PDF.
+    // JetDirect fills host:port + raw_tcp + the local ESC/POS default.
     expect(within(panel).getByLabelText("Address")).toHaveValue(
       "192.168.1.21:9100",
     );
   });
 
-  it("on Android offers only the PDF language, on desktop all six", async () => {
+  it("on Android offers PDF plus the QA-gated languages, on desktop all six", async () => {
     stubUA(ANDROID_UA);
     const view = renderPage();
     await screen.findByRole("button", { name: /Add printer/i });
     fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));
     let panel = await screen.findByRole("dialog");
     fireEvent.click(within(panel).getByLabelText("Language"));
+    // The WebView rasterizes these locally (PLAN §4, D4.4) — no paired PC
+    // needed — and the note flags them as unverified on a real head.
     expect(
       await screen.findByRole("option", { name: "PDF" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("option", { name: /ZPL/ }),
+      screen.getByRole("option", { name: /ESC\/POS/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /ZPL/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /TSPL/ })).toBeInTheDocument();
+    // Not QA'd yet: CPCL and raster stay hidden on Android.
+    expect(
+      screen.queryByRole("option", { name: /CPCL/ }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("option", { name: /ESC\/POS/ }),
+      screen.queryByRole("option", { name: /Raster/ }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText(/Android prints PDF only/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/verified against a fake head/),
+    ).toBeInTheDocument();
     view.unmount();
 
     stubUA(realUA);
@@ -211,12 +221,14 @@ describe("printer types per platform", () => {
     expect(
       await screen.findByRole("option", { name: /ZPL/ }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /CPCL/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Raster/ })).toBeInTheDocument();
     expect(
-      screen.queryByText(/Android prints PDF only/),
+      screen.queryByText(/verified against a fake head/),
     ).not.toBeInTheDocument();
   });
 
-  it("on Android with a paired PC unlocks the thermal languages", async () => {
+  it("on Android a paired PC does not change the offered languages", async () => {
     stubUA(ANDROID_UA);
     localStorage.setItem(
       "printninja-setting:render_pairs",
@@ -230,25 +242,22 @@ describe("printer types per platform", () => {
     fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));
     const panel = await screen.findByRole("dialog");
     fireEvent.click(within(panel).getByLabelText("Language"));
+    // The gate is about what the device itself can rasterize, not about
+    // pairing: the same QA-gated set, and the limitation note stays.
     expect(
-      await screen.findByRole("option", { name: /ESC\/POS/ }),
+      screen.getByRole("option", { name: /ESC\/POS/ }),
     ).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /ZPL/ })).toBeInTheDocument();
-    // All languages offered: no "PDF only" limitation note.
     expect(
-      screen.queryByText(/Android prints PDF only/),
+      screen.queryByRole("option", { name: /CPCL/ }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/verified against a fake head/),
+    ).toBeInTheDocument();
   });
 
-  it("defaults a new USB printer to ESC/POS when a PC is paired", async () => {
+  it("defaults a new USB printer to ESC/POS on Android", async () => {
     stubUA(ANDROID_UA);
-    localStorage.setItem(
-      "printninja-setting:render_pairs",
-      JSON.stringify([
-        { id: "p1", name: "PC", host: "192.168.1.9", port: 17717, secret: "s" },
-      ]),
-    );
-    localStorage.setItem("printninja-setting:render_policy", "auto");
     renderPage();
     await screen.findByRole("button", { name: /Add printer/i });
     fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));
@@ -261,8 +270,8 @@ describe("printer types per platform", () => {
     );
   });
 
-  it("keeps PDF for USB printers without a paired PC", async () => {
-    stubUA(ANDROID_UA);
+  it("keeps PDF for new USB printers on desktop", async () => {
+    stubUA(realUA);
     renderPage();
     await screen.findByRole("button", { name: /Add printer/i });
     fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));

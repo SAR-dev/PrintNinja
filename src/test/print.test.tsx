@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import "@/lib/i18n";
 
 const invoke = vi.fn();
@@ -22,11 +22,24 @@ vi.mock("@/lib/templates/listTemplates", () => ({
     },
   ],
 }));
+// The page reads `printers` on mount; tests that need a different
+// listing (e.g. a PDF printer) swap the holder, and beforeEach resets
+// it back. `refresh` follows the invoke mock, as the real hook does.
+const { mockPrinters, defaultPrinters } = vi.hoisted(() => {
+  const defaultPrinters = [
+    {
+      id: "1",
+      name: "Dock Zebra",
+      address: "127.0.0.1:9100",
+      printer_type: "raw_tcp",
+      language: "escpos",
+    },
+  ];
+  return { mockPrinters: { current: defaultPrinters }, defaultPrinters };
+});
 vi.mock("@/lib/hooks/useSystemPrinters", () => ({
   useSystemPrinters: () => ({
-    printers: [{ id: "1", name: "Dock Zebra" }],
-    // Follows the invoke mock, as the real hook does, so a test that makes
-    // the backend report no printers really has none.
+    printers: mockPrinters.current,
     refresh: async () => (await invoke("list_printers", {})) ?? [],
   }),
 }));
@@ -50,6 +63,7 @@ beforeAll(() => {
 beforeEach(() => {
   invoke.mockReset();
   localStorage.clear();
+  mockPrinters.current = defaultPrinters;
   vi.mocked(toast.success).mockClear();
   vi.mocked(toast.error).mockClear();
   usePrintStore.setState({
@@ -612,26 +626,55 @@ describe("Print via PC exit", () => {
 });
 
 describe("unpaired phone on the Print page", () => {
-  it("redirects to the pairing screen instead of a dead form", async () => {
+  // PLAN §4: no pairing wall in front of the form. Thermal prints on
+  // the device itself; only a PDF printer needs a pair.
+  it("opens the form even when unpaired: a thermal printer prints", async () => {
     const ua = vi
       .spyOn(window.navigator, "userAgent", "get")
       .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
     invoke.mockImplementation(async (cmd: string) => {
-      if (cmd === "get_setting") return null;
-      return null;
+      if (cmd === "list_printers" || cmd === "enumerate_system_printers")
+        return mockPrinters.current;
+      return null; // nothing paired
     });
     try {
-      render(
-        <MemoryRouter initialEntries={["/print"]}>
-          <Routes>
-            <Route path="/print" element={<PrintPage />} />
-            <Route path="/pair" element={<p>Pair your PC</p>} />
-          </Routes>
-        </MemoryRouter>,
+      renderPage();
+      const print = await screen.findByRole("button", { name: /^Print$/ });
+      await waitFor(() => expect(print).toBeEnabled());
+    } finally {
+      ua.mockRestore();
+    }
+  });
+
+  it("blocks a PDF printer with a pair link, not a redirect", async () => {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    mockPrinters.current = [
+      {
+        id: "2",
+        name: "Dock PDF",
+        address: "127.0.0.1:631",
+        printer_type: "ipp",
+        language: "pdf",
+      },
+    ];
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers" || cmd === "enumerate_system_printers")
+        return mockPrinters.current;
+      return null; // nothing paired
+    });
+    try {
+      renderPage();
+      const print = await screen.findByRole("button", { name: /^Print$/ });
+      await waitFor(() => expect(print).toBeDisabled());
+      expect(
+        screen.getByText(/needs a paired PC to render/),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Pair a PC" })).toHaveAttribute(
+        "href",
+        "/pair",
       );
-      // The form never renders; the pairing screen does.
-      expect(await screen.findByText("Pair your PC")).toBeInTheDocument();
-      expect(screen.queryByTitle("Print preview")).not.toBeInTheDocument();
     } finally {
       ua.mockRestore();
     }

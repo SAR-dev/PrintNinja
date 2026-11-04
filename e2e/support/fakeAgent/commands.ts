@@ -260,6 +260,9 @@ const implemented: Record<string, Handler> = {
       language: String(p["language"] ?? "zpl"),
       status: "idle",
     })),
+  // Bonded Bluetooth is an Android-only surface; the e2e browser has
+  // none, so the honest answer is an empty list.
+  list_bluetooth_devices: () => [],
   cache_apply_changes: (args) =>
     cache.applyChanges(
       (args["changes"] as SyncChangeIn[] | undefined) ?? [],

@@ -92,10 +92,10 @@ const en = {
     onboarding_setup: "Set up this workstation",
     onboarding_checklist_hint:
       "Setting up a printer, templates, or sharing? The checklist in Settings walks through it.",
-    pair_required_title: "Pair your PC to start printing",
-    pair_welcome_name: "Welcome {{name}} — pair your PC to start printing",
+    pair_required_title: "Pair your PC",
+    pair_welcome_name: "Welcome {{name}}",
     pair_required_body:
-      "Printing on this phone always goes through a paired PC: the PC renders each page and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. Pair once below — it stays paired.",
+      "Thermal printers (ESC/POS, ZPL and TSPL) print straight from this phone without a paired PC. Pair a PC to print PDF on this phone, or to print on the PC's own printers with Print via PC. The pair stays until you remove it.",
   },
   engine: {
     badge: "Browser missing",
@@ -458,6 +458,9 @@ const en = {
     failed_title: "Print failed",
     unknown_error: "Unknown error",
     pair_again_to_print: "Pair again to print.",
+    pdf_needs_pair:
+      "This printer prints PDF, which needs a paired PC to render — pair one, or choose a thermal printer.",
+    pdf_pair_now: "Pair a PC",
     via_pc_banner: "Printing on {{pc}} — the job runs on its printers.",
     via_pc_cached: "Printer list is cached: the PC is unreachable.",
     via_pc_templates_cached: "Template list is cached: the PC is unreachable.",
@@ -583,9 +586,12 @@ const en = {
     remove_confirm: "Remove printer",
     found_system: "Found on this computer",
     found_network: "Found on this network",
+    found_bluetooth: "Paired Bluetooth printers",
     fill: "Fill",
     no_network_printers:
       "No network printers found yet — scan to look for them.",
+    no_bluetooth_printers:
+      "No paired Bluetooth printers — pair one in Android's Bluetooth settings first.",
     rescan: "Rescan",
     form_name: "Printer name",
     form_name_example: "Front desk",
@@ -601,6 +607,8 @@ const en = {
     hint_ipp:
       "For example http://192.168.1.100, ipp://192.168.1.100:631/ipp/print, or just 192.168.1.100",
     hint_raw: "For example 192.168.1.100:9100",
+    hint_bluetooth:
+      "For example A4:77:17:22:33:44 — the MAC of a paired device (the list below offers them)",
     edit_printer: "Edit {{name}}",
     test_action: "Test print on {{name}}",
     testing: "Testing…",
@@ -611,6 +619,7 @@ const en = {
     toast_discovery_failed: "Discovery failed: {{error}}",
     toast_no_system: "No system printers found",
     toast_no_network: "No network printers found",
+    toast_no_bluetooth: "No paired Bluetooth printers found",
     toast_all_added: "All {{count}} system printer(s) already added",
     toast_none_new: "No new system printers to add",
     toast_scan_failed: "Scan failed: {{error}}",
@@ -646,7 +655,7 @@ const en = {
     lang_cpcl: "CPCL (label)",
     lang_raster: "Raster",
     lang_android_hint:
-      "Android prints PDF only for now. Receipt and label languages need a raster that Android cannot produce yet.",
+      "Android prints receipt and label languages itself (ESC/POS, ZPL, TSPL), verified against a fake head only — unverified on a real one. CPCL and raster are not offered yet.",
   },
   history: {
     title: "History",
@@ -1318,6 +1327,9 @@ const en = {
     tab_links: "Deep links",
     server_title: "Local API server",
     open_explorer: "Try the API",
+    demo_open: "Open demo page",
+    demo_no_service:
+      "No share service URL set — add one in Settings to open the demo page.",
     links_title: "Trusted deep-link sources",
     status_running: "running",
     status_disabled: "disabled",
@@ -1355,9 +1367,6 @@ const en = {
     idem_hint: "replay-safe key for retries",
     sending: "Sending…",
     send: "Send {{method}} {{path}}",
-    print_needs_pair:
-      "Printing needs a paired PC on this phone — the request stays here until you pair.",
-    print_pair_now: "Pair a PC",
     response: "Response",
     toast_bad_json: "Request body is not valid JSON",
     toast_job_id_required: "Enter a job id first",

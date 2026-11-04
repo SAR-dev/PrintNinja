@@ -79,13 +79,21 @@ describe("API Explorer and the server", () => {
     );
   });
 
-  it("blocks the print endpoint on an unpaired phone, with a way to pair", async () => {
+  // PLAN §4: the explorer has no pairing wall — thermal prints on the
+  // device itself, so the request just goes out and the backend's
+  // `need_peer` answer (here a 409) is what the person sees.
+  it("sends print requests from an unpaired phone; the backend decides", async () => {
     const ua = vi
       .spyOn(window.navigator, "userAgent", "get")
       .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
     invoke.mockImplementation(async (cmd: string) => {
       if (cmd === "get_api_status") return running;
-      if (cmd === "get_setting") return null;
+      if (cmd === "get_setting") return null; // unpaired
+      if (cmd === "api_request")
+        return {
+          status: 409,
+          text: '{"error":"this pdf job needs a paired PC; this device cannot render pdf itself"}',
+        };
       return null;
     });
     try {
@@ -96,19 +104,20 @@ describe("API Explorer and the server", () => {
         }),
       );
       const send = await screen.findByTestId("api-explorer-send");
-      await waitFor(() => expect(send).toBeDisabled());
-      expect(
-        screen.getByText(/needs a paired PC on this phone/),
-      ).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Pair a PC" })).toHaveAttribute(
-        "href",
-        "/pair",
-      );
+      expect(send).toBeEnabled();
       fireEvent.click(send);
-      expect(invoke).not.toHaveBeenCalledWith(
-        "api_request",
-        expect.objectContaining({ url: expect.stringContaining("/v1/print") }),
-      );
+      await waitFor(() => {
+        expect(invoke).toHaveBeenCalledWith(
+          "api_request",
+          expect.objectContaining({
+            method: "POST",
+            url: "http://127.0.0.1:17717/v1/print",
+          }),
+        );
+      });
+      expect(
+        await screen.findByTestId("api-explorer-response"),
+      ).toHaveTextContent(/needs a paired PC/);
     } finally {
       ua.mockRestore();
     }

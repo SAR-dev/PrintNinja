@@ -100,15 +100,21 @@ and which transports exist.
   `application/octet-stream`). The browser stays running in the background so
   every print only opens a tab, like on Windows. Direct USB/Bluetooth are not
   supported — the app tells the operator to use the CUPS raw route instead.
-- **Android** renders PDFs through the system WebView. Network printers are
-  added by address; automatic network discovery is not implemented yet. USB
-  printers are listed through the USB host API and Bluetooth printers are
-  chosen from the bonded devices. The receipt and label languages (ESC/POS,
-  ZPL, TSPL, CPCL, raster) need a raster Android cannot produce yet, so the
-  printer form offers only PDF there. A background service, on by default,
-  keeps the print queue draining even after the app is swiped away (Open and
-  Close sit on its notification), and the app can request exemption from
-  battery optimization so the system doesn't defer prints.
+- **Android** renders PDFs through the system WebView, and renders
+  ESC/POS, ZPL and TSPL jobs directly: the same WebView measures the page
+  at the head's own resolution (1 CSS px = 1 dot, via a density-160
+  context) and the device thresholds the pixels to 1-bit dots before the
+  encoder. Those languages are not yet verified on a real head (PLAN §4,
+  D4.1), so the printer form offers only the QA'd ones and labels them
+  accordingly; CPCL and raster still need a paired PC (PDF only). Network
+  printers are added by address or picked from an mDNS scan of the LAN;
+  USB printers are listed through the USB host API, and Bluetooth
+  printers are chosen from the bonded devices, which the Add sheet lists
+  by name and MAC address. A background
+  service, on by default, keeps the print queue draining even after the app
+  is swiped away (Open and Close sit on its notification), and the app can
+  request exemption from battery optimization so the system doesn't defer
+  prints.
 - **macOS** is not a print target: rendering and delivery both report
   unsupported rather than failing mysteriously.
 

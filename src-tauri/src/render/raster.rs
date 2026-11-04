@@ -16,6 +16,23 @@ impl RasterImage {
         }
     }
 
+    /// Build a raster from already-packed 1-bit dots (8 per byte, MSB
+    /// first) — the path the Android WebView render takes, where the
+    /// device packs the dots itself (PLAN §4). `None` when the byte count
+    /// does not match the dimensions, so a truncated or corrupted file can
+    /// never reach a head as a plausible-looking raster.
+    pub fn from_packed(width: usize, height: usize, dots: Vec<u8>) -> Option<Self> {
+        let bytes_per_row = width.div_ceil(8);
+        if dots.len() != bytes_per_row * height {
+            return None;
+        }
+        Some(Self {
+            width,
+            height,
+            dots,
+        })
+    }
+
     pub fn get_bit(&self, x: usize, y: usize) -> bool {
         if x >= self.width || y >= self.height {
             return false;

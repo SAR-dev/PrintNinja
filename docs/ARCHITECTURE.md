@@ -13,13 +13,13 @@ plain words used here are collected in the [glossary](./GLOSSARY.md).
 flowchart LR
     subgraph LAN["Local network"]
         PC["PC (Windows or Linux) — renders and prints"]
-        PH["Phone (Android) — lays pages out, cannot render"]
+        PH["Phone (Android) — lays pages out, prints thermal on-device"]
         PR["Printers — office PDF, receipts, labels"]
         SCRIPTS["Scripts and POS on the PC"]
     end
     Srv["Share service (cloud) — accounts, templates, fonts"]
     PC <-->|pairing code, then a device token| PH
-    PC -->|renders for the phone, returns finished bytes| PH
+    PC -->|PDF jobs: renders, returns finished bytes| PH
     PH -->|bytes| PR
     PC -->|bytes| PR
     SCRIPTS -->|local API| PC
@@ -27,10 +27,11 @@ flowchart LR
 ```
 
 One machine does the heavy work: a **PC** (Windows or Linux) can render a
-design into an image or PDF and can print. A **phone** lays pages out but
-cannot render, so it is always paired with a PC that does that one step for
-it. The **share service** in the cloud stores accounts, templates and fonts;
-it has no rendering engine, so a print never travels through it.
+design into an image or PDF and can print. A **phone** lays pages out and
+renders receipt and label jobs itself; PDF is the one thing it cannot make,
+so a phone that prints PDF pairs with a PC that does that one step for it.
+The **share service** in the cloud stores accounts, templates and fonts; it
+has no rendering engine, so a print never travels through it.
 
 ## The pipeline
 
@@ -54,9 +55,10 @@ paper ever feeds back into the template** — so a design is never re-laid out,
 never stretched, and the preview can never lie about what will print.
 
 The highlighted stage — producing the image or PDF — is the only one that can
-run on a different machine: a phone hands it to its paired PC and takes back
-the finished bytes. Everything before and after that step stays on the device
-that owns the printer.
+run on a different machine: a phone that must produce a PDF hands the job to
+its paired PC and takes back the finished bytes, while receipt and label
+jobs are produced on the phone itself. Everything before and after that step
+stays on the device that owns the printer.
 
 Each stage is timed, so a slow print can be traced to the exact step that
 caused it.
@@ -100,16 +102,21 @@ sequenceDiagram
     P->>C: code + account check
     C-->>P: device token minted
     Note over P,R: Every print
-    P->>P: render data, lay pages on sheets
-    P->>C: finished document + paper, language, resolution
-    C-->>P: finished bytes
-    P->>R: send bytes
-    P->>P: history row ("rendered by PC")
+    alt thermal (receipt, label) — pair not needed
+        P->>P: lay pages on sheets, render to dots on the phone
+        P->>R: send bytes
+    else PDF — pair needed
+        P->>P: lay pages on sheets
+        P->>C: finished document + paper, language, resolution
+        C-->>P: finished bytes
+        P->>R: send bytes
+        P->>P: history row ("rendered by PC")
+    end
 ```
 
 The direction is fixed: **a phone asks a PC, never the other way round.**
-The phone does everything up to laying the pages out, sends the finished
-document, and the PC returns the finished bytes. The PC never touches the
+For a PDF the phone does everything up to laying the pages out, sends the
+finished document, and the PC returns the finished bytes. The PC never touches the
 phone's printers, templates, data or history, and the phone still sends the
 bytes to the printer and writes its own history row. Because the document is
 the finished page, it contains the print's real content — which is why
@@ -134,7 +141,9 @@ flowchart TD
     C -- no --> C1[Blocked domain or private-IP blocking<br/>Settings → Data and network]
     C -- yes --> D{Phone job?}
     D -- desktop --> E[Check the job's timings for the slow or failed stage]
-    D -- phone --> F{Paired PC on and awake?}
+    D -- phone --> H{PDF job?}
+    H -- thermal --> E
+    H -- PDF --> F{Paired PC on and awake?}
     F -- no --> F1[Job names the PC; retry from History when it is back]
     F -- yes --> G{Print via PC?}
     G -- yes --> G1[Template mismatch? tap Sync — the wrong version is refused, never printed]
@@ -151,11 +160,14 @@ timings, so the answer is in History, not in the log.
 - **Desktop, offline** — local printing works completely; the engine,
   templates and printers all live on the machine. Only remote data, cloud
   sync and release checks degrade.
-- **Phone paired with a PC** — an unpaired phone can still browse, but
-  printing goes to the pairing screen first. Once paired, every render is
-  done on the PC while it is on the same network and sharing. When the PC is
-  off, asleep or away, the job fails at once with a message that names the PC;
-  nothing is queued silently, and the failed job retries from History.
+- **Phone, unpaired** — browsing works, and thermal printers (ESC/POS,
+  ZPL, TSPL) print on the device itself (PLAN §4). Only PDF on the phone
+  needs a pair; choosing a PDF printer offers the pairing screen.
+- **Phone paired with a PC** — PDF jobs render on the PC while it is on
+  the same network and sharing (shared rendering, or the PC's own printers
+  with Print via PC). When the PC is off, asleep or away, the job fails at
+  once with a message that names the PC; nothing is queued silently, and
+  the failed job retries from History.
 - **Web preview** — the design and preview render in the browser, but nothing
   can print: there is no local backend to receive the job.
 - **Test vs real** — test prints run the full pipeline on mock data and are

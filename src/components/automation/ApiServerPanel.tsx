@@ -16,8 +16,11 @@ import {
   stopApiServer,
   useApiStatusChanged,
 } from "@/lib/apiServer";
+import { openExternalUrl } from "@/lib/appUpdate";
 import { describeError } from "@/lib/errors";
 import { isWebMode, readSetting, writeSetting } from "@/lib/settings";
+import { getServiceUrl } from "@/lib/share/client";
+import { defaultServiceUrl } from "@/lib/share/session";
 
 /**
  * The one place that owns the local API server: status, port, LAN
@@ -109,6 +112,19 @@ export function ApiServerPanel({
   /** The share switch lives with the phones it governs (DevicesCard):
    * this panel stages nothing — Start binds whatever the bind switch
    * says, and sharing is toggled live from the phones tab. */
+
+  /** Opens the share service's demo page — a plain-HTML mirror of the
+   * Print page that drives this very API server from a browser. Only
+   * offered while the server runs, since a stopped server has nothing
+   * for the page to talk to. */
+  const openDemoPage = async () => {
+    const url = (await getServiceUrl()) ?? defaultServiceUrl();
+    if (!url) {
+      notifyError(t("automation.demo_no_service"));
+      return;
+    }
+    await openExternalUrl(`${url}/demo/print.html`);
+  };
 
   return (
     <Card>
@@ -225,9 +241,20 @@ export function ApiServerPanel({
           </p>
         </section>
 
-        <Button variant="outline" onClick={onOpenExplorer}>
-          {t("automation.open_explorer")}
-        </Button>
+        <div className="flex flex-col gap-2">
+          {apiStatus?.running && (
+            <Button
+              variant="outline"
+              data-testid="automation-open-demo"
+              onClick={() => void openDemoPage()}
+            >
+              {t("automation.demo_open")}
+            </Button>
+          )}
+          <Button variant="outline" onClick={onOpenExplorer}>
+            {t("automation.open_explorer")}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

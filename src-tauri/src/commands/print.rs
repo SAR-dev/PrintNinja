@@ -1096,19 +1096,23 @@ async fn run_stages(
             .ok()
             .map(|guard| crate::api::peer_consume::inline_fonts(guard.connection(), &final_html))
     };
-    // Android never renders locally: every job — PDF included — is bought
-    // from the paired PC, which is mandatory there (the app opens on the
-    // pairing screen until one is paired). A local attempt could only
-    // report "no renderer", hiding the real cause (PC off, unpaired,
-    // busy). Desktop keeps local rendering, with required mode only for
-    // thermal languages the platform cannot rasterize itself.
-    let need_peer = cfg!(target_os = "android")
-        || (!matches!(language, crate::transport::PrinterLanguage::Pdf)
-            && !crate::api::render_share::can_render());
+    // PDF on Android is still bought from the paired PC, which is mandatory
+    // there (the app opens on the pairing screen until one is paired): a
+    // local attempt could only report "no renderer", hiding the real cause
+    // (PC off, unpaired, busy). Thermal jobs now rasterize on the device
+    // itself (PLAN §4), so on Android they go local — `render_best` below
+    // still asks a paired PC first when one answers. Desktop is unchanged:
+    // local rendering, with required mode only for languages the platform
+    // cannot rasterize itself (macOS has no browser renderer).
+    let need_peer = (cfg!(target_os = "android")
+        && matches!(language, crate::transport::PrinterLanguage::Pdf))
+        || !(matches!(language, crate::transport::PrinterLanguage::Pdf)
+            || crate::api::render_share::can_render()
+            || cfg!(target_os = "android"));
     let peer_result: Result<Option<crate::api::peer_consume::PeerOutcome>, String> =
         match (peer_had_pairs, need_peer) {
             (false, true) => Err(format!(
-                "this {} job needs a paired PC (pair one in Settings → Shared rendering); this device cannot rasterize {} itself",
+                "this {} job needs a paired PC (pair one in Settings → Shared rendering); this device cannot render {} itself",
                 crate::api::peer_consume::language_name(&language),
                 crate::api::peer_consume::language_name(&language),
             )),
@@ -1808,6 +1812,42 @@ pub fn enumerate_system_printers() -> AppResult<Vec<crate::transport::PrinterInf
     }
 }
 
+/// List the phone's bonded Bluetooth devices (Android only). The MAC of a
+/// bonded device is exactly what a Bluetooth printer row stores as its
+/// address, so the Add-printer dialog can offer them one tap away instead
+/// of a hand-typed MAC.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn list_bluetooth_devices(
+    app: tauri::AppHandle,
+) -> AppResult<Vec<crate::transport::PrinterInfo>> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri_plugin_android_print::AndroidPrintExt;
+
+        let devices =
+            tokio::task::spawn_blocking(move || app.android_print().list_bluetooth_devices())
+                .await
+                .map_err(|e| AppError::Internal(format!("bluetooth listing task failed: {e}")))?
+                .map_err(|e| AppError::Internal(format!("bluetooth listing failed: {e}")))?;
+        Ok(devices
+            .into_iter()
+            .map(|d| crate::transport::PrinterInfo {
+                id: d.id.clone(),
+                name: d.name,
+                address: d.id,
+                printer_type: crate::transport::PrinterType::Bluetooth,
+                language: crate::transport::PrinterLanguage::Pdf,
+                status: "unknown".to_string(),
+            })
+            .collect())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = &app;
+        Ok(vec![])
+    }
+}
+
 /// Discover network printers over mDNS (`_ipp._tcp` and JetDirect
 /// `_pdl-datastream._tcp`), resolved to IP and port.
 ///
@@ -1853,40 +1893,47 @@ pub async fn discover_network_printers(
             })
             .collect());
     }
-    // Desktop mDNS via mdns-sd (Linux/Windows); no-op on other platforms but still returns empty gracefully
-    let secs = timeout_secs.unwrap_or(8).clamp(2, 30);
-    let timeout_ms = u64::from(secs) * 1000;
-    let found = tokio::task::spawn_blocking(move || crate::discovery::browse_printers(timeout_ms))
-        .await
-        .map_err(|e| AppError::Internal(format!("discovery task failed: {e}")))?;
-    Ok(found
-        .into_iter()
-        .map(|d| {
-            // resource_path arrives without its leading "/" (trimmed in
-            // service_info_to_printer), so both cases format identically.
-            let address = if d.kind == "ipp" {
-                match d.resource_path.as_deref() {
-                    Some(rp) => format!("{}:{}/{}", d.host, d.port, rp),
-                    None => format!("{}:{}", d.host, d.port),
+    // Desktop mDNS via mdns-sd (Linux/Windows); no-op on other platforms but
+    // still returns empty gracefully. Gated because the Android arm above
+    // returns unconditionally — without the gate the tail would be
+    // unreachable code on Android (unreachable_code warning).
+    #[cfg(not(target_os = "android"))]
+    {
+        let secs = timeout_secs.unwrap_or(8).clamp(2, 30);
+        let timeout_ms = u64::from(secs) * 1000;
+        let found =
+            tokio::task::spawn_blocking(move || crate::discovery::browse_printers(timeout_ms))
+                .await
+                .map_err(|e| AppError::Internal(format!("discovery task failed: {e}")))?;
+        Ok(found
+            .into_iter()
+            .map(|d| {
+                // resource_path arrives without its leading "/" (trimmed in
+                // service_info_to_printer), so both cases format identically.
+                let address = if d.kind == "ipp" {
+                    match d.resource_path.as_deref() {
+                        Some(rp) => format!("{}:{}/{}", d.host, d.port, rp),
+                        None => format!("{}:{}", d.host, d.port),
+                    }
+                } else {
+                    format!("{}:{}", d.host, d.port)
+                };
+                let printer_type = if d.kind == "raw_tcp" {
+                    crate::transport::PrinterType::RawTcp
+                } else {
+                    crate::transport::PrinterType::Ipp
+                };
+                crate::transport::PrinterInfo {
+                    id: format!("net:{}:{}", d.host, d.port),
+                    name: d.name,
+                    address,
+                    printer_type,
+                    language: crate::transport::PrinterLanguage::Pdf,
+                    status: "unknown".to_string(),
                 }
-            } else {
-                format!("{}:{}", d.host, d.port)
-            };
-            let printer_type = if d.kind == "raw_tcp" {
-                crate::transport::PrinterType::RawTcp
-            } else {
-                crate::transport::PrinterType::Ipp
-            };
-            crate::transport::PrinterInfo {
-                id: format!("net:{}:{}", d.host, d.port),
-                name: d.name,
-                address,
-                printer_type,
-                language: crate::transport::PrinterLanguage::Pdf,
-                status: "unknown".to_string(),
-            }
-        })
-        .collect())
+            })
+            .collect())
+    }
 }
 
 /// mDNS-specific printer discovery that returns the raw discovered rows

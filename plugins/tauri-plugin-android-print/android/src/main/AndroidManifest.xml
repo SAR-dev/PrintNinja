@@ -5,6 +5,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Bluetooth printing: bonded-device reads + RFCOMM sockets.
+         BLUETOOTH_CONNECT is the runtime permission on Android 12+
+         (never grantable unless declared here); the legacy pair covers
+         11 and below, where it is granted at install. No
+         BLUETOOTH_SCAN: the app lists bonded devices only, never
+         discovers. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <application>
         <!-- Merged into the app manifest by the Gradle manifest merger.

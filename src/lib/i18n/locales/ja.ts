@@ -94,11 +94,10 @@ const ja: Translation = {
     onboarding_setup: "このワークステーションを設定",
     onboarding_checklist_hint:
       "プリンター、テンプレート、共有の設定は、設定内のチェックリストで順に確認できます。",
-    pair_required_title: "印刷を開始するにはPCとペアリングしてください",
-    pair_welcome_name:
-      "ようこそ {{name}} さん — 印刷を開始するにはPCとペアリングしてください",
+    pair_required_title: "PCとペアリングする",
+    pair_welcome_name: "ようこそ {{name}} さん",
     pair_required_body:
-      "この電話での印刷は常にペアリングされたPCを経由します: PCが各ページをレンダリングし、電話が印刷するか — PC経由印刷がオンならPC自身のプリンターで印刷します。一度ペアリングすれば、そのまま保持されます。",
+      "サーマルプリンター(ESC/POS、ZPL、TSPL)は、ペアリングされたPCなしでこの電話からそのまま印刷できます。PDFをこの電話で印刷する場合、またはPC経由印刷でPC自身のプリンターに印刷する場合は、PCをペアリングしてください。一度ペアリングすれば、削除するまでそのまま保持されます。",
   },
   engine: {
     badge: "ブラウザー未検出",
@@ -469,6 +468,9 @@ const ja: Translation = {
     failed_title: "印刷に失敗しました",
     unknown_error: "不明なエラー",
     pair_again_to_print: "印刷するには再ペアリングしてください。",
+    pdf_needs_pair:
+      "このプリンターはPDFを印刷します。PDFのレンダリングにはペアリングされたPCが必要です — ペアリングするか、サーマルプリンターを選択してください。",
+    pdf_pair_now: "PCとペアリングする",
     via_pc_banner:
       "{{pc}}で印刷中 — ジョブはそのPCのプリンターで実行されます。",
     via_pc_cached: "プリンター一覧はキャッシュです。PCに到達できません。",
@@ -597,9 +599,12 @@ const ja: Translation = {
     remove_confirm: "プリンターを削除",
     found_system: "このコンピューターで見つかりました",
     found_network: "このネットワークで見つかりました",
+    found_bluetooth: "ペアリング済みのBluetoothプリンター",
     fill: "入力",
     no_network_printers:
       "ネットワークプリンターはまだ見つかっていません。スキャンして探してください。",
+    no_bluetooth_printers:
+      "ペアリング済みのBluetoothプリンターがありません。まずAndroidのBluetooth設定でペアリングしてください。",
     rescan: "再スキャン",
     form_name: "プリンター名",
     form_name_example: "受付",
@@ -616,6 +621,8 @@ const ja: Translation = {
     hint_ipp:
       "例: http://192.168.1.100、ipp://192.168.1.100:631/ipp/print、または 192.168.1.100",
     hint_raw: "例: 192.168.1.100:9100",
+    hint_bluetooth:
+      "例: A4:77:17:22:33:44 — ペアリング済みデバイスのMAC（下のリストから選べます）",
     edit_printer: "{{name}}を編集",
     test_action: "{{name}}でテスト印刷",
     testing: "テストしています…",
@@ -626,6 +633,7 @@ const ja: Translation = {
     toast_discovery_failed: "検出に失敗しました: {{error}}",
     toast_no_system: "システムプリンターが見つかりません",
     toast_no_network: "ネットワークプリンターが見つかりません",
+    toast_no_bluetooth: "ペアリング済みのBluetoothプリンターが見つかりません",
     toast_all_added: "システムプリンター{{count}}台はすべて追加済みです",
     toast_none_new: "追加できる新しいシステムプリンターはありません",
     toast_scan_failed: "スキャンに失敗しました: {{error}}",
@@ -662,7 +670,7 @@ const ja: Translation = {
     lang_cpcl: "CPCL（ラベル）",
     lang_raster: "ラスター",
     lang_android_hint:
-      "Androidでは現在PDFのみ印刷できます。レシート・ラベル言語にはAndroidがまだ生成できないラスターが必要です。",
+      "Androidはレシート・ラベル言語（ESC/POS、ZPL、TSPL）を本体で印刷します。これらは偽プリンターでのみ検証済みで、実機での検証は未完了です。CPCL・ラスターは現在提供していません。",
   },
   history: {
     title: "履歴",
@@ -1351,6 +1359,9 @@ const ja: Translation = {
     tab_links: "ディープリンク",
     server_title: "ローカルAPIサーバー",
     open_explorer: "APIを試す",
+    demo_open: "デモページを開く",
+    demo_no_service:
+      "共有サービスのURLが設定されていません。設定でURLを追加するとデモページを開けます。",
     links_title: "信頼するディープリンクの送信元",
     status_running: "稼働中",
     status_disabled: "停止中",
@@ -1389,9 +1400,6 @@ const ja: Translation = {
     idem_hint: "再試行時に重複実行を防ぐキー",
     sending: "送信しています…",
     send: "{{method}} {{path}} を送信",
-    print_needs_pair:
-      "この電話での印刷にはペアリングされたPCが必要です。ペアリングするまでリクエストはここに保持されます。",
-    print_pair_now: "PCとペアリングする",
     response: "レスポンス",
     toast_bad_json: "リクエストボディが有効なJSONではありません",
     toast_job_id_required: "先にジョブIDを入力してください",

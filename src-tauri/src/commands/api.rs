@@ -272,7 +272,23 @@ pub async fn launch_server(
         cache_dir,
         window: pairing_window(&app),
     };
-    let router = crate::api::routes::router_with_state(state, lan);
+    // The share service's origin is the one browser origin allowed to read
+    // responses: the demo page fetches this API cross-origin from there
+    // (ARCHITECTURE §9). Read at start, so a changed URL applies on the
+    // next start.
+    let share_service_url = {
+        let guard = db
+            .lock()
+            .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+        let conn = guard.connection();
+        conn.query_row(
+            "SELECT value FROM settings WHERE key = 'share_service_url'",
+            [],
+            |r| r.get::<_, String>(0),
+        )
+        .ok()
+    };
+    let router = crate::api::routes::router_with_state(state, lan, share_service_url);
     let app2 = app.clone();
 
     let log_addr = addr.clone();

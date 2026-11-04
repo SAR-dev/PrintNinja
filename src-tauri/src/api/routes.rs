@@ -52,17 +52,33 @@ impl ApiState {
 /// NOTE: `/v1/jobs/{id}` is registered ONCE with `get(..).delete(..)`.
 /// Registering the same path twice makes axum shadow the first method,
 /// silently dropping GET or DELETE.
-pub fn router_with_state(state: ApiState, lan_access: bool) -> Router {
-    // Browser origins are never allowed: the app's own UI reaches this
-    // server through the Rust `api_request` proxy (loopback allow-list),
-    // and paired phones call from native code — so no legitimate caller
-    // needs CORS, and a wildcard would let any web page on the LAN probe
-    // the API (ARCHITECTURE §9). `lan_access` still decides the bind
-    // address in the launcher; it no longer changes CORS here.
+///
+/// `browser_origin` is the single origin allowed to read responses from a
+/// browser: the share service's demo page fetches this API cross-origin
+/// from there. Every other origin stays CORS-free — the app's own UI
+/// reaches this server through the Rust `api_request` proxy (loopback
+/// allow-list) and paired phones call from native code, so no other
+/// legitimate caller needs CORS, and a wildcard would let any web page on
+/// the LAN probe the API (ARCHITECTURE §9). `lan_access` still decides the
+/// bind address in the launcher; it does not change CORS here.
+pub fn router_with_state(
+    state: ApiState,
+    lan_access: bool,
+    browser_origin: Option<String>,
+) -> Router {
     let _ = lan_access;
-    let cors = tower_http::cors::CorsLayer::new()
+    let mut cors = tower_http::cors::CorsLayer::new()
         .allow_methods(tower_http::cors::Any)
         .allow_headers(tower_http::cors::Any);
+    if let Some(origin) = browser_origin.as_deref().and_then(normalize_browser_origin) {
+        // `list` filters on the request's Origin (unlike `exact`, which
+        // answers every origin with the fixed value); `allow_private_network`
+        // answers Chrome's public-to-loopback preflight for the demo page —
+        // without it the browser refuses the connection before CORS.
+        cors = cors
+            .allow_origin(tower_http::cors::AllowOrigin::list([origin]))
+            .allow_private_network(true);
+    }
 
     // The peer endpoints live on their own sub-router: they need the
     // pairing-secret gate, and the render body can be megabytes, so the
@@ -122,6 +138,31 @@ pub fn router_with_state(state: ApiState, lan_access: bool) -> Router {
         .layer(cors)
         .merge(peer)
         .merge(pair)
+}
+
+/// The `Origin` a browser on the share service sends: the configured
+/// service URL reduced to scheme+host+port, exactly as the `Origin`
+/// header carries it. Unparseable or non-http(s) settings stay out of the
+/// allow-list rather than widening it.
+fn normalize_browser_origin(raw: &str) -> Option<axum::http::HeaderValue> {
+    let url = url::Url::parse(raw.trim()).ok()?;
+    if !url.scheme().starts_with("http") {
+        return None;
+    }
+    // scheme://host[:port] exactly as the `Origin` header carries it;
+    // `Url::port` is None for the scheme's default, and IPv6 literals
+    // need their brackets back.
+    let host = url.host_str()?;
+    let host = if host.contains(':') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    };
+    let mut origin = format!("{}://{host}", url.scheme());
+    if let Some(port) = url.port() {
+        origin.push_str(&format!(":{port}"));
+    }
+    axum::http::HeaderValue::from_str(&origin).ok()
 }
 
 use axum::response::IntoResponse;

@@ -7,7 +7,7 @@
 **Silent printing for Windows, Android and Linux.**
 Design a receipt or label in HTML and CSS, feed it JSON, and it prints. No print dialog, no driver dance, no fuss.
 
-[![Version](https://img.shields.io/badge/version-3.1.2-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
+[![Version](https://img.shields.io/badge/version-3.2.6-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-1.90-DEA584?logo=rust&logoColor=black)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
@@ -119,7 +119,7 @@ Every new template starts from a **starter pack** — Receipt, Delivery Slip, In
 
 ## Print from your phone
 
-Phones are small and Android cannot make every printer language. So PrintNinja lets a phone borrow a PC on the same Wi-Fi.
+Phones are small and Android cannot make every printer language — ESC/POS, ZPL and TSPL print on the phone itself, while CPCL and raster still need a PC. So PrintNinja lets a phone borrow a PC on the same Wi-Fi.
 
 **Pair a phone with a PC**
 
@@ -130,7 +130,7 @@ Phones are small and Android cannot make every printer language. So PrintNinja l
 
 **Let someone borrow your PC without an account.** On the PC, choose **Invite guest** and pick how long the invite lasts (24 hours by default), how many times it can be used, and whether the guest may print or only render. The guest enters a name, taps **Continue as guest** on the sign-in screen and types the code. Guests can use templates by name, but can never read or change them.
 
-An unpaired phone can browse the app, but printing needs a pair: opening Print (or sending `/v1/print` from Try the API) takes you to the pairing screen first, which greets you by name and returns afterwards.
+An unpaired phone can browse the app and print straight to thermal printers (ESC/POS, ZPL, TSPL) — no pair needed. A pair is only for PDF on the phone and Print via PC: choosing a PDF printer on the Print page offers the pairing screen, which greets you by name and returns afterwards.
 
 **Two ways to use a paired PC**
 
@@ -192,8 +192,9 @@ Other options include `url` (a data URL), `test=1`, `orientation`, `fit` and `pr
 **Printers**
 - Network (IPP, raw TCP 9100) and system printers on Windows and Linux
 - LAN scan finds IPP and raw printers on the network over mDNS; a discovered printer is added in one tap
+- On Android, the Add dialog also lists your paired Bluetooth printers (bonded devices) with the same one-tap Fill and Add
 - USB and Bluetooth through the Windows spooler, or directly on Android
-- Printer languages: PDF, ESC/POS, ZPL, TSPL, CPCL and raster (Android prints PDF only for now)
+- Printer languages: PDF, ESC/POS, ZPL, TSPL, CPCL and raster (Android prints ESC/POS, ZPL and TSPL on the device itself; CPCL and raster need a paired PC)
 - Status checks before a raw job is sent, and timeouts so a stuck printer never hangs a job
 
 **Templates and sharing**
