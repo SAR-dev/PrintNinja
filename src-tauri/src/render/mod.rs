@@ -233,10 +233,11 @@ impl PdfRenderer {
 
     /// Render `html` to a 1-bit raster at the printer's own resolution (P4).
     ///
-    /// Headless Edge screenshots the page at exactly the window size the
-    /// label prints at (1 CSS px = 1 printer dot), and the PNG is
-    /// thresholded to dots. Same Edge dependency as [`Self::html_to_pdf`] —
-    /// and the same rule: failure is an error, never a placeholder.
+    /// On Windows and Linux a headless browser screenshots the page at
+    /// exactly the window size the label prints at (1 CSS px = 1 printer
+    /// dot) and the PNG is thresholded to dots; on Android the system
+    /// WebView does the same render on the device (PLAN §4). Same rule on
+    /// every platform: failure is an error, never a placeholder.
     pub async fn html_to_raster(
         &self,
         html: &str,
@@ -254,18 +255,79 @@ impl PdfRenderer {
         #[cfg(target_os = "linux")]
         let result = self.chromium_screenshot(&html_path, w_px, h_px).await;
 
-        #[cfg(not(any(windows, target_os = "linux")))]
+        // The system WebView measures the page at the head's own
+        // resolution and thresholds on the device (PLAN §4).
+        #[cfg(target_os = "android")]
+        let result = Self::android_webview_raster(html, w_px, h_px).await;
+
+        #[cfg(not(any(windows, target_os = "linux", target_os = "android")))]
         let result = Err(anyhow!(
             "no raster renderer on this platform (command-language printing needs \
-             Windows with Edge/WebView2 or Linux with a system Chromium; Android cannot \
-             rasterize yet, use a PDF printer there); refusing to send a placeholder \
-             instead of the label"
+             Windows with Edge/WebView2 or Linux with a system Chromium); refusing to \
+             send a placeholder instead of the label"
         ));
 
         // Per-job file: removed whether the render worked or not, so the
         // cache dir does not grow a file per print.
         let _ = tokio::fs::remove_file(&html_path).await;
         result
+    }
+
+    /// Android: the WebView renders at the head's own resolution (1 CSS px
+    /// = 1 dot) and thresholds on the device (PLAN §4). Kotlin writes the
+    /// packed dots to a cache-dir file, which this reads and deletes.
+    ///
+    /// The deadline sits above Kotlin's own 60 s render watchdog (see
+    /// `renderTimeoutMs` in `AndroidPrintPlugin`), like the USB path's
+    /// timeout sits above its socket deadlines: whichever gives up first
+    /// reports the cause.
+    #[cfg(target_os = "android")]
+    async fn android_webview_raster(
+        html: &str,
+        w_px: usize,
+        h_px: usize,
+    ) -> Result<crate::render::raster::RasterImage> {
+        use tauri_plugin_android_print::AndroidPrintExt;
+
+        const ANDROID_RENDER_DEADLINE: std::time::Duration = std::time::Duration::from_secs(75);
+
+        let app = crate::render::android_app()
+            .ok_or_else(|| anyhow!("the Android render bridge is not ready yet"))?;
+        let payload = tauri_plugin_android_print::HtmlToRasterRequest {
+            html: html.to_string(),
+            width_px: w_px as u32,
+            height_px: h_px as u32,
+        };
+        let res = tokio::time::timeout(
+            ANDROID_RENDER_DEADLINE,
+            tokio::task::spawn_blocking(move || app.android_print().html_to_raster(payload)),
+        )
+        .await
+        .map_err(|_| {
+            anyhow!(
+                "the Android WebView did not finish rasterizing within {}s",
+                ANDROID_RENDER_DEADLINE.as_secs()
+            )
+        })?
+        .map_err(|e| anyhow!("the Android raster render task failed: {e}"))?
+        .map_err(|e| anyhow!("the Android WebView could not rasterize the job: {e}"))?;
+
+        let bytes = tokio::fs::read(&res.path).await?;
+        let _ = tokio::fs::remove_file(&res.path).await;
+
+        crate::render::raster::RasterImage::from_packed(
+            res.width as usize,
+            res.height as usize,
+            bytes,
+        )
+        .ok_or_else(|| {
+            anyhow!(
+                "raster size mismatch from the Android WebView: {} bytes for {}x{} dots",
+                bytes.len(),
+                res.width,
+                res.height
+            )
+        })
     }
 
     /// Headless Edge `--screenshot` at `w_px`×`h_px`, thresholded to dots.
@@ -1160,6 +1222,70 @@ mod tests {
             "coloured text must threshold to a dot"
         );
         assert!(!raster.get_bit(1, 0));
+    }
+
+    /// Cross-language contract (PLAN §4): Android thresholds on the device
+    /// (`dotsFromArgb` in `AndroidPrintPlugin.kt`), desktop thresholds here
+    /// (`png_to_raster` + `RasterImage::threshold`). Both must produce the
+    /// same bytes for the same pixels, or the same label prints differently
+    /// depending on which device rendered it. The same 8×1 row is pinned to
+    /// `0xAD` in the Kotlin `RasterDotsTest` golden; a drift on either side
+    /// fails one of the two tests.
+    ///
+    /// The row, left to right: (0,0,0)→dot, (255,255,255)→no,
+    /// (127,127,127)→dot, (128,128,128)→no (exactly at the `< 128` cut),
+    /// (200,100,50)→dot (lum 124.2), (199,99,49)→dot (lum 123.2),
+    /// (250,250,250)→no, (10,10,10)→dot. Dots at x = {0,2,4,5,7} → 0xAD.
+    #[test]
+    fn raster_threshold_matches_the_kotlin_contract() {
+        use crate::render::raster::RasterImage;
+
+        let row: [(u8, u8, u8); 8] = [
+            (0, 0, 0),
+            (255, 255, 255),
+            (127, 127, 127),
+            (128, 128, 128),
+            (200, 100, 50),
+            (199, 99, 49),
+            (250, 250, 250),
+            (10, 10, 10),
+        ];
+
+        // The Rust side, exactly as png_to_raster computes it.
+        let gray: Vec<u8> = row
+            .iter()
+            .map(|&(r, g, b)| {
+                (0.299 * f64::from(r) + 0.587 * f64::from(g) + 0.114 * f64::from(b)).round() as u8
+            })
+            .collect();
+        let mut raster = RasterImage::new(8, 1);
+        raster.threshold(&gray, 8, 1, 128);
+        assert_eq!(raster.to_bytes(), vec![0xAD]);
+
+        // Through the real decode path too, so a PNG colour-handling
+        // change is caught as well as a threshold change.
+        let rgb: Vec<u8> = row.iter().flat_map(|&(r, g, b)| [r, g, b]).collect();
+        let dir = std::env::temp_dir();
+        let path = write_png(&dir, png::ColorType::Rgb, 8, 1, &rgb);
+        let via_png = png_to_raster(&path).expect("decode");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(via_png.to_bytes(), vec![0xAD]);
+    }
+
+    /// The Android file→raster path validates its size before use: a
+    /// truncated or corrupted dots file must fail, not print.
+    #[test]
+    fn from_packed_rejects_a_byte_count_that_fits_no_row() {
+        use crate::render::raster::RasterImage;
+
+        // 10 dots wide → 2 bytes per row.
+        assert!(RasterImage::from_packed(10, 1, vec![0xAD; 2]).is_some());
+        assert!(RasterImage::from_packed(10, 1, vec![0xAD; 1]).is_none());
+        assert!(RasterImage::from_packed(10, 1, vec![0xAD; 3]).is_none());
+        // 8 dots wide → 1 byte per row.
+        assert!(RasterImage::from_packed(8, 2, vec![0xAD, 0xFF]).is_some());
+        // A multiple-of-eight width: no padding bytes may be smuggled in.
+        assert!(RasterImage::from_packed(8, 2, vec![0xAD, 0xFF, 0x00]).is_none());
     }
 
     /// Linux Chromium selection and the root retry, behind a fake

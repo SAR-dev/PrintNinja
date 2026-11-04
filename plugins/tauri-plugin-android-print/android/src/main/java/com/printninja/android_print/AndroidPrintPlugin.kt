@@ -12,6 +12,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.pdf.PdfDocument
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
@@ -44,7 +48,192 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.ceil
+import kotlin.math.roundToLong
 import kotlin.math.roundToInt
+
+/**
+ * Packs ARGB pixels (row-major, top-left first) into 1-bit dots: 8 dots
+ * per byte, the leftmost dot of each group of eight at bit 7, a dot
+ * where the luminance `0.299R + 0.587G + 0.114B` rounds to less than
+ * 128.
+ *
+ * This is the device-side twin of Rust's `png_to_raster` +
+ * `RasterImage::threshold` (src-tauri/src/render/{mod,raster}.rs): same
+ * luminance weights, same half-away-from-zero rounding, same `< 128`
+ * cut, same bit order. The goldens in `RasterDotsTest` and the Rust
+ * `raster_threshold_matches_the_kotlin_contract` test pin both sides to
+ * one value, so a change on either side fails a test.
+ *
+ * Top-level (not a plugin member) because it is pure — no Android types —
+ * and must stay testable in a plain JVM unit test where an `Activity`
+ * cannot be constructed.
+ */
+fun dotsFromArgb(pixels: IntArray, widthPx: Int, heightPx: Int): ByteArray {
+    require(pixels.size == widthPx * heightPx) { "pixel array must be width * height" }
+    val bytesPerRow = (widthPx + 7) / 8
+    val dots = ByteArray(heightPx * bytesPerRow)
+    for (y in 0 until heightPx) {
+        val rowBase = y * bytesPerRow
+        for (x in 0 until widthPx) {
+            val p = pixels[y * widthPx + x]
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            val lum = (0.299 * r + 0.587 * g + 0.114 * b).roundToLong()
+            if (lum < 128) {
+                // The stdlib has no `Byte or Byte`: widen to Int for the OR.
+                dots[rowBase + x / 8] = (dots[rowBase + x / 8].toInt() or (1 shl (7 - x % 8))).toByte()
+            }
+        }
+    }
+    return dots
+}
+
+/** Log tag shared by the class and the file-level render helpers. */
+private const val TAG = "AndroidPrintPlugin"
+
+/**
+ * One render's deadline, in ms: a page that never finishes still gets an
+ * answer. Shared by the class's PDF watchdog (`renderTimeoutMs`) and
+ * [renderDots].
+ */
+const val RASTER_RENDER_TIMEOUT_MS = 60_000L
+
+/**
+ * The device-side half of thermal printing (PLAN §4): renders [html] in
+ * a WebView measured at the head's own resolution — 1 CSS px = 1
+ * printer dot — thresholds it to 1-bit and writes the packed dots to a
+ * fresh `pn_raster_*.bin` in the cache dir.
+ *
+ * The WebView takes its density from its *context*, so it is created
+ * from a 160 dpi configuration context: at 160 dpi one CSS px is one
+ * device px, so measuring the page at exactly [widthPx] device px lays
+ * it out at exactly [widthPx] CSS px. That is the mobile twin of the
+ * desktop screenshot path's `--force-device-scale-factor=1` — no
+ * resampling anywhere.
+ *
+ * [onSettled] fires exactly once, on the main thread, with the file on
+ * success or the reason on failure (the file is deleted then). The
+ * caller reads the file and deletes it.
+ *
+ * Top-level (not a plugin member) like [dotsFromArgb]: it needs only a
+ * [Context], so the instrumented test can call it without constructing
+ * the plugin; the `@Command` [AndroidPrintPlugin.htmlToRaster] is the
+ * production entry point.
+ */
+fun renderDots(
+    context: Context,
+    html: String,
+    widthPx: Int,
+    heightPx: Int,
+    onSettled: (Result<File>) -> Unit,
+) {
+    val config = Configuration(context.resources.configuration)
+    config.densityDpi = 160
+    val rasterContext = context.createConfigurationContext(config)
+
+    // Exactly one of page-finished / failure / watchdog settles the
+    // render, like htmlToPdf: a callback that arrives after the
+    // deadline must not answer a second time.
+    val claimed = AtomicBoolean(false)
+    var tmp: File? = null
+    var view: WebView? = null
+
+    fun settle(outcome: Result<File>) {
+        if (claimed.compareAndSet(false, true)) {
+            onSettled(outcome)
+        }
+    }
+
+    // `runOnUiThread` is an Activity method; with a bare Context the
+    // main-looper handler is the equivalent.
+    Handler(Looper.getMainLooper()).post {
+        try {
+            val f = File.createTempFile("pn_raster_", ".bin", rasterContext.cacheDir)
+            tmp = f
+            val v = WebView(rasterContext)
+            view = v
+            v.settings.javaScriptEnabled = false
+            v.webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    if (view == null) {
+                        settle(Result.failure(Exception("web view gone")))
+                        return
+                    }
+                    val error = captureDots(view, f, widthPx, heightPx)
+                    if (error == null) {
+                        settle(Result.success(f))
+                    } else {
+                        f.delete()
+                        settle(Result.failure(Exception(error)))
+                    }
+                }
+            }
+            Handler(Looper.getMainLooper()).postDelayed(
+                {
+                    view?.destroy()
+                    tmp?.delete()
+                    settle(
+                        Result.failure(
+                            Exception("render timed out after ${RASTER_RENDER_TIMEOUT_MS / 1000}s"),
+                        ),
+                    )
+                },
+                RASTER_RENDER_TIMEOUT_MS,
+            )
+            v.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+        } catch (e: Exception) {
+            view?.destroy()
+            tmp?.delete()
+            settle(Result.failure(e))
+        }
+    }
+}
+
+/**
+ * Draws a loaded WebView into exactly [widthPx] × [heightPx] device
+ * pixels and thresholds the result to 1-bit dots written to [outFile].
+ * The view must have been created from a 160 dpi context (see
+ * [renderDots]) so that 1 CSS px = 1 device px and nothing is
+ * resampled.
+ *
+ * First sheet only (D4.3): the canvas is exactly the sheet size, so
+ * content below it — later sheets — is clipped.
+ *
+ * Returns `null` on success, or why the capture failed. The view is
+ * released on both paths.
+ */
+private fun captureDots(view: WebView, outFile: File, widthPx: Int, heightPx: Int): String? {
+    try {
+        view.measure(
+            View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        val contentHeightPx = maxOf(view.measuredHeight, heightPx)
+        view.layout(0, 0, widthPx, contentHeightPx)
+
+        val bmp = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+        try {
+            val canvas = Canvas(bmp)
+            // A page that paints nothing stays white, and white is no dot.
+            canvas.drawColor(Color.WHITE)
+            view.draw(canvas)
+
+            val pixels = IntArray(widthPx * heightPx)
+            bmp.getPixels(pixels, 0, widthPx, 0, 0, widthPx, heightPx)
+            FileOutputStream(outFile).use { it.write(dotsFromArgb(pixels, widthPx, heightPx)) }
+        } finally {
+            bmp.recycle()
+        }
+        return null
+    } catch (e: Exception) {
+        Log.e(TAG, "raster capture failed", e)
+        return "raster capture failed: ${e.message}"
+    } finally {
+        view.destroy()
+    }
+}
 
 @InvokeArg
 class HtmlToPdfArgs {
@@ -53,6 +242,13 @@ class HtmlToPdfArgs {
     var pageHeightMm: Double? = null
     var orientation: String? = null
     var documentName: String? = null
+}
+
+@InvokeArg
+class HtmlToRasterArgs {
+    var html: String? = null
+    var widthPx: Int? = null
+    var heightPx: Int? = null
 }
 
 @InvokeArg
@@ -165,10 +361,10 @@ class ApiServerStateArgs {
 
 @TauriPlugin
 class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
-    private val tag = "AndroidPrintPlugin"
+    private val tag = TAG
 
     /** One render's deadline, in ms: a page that never finishes still gets an answer. */
-    private val renderTimeoutMs = 60_000L
+    private val renderTimeoutMs = RASTER_RENDER_TIMEOUT_MS
 
     /** One bulk-transfer / socket write's deadline, in ms. */
     private val ioTimeoutMs = 10_000
@@ -339,6 +535,40 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
             runCatching { pdf.close() }
                 .onFailure { Log.w(tag, "closing the pdf failed: ${it.message}") }
             view.destroy()
+        }
+    }
+
+    /**
+     * Renders HTML to a 1-bit raster at the printer's own resolution and
+     * resolves with the path of a file holding the packed dots — the
+     * device-side half of thermal printing (PLAN §4). The caller reads the
+     * file and deletes it.
+     *
+     * Same main-thread contract as [htmlToPdf]: Tauri invokes this on the
+     * main thread, so it must return at once and let the callbacks answer.
+     */
+    @Command
+    fun htmlToRaster(invoke: Invoke) {
+        val args = invoke.parseArgs(HtmlToRasterArgs::class.java)
+        val html = args.html ?: return invoke.reject("html is required")
+        val widthPx = args.widthPx ?: 0
+        val heightPx = args.heightPx ?: 0
+        if (widthPx < 1 || heightPx < 1) {
+            return invoke.reject("widthPx and heightPx must be at least 1")
+        }
+
+        renderDots(activity, html, widthPx, heightPx) {
+            if (it.isSuccess) {
+                val file = it.getOrThrow()
+                invoke.resolve(
+                    JSObject()
+                        .put("path", file.absolutePath)
+                        .put("width", widthPx)
+                        .put("height", heightPx),
+                )
+            } else {
+                invoke.reject(it.exceptionOrNull()?.message ?: "raster render failed")
+            }
         }
     }
 

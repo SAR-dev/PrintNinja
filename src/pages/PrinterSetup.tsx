@@ -4,7 +4,6 @@ import {
   supportedPrinterLanguages,
   supportedPrinterTypes,
 } from "@/lib/platform";
-import { hasPairedProvider } from "@/lib/pairing";
 import { TimeoutError, withTimeout } from "@/lib/withTimeout";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -150,9 +149,6 @@ export function PrinterSetupPage() {
 
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  // Whether a PC is paired for shared rendering (auto policy): on
-  // Android this unlocks the thermal languages, which the PC renders.
-  const [pairedProvider, setPairedProvider] = useState(false);
   // Print-via-PC mode: local printers sit unused while it is on.
   const [viaPc, setViaPc] = useState(false);
   useEffect(() => {
@@ -221,8 +217,6 @@ export function PrinterSetupPage() {
     agent("enumerate_system_printers", {})
       .then((list) => setSystemPrinters(list ?? []))
       .catch(() => setSystemPrinters([]));
-    // A paired PC (auto policy) unlocks the thermal languages on Android.
-    void hasPairedProvider().then(setPairedProvider);
     // Background mDNS browse after mount (one-shot, not continuous) so
     // printers appear without an extra tap: an 8 s browse immediately,
     // then a single 8 s re-browse at 15 s (~30 s window total).
@@ -285,8 +279,10 @@ export function PrinterSetupPage() {
           name,
           printer_type: printerType,
           address,
+          // Android rasterizes thermal languages locally (PLAN §4), so a
+          // non-IPP add starts at ESC/POS there.
           language:
-            printerType === "ipp" ? "pdf" : pairedProvider ? "escpos" : "pdf",
+            printerType === "ipp" ? "pdf" : isAndroid() ? "escpos" : "pdf",
           paper_width_mm: 80,
           dpi: 203,
         },
@@ -425,18 +421,17 @@ export function PrinterSetupPage() {
   // the add form and the tabs hide only that. `isAndroid` reads the
   // WebView user agent once per mount; it cannot change at runtime.
   const visibleTypes = useMemo(() => supportedPrinterTypes(PRINTER_TYPES), []);
-  // Android renders PDF only, so the command languages are hidden there. A
-  // saved row that already uses one stays visible so editing it does not
-  // silently change its language. With a paired PC the thermal languages
-  // come back: the PC renders them through shared rendering.
+  // Android can produce PDF plus the receipt and label languages that pass
+  // the per-language QA gate in platform.ts (PLAN §4, D4.4): its WebView
+  // rasterizes them locally. A saved row that already uses another
+  // language stays visible so editing it does not silently change its
+  // language.
   const visibleLanguages = useMemo(() => {
-    const supported = supportedPrinterLanguages(LANGUAGES, {
-      pairedProvider,
-    });
+    const supported = supportedPrinterLanguages(LANGUAGES);
     if (supported.some((l) => l.value === form.language)) return supported;
     const current = LANGUAGES.find((l) => l.value === form.language);
     return current ? [...supported, current] : supported;
-  }, [form.language, pairedProvider]);
+  }, [form.language]);
   const languagesLimited = visibleLanguages.length < LANGUAGES.length;
   const visibleGroups = useMemo(
     () =>
@@ -860,7 +855,7 @@ export function PrinterSetupPage() {
                               language:
                                 (np.printer_type ?? "ipp") === "ipp"
                                   ? "pdf"
-                                  : pairedProvider
+                                  : isAndroid()
                                     ? "escpos"
                                     : f.language,
                             }))
@@ -910,13 +905,13 @@ export function PrinterSetupPage() {
                     setForm((f) => ({
                       ...f,
                       printer_type: v,
-                      // New USB/Bluetooth printers on a paired phone print
-                      // through the PC, which renders thermal languages: a
-                      // PDF default would put an unreadable page on a
-                      // thermal head, so start at ESC/POS instead. An
-                      // explicitly chosen language is left alone.
+                      // New USB/Bluetooth printers on Android print
+                      // locally: the WebView rasterizes the thermal
+                      // languages (PLAN §4), so a PDF default would put an
+                      // unreadable page on a thermal head — start at
+                      // ESC/POS instead. An explicitly chosen language is
+                      // left alone.
                       language:
-                        pairedProvider &&
                         isAndroid() &&
                         (v === "usb" || v === "bluetooth") &&
                         f.language === "pdf"

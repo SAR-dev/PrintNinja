@@ -662,7 +662,7 @@ const ja: Translation = {
     lang_cpcl: "CPCL（ラベル）",
     lang_raster: "ラスター",
     lang_android_hint:
-      "Androidでは現在PDFのみ印刷できます。レシート・ラベル言語にはAndroidがまだ生成できないラスターが必要です。",
+      "Androidはレシート・ラベル言語（ESC/POS、ZPL、TSPL）を本体で印刷します。これらは偽プリンターでのみ検証済みで、実機での検証は未完了です。CPCL・ラスターは現在提供していません。",
   },
   history: {
     title: "履歴",
