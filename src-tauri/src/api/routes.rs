@@ -70,10 +70,7 @@ pub fn router_with_state(
     let mut cors = tower_http::cors::CorsLayer::new()
         .allow_methods(tower_http::cors::Any)
         .allow_headers(tower_http::cors::Any);
-    if let Some(origin) = browser_origin
-        .as_deref()
-        .and_then(normalize_browser_origin)
-    {
+    if let Some(origin) = browser_origin.as_deref().and_then(normalize_browser_origin) {
         // `list` filters on the request's Origin (unlike `exact`, which
         // answers every origin with the fixed value); `allow_private_network`
         // answers Chrome's public-to-loopback preflight for the demo page —

@@ -288,8 +288,7 @@ pub async fn launch_server(
         )
         .ok()
     };
-    let router =
-        crate::api::routes::router_with_state(state, lan, share_service_url);
+    let router = crate::api::routes::router_with_state(state, lan, share_service_url);
     let app2 = app.clone();
 
     let log_addr = addr.clone();
