@@ -335,3 +335,107 @@ describe("Settings database reset", () => {
     await waitFor(() => expect(target).toHaveClass("ring-2"));
   });
 });
+
+describe("Settings print repair (Windows)", () => {
+  const windowsEngine = {
+    platform: "windows",
+    available: true,
+    path: "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    searched: [],
+    distro: [],
+    distro_name: null,
+    appimage: false,
+  };
+
+  it("confirms, runs the repair and shows the per-step report", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_render_engine_status") return windowsEngine;
+      if (cmd === "fix_pc_print")
+        return {
+          edge_found: true,
+          edge_path: windowsEngine.path,
+          edge_was_running: true,
+          edge_closed: true,
+          profiles_removed: ["edge-warm-profile"],
+          cooldown_reset: true,
+          test_render_ok: true,
+          test_render_error: null,
+        };
+      return null;
+    });
+    renderPage();
+    open("Diagnostics");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Fix PC printing" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Fix PC printing")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Fix it" }));
+    const result = await waitFor(() => {
+      const el = document.getElementById("settings-diag-fix-result");
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(result).toHaveTextContent("Edge found");
+    expect(result).toHaveTextContent("Closed the running Edge windows");
+    expect(result).toHaveTextContent("Removed 1 stale render profile(s)");
+    expect(result).toHaveTextContent("Persistent browser cooldown reset");
+    expect(result).toHaveTextContent("Test render succeeded");
+    expect(invoke).toHaveBeenCalledWith("fix_pc_print", { closeEdge: true });
+  });
+
+  it("shows the failure text when the test render fails", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_render_engine_status") return windowsEngine;
+      if (cmd === "fix_pc_print")
+        return {
+          edge_found: true,
+          edge_path: windowsEngine.path,
+          edge_was_running: true,
+          edge_closed: true,
+          profiles_removed: [],
+          cooldown_reset: true,
+          test_render_ok: false,
+          test_render_error: "Edge exited but did not return a PDF",
+        };
+      return null;
+    });
+    renderPage();
+    open("Diagnostics");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Fix PC printing" }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Fix it",
+      }),
+    );
+    const result = await waitFor(() => {
+      const el = document.getElementById("settings-diag-fix-result");
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(result).toHaveTextContent("Test render failed");
+    expect(result).toHaveTextContent("Edge exited but did not return a PDF");
+    expect(result).toHaveTextContent("No stale render profiles to remove");
+  });
+
+  it("is hidden where the repair does not exist (non-Windows)", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_render_engine_status")
+        return { ...windowsEngine, platform: "linux", path: null };
+      return null;
+    });
+    renderPage();
+    open("Diagnostics");
+    // Wait until the platform read landed and the section rendered, then
+    // the button must be absent even though the rest of Diagnostics is up.
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("get_render_engine_status", {}),
+    );
+    expect(
+      await screen.findByRole("button", { name: /Export Diagnostics/ }),
+    ).toBeInTheDocument();
+    expect(document.getElementById("settings-diag-fix-pc-print")).toBeNull();
+  });
+});

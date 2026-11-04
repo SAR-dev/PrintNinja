@@ -725,6 +725,20 @@ impl PersistentBrowser {
         self.browser(cfg).await.map(|_| ())
     }
 
+    /// Close the app's browser (if any) and clear the failure cooldown.
+    ///
+    /// The one-click repair (`fix.rs`) calls this after it closed Edge and
+    /// removed the render profiles: the next render then starts a fresh
+    /// browser immediately instead of inheriting a dead connection or the
+    /// [`RETRY_AFTER`] cooldown.
+    pub async fn reset(&self) {
+        let mut st = self.state.lock().await;
+        if let Some(b) = st.browser.take() {
+            b.stop().await;
+        }
+        st.failed_at = None;
+    }
+
     /// Print the document at `url` (a `file:///` URL) to a PDF.
     pub async fn print_pdf(&self, cfg: &Config, url: &str) -> Result<Vec<u8>> {
         let browser = self.browser(cfg).await?;

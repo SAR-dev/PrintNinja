@@ -261,6 +261,39 @@ describe("Print page", () => {
       ),
     );
   });
+  it("lets Template size be re-selected after a preset was chosen", async () => {
+    renderPage();
+    const paper = await screen.findByRole("combobox", { name: "Paper size" });
+    // Choose A4, then ask for the template size again: the override must
+    // be cleared, not re-applied as a no-op.
+    // Radix opens the trigger and selects items on click when no pointer
+    // type was set (the jsdom default), unlike a real mouse pointerdown.
+    fireEvent.click(paper);
+    fireEvent.click(await screen.findByRole("option", { name: /A4/ }));
+    expect(usePrintStore.getState().paperW).toBe(210);
+    expect(usePrintStore.getState().paperH).toBe(297);
+    fireEvent.click(paper);
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Template size" }),
+    );
+    expect(usePrintStore.getState().paperW).toBeNull();
+    expect(usePrintStore.getState().paperH).toBeNull();
+    const print = screen.getByRole("button", { name: /^Print$/ });
+    fireEvent.click(print);
+    // The job goes out at the template size again.
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "print_html",
+        expect.objectContaining({
+          req: expect.objectContaining({
+            page_width_mm: 100,
+            page_height_mm: 150,
+          }),
+        }),
+      ),
+    );
+  });
+
   it("sends the pages count with the print request", async () => {
     renderPage();
     const print = await screen.findByRole("button", { name: /^Print$/ });
