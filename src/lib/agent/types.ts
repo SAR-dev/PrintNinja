@@ -412,6 +412,27 @@ export interface RenderEngineStatus {
   appimage: boolean;
 }
 
+/**
+ * What the one-click print repair did, one field per step. Mirrors
+ * `FixReport` in src-tauri/src/render/fix.rs.
+ */
+export interface FixReport {
+  /** Edge was found in one of the known install locations. */
+  edge_found: boolean;
+  edge_path: string | null;
+  /** At least one msedge.exe process was running when it started. */
+  edge_was_running: boolean;
+  /** The repair closed the running Edge processes. */
+  edge_closed: boolean;
+  /** Render profiles removed from the cache dir. */
+  profiles_removed: string[];
+  /** The persistent-browser connection and failure cooldown were reset. */
+  cooldown_reset: boolean;
+  /** The test render produced a real PDF. */
+  test_render_ok: boolean;
+  test_render_error: string | null;
+}
+
 export interface ApiStatus {
   running: boolean;
   address: string;

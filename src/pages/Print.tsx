@@ -1316,6 +1316,13 @@ function PrintForm() {
                 <Select
                   value={paperPreset}
                   onValueChange={(v) => {
+                    // "auto" (template size) is not a preset: clear the
+                    // explicit override so the design size applies again.
+                    if (v === "auto") {
+                      store.setPaperW(null);
+                      store.setPaperH(null);
+                      return;
+                    }
                     const preset = PAPER_PRESETS.find((x) => x.key === v);
                     if (!preset) {
                       // Custom: start from the current effective size so

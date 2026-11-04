@@ -1098,6 +1098,28 @@ const ja: Translation = {
     diag_app_log_hint:
       "バックエンドの最新のログ（印刷パイプライン）を古い順に表示します。ファイルログが開始されていない場合は空です。",
     diag_note: "シークレットとAPIトークンはエクスポートから除外されます。",
+    diag_fix_pc_print_hint:
+      "「Edge が PDF を生成できませんでした」で印刷に失敗しますか？リペアは Edge を終了し、古いレンダリングプロファイルを確認してからテスト印刷を実行します。",
+    diag_fix_pc_print: "PCの印刷を修復",
+    diag_fix_pc_print_running: "修復中…",
+    fix_title: "PCの印刷を修復",
+    fix_hint:
+      "開いているすべての Edge ウィンドウを（保存せずに）閉じ、PrintNinja のレンダリングプロファイルと永続ブラウザをリセットしてから、確認用のテスト印刷を実行します。続行しますか？",
+    fix_cancel: "キャンセル",
+    fix_confirm: "修復する",
+    fix_edge_found: "Edge が見つかりました",
+    fix_edge_missing:
+      "Edge が見つかりません — 先に Microsoft Edge をインストールしてください",
+    fix_edge_closed: "実行中の Edge ウィンドウを終了しました",
+    fix_edge_running:
+      "Edge がまだ実行中です — 手動で終了して、再度印刷してください",
+    fix_profiles_removed: "古いレンダリングプロファイル {{n}} 件を削除しました",
+    fix_no_profiles: "削除すべき古いレンダリングプロファイルはありません",
+    fix_cooldown: "永続ブラウザのクールダウンをリセットしました",
+    fix_test_ok: "テスト印刷に成功しました",
+    fix_test_failed: "テスト印刷に失敗しました",
+    toast_fix_ok: "印刷パイプラインを修復しました — テスト印刷に成功しました",
+    toast_fix_failed: "リペアは実行されましたが、テスト印刷に失敗しました",
     allow_title: "すべてのドメインからのデータを許可しますか？",
     allow_hint:
       "リストが空の場合、すべてのドメインが許可されます。ライブデータURLから、どこからでもコンテンツを取得できるようになります。意図的でない限り、少なくとも自分のホストは登録しておいてください。",
