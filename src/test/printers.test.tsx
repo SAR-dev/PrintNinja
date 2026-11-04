@@ -248,6 +248,101 @@ describe("Printers page", () => {
   });
 });
 
+describe("Bluetooth in the add dialog", () => {
+  const BT_ROW = {
+    id: "A4:77:17:22:33:44",
+    name: "Ruijie 80",
+    address: "A4:77:17:22:33:44",
+    printer_type: "bluetooth",
+    language: "pdf",
+    status: "unknown",
+  };
+
+  function phoneMode() {
+    const ua = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile");
+    return () => ua.mockRestore();
+  }
+
+  async function openBluetoothDialog() {
+    renderPage();
+    await screen.findByText("Dock Zebra");
+    fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));
+    const panel = await screen.findByRole("dialog");
+    fireEvent.click(within(panel).getByLabelText("Connection"));
+    fireEvent.click(await screen.findByRole("option", { name: "Bluetooth" }));
+    return panel;
+  }
+
+  it("shows a MAC sample under the address input when Bluetooth is selected", async () => {
+    const panel = await openBluetoothDialog();
+    const hint = await screen.findByText(/A4:77:17:22:33:44/);
+    // Wired to the address input so a screen reader reads it on focus.
+    expect(hint).toHaveAttribute("id", "printer-address-hint");
+    expect(
+      within(panel).getByLabelText("Bluetooth MAC or COM port"),
+    ).toHaveAttribute("aria-describedby", "printer-address-hint");
+  });
+
+  it("lists bonded printers with Fill and Add on Android", async () => {
+    const done = phoneMode();
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers") return PRINTERS;
+      if (cmd === "list_bluetooth_devices") return [BT_ROW];
+      if (cmd === "enumerate_system_printers") return [];
+      return null;
+    });
+    try {
+      const panel = await openBluetoothDialog();
+      const row = await screen.findByTestId(
+        "discovered-bluetooth-A4:77:17:22:33:44",
+      );
+      expect(within(row).getByText("Ruijie 80")).toBeInTheDocument();
+      fireEvent.click(within(row).getByRole("button", { name: "Fill" }));
+      expect(
+        within(panel).getByLabelText("Bluetooth MAC or COM port"),
+      ).toHaveValue("A4:77:17:22:33:44");
+    } finally {
+      done();
+    }
+  });
+
+  it("adds a bonded printer in one tap on Android", async () => {
+    const done = phoneMode();
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers") return PRINTERS;
+      if (cmd === "list_bluetooth_devices") return [BT_ROW];
+      if (cmd === "enumerate_system_printers") return [];
+      return null;
+    });
+    try {
+      await openBluetoothDialog();
+      const row = await screen.findByTestId(
+        "discovered-bluetooth-A4:77:17:22:33:44",
+      );
+      fireEvent.click(within(row).getByRole("button", { name: /Add/ }));
+      await waitFor(() =>
+        expect(invoke).toHaveBeenCalledWith(
+          "add_printer",
+          expect.objectContaining({
+            req: expect.objectContaining({
+              name: "Ruijie 80",
+              address: "A4:77:17:22:33:44",
+              printer_type: "bluetooth",
+              // Android rasterizes thermal locally: the add starts at
+              // ESC/POS, not PDF.
+              language: "escpos",
+            }),
+          }),
+        ),
+      );
+    } finally {
+      done();
+    }
+  });
+});
+
 describe("Print via PC notice", () => {
   it("explains the idle list and offers the exit", async () => {
     invoke.mockImplementation(async (cmd: string, args?: any) => {

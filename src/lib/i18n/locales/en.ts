@@ -586,9 +586,12 @@ const en = {
     remove_confirm: "Remove printer",
     found_system: "Found on this computer",
     found_network: "Found on this network",
+    found_bluetooth: "Paired Bluetooth printers",
     fill: "Fill",
     no_network_printers:
       "No network printers found yet — scan to look for them.",
+    no_bluetooth_printers:
+      "No paired Bluetooth printers — pair one in Android's Bluetooth settings first.",
     rescan: "Rescan",
     form_name: "Printer name",
     form_name_example: "Front desk",
@@ -604,6 +607,8 @@ const en = {
     hint_ipp:
       "For example http://192.168.1.100, ipp://192.168.1.100:631/ipp/print, or just 192.168.1.100",
     hint_raw: "For example 192.168.1.100:9100",
+    hint_bluetooth:
+      "For example A4:77:17:22:33:44 — the MAC of a paired device (the list below offers them)",
     edit_printer: "Edit {{name}}",
     test_action: "Test print on {{name}}",
     testing: "Testing…",
@@ -614,6 +619,7 @@ const en = {
     toast_discovery_failed: "Discovery failed: {{error}}",
     toast_no_system: "No system printers found",
     toast_no_network: "No network printers found",
+    toast_no_bluetooth: "No paired Bluetooth printers found",
     toast_all_added: "All {{count}} system printer(s) already added",
     toast_none_new: "No new system printers to add",
     toast_scan_failed: "Scan failed: {{error}}",

@@ -599,9 +599,12 @@ const ja: Translation = {
     remove_confirm: "プリンターを削除",
     found_system: "このコンピューターで見つかりました",
     found_network: "このネットワークで見つかりました",
+    found_bluetooth: "ペアリング済みのBluetoothプリンター",
     fill: "入力",
     no_network_printers:
       "ネットワークプリンターはまだ見つかっていません。スキャンして探してください。",
+    no_bluetooth_printers:
+      "ペアリング済みのBluetoothプリンターがありません。まずAndroidのBluetooth設定でペアリングしてください。",
     rescan: "再スキャン",
     form_name: "プリンター名",
     form_name_example: "受付",
@@ -618,6 +621,8 @@ const ja: Translation = {
     hint_ipp:
       "例: http://192.168.1.100、ipp://192.168.1.100:631/ipp/print、または 192.168.1.100",
     hint_raw: "例: 192.168.1.100:9100",
+    hint_bluetooth:
+      "例: A4:77:17:22:33:44 — ペアリング済みデバイスのMAC（下のリストから選べます）",
     edit_printer: "{{name}}を編集",
     test_action: "{{name}}でテスト印刷",
     testing: "テストしています…",
@@ -628,6 +633,7 @@ const ja: Translation = {
     toast_discovery_failed: "検出に失敗しました: {{error}}",
     toast_no_system: "システムプリンターが見つかりません",
     toast_no_network: "ネットワークプリンターが見つかりません",
+    toast_no_bluetooth: "ペアリング済みのBluetoothプリンターが見つかりません",
     toast_all_added: "システムプリンター{{count}}台はすべて追加済みです",
     toast_none_new: "追加できる新しいシステムプリンターはありません",
     toast_scan_failed: "スキャンに失敗しました: {{error}}",

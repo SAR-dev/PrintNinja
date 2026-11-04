@@ -144,6 +144,9 @@ export interface AgentCommands {
   get_printer: [{ id: number }, PrinterRow];
   test_printer: [{ id: number }, null];
   enumerate_system_printers: [{}, SystemPrinterRow[]];
+  // Bonded Bluetooth devices (Android): the MAC doubles as the address a
+  // Bluetooth printer row stores, so the result is a printer-shaped list.
+  list_bluetooth_devices: [{}, SystemPrinterRow[]];
   discover_network_printers: [{ timeout_secs?: number }, SystemPrinterRow[]];
   discover_network_printers_mdns: [
     { timeout_secs?: number },
