@@ -1096,19 +1096,23 @@ async fn run_stages(
             .ok()
             .map(|guard| crate::api::peer_consume::inline_fonts(guard.connection(), &final_html))
     };
-    // Android never renders locally: every job — PDF included — is bought
-    // from the paired PC, which is mandatory there (the app opens on the
-    // pairing screen until one is paired). A local attempt could only
-    // report "no renderer", hiding the real cause (PC off, unpaired,
-    // busy). Desktop keeps local rendering, with required mode only for
-    // thermal languages the platform cannot rasterize itself.
-    let need_peer = cfg!(target_os = "android")
-        || (!matches!(language, crate::transport::PrinterLanguage::Pdf)
-            && !crate::api::render_share::can_render());
+    // PDF on Android is still bought from the paired PC, which is mandatory
+    // there (the app opens on the pairing screen until one is paired): a
+    // local attempt could only report "no renderer", hiding the real cause
+    // (PC off, unpaired, busy). Thermal jobs now rasterize on the device
+    // itself (PLAN §4), so on Android they go local — `render_best` below
+    // still asks a paired PC first when one answers. Desktop is unchanged:
+    // local rendering, with required mode only for languages the platform
+    // cannot rasterize itself (macOS has no browser renderer).
+    let need_peer = (cfg!(target_os = "android")
+        && matches!(language, crate::transport::PrinterLanguage::Pdf))
+        || !(matches!(language, crate::transport::PrinterLanguage::Pdf)
+            || crate::api::render_share::can_render()
+            || cfg!(target_os = "android"));
     let peer_result: Result<Option<crate::api::peer_consume::PeerOutcome>, String> =
         match (peer_had_pairs, need_peer) {
             (false, true) => Err(format!(
-                "this {} job needs a paired PC (pair one in Settings → Shared rendering); this device cannot rasterize {} itself",
+                "this {} job needs a paired PC (pair one in Settings → Shared rendering); this device cannot render {} itself",
                 crate::api::peer_consume::language_name(&language),
                 crate::api::peer_consume::language_name(&language),
             )),

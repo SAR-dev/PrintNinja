@@ -16,6 +16,29 @@ pub struct HtmlToPdfResponse {
     pub path: String,
 }
 
+/// Render HTML to a 1-bit raster on the device (thermal printing, PLAN §4):
+/// the WebView measures the page at the head's own resolution (1 CSS px =
+/// 1 printer dot), thresholds it to dots, and writes the packed bytes to a
+/// cache-dir file. `width_px`/`height_px` are dots — the caller computes
+/// them from the paper size and the head's dpi (`dots_for_mm`).
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HtmlToRasterRequest {
+    pub html: String,
+    pub width_px: u32,
+    pub height_px: u32,
+}
+
+/// The packed-dot file the Kotlin `htmlToRaster` command wrote. The caller
+/// reads the file and deletes it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HtmlToRasterResponse {
+    pub path: String,
+    pub width: u32,
+    pub height: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsbPrinter {
@@ -502,5 +525,29 @@ mod tests {
     fn granted_response_parses_the_object_kotlin_sends() {
         let r: GrantedResponse = serde_json::from_str(r#"{"granted":false}"#).unwrap();
         assert!(!r.granted);
+    }
+
+    #[test]
+    fn html_to_raster_request_sends_camel_case_keys() {
+        let json = serde_json::to_value(HtmlToRasterRequest {
+            html: "<p>x</p>".to_string(),
+            width_px: 320,
+            height_px: 240,
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({"html": "<p>x</p>", "widthPx": 320, "heightPx": 240})
+        );
+    }
+
+    #[test]
+    fn html_to_raster_response_parses_the_object_kotlin_sends() {
+        let r: HtmlToRasterResponse =
+            serde_json::from_str(r#"{"path":"/data/user/0/com.printninja/cache/pn_raster_1.bin","width":320,"height":240}"#)
+                .unwrap();
+        assert_eq!(r.path, "/data/user/0/com.printninja/cache/pn_raster_1.bin");
+        assert_eq!(r.width, 320);
+        assert_eq!(r.height, 240);
     }
 }

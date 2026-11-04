@@ -32,6 +32,20 @@ impl<R: Runtime> AndroidPrint<R> {
         self.0.run_mobile_plugin("htmlToPdf", payload).map_err(Into::into)
     }
 
+    /// Render HTML to a 1-bit raster on the device (thermal printing,
+    /// PLAN §4). Kotlin measures the WebView at the head's own resolution
+    /// (1 CSS px = 1 dot), thresholds to dots and writes them to a
+    /// cache-dir file; the response carries its path plus the dimensions.
+    /// The caller reads and deletes the file.
+    pub fn html_to_raster(
+        &self,
+        payload: HtmlToRasterRequest,
+    ) -> crate::Result<HtmlToRasterResponse> {
+        self.0
+            .run_mobile_plugin("htmlToRaster", payload)
+            .map_err(Into::into)
+    }
+
     /// Kotlin answers `{"printers": [...]}`; the inner list is returned so
     /// callers do not see the wrapper.
     pub fn enumerate_usb_printers(&self) -> crate::Result<Vec<UsbPrinter>> {

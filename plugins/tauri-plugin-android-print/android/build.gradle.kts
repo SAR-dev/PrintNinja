@@ -34,6 +34,11 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     testImplementation("junit:junit:4.13.2")
+    // Instrumented tests (androidTest) — run on a device/emulator via the
+    // generated app project's `connectedCheck`, local-only (PLAN D4.2).
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
     // Tauri runtime classes (Plugin, Invoke, JSObject): provided by the
     // generated app project, which includes this module on every build.
     implementation(project(":tauri-android"))
