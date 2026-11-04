@@ -3,9 +3,11 @@
 @tailwind utilities;
 
 @layer base {
-  /* PrintNinja corporate palette ("Slate teal"). Single light theme.
+  /* PrintNinja corporate palette ("Slate teal"), light and dark.
      Values are HSL triplets so Tailwind can apply opacity modifiers.
-     Contrast pairs are asserted in src/test/tokens.test.ts. */
+     Contrast pairs are asserted in src/test/tokens.test.ts. Light is the
+     default; the dark set applies when Settings → Appearance sets
+     data-theme="dark" on <html>. */
   :root {
     color-scheme: light;
 
@@ -54,6 +56,48 @@
     --head-h: 2.5rem;
     --cell-py: 0.625rem;
   }
+
+  /* Dark theme: the same tokens on dark slate surfaces. The brand teal
+     lightens and takes dark ink, so primary keeps 4.5:1 both as text on
+     the surface and under its own label. */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --background: 200 24% 10%;
+    --foreground: 180 14% 91%;
+    --card: 200 20% 14%;
+    --card-foreground: 180 14% 91%;
+    --popover: 200 20% 16%;
+    --popover-foreground: 180 14% 91%;
+
+    --primary: 180 70% 45%;
+    --primary-foreground: 200 40% 8%;
+    --secondary: 200 18% 20%;
+    --secondary-foreground: 180 14% 91%;
+    --muted: 200 18% 20%;
+    --muted-foreground: 190 12% 66%;
+    --accent: 180 25% 22%;
+    --accent-foreground: 170 65% 72%;
+
+    --destructive: 4 72% 62%;
+    --destructive-foreground: 200 40% 8%;
+
+    --border: 200 14% 28%;
+    --input: 190 8% 56%;
+    --ring: 180 70% 50%;
+
+    --success: 93 55% 60%;
+    --success-soft: 93 25% 16%;
+    --warning: 40 90% 55%;
+    --warning-soft: 40 40% 16%;
+    --danger: 4 78% 66%;
+    --danger-soft: 4 35% 18%;
+    --info: 180 70% 50%;
+    --info-soft: 180 25% 18%;
+    --neutral: 190 12% 66%;
+    --neutral-soft: 200 18% 20%;
+  }
+
   :root[data-density="compact"] {
     --control-h: 2rem;
     --head-h: 2rem;

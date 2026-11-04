@@ -82,8 +82,8 @@ test("printers add, reject duplicates, test and remove", async ({
   ).toBeHidden();
 });
 
-// Feature 3 (docs/PLAN.md): a discovered mDNS row can be added straight
-// from the scan list. The fake agent has no network, so the spec opts
+// A discovered mDNS row can be added straight from the scan list. The fake
+// agent has no network, so the spec opts
 // in with the `fake_discovered_printers` setting (see commands.ts).
 test("discovered mDNS printer can be added from the scan row", async ({
   browser,

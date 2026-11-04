@@ -1160,7 +1160,7 @@ export function SettingsPage() {
                             <li
                               className={
                                 fixReport.test_render_ok
-                                  ? "text-emerald-600"
+                                  ? "text-success"
                                   : "text-destructive"
                               }
                             >

@@ -14,6 +14,7 @@ import {
   MAX_APP_NAME_LENGTH,
   checkLogoFile,
   type Density,
+  type Theme,
 } from "@/lib/prefs/prefs";
 import { cn } from "@/lib/utils";
 
@@ -31,8 +32,16 @@ export function AppearanceSettings() {
   // useTranslation re-renders this component when the language changes.
   const { t } = useTranslation();
   const language = currentLanguage();
-  const { density, appName, logo, setDensity, setAppName, setLogo } =
-    usePrefs();
+  const {
+    density,
+    theme,
+    appName,
+    logo,
+    setDensity,
+    setTheme,
+    setAppName,
+    setLogo,
+  } = usePrefs();
   const [name, setName] = useState(appName);
   const [logoError, setLogoError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -47,6 +56,24 @@ export function AppearanceSettings() {
       value: "compact",
       label: t("settings_page.appearance_density_compact"),
       hint: t("settings_page.appearance_density_compact_hint"),
+    },
+  ];
+
+  const themes: Array<{ value: Theme; label: string; hint: string }> = [
+    {
+      value: "light",
+      label: t("settings_page.appearance_theme_light"),
+      hint: t("settings_page.appearance_theme_light_hint"),
+    },
+    {
+      value: "dark",
+      label: t("settings_page.appearance_theme_dark"),
+      hint: t("settings_page.appearance_theme_dark_hint"),
+    },
+    {
+      value: "system",
+      label: t("settings_page.appearance_theme_system"),
+      hint: t("settings_page.appearance_theme_system_hint"),
     },
   ];
 
@@ -114,6 +141,52 @@ export function AppearanceSettings() {
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             {t("settings_page.appearance_language_hint")}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            {t("settings_page.appearance_theme")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div
+            role="radiogroup"
+            aria-label={t("settings_page.appearance_theme")}
+            id="settings-theme"
+            data-testid="settings-theme"
+            className="grid gap-2 sm:grid-cols-3"
+          >
+            {themes.map((th) => {
+              const selected = theme === th.value;
+              return (
+                <button
+                  key={th.value}
+                  type="button"
+                  role="radio"
+                  aria-label={th.label}
+                  aria-checked={selected}
+                  data-testid={`settings-theme-${th.value}`}
+                  onClick={() => setTheme(th.value)}
+                  className={cn(
+                    "rounded-md border p-3 text-left transition-colors",
+                    selected
+                      ? "border-primary bg-accent"
+                      : "border-input bg-card hover:bg-muted",
+                  )}
+                >
+                  <span className="block font-medium">{th.label}</span>
+                  <span className="block text-sm text-muted-foreground">
+                    {th.hint}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t("settings_page.appearance_theme_note")}
           </p>
         </CardContent>
       </Card>

@@ -2,6 +2,9 @@
 
 export type Density = "comfortable" | "compact";
 
+/** The user's theme choice; "system" resolves against the OS preference. */
+export type Theme = "light" | "dark" | "system";
+
 export const DEFAULT_APP_NAME = "PrintNinja";
 export const MAX_APP_NAME_LENGTH = 40;
 export const MAX_LOGO_BYTES = 256 * 1024;
@@ -14,12 +17,39 @@ export const LOGO_TYPES = [
 
 export const SETTING_KEYS = {
   density: "ui_density",
+  theme: "ui_theme",
   appName: "brand_name",
   logo: "brand_logo",
 } as const;
 
 export function parseDensity(value: string | null | undefined): Density {
   return value === "compact" ? "compact" : "comfortable";
+}
+
+/** Unknown or empty values fall back to the light default. */
+export function parseTheme(value: string | null | undefined): Theme {
+  return value === "dark" || value === "system" ? value : "light";
+}
+
+/** The concrete theme that goes on <html>: "system" follows the OS. */
+export function resolveTheme(
+  theme: Theme,
+  systemIsDark: boolean,
+): "light" | "dark" {
+  return theme === "system" ? (systemIsDark ? "dark" : "light") : theme;
+}
+
+/** The OS dark-mode preference. False wherever matchMedia is unavailable. */
+export function systemIsDark(): boolean {
+  try {
+    return (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Trim, collapse whitespace, cap the length. Empty falls back to the default name. */

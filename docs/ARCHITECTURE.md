@@ -161,7 +161,7 @@ timings, so the answer is in History, not in the log.
   templates and printers all live on the machine. Only remote data, cloud
   sync and release checks degrade.
 - **Phone, unpaired** — browsing works, and thermal printers (ESC/POS,
-  ZPL, TSPL) print on the device itself (PLAN §4). Only PDF on the phone
+  ZPL, TSPL) print on the device itself. Only PDF on the phone
   needs a pair; choosing a PDF printer offers the pairing screen.
 - **Phone paired with a PC** — PDF jobs render on the PC while it is on
   the same network and sharing (shared rendering, or the PC's own printers

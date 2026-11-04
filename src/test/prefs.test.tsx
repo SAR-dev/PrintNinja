@@ -7,6 +7,8 @@ import {
   checkLogoFile,
   isValidLogoDataUrl,
   parseDensity,
+  parseTheme,
+  resolveTheme,
   sanitizeAppName,
 } from "@/lib/prefs/prefs";
 import { PrefsProvider, usePrefs } from "@/lib/prefs/PrefsProvider";
@@ -16,6 +18,18 @@ describe("prefs helpers", () => {
     expect(parseDensity(null)).toBe("comfortable");
     expect(parseDensity("nonsense")).toBe("comfortable");
     expect(parseDensity("compact")).toBe("compact");
+  });
+  it("defaults to the light theme", () => {
+    expect(parseTheme(null)).toBe("light");
+    expect(parseTheme("nonsense")).toBe("light");
+    expect(parseTheme("dark")).toBe("dark");
+    expect(parseTheme("system")).toBe("system");
+  });
+  it("resolves the system theme against the OS preference", () => {
+    expect(resolveTheme("system", true)).toBe("dark");
+    expect(resolveTheme("system", false)).toBe("light");
+    expect(resolveTheme("dark", false)).toBe("dark");
+    expect(resolveTheme("light", true)).toBe("light");
   });
   it("sanitizes the app name", () => {
     expect(sanitizeAppName("  Acme   Print  ")).toBe("Acme Print");
@@ -49,8 +63,10 @@ function Probe() {
   return (
     <div>
       <span data-testid="d">{p.density}</span>
+      <span data-testid="t">{p.theme}</span>
       <span data-testid="n">{p.appName}</span>
       <button onClick={() => p.setDensity("compact")}>compact</button>
+      <button onClick={() => p.setTheme("dark")}>dark</button>
       <button onClick={() => p.setAppName("Acme Print")}>rename</button>
     </div>
   );
@@ -60,6 +76,7 @@ describe("PrefsProvider", () => {
   beforeEach(() => {
     localStorage.clear();
     delete document.documentElement.dataset.density;
+    delete document.documentElement.dataset.theme;
     document.title = "";
   });
 
@@ -77,6 +94,47 @@ describe("PrefsProvider", () => {
     expect(localStorage.getItem("printninja-setting:ui_density")).toBe(
       "compact",
     );
+  });
+
+  it("applies the theme to <html> and persists it", async () => {
+    render(
+      <PrefsProvider>
+        <Probe />
+      </PrefsProvider>,
+    );
+    expect(document.documentElement.dataset.theme).toBe("light");
+    fireEvent.click(screen.getByText("dark"));
+    await waitFor(() =>
+      expect(document.documentElement.dataset.theme).toBe("dark"),
+    );
+    expect(localStorage.getItem("printninja-setting:ui_theme")).toBe("dark");
+  });
+
+  it("restores the stored theme on start", async () => {
+    localStorage.setItem("printninja-setting:ui_theme", "dark");
+    render(
+      <PrefsProvider>
+        <Probe />
+      </PrefsProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("t")).toHaveTextContent("dark"),
+    );
+    expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("resolves the system theme against the OS preference", async () => {
+    // jsdom's matchMedia stub reports light, so "system" lands on light.
+    localStorage.setItem("printninja-setting:ui_theme", "system");
+    render(
+      <PrefsProvider>
+        <Probe />
+      </PrefsProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("t")).toHaveTextContent("system"),
+    );
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 
   it("applies the app name to the document title and persists it", async () => {
