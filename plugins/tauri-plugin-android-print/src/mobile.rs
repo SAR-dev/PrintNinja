@@ -58,13 +58,17 @@ impl<R: Runtime> AndroidPrint<R> {
 
     /// Open the USB device and close it again: the reachability probe.
     /// Never writes, so looking cannot print.
-    pub fn probe_usb(&self, device_name: &str) -> crate::Result<()> {
+    ///
+    /// Kotlin answers `{"opened": true}`; the bool is returned.
+    pub fn probe_usb(&self, device_name: &str) -> crate::Result<bool> {
         let payload = UsbProbeRequest {
             device_name: device_name.to_string(),
         };
-        self.0
+        let res: UsbProbeResponse = self
+            .0
             .run_mobile_plugin("probeUsb", payload)
-            .map_err(Into::into)
+            .map_err(crate::Error::from)?;
+        Ok(res.opened)
     }
 
     /// Write raw bytes to the USB device (bulk transfer). The Kotlin side
@@ -139,13 +143,17 @@ impl<R: Runtime> AndroidPrint<R> {
     }
 
     /// Open an RFCOMM socket and close it again: the reachability probe.
-    pub fn probe_bluetooth(&self, address: &str) -> crate::Result<()> {
+    ///
+    /// Kotlin answers `{"reachable": true}`; the bool is returned.
+    pub fn probe_bluetooth(&self, address: &str) -> crate::Result<bool> {
         let payload = BluetoothProbeRequest {
             address: address.to_string(),
         };
-        self.0
+        let res: BluetoothProbeResponse = self
+            .0
             .run_mobile_plugin("probeBluetooth", payload)
-            .map_err(Into::into)
+            .map_err(crate::Error::from)?;
+        Ok(res.reachable)
     }
 
     /// Write raw bytes over an RFCOMM (SPP) socket.

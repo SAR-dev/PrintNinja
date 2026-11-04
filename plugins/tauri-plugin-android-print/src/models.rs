@@ -124,6 +124,14 @@ pub struct UsbProbeRequest {
     pub device_name: String,
 }
 
+/// What the Kotlin `probeUsb` command resolves with: `{"opened": true}` —
+/// an object, never a bare boolean, like [`RunningResponse`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsbProbeResponse {
+    pub opened: bool,
+}
+
 /// Write raw bytes to a USB device. `data_base64` is base64 because the
 /// mobile-plugin boundary is JSON; the Kotlin side decodes it before the
 /// bulk transfer. `device_name` is the `UsbDevice.deviceName` from
@@ -237,6 +245,15 @@ pub struct BluetoothDeviceList {
 #[serde(rename_all = "camelCase")]
 pub struct BluetoothProbeRequest {
     pub address: String,
+}
+
+/// What the Kotlin `probeBluetooth` command resolves with:
+/// `{"reachable": true}` — an object, never a bare boolean, like
+/// [`RunningResponse`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BluetoothProbeResponse {
+    pub reachable: bool,
 }
 
 /// Write raw bytes over an RFCOMM (SPP) socket. Same base64 convention as
@@ -519,6 +536,22 @@ mod tests {
     fn running_response_parses_the_object_kotlin_sends() {
         let r: RunningResponse = serde_json::from_str(r#"{"running":true}"#).unwrap();
         assert!(r.running);
+    }
+
+    #[test]
+    fn usb_probe_response_parses_the_object_kotlin_sends() {
+        let r: UsbProbeResponse = serde_json::from_str(r#"{"opened":true}"#).unwrap();
+        assert!(r.opened);
+        // A bare unit is what the old accessor wrongly expected — it must
+        // not parse, or the regression comes back silently.
+        assert!(serde_json::from_str::<UsbProbeResponse>("null").is_err());
+    }
+
+    #[test]
+    fn bluetooth_probe_response_parses_the_object_kotlin_sends() {
+        let r: BluetoothProbeResponse = serde_json::from_str(r#"{"reachable":true}"#).unwrap();
+        assert!(r.reachable);
+        assert!(serde_json::from_str::<BluetoothProbeResponse>("null").is_err());
     }
 
     #[test]
