@@ -315,6 +315,9 @@ impl PdfRenderer {
         let bytes = tokio::fs::read(&res.path).await?;
         let _ = tokio::fs::remove_file(&res.path).await;
 
+        // Length for the error message, taken before `bytes` moves into
+        // `from_packed` (the closure may not borrow it afterwards).
+        let dot_bytes = bytes.len();
         crate::render::raster::RasterImage::from_packed(
             res.width as usize,
             res.height as usize,
@@ -322,8 +325,7 @@ impl PdfRenderer {
         )
         .ok_or_else(|| {
             anyhow!(
-                "raster size mismatch from the Android WebView: {} bytes for {}x{} dots",
-                bytes.len(),
+                "raster size mismatch from the Android WebView: {dot_bytes} bytes for {}x{} dots",
                 res.width,
                 res.height
             )
