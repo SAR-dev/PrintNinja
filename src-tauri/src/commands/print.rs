@@ -1857,40 +1857,47 @@ pub async fn discover_network_printers(
             })
             .collect());
     }
-    // Desktop mDNS via mdns-sd (Linux/Windows); no-op on other platforms but still returns empty gracefully
-    let secs = timeout_secs.unwrap_or(8).clamp(2, 30);
-    let timeout_ms = u64::from(secs) * 1000;
-    let found = tokio::task::spawn_blocking(move || crate::discovery::browse_printers(timeout_ms))
-        .await
-        .map_err(|e| AppError::Internal(format!("discovery task failed: {e}")))?;
-    Ok(found
-        .into_iter()
-        .map(|d| {
-            // resource_path arrives without its leading "/" (trimmed in
-            // service_info_to_printer), so both cases format identically.
-            let address = if d.kind == "ipp" {
-                match d.resource_path.as_deref() {
-                    Some(rp) => format!("{}:{}/{}", d.host, d.port, rp),
-                    None => format!("{}:{}", d.host, d.port),
+    // Desktop mDNS via mdns-sd (Linux/Windows); no-op on other platforms but
+    // still returns empty gracefully. Gated because the Android arm above
+    // returns unconditionally — without the gate the tail would be
+    // unreachable code on Android (unreachable_code warning).
+    #[cfg(not(target_os = "android"))]
+    {
+        let secs = timeout_secs.unwrap_or(8).clamp(2, 30);
+        let timeout_ms = u64::from(secs) * 1000;
+        let found =
+            tokio::task::spawn_blocking(move || crate::discovery::browse_printers(timeout_ms))
+                .await
+                .map_err(|e| AppError::Internal(format!("discovery task failed: {e}")))?;
+        Ok(found
+            .into_iter()
+            .map(|d| {
+                // resource_path arrives without its leading "/" (trimmed in
+                // service_info_to_printer), so both cases format identically.
+                let address = if d.kind == "ipp" {
+                    match d.resource_path.as_deref() {
+                        Some(rp) => format!("{}:{}/{}", d.host, d.port, rp),
+                        None => format!("{}:{}", d.host, d.port),
+                    }
+                } else {
+                    format!("{}:{}", d.host, d.port)
+                };
+                let printer_type = if d.kind == "raw_tcp" {
+                    crate::transport::PrinterType::RawTcp
+                } else {
+                    crate::transport::PrinterType::Ipp
+                };
+                crate::transport::PrinterInfo {
+                    id: format!("net:{}:{}", d.host, d.port),
+                    name: d.name,
+                    address,
+                    printer_type,
+                    language: crate::transport::PrinterLanguage::Pdf,
+                    status: "unknown".to_string(),
                 }
-            } else {
-                format!("{}:{}", d.host, d.port)
-            };
-            let printer_type = if d.kind == "raw_tcp" {
-                crate::transport::PrinterType::RawTcp
-            } else {
-                crate::transport::PrinterType::Ipp
-            };
-            crate::transport::PrinterInfo {
-                id: format!("net:{}:{}", d.host, d.port),
-                name: d.name,
-                address,
-                printer_type,
-                language: crate::transport::PrinterLanguage::Pdf,
-                status: "unknown".to_string(),
-            }
-        })
-        .collect())
+            })
+            .collect())
+    }
 }
 
 /// mDNS-specific printer discovery that returns the raw discovered rows
