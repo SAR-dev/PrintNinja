@@ -7,7 +7,7 @@
 **Silent printing for Windows, Android and Linux.**
 Design a receipt or label in HTML and CSS, feed it JSON, and it prints. No print dialog, no driver dance, no fuss.
 
-[![Version](https://img.shields.io/badge/version-3.2.4-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
+[![Version](https://img.shields.io/badge/version-3.2.5-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-1.90-DEA584?logo=rust&logoColor=black)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
