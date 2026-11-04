@@ -145,6 +145,10 @@ export function PrinterSetupPage() {
   const [scanning, setScanning] = useState(false);
   const [networkPrinters, setNetworkPrinters] = useState<SystemPrinter[]>([]);
   const [scanningNet, setScanningNet] = useState(false);
+  // Bonded Bluetooth printers (Android): their MAC is the address a
+  // Bluetooth row stores, so the dialog offers them instead of a typed MAC.
+  const [btPrinters, setBtPrinters] = useState<SystemPrinter[]>([]);
+  const [scanningBt, setScanningBt] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<PrinterRow | null>(null);
 
   const [showAdd, setShowAdd] = useState(false);
@@ -268,6 +272,33 @@ export function PrinterSetupPage() {
       setScanningNet(false);
     }
   };
+
+  // Bonded-device listing for the add panel (Android only): the MAC of a
+  // paired printer is the address a Bluetooth row stores.
+  const scanBluetooth = useCallback(async () => {
+    setScanningBt(true);
+    try {
+      const list = await agent("list_bluetooth_devices", {});
+      setBtPrinters(list ?? []);
+      if (!list || list.length === 0) {
+        notifyInfo(t("printers.toast_no_bluetooth"));
+      }
+    } catch (e) {
+      notifyError(
+        t("printers.toast_discovery_failed", { error: describeError(e) }),
+      );
+    } finally {
+      setScanningBt(false);
+    }
+  }, [t]);
+
+  // The moment the dialog is on Bluetooth (Android), list the bonded
+  // printers: they are one tap away, no MAC to type.
+  useEffect(() => {
+    if (showAdd && isAndroid() && form.printer_type === "bluetooth") {
+      void scanBluetooth();
+    }
+  }, [showAdd, form.printer_type, scanBluetooth]);
 
   const addDiscovered = async (np: SystemPrinter) => {
     const printerType = np.printer_type ?? "ipp";
@@ -664,7 +695,9 @@ export function PrinterSetupPage() {
       ? "printers.hint_ipp"
       : form.printer_type === "raw_tcp"
         ? "printers.hint_raw"
-        : null;
+        : form.printer_type === "bluetooth"
+          ? "printers.hint_bluetooth"
+          : null;
 
   return (
     <div className="space-y-4">
@@ -881,6 +914,79 @@ export function PrinterSetupPage() {
                 )
               )}
             </div>
+
+            {isAndroid() && form.printer_type === "bluetooth" && (
+              <div className="rounded-md border p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-medium">
+                    {t("printers.found_bluetooth")}
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void scanBluetooth()}
+                    disabled={scanningBt}
+                    data-testid="printers-scan-bluetooth"
+                  >
+                    {scanningBt ? t("printers.scanning") : t("printers.rescan")}
+                  </Button>
+                </div>
+                {btPrinters.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {btPrinters.map((bp) => (
+                      <div
+                        key={bp.id}
+                        className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
+                        data-testid={`discovered-bluetooth-${bp.id}`}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {bp.name}
+                          </p>
+                          <p className="truncate font-mono text-xs text-muted-foreground">
+                            {bp.address} · bluetooth
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setForm((f) => ({
+                                ...f,
+                                name: bp.name,
+                                address: bp.address,
+                                printer_type: "bluetooth",
+                                // Android rasterizes thermal locally
+                                // (PLAN §4): a bonded printer starts at
+                                // ESC/POS unless another language was
+                                // already chosen on purpose.
+                                language:
+                                  f.language === "pdf" ? "escpos" : f.language,
+                              }))
+                            }
+                          >
+                            {t("printers.fill")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => void addDiscovered(bp)}
+                          >
+                            {t("common.add")}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  !scanningBt && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("printers.no_bluetooth_printers")}
+                    </p>
+                  )
+                )}
+              </div>
+            )}
 
             <div className={field}>
               <Label htmlFor="printer-name">{t("printers.form_name")}</Label>
