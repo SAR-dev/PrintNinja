@@ -1,7 +1,7 @@
 # Feature Pack Plan — PrintNinja v2.5
 
 > Five features that close the loop between discovery, printing, and integration; §6–§9 add the follow-up work absorbed from the 2026-11 investigation (mobile redesign, documentation, extra features).
-> Status: **1–3 and 7 implemented (2026-11-02) · 6 implemented (2026-11-03)** · Target: `v2.5` · Branch strategy: one branch per feature, merge to `develop`
+> Status: **1–3 and 7 implemented (2026-11-02) · 6 implemented (2026-11-03) · 4 implemented (2026-11-04)** · Target: `v2.5` · Branch strategy: one branch per feature, merge to `develop`
 
 ## Overview — sorted easy → hard
 
@@ -10,7 +10,7 @@
 | 1 | Starter template packs | ~2–3 days | New template always starts from one shipping-label example | Creator picks Receipt / Delivery Slip / Invoice / Label / Blank before editing | ✅ Implemented |
 | 2 | Webhook callbacks (`callback_url`) | ~2–4 days | `POST /v1/print` with `callback_url` is rejected with 400; POS systems poll `/v1/jobs/{id}` instead | Successful/final jobs POST to the caller's URL | ✅ Implemented |
 | 3 | Auto discovery (mDNS) | ~4–7 days | "Add printer" requires typing an IP; finding a PC requires a `/24` brute scan | Printers and PCs appear automatically on the same LAN | ✅ Implemented |
-| 4 | Direct thermal printing from Android | ~5–8 days | Android offers only PDF — ESC/POS, ZPL, TSPL, CPCL, raster are disabled | An Android phone drives a thermal head directly, no PC needed | ⬜ Planned |
+| 4 | Direct thermal printing from Android | ~5–8 days | Android offers only PDF — ESC/POS, ZPL, TSPL, CPCL, raster are disabled | An Android phone drives a thermal head directly, no PC needed | ✅ Implemented |
 | 5 | Encrypted LAN traffic | ~2–3 weeks | All LAN traffic (pairing, render, print) is plain HTTP | LAN traffic is encrypted with pinned certificates | ⬜ Planned |
 | 6 | Mobile redesign (vertical-only, portrait lock) | ~2 weeks | Print page is 2.7 screens of 15 fields; horizontal layouts; Designer is a desktop tool on phones | One-column phone UI, viewer-mode Designer, three-step pairing | ✅ Implemented |
 | 7 | Documentation cleanup + restructure | ~1 week | README overloaded, stale version badge; ARCHITECTURE.md hard to enter | Split docs, glossary, diagrams, badge automation | ✅ Implemented |
@@ -224,7 +224,7 @@ Shippable independently. No migration, no schema change. Feature-flagged by `lan
 
 ---
 
-## 4. Direct thermal printing from Android (ESC/POS, ZPL, TSPL)
+## 4. Direct thermal printing from Android (ESC/POS, ZPL, TSPL) — ✅ Implemented (2026-11-04)
 
 ### Finalized decisions (2026-11-03)
 
@@ -287,6 +287,17 @@ Thermal heads are typically 203 dpi (8 dots/mm). Reuse `dots_for_mm` and the `Pr
 ### Rollout
 
 Shippable after discovery (or before — no hard dependency). No schema migration. Gate by capability: `canRaster = Android && webViewScreenshotAvailable`. If the probe says no, the UI still shows PDF only and `need_peer` keeps borrowing a PC — no behaviour change for unsupported devices.
+
+### Implementation notes (2026-11-04)
+
+Shipped as Path A, with one deviation from the sketch: instead of `capturePicture`, the WebView is created from `context.createConfigurationContext(config)` with `densityDpi = 160` — at that density 1 CSS px = 1 device px, so the page measures exactly `w_px × h_px` and is drawn 1:1 into an ARGB bitmap. Thresholding runs on-device in Kotlin (`dotsFromArgb`: luminance `0.299R + 0.587G + 0.114B`, dot where the rounded value is `< 128`, MSB-first, 8 dots per byte); the packed dots go to a cache-dir file that `android_webview_raster` (render/mod.rs) reads into `RasterImage::from_packed`, which validates the size. Rust's 75 s deadline sits above Kotlin's 60 s watchdog, mirroring the USB path's layering.
+
+- `need_peer` (print.rs) is now `is_android && language == Pdf`: PDF still borrows the paired PC, thermal jobs render locally.
+- The printer form offers only the QA'd languages (D4.4): `ANDROID_THERMAL_QA_GATE` in `src/lib/platform.ts` = {escpos, zpl, tspl}, labeled "unverified on a real head". CPCL and raster still need the PC.
+- First sheet only (D4.3).
+- Tests: `RasterDotsTest.kt` (6 unit tests; the 8×1 golden row packs to `0xAD`, pinned against Rust's `raster_threshold_matches_the_kotlin_contract`), `RasterDotsInstrumentedTest.kt` (device-only, D4.2 — full-bleed and half-bleed pages assert 1 CSS px = 1 dot; **not yet run** on this branch's machine — run it with an emulator via `./gradlew connectedDebugAndroidTest` from the generated Android project), `platform.test.ts` and `androidPrinterTypes.test.tsx` (the gate and the form gating), plus the Rust round-trip tests in `render/`.
+- `dev-printer` gained `--raw`: a fake JetDirect head (default port 9100) that answers the three dialect status queries "healthy" with the exact bytes `status.rs` expects, logs the two-byte ESC-@ connectivity test, and saves jobs named by detected framing (`.escpos`/`.zpl`/`.tspl`/`.bin`) — the D4.4 tier-1 gate target.
+- Open: real-head sign-off per language (D4.1); CI `android-check` stays compile + unit only (D4.2).
 
 ---
 

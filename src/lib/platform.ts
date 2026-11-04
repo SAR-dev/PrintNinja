@@ -32,18 +32,27 @@ export function supportedPrinterTypes<T extends { value: string }>(
 }
 
 /**
+ * The receipt and label languages the Android WebView raster has been
+ * QA'd for (PLAN §4, D4.4 — tier 1, the fake-head framing test). These
+ * are enabled on Android and documented as unverified on a real head;
+ * adding a language here after its real-head pass is the one-line
+ * per-language flip the plan calls for.
+ */
+export const ANDROID_THERMAL_QA_GATE = new Set(["escpos", "zpl", "tspl"]);
+
+/**
  * Printer languages the current platform can actually produce.
  *
- * Android renders to PDF only, so the command languages (ESC/POS, ZPL,
- * TSPL, CPCL, raster) are hidden — unless a PC is paired for shared
- * rendering (`pairedProvider`), in which case the PC renders them and
- * the phone only sends the bytes. Desktop keeps all six.
+ * Android rasterizes receipt and label jobs itself through the system
+ * WebView (PLAN §4), so it offers PDF plus the languages that pass
+ * `ANDROID_THERMAL_QA_GATE` — independent of whether a PC is paired.
+ * Desktop keeps all six.
  */
 export function supportedPrinterLanguages<T extends { value: string }>(
   all: readonly T[],
-  opts?: { pairedProvider?: boolean },
 ): readonly T[] {
   if (!isAndroid()) return all;
-  if (opts?.pairedProvider) return all;
-  return all.filter((l) => l.value === "pdf");
+  return all.filter(
+    (l) => l.value === "pdf" || ANDROID_THERMAL_QA_GATE.has(l.value),
+  );
 }

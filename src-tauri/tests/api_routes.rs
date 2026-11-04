@@ -757,6 +757,7 @@ fn router(db: &Db) -> axum::Router {
             cache,
         ),
         false,
+        None,
     );
     // In-process requests carry no socket address; give them the loopback
     // one the live server's `into_make_service_with_connect_info`
@@ -1241,6 +1242,97 @@ async fn api_request_reaches_the_live_server_and_stays_loopback_only() {
         refused.to_string().contains("loopback"),
         "names the restriction: {refused}"
     );
+}
+
+/// The share service's demo page is the one exception to the no-CORS rule:
+/// with the service URL configured at start, exactly that origin may read
+/// responses — every other origin, including other local or Vercel ones,
+/// still gets nothing (ARCHITECTURE §9).
+#[tokio::test]
+async fn share_service_origin_is_the_only_cors_exception() {
+    let db = setup();
+    let cache =
+        std::env::temp_dir().join(format!("printninja_cors_cache_{}", uuid::Uuid::new_v4()));
+    let inner = printninja_lib::api::routes::router_with_state(
+        printninja_lib::api::routes::ApiState::without_window(
+            db.clone(),
+            std::sync::Arc::new(printninja_lib::queue::PrintQueue::new()),
+            cache,
+        ),
+        false,
+        // Trailing slash in the setting, as users paste it: it must be
+        // reduced to the bare origin the `Origin` header carries.
+        Some("https://print-ninja.vercel.app/".into()),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("ephemeral port");
+    let port = listener.local_addr().expect("local addr").port();
+    // `into_make_service_with_connect_info` like the live server: the
+    // pairing gate reads the source address from it.
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            inner.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await
+        .expect("server");
+    });
+
+    let client = reqwest::Client::new();
+
+    // The demo page's origin: allowed.
+    let allowed = client
+        .get(format!("http://127.0.0.1:{port}/v1/health"))
+        .header("Origin", "https://print-ninja.vercel.app")
+        .send()
+        .await
+        .expect("loopback is reachable");
+    assert_eq!(allowed.status().as_u16(), 200);
+    assert_eq!(
+        allowed
+            .headers()
+            .get("access-control-allow-origin")
+            .and_then(|v| v.to_str().ok()),
+        Some("https://print-ninja.vercel.app"),
+    );
+
+    // Chrome's public-to-loopback preflight also needs the private-network
+    // answer, or the browser refuses the exchange before CORS even applies.
+    let preflight = client
+        .get(format!("http://127.0.0.1:{port}/v1/health"))
+        .header("Origin", "https://print-ninja.vercel.app")
+        .header("Access-Control-Request-Private-Network", "true")
+        .send()
+        .await
+        .expect("loopback is reachable");
+    assert_eq!(
+        preflight
+            .headers()
+            .get("access-control-allow-private-network")
+            .and_then(|v| v.to_str().ok()),
+        Some("true"),
+    );
+
+    // Every other origin stays blocked.
+    for origin in [
+        "https://tauri.localhost",
+        "https://evil.example",
+        "http://localhost:4873",
+    ] {
+        let blocked = client
+            .get(format!("http://127.0.0.1:{port}/v1/health"))
+            .header("Origin", origin)
+            .send()
+            .await
+            .expect("loopback is reachable");
+        assert!(
+            !blocked
+                .headers()
+                .contains_key("access-control-allow-origin"),
+            "{origin} must not read responses"
+        );
+    }
 }
 
 // ───────────────────────────────────────────────────────────────

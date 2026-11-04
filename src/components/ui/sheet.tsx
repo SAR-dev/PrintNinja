@@ -28,11 +28,14 @@ const SheetContent = React.forwardRef<
         data-side={side}
         className={cn(
           "fixed z-50 gap-4 bg-background p-6 shadow-lg",
+          // top-[env(safe-area-inset-top)]: on edge-to-edge Android the webview
+          // runs under the status bar / punch hole, so anchoring at top-0
+          // clipped the sheet header and close button off screen.
           side === "right" &&
-            "inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm",
+            "bottom-0 top-[env(safe-area-inset-top)] right-0 w-3/4 border-l sm:max-w-sm",
           side === "left" &&
-            "inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm",
-          side === "top" && "inset-x-0 top-0 border-b",
+            "bottom-0 top-[env(safe-area-inset-top)] left-0 w-3/4 border-r sm:max-w-sm",
+          side === "top" && "inset-x-0 top-[env(safe-area-inset-top)] border-b",
           side === "bottom" &&
             "inset-x-0 bottom-0 border-t data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom data-[state=open]:duration-300 data-[state=closed]:duration-200",
           className,

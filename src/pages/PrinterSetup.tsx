@@ -4,7 +4,6 @@ import {
   supportedPrinterLanguages,
   supportedPrinterTypes,
 } from "@/lib/platform";
-import { hasPairedProvider } from "@/lib/pairing";
 import { TimeoutError, withTimeout } from "@/lib/withTimeout";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -146,13 +145,14 @@ export function PrinterSetupPage() {
   const [scanning, setScanning] = useState(false);
   const [networkPrinters, setNetworkPrinters] = useState<SystemPrinter[]>([]);
   const [scanningNet, setScanningNet] = useState(false);
+  // Bonded Bluetooth printers (Android): their MAC is the address a
+  // Bluetooth row stores, so the dialog offers them instead of a typed MAC.
+  const [btPrinters, setBtPrinters] = useState<SystemPrinter[]>([]);
+  const [scanningBt, setScanningBt] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<PrinterRow | null>(null);
 
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  // Whether a PC is paired for shared rendering (auto policy): on
-  // Android this unlocks the thermal languages, which the PC renders.
-  const [pairedProvider, setPairedProvider] = useState(false);
   // Print-via-PC mode: local printers sit unused while it is on.
   const [viaPc, setViaPc] = useState(false);
   useEffect(() => {
@@ -221,8 +221,6 @@ export function PrinterSetupPage() {
     agent("enumerate_system_printers", {})
       .then((list) => setSystemPrinters(list ?? []))
       .catch(() => setSystemPrinters([]));
-    // A paired PC (auto policy) unlocks the thermal languages on Android.
-    void hasPairedProvider().then(setPairedProvider);
     // Background mDNS browse after mount (one-shot, not continuous) so
     // printers appear without an extra tap: an 8 s browse immediately,
     // then a single 8 s re-browse at 15 s (~30 s window total).
@@ -275,6 +273,33 @@ export function PrinterSetupPage() {
     }
   };
 
+  // Bonded-device listing for the add panel (Android only): the MAC of a
+  // paired printer is the address a Bluetooth row stores.
+  const scanBluetooth = useCallback(async () => {
+    setScanningBt(true);
+    try {
+      const list = await agent("list_bluetooth_devices", {});
+      setBtPrinters(list ?? []);
+      if (!list || list.length === 0) {
+        notifyInfo(t("printers.toast_no_bluetooth"));
+      }
+    } catch (e) {
+      notifyError(
+        t("printers.toast_discovery_failed", { error: describeError(e) }),
+      );
+    } finally {
+      setScanningBt(false);
+    }
+  }, [t]);
+
+  // The moment the dialog is on Bluetooth (Android), list the bonded
+  // printers: they are one tap away, no MAC to type.
+  useEffect(() => {
+    if (showAdd && isAndroid() && form.printer_type === "bluetooth") {
+      void scanBluetooth();
+    }
+  }, [showAdd, form.printer_type, scanBluetooth]);
+
   const addDiscovered = async (np: SystemPrinter) => {
     const printerType = np.printer_type ?? "ipp";
     const address = np.address;
@@ -285,8 +310,10 @@ export function PrinterSetupPage() {
           name,
           printer_type: printerType,
           address,
+          // Android rasterizes thermal languages locally (PLAN §4), so a
+          // non-IPP add starts at ESC/POS there.
           language:
-            printerType === "ipp" ? "pdf" : pairedProvider ? "escpos" : "pdf",
+            printerType === "ipp" ? "pdf" : isAndroid() ? "escpos" : "pdf",
           paper_width_mm: 80,
           dpi: 203,
         },
@@ -425,18 +452,17 @@ export function PrinterSetupPage() {
   // the add form and the tabs hide only that. `isAndroid` reads the
   // WebView user agent once per mount; it cannot change at runtime.
   const visibleTypes = useMemo(() => supportedPrinterTypes(PRINTER_TYPES), []);
-  // Android renders PDF only, so the command languages are hidden there. A
-  // saved row that already uses one stays visible so editing it does not
-  // silently change its language. With a paired PC the thermal languages
-  // come back: the PC renders them through shared rendering.
+  // Android can produce PDF plus the receipt and label languages that pass
+  // the per-language QA gate in platform.ts (PLAN §4, D4.4): its WebView
+  // rasterizes them locally. A saved row that already uses another
+  // language stays visible so editing it does not silently change its
+  // language.
   const visibleLanguages = useMemo(() => {
-    const supported = supportedPrinterLanguages(LANGUAGES, {
-      pairedProvider,
-    });
+    const supported = supportedPrinterLanguages(LANGUAGES);
     if (supported.some((l) => l.value === form.language)) return supported;
     const current = LANGUAGES.find((l) => l.value === form.language);
     return current ? [...supported, current] : supported;
-  }, [form.language, pairedProvider]);
+  }, [form.language]);
   const languagesLimited = visibleLanguages.length < LANGUAGES.length;
   const visibleGroups = useMemo(
     () =>
@@ -669,7 +695,9 @@ export function PrinterSetupPage() {
       ? "printers.hint_ipp"
       : form.printer_type === "raw_tcp"
         ? "printers.hint_raw"
-        : null;
+        : form.printer_type === "bluetooth"
+          ? "printers.hint_bluetooth"
+          : null;
 
   return (
     <div className="space-y-4">
@@ -860,7 +888,7 @@ export function PrinterSetupPage() {
                               language:
                                 (np.printer_type ?? "ipp") === "ipp"
                                   ? "pdf"
-                                  : pairedProvider
+                                  : isAndroid()
                                     ? "escpos"
                                     : f.language,
                             }))
@@ -887,6 +915,79 @@ export function PrinterSetupPage() {
               )}
             </div>
 
+            {isAndroid() && form.printer_type === "bluetooth" && (
+              <div className="rounded-md border p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-medium">
+                    {t("printers.found_bluetooth")}
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void scanBluetooth()}
+                    disabled={scanningBt}
+                    data-testid="printers-scan-bluetooth"
+                  >
+                    {scanningBt ? t("printers.scanning") : t("printers.rescan")}
+                  </Button>
+                </div>
+                {btPrinters.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {btPrinters.map((bp) => (
+                      <div
+                        key={bp.id}
+                        className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
+                        data-testid={`discovered-bluetooth-${bp.id}`}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {bp.name}
+                          </p>
+                          <p className="truncate font-mono text-xs text-muted-foreground">
+                            {bp.address} · bluetooth
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setForm((f) => ({
+                                ...f,
+                                name: bp.name,
+                                address: bp.address,
+                                printer_type: "bluetooth",
+                                // Android rasterizes thermal locally
+                                // (PLAN §4): a bonded printer starts at
+                                // ESC/POS unless another language was
+                                // already chosen on purpose.
+                                language:
+                                  f.language === "pdf" ? "escpos" : f.language,
+                              }))
+                            }
+                          >
+                            {t("printers.fill")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => void addDiscovered(bp)}
+                          >
+                            {t("common.add")}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  !scanningBt && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("printers.no_bluetooth_printers")}
+                    </p>
+                  )
+                )}
+              </div>
+            )}
+
             <div className={field}>
               <Label htmlFor="printer-name">{t("printers.form_name")}</Label>
               <Input
@@ -910,13 +1011,13 @@ export function PrinterSetupPage() {
                     setForm((f) => ({
                       ...f,
                       printer_type: v,
-                      // New USB/Bluetooth printers on a paired phone print
-                      // through the PC, which renders thermal languages: a
-                      // PDF default would put an unreadable page on a
-                      // thermal head, so start at ESC/POS instead. An
-                      // explicitly chosen language is left alone.
+                      // New USB/Bluetooth printers on Android print
+                      // locally: the WebView rasterizes the thermal
+                      // languages (PLAN §4), so a PDF default would put an
+                      // unreadable page on a thermal head — start at
+                      // ESC/POS instead. An explicitly chosen language is
+                      // left alone.
                       language:
-                        pairedProvider &&
                         isAndroid() &&
                         (v === "usb" || v === "bluetooth") &&
                         f.language === "pdf"

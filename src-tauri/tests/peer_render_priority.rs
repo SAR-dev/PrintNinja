@@ -72,6 +72,7 @@ fn router(db: &Db) -> axum::Router {
             std::env::temp_dir().join(format!("printninja_prio_cache_{}", uuid::Uuid::new_v4())),
         ),
         false,
+        None,
     );
     // Same as api_routes.rs: in-process requests carry no socket address.
     axum::Router::new()

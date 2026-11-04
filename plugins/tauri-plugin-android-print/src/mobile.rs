@@ -32,6 +32,20 @@ impl<R: Runtime> AndroidPrint<R> {
         self.0.run_mobile_plugin("htmlToPdf", payload).map_err(Into::into)
     }
 
+    /// Render HTML to a 1-bit raster on the device (thermal printing,
+    /// PLAN §4). Kotlin measures the WebView at the head's own resolution
+    /// (1 CSS px = 1 dot), thresholds to dots and writes them to a
+    /// cache-dir file; the response carries its path plus the dimensions.
+    /// The caller reads and deletes the file.
+    pub fn html_to_raster(
+        &self,
+        payload: HtmlToRasterRequest,
+    ) -> crate::Result<HtmlToRasterResponse> {
+        self.0
+            .run_mobile_plugin("htmlToRaster", payload)
+            .map_err(Into::into)
+    }
+
     /// Kotlin answers `{"printers": [...]}`; the inner list is returned so
     /// callers do not see the wrapper.
     pub fn enumerate_usb_printers(&self) -> crate::Result<Vec<UsbPrinter>> {
@@ -44,13 +58,17 @@ impl<R: Runtime> AndroidPrint<R> {
 
     /// Open the USB device and close it again: the reachability probe.
     /// Never writes, so looking cannot print.
-    pub fn probe_usb(&self, device_name: &str) -> crate::Result<()> {
+    ///
+    /// Kotlin answers `{"opened": true}`; the bool is returned.
+    pub fn probe_usb(&self, device_name: &str) -> crate::Result<bool> {
         let payload = UsbProbeRequest {
             device_name: device_name.to_string(),
         };
-        self.0
+        let res: UsbProbeResponse = self
+            .0
             .run_mobile_plugin("probeUsb", payload)
-            .map_err(Into::into)
+            .map_err(crate::Error::from)?;
+        Ok(res.opened)
     }
 
     /// Write raw bytes to the USB device (bulk transfer). The Kotlin side
@@ -125,13 +143,17 @@ impl<R: Runtime> AndroidPrint<R> {
     }
 
     /// Open an RFCOMM socket and close it again: the reachability probe.
-    pub fn probe_bluetooth(&self, address: &str) -> crate::Result<()> {
+    ///
+    /// Kotlin answers `{"reachable": true}`; the bool is returned.
+    pub fn probe_bluetooth(&self, address: &str) -> crate::Result<bool> {
         let payload = BluetoothProbeRequest {
             address: address.to_string(),
         };
-        self.0
+        let res: BluetoothProbeResponse = self
+            .0
             .run_mobile_plugin("probeBluetooth", payload)
-            .map_err(Into::into)
+            .map_err(crate::Error::from)?;
+        Ok(res.reachable)
     }
 
     /// Write raw bytes over an RFCOMM (SPP) socket.

@@ -370,6 +370,7 @@ pub fn run() {
             commands::datasets::cache_forget_dataset,
             commands::print::print_html,
             commands::print::enumerate_system_printers,
+            commands::print::list_bluetooth_devices,
             commands::print::discover_network_printers,
             commands::print::discover_network_printers_mdns,
             commands::print::discover_peers_mdns,

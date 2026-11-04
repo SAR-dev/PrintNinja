@@ -39,11 +39,9 @@ beforeEach(() => {
 describe("PairingGate", () => {
   it("explains the PC requirement and shows the pairing UI", async () => {
     const view = renderGate(<PairingGate onPaired={() => {}} />);
+    expect(await screen.findByText("Pair your PC")).toBeInTheDocument();
     expect(
-      await screen.findByText(/Pair your PC to start printing/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/always goes through a paired PC/),
+      screen.getByText(/print straight from this phone/),
     ).toBeInTheDocument();
     view.unmount();
   });
@@ -51,7 +49,7 @@ describe("PairingGate", () => {
   it("lets the app through once a pair lands", async () => {
     const onPaired = vi.fn();
     const view = renderGate(<PairingGate onPaired={onPaired} />);
-    await screen.findByText(/Pair your PC to start printing/);
+    await screen.findByText("Pair your PC");
     expect(onPaired).not.toHaveBeenCalled();
 
     // Pairing happens in the embedded Devices UI (here simulated by
@@ -70,7 +68,7 @@ describe("PairingGate", () => {
   it("stays put while unpaired", async () => {
     const onPaired = vi.fn();
     const view = renderGate(<PairingGate onPaired={onPaired} />);
-    await screen.findByText(/Pair your PC to start printing/);
+    await screen.findByText("Pair your PC");
     // Longer than one poll: still no pair, still no pass.
     await new Promise((r) => setTimeout(r, 2500));
     expect(onPaired).not.toHaveBeenCalled();
@@ -269,9 +267,7 @@ describe("PairingGate welcome", () => {
 
   it("stays nameless with no identity", async () => {
     const view = renderGate(<PairingGate onPaired={() => {}} />);
-    expect(
-      await screen.findByText(/Pair your PC to start printing/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Pair your PC")).toBeInTheDocument();
     expect(screen.queryByText(/Welcome /)).not.toBeInTheDocument();
     view.unmount();
   });

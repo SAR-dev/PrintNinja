@@ -51,8 +51,9 @@ export function SettingsRoute() {
 
 /**
  * Pairing lives on its own route instead of replacing the app: an
- * unpaired phone can browse everything, and only printing redirects
- * here. After the pair, back to wherever the person came from.
+ * unpaired phone can browse everything, and printing works for
+ * thermal printers as-is — only a PDF printer (or Print via PC)
+ * points here. After the pair, back to wherever the person came from.
  */
 function PairRoute() {
   const navigate = useNavigate();
@@ -167,9 +168,10 @@ function AppContent() {
     };
   }, []);
 
-  // After onboarding the app opens straight in: pairing no longer
-  // replaces the app on Android, it guards printing instead (Print page
-  // and the API explorer redirect unpaired phones to /pair).
+  // After onboarding the app opens straight in. An unpaired phone
+  // prints straight to thermal printers (PLAN §4); /pair is reached
+  // from the Print page when a PDF printer is chosen (or from
+  // Settings), and it returns to where the person came from.
 
   const handleOnboardingComplete = async (destination?: string) => {
     localStorage.setItem("printninja-onboarding-complete", "true");
