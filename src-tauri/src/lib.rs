@@ -368,6 +368,7 @@ pub fn run() {
             commands::datasets::cache_list_tombstoned_datasets,
             commands::datasets::cache_list_synced_datasets,
             commands::datasets::cache_forget_dataset,
+            commands::fix::fix_pc_print,
             commands::print::print_html,
             commands::print::enumerate_system_printers,
             commands::print::list_bluetooth_devices,

@@ -9,6 +9,8 @@ pub mod barcode;
 mod cdp;
 #[cfg(any(windows, test))]
 mod edge;
+/// One-click repair for the Windows print pipeline (Settings → Diagnostics).
+pub mod fix;
 pub mod handlebars;
 pub mod layout;
 pub mod raster;
@@ -710,7 +712,7 @@ async fn run_chromium(chromium: &std::path::Path, args: &[String]) -> Result<std
 /// Where Edge lives. Both Program Files locations are checked; `purpose`
 /// names the render in the error so the operator knows what failed.
 #[cfg(windows)]
-fn find_edge(purpose: &str) -> Result<&'static str> {
+pub(crate) fn find_edge(purpose: &str) -> Result<&'static str> {
     EDGE_PATHS
         .iter()
         .copied()

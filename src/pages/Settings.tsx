@@ -13,7 +13,8 @@ import { parseSection, type SettingsSection } from "@/lib/setup/checklist";
 import { agent } from "@/lib/agent/commands";
 import { useFlashField } from "@/lib/hooks/useFlashField";
 import { readSetting, writeSetting } from "@/lib/settings";
-import type { FontRow } from "@/lib/agent/types";
+import type { FixReport, FontRow } from "@/lib/agent/types";
+import { useRenderEngine } from "@/lib/render/useRenderEngine";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ import {
   ListChecks,
   ArrowLeft,
   ChevronRight,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
@@ -168,6 +170,32 @@ export function SettingsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
+
+  // One-click repair of the Windows print pipeline (Settings → Diagnostics).
+  // `engineStatus` doubles as the platform check: the repair only exists
+  // where the Edge handoff failure can (Windows).
+  const { status: engineStatus } = useRenderEngine();
+  const isWindows = engineStatus?.platform === "windows";
+  const [fixOpen, setFixOpen] = useState(false);
+  const [fixing, setFixing] = useState(false);
+  const [fixReport, setFixReport] = useState<FixReport | null>(null);
+  const runFix = useCallback(async () => {
+    setFixing(true);
+    setFixReport(null);
+    try {
+      const report = await agent("fix_pc_print", { closeEdge: true });
+      setFixReport(report);
+      if (report?.test_render_ok) {
+        notifySuccess(t("settings_page.toast_fix_ok"));
+      } else {
+        notifyError(t("settings_page.toast_fix_failed"));
+      }
+    } catch (e) {
+      notifyError(describeError(e));
+    } finally {
+      setFixing(false);
+    }
+  }, [t]);
 
   const [shareUrl, setShareUrl] = useState("");
   const [shareHandle, setShareHandle] = useState("");
@@ -509,7 +537,7 @@ export function SettingsPage() {
                 <TabsTrigger
                   key={s.key}
                   value={s.key}
-                  className="justify-start gap-2 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none"
+                  className="w-full justify-start gap-2 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none"
                 >
                   <s.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                   {t(`settings_page.${s.labelKey}`)}
@@ -1083,6 +1111,71 @@ export function SettingsPage() {
                           {t("settings_page.diag_app_log_export")}
                         </Button>
                       </div>
+                      {isWindows && (
+                        <>
+                          <p className="text-sm text-muted-foreground">
+                            {t("settings_page.diag_fix_pc_print_hint")}
+                          </p>
+                          <Button
+                            variant="outline"
+                            id="settings-diag-fix-pc-print"
+                            disabled={fixing}
+                            onClick={() => setFixOpen(true)}
+                          >
+                            <Wrench className="h-4 w-4 mr-2" />
+                            {fixing
+                              ? t("settings_page.diag_fix_pc_print_running")
+                              : t("settings_page.diag_fix_pc_print")}
+                          </Button>
+                        </>
+                      )}
+                      {fixReport && (
+                        <div
+                          id="settings-diag-fix-result"
+                          className="rounded-md border p-3 text-sm"
+                        >
+                          <ul className="space-y-1">
+                            <li>
+                              {fixReport.edge_found
+                                ? t("settings_page.fix_edge_found")
+                                : t("settings_page.fix_edge_missing")}
+                            </li>
+                            {fixReport.edge_was_running && (
+                              <li>
+                                {fixReport.edge_closed
+                                  ? t("settings_page.fix_edge_closed")
+                                  : t("settings_page.fix_edge_running")}
+                              </li>
+                            )}
+                            <li>
+                              {fixReport.profiles_removed.length > 0
+                                ? t("settings_page.fix_profiles_removed", {
+                                    n: fixReport.profiles_removed.length,
+                                  })
+                                : t("settings_page.fix_no_profiles")}
+                            </li>
+                            {fixReport.cooldown_reset && (
+                              <li>{t("settings_page.fix_cooldown")}</li>
+                            )}
+                            <li
+                              className={
+                                fixReport.test_render_ok
+                                  ? "text-emerald-600"
+                                  : "text-destructive"
+                              }
+                            >
+                              {fixReport.test_render_ok
+                                ? t("settings_page.fix_test_ok")
+                                : t("settings_page.fix_test_failed")}
+                            </li>
+                          </ul>
+                          {fixReport.test_render_error && (
+                            <p className="mt-2 break-words text-xs text-muted-foreground">
+                              {fixReport.test_render_error}
+                            </p>
+                          )}
+                        </div>
+                      )}
                       <p className="text-xs text-muted-foreground">
                         {t("settings_page.diag_note")}
                       </p>
@@ -1120,6 +1213,34 @@ export function SettingsPage() {
               }}
             >
               {t("settings_page.allow_all")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Print repair confirmation: it closes Edge windows without saving. */}
+      <Dialog open={fixOpen} onOpenChange={(o) => !fixing && setFixOpen(o)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("settings_page.fix_title")}</DialogTitle>
+            <DialogDescription>{t("settings_page.fix_hint")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setFixOpen(false)}
+              disabled={fixing}
+            >
+              {t("settings_page.fix_cancel")}
+            </Button>
+            <Button
+              disabled={fixing}
+              onClick={() => {
+                setFixOpen(false);
+                void runFix();
+              }}
+            >
+              {t("settings_page.fix_confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -5,6 +5,51 @@
 > **Platform:** Windows. Android already prints directly; Linux is unchanged
 > (see `docs/PLAN.md` §8, F14–F15).
 
+## Phase 0 — running the spike tool
+
+The Phase 0 spike is a standalone example:
+`src-tauri/examples/direct_print_spike.rs` (internals in
+`src-tauri/examples/spike.rs`). It probes real hardware and prints its findings
+to the console; it touches no app state and merges nothing.
+
+Run from the repo root (`PrintNinja/`), with the printer attached and powered
+on. Every write subcommand feeds the printer real bytes — **it will print
+noise, so keep paper out.**
+
+```bash
+# USB printer-class printer (installed as a Windows printer)
+cargo run --manifest-path src-tauri/Cargo.toml --example direct_print_spike -- usb
+cargo run --manifest-path src-tauri/Cargo.toml --example direct_print_spike -- usb --kb 100   # 100 KB throughput
+
+# Queue ↔ device mapping + queue list (printer attached)
+cargo run --manifest-path src-tauri/Cargo.toml --example direct_print_spike -- mapping
+cargo run --manifest-path src-tauri/Cargo.toml --example direct_print_spike -- queues
+
+# USB access while the spooler owns the device (item 1):
+# 1. start `usb-wait 60`, 2. within the window send a normal PrintNinja print, 3. let it finish
+cargo run --manifest-path src-tauri/Cargo.toml --example direct_print_spike -- usb-wait 60
+# Optionally, from a second shell, pause/resume the queue to see if it releases the port:
+cargo run --manifest-path src-tauri/Cargo.toml --example direct_print_spike -- pause  "Queue Name"
+cargo run --manifest-path src-tauri/Cargo.toml --example direct_print_spike -- resume "Queue Name"
+
+# Classic Bluetooth printer (paired + powered on; MAC from Settings → Bluetooth)
+cargo run --manifest-path src-tauri/Cargo.toml --example direct_print_spike -- bt AA:BB:CC:DD:EE:FF
+cargo run --manifest-path src-tauri/Cargo.toml --example direct_print_spike -- bt AA:BB:CC:DD:EE:FF --kb 1   # quick open test first
+
+# BLE printer (scan first to confirm the advertised address)
+cargo run --manifest-path src-tauri/Cargo.toml --example direct_print_spike -- ble-scan 15
+cargo run --manifest-path src-tauri/Cargo.toml --example direct_print_spike -- ble AA:BB:CC:DD:EE:FF
+```
+
+Notes:
+
+- A refused open/connect with a win32 code is a **finding**, not a failure —
+  paste the full terminal output of every subcommand, successes and failures.
+- `usb-wait` is the interactive one: the spooler job must be sent **during**
+  the 60 s window so we learn whether the `usbprint` handle opens while the
+  spooler owns the device.
+- The output becomes the Phase 0 "findings" note below (§8, Phase 0).
+
 ## 1. Goal
 
 Send ESC/POS, ZPL, TSPL and CPCL bytes from PrintNinja to a printer on
@@ -37,7 +82,8 @@ Non-goals:
 | `transport/raw_tcp.rs` | Already direct (TCP 9100). No change. |
 | `transport/android_usb.rs`, `android_bluetooth.rs` | Already direct on Android. Behavioural reference: preflight status query, deadlines, clear errors, `reach()` that opens and closes without writing. |
 | `transport/status.rs` | Transport-agnostic status queries (`dialect_for`, `decode`, `should_probe`, `note_silent`). Reused as is. |
-| `commands/print.rs` | Preflight and the "language is PDF on a raw USB/Bluetooth transport" warning already cover `Usb` and `Bluetooth`. |
+| `commands/print.rs` | Preflight and the "language is PDF on a raw USB/Bluetooth transport" warning already cover `Usb` and `Bluetooth`. `list_bluetooth_devices` (the UI's BT scan) is Android-only. |
+| `db/schema.sql` | `printers.type` has `CHECK(type IN ('ipp','raw_tcp','usb','bluetooth','system'))` (also in the P2 backfill in `db/mod.rs`). Adding a type means a table-rebuild migration. |
 | `.github/workflows/ci.yml` | `rust-test-windows` job exists (D4). |
 | `docs/SIGNING.md` | Builds are internally self-signed. This rules out shipping a driver installer for WinUSB (Phase 5). |
 
@@ -137,6 +183,9 @@ green on `rust-test-windows`, `pnpm check`, and the listed hardware checks.
 Verify what the rest of the plan assumes. Nothing is merged; the output is a
 short "findings" note appended to this doc.
 
+The tool is `src-tauri/examples/direct_print_spike.rs` — run instructions are
+at the top of this doc.
+
 1. **USB access while a queue exists.** With a printer installed as a Windows
    printer, can `CreateFileW` on the `usbprint` interface succeed when idle?
    During a spooler job? Does pausing the queue release it?
@@ -199,6 +248,11 @@ strings; ambiguous match; write loop and short-write handling behind a small
   on Windows (keep the loose check for Android `/dev/bus/usb/...`);
   `PrinterSetup.tsx` shows a device picker instead of a free-text address;
   new EN/JA strings.
+- **Discovery IPC:** the picker needs its own command (e.g. `list_usb_devices`
+  in `commands/print.rs`, backed by the `windows_usb.rs` enumeration) —
+  there is no USB discovery command today. Per the agent contract
+  (REFACTORING.md P18/Q11) it gets a typed entry in
+  `src/lib/agent/commands.ts` and a type in `src/lib/agent/types.ts`.
 
 **Tests:** discovery mapping; legacy-row detection (table of old/new
 addresses); schema validation cases; probe never writes.
@@ -248,6 +302,10 @@ actionable next step.
   `BluetoothFindNextDeviceW`, authenticated and remembered, no inquiry). Show
   every paired device; many printers report a generic class. The user pairs in
   Windows Settings, which does not create a Windows printer.
+  The UI's Bluetooth scan button calls the `list_bluetooth_devices` command
+  (`commands/print.rs`), which is **Android-only today** — this phase adds a
+  Windows arm (the paired-device enumeration above) to the same command, so
+  the existing `PrinterSetup.tsx` scan path works unchanged.
 - `reach()` and `probe` arms; status query over the socket (RFCOMM replies
   are usually reliable).
 - Remove the spooler delegation from `windows_bluetooth.rs`.
@@ -301,8 +359,13 @@ shows the remedy message.
 - New `PrinterType::Ble` (`"ble"`): add to `parse`/`Display` in
   `transport/mod.rs`; Android and Linux return `None` ("not supported on this
   platform"); add to `PRINTER_TYPES`, the type picker, filter tabs and
-  strings in the frontend. No CHECK constraint on printer type was found in
-  `src-tauri/src/db`; confirm when implementing.
+  strings in the frontend.
+- **Schema migration required:** `printers.type` carries
+  `CHECK(type IN ('ipp','raw_tcp','usb','bluetooth','system'))` in
+  `src-tauri/src/db/schema.sql` and in the P2 backfill in `db/mod.rs`.
+  SQLite cannot alter a CHECK in place, so this phase ships a table rebuild
+  (create-new → copy → drop → rename) following the P2 backfill pattern, and
+  updates both `schema.sql` and the backfill to include `'ble'`.
 - `btleplug` (WinRT backend): bounded scan (about 5 s, one-shot), connect,
   discover services, select a characteristic.
 - **Characteristic selection.** BLE printers have no standard print service.

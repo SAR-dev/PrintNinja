@@ -1072,6 +1072,27 @@ const en = {
     diag_app_log_hint:
       "Recent backend log (print pipeline), oldest first. Empty when file logging never started.",
     diag_note: "Secrets and API tokens are redacted from the export.",
+    diag_fix_pc_print_hint:
+      "Printing fails with “Edge did not produce a PDF”? The repair closes Edge, clears stale render profiles and runs a test render.",
+    diag_fix_pc_print: "Fix PC printing",
+    diag_fix_pc_print_running: "Repairing…",
+    fix_title: "Fix PC printing",
+    fix_hint:
+      "This closes all open Edge windows (without saving), clears PrintNinja's render profiles, resets the persistent browser and runs a test render to verify. Continue?",
+    fix_cancel: "Cancel",
+    fix_confirm: "Fix it",
+    fix_edge_found: "Edge found",
+    fix_edge_missing: "Edge not found — install Microsoft Edge first",
+    fix_edge_closed: "Closed the running Edge windows",
+    fix_edge_running:
+      "Edge is still running — close it yourself and try printing again",
+    fix_profiles_removed: "Removed {{n}} stale render profile(s)",
+    fix_no_profiles: "No stale render profiles to remove",
+    fix_cooldown: "Persistent browser cooldown reset",
+    fix_test_ok: "Test render succeeded",
+    fix_test_failed: "Test render failed",
+    toast_fix_ok: "Print pipeline fixed — test render succeeded",
+    toast_fix_failed: "Repair ran, but the test render failed",
     allow_title: "Allow data from any domain?",
     allow_hint:
       "An empty list allows every domain. Live data URLs could then pull content from anywhere. Keep at least your own hosts listed unless you mean it.",

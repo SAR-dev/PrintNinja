@@ -3,6 +3,7 @@ pub mod background;
 pub mod cache;
 pub mod datasets;
 pub mod deeplink_cmd;
+pub mod fix;
 pub mod font;
 pub mod history;
 pub mod logfile;
