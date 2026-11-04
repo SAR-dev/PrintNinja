@@ -1327,7 +1327,9 @@ async fn share_service_origin_is_the_only_cors_exception() {
             .await
             .expect("loopback is reachable");
         assert!(
-            !blocked.headers().contains_key("access-control-allow-origin"),
+            !blocked
+                .headers()
+                .contains_key("access-control-allow-origin"),
             "{origin} must not read responses"
         );
     }
