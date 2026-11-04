@@ -192,6 +192,7 @@ Other options include `url` (a data URL), `test=1`, `orientation`, `fit` and `pr
 **Printers**
 - Network (IPP, raw TCP 9100) and system printers on Windows and Linux
 - LAN scan finds IPP and raw printers on the network over mDNS; a discovered printer is added in one tap
+- On Android, the Add dialog also lists your paired Bluetooth printers (bonded devices) with the same one-tap Fill and Add
 - USB and Bluetooth through the Windows spooler, or directly on Android
 - Printer languages: PDF, ESC/POS, ZPL, TSPL, CPCL and raster (Android prints ESC/POS, ZPL and TSPL on the device itself; CPCL and raster need a paired PC)
 - Status checks before a raw job is sent, and timeouts so a stuck printer never hangs a job

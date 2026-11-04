@@ -10,7 +10,7 @@
 | 1 | Starter template packs | ~2–3 days | New template always starts from one shipping-label example | Creator picks Receipt / Delivery Slip / Invoice / Label / Blank before editing | ✅ Implemented |
 | 2 | Webhook callbacks (`callback_url`) | ~2–4 days | `POST /v1/print` with `callback_url` is rejected with 400; POS systems poll `/v1/jobs/{id}` instead | Successful/final jobs POST to the caller's URL | ✅ Implemented |
 | 3 | Auto discovery (mDNS) | ~4–7 days | "Add printer" requires typing an IP; finding a PC requires a `/24` brute scan | Printers and PCs appear automatically on the same LAN | ✅ Implemented |
-| 4 | Direct thermal printing from Android | ~5–8 days | Android offers only PDF — ESC/POS, ZPL, TSPL, CPCL, raster are disabled | An Android phone drives a thermal head directly, no PC needed | ⬜ Planned |
+| 4 | Direct thermal printing from Android | ~5–8 days | Android offers only PDF — ESC/POS, ZPL, TSPL, CPCL, raster are disabled | An Android phone drives a thermal head directly, no PC needed | ✅ Implemented |
 | 5 | Encrypted LAN traffic | ~2–3 weeks | All LAN traffic (pairing, render, print) is plain HTTP | LAN traffic is encrypted with pinned certificates | ⬜ Planned |
 | 6 | Mobile redesign (vertical-only, portrait lock) | ~2 weeks | Print page is 2.7 screens of 15 fields; horizontal layouts; Designer is a desktop tool on phones | One-column phone UI, viewer-mode Designer, three-step pairing | ✅ Implemented |
 | 7 | Documentation cleanup + restructure | ~1 week | README overloaded, stale version badge; ARCHITECTURE.md hard to enter | Split docs, glossary, diagrams, badge automation | ✅ Implemented |

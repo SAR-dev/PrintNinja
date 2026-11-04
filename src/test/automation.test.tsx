@@ -18,11 +18,21 @@ import { MemoryRouter } from "react-router-dom";
 import "@/lib/i18n";
 
 const invoke = vi.fn();
+// Hoisted: the appUpdate mock factory runs before this file's consts
+// exist, so the mock function must be created even earlier.
+const { openExternalUrlMock } = vi.hoisted(() => ({
+  openExternalUrlMock: vi.fn(),
+}));
+const serviceUrl: { value: string | null } = { value: null };
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...a: unknown[]) => invoke(...a),
 }));
+vi.mock("@/lib/appUpdate", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/appUpdate")>()),
+  openExternalUrl: openExternalUrlMock,
+}));
 vi.mock("@/lib/share/client", () => ({
-  getServiceUrl: async () => null,
+  getServiceUrl: async () => serviceUrl.value,
   getSessionToken: async () => null,
   setServiceUrl: async () => {},
   register: async () => ({}),
@@ -47,6 +57,8 @@ beforeAll(() => {
 beforeEach(() => {
   invoke.mockReset();
   invoke.mockResolvedValue(null);
+  openExternalUrlMock.mockReset();
+  serviceUrl.value = null;
   localStorage.clear();
 });
 const renderPage = (tab?: string) =>
@@ -955,6 +967,37 @@ describe("Automation → Phones and server", () => {
         expect(lan).toBeVisible();
         expect(lan.closest("details")).toBeNull();
         expect(screen.queryByText("Advanced")).toBeNull();
+      } finally {
+        webMode();
+      }
+    });
+  });
+
+  describe("demo page button (server tab)", () => {
+    it("opens the share service demo page while the server runs", async () => {
+      appMode();
+      try {
+        serviceUrl.value = "https://share.example";
+        pcBackend({ enabled: true });
+        openApi("server");
+        fireEvent.click(await screen.findByTestId("automation-open-demo"));
+        await waitFor(() =>
+          expect(openExternalUrlMock).toHaveBeenCalledWith(
+            "https://share.example/demo/print.html",
+          ),
+        );
+      } finally {
+        webMode();
+      }
+    });
+
+    it("stays hidden while the server is stopped", async () => {
+      appMode();
+      try {
+        pcBackend({ enabled: true }).running = false;
+        openApi("server");
+        await screen.findByText("Local API server");
+        expect(screen.queryByTestId("automation-open-demo")).toBeNull();
       } finally {
         webMode();
       }

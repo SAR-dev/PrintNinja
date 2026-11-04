@@ -1178,16 +1178,21 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
      * after asking it polls for the answer instead of failing at once:
      * the user grants "Nearby devices" in the system dialog and the
      * waiting operation carries on. Call off the main thread — it blocks
-     * up to a minute while the dialog is open.
+     * up to a minute while the dialog is open; only the request is
+     * posted to the main thread, the poll stays on the caller.
      */
     private fun awaitBluetoothConnect(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
         if (grantedBluetoothConnect()) return true
-        ActivityCompat.requestPermissions(
-            activity,
-            arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
-            9751,
-        )
+        // The system dialog must be requested on the main thread; the
+        // poll below keeps running on the worker that called us.
+        activity.runOnUiThread {
+            ActivityCompat.requestPermissions(
+                activity,
+                arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                9751,
+            )
+        }
         // Poll, don't fail: denial then reads as a timeout below, with a
         // message that names the fix instead of "try again".
         val deadline = android.os.SystemClock.elapsedRealtime() + 60_000

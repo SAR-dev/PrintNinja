@@ -107,9 +107,10 @@ and which transports exist.
   encoder. Those languages are not yet verified on a real head (PLAN §4,
   D4.1), so the printer form offers only the QA'd ones and labels them
   accordingly; CPCL and raster still need a paired PC (PDF only). Network
-  printers are added by address; automatic network discovery is not
-  implemented yet. USB printers are listed through the USB host API and
-  Bluetooth printers are chosen from the bonded devices. A background
+  printers are added by address or picked from an mDNS scan of the LAN;
+  USB printers are listed through the USB host API, and Bluetooth
+  printers are chosen from the bonded devices, which the Add sheet lists
+  by name and MAC address. A background
   service, on by default, keeps the print queue draining even after the app
   is swiped away (Open and Close sit on its notification), and the app can
   request exemption from battery optimization so the system doesn't defer
