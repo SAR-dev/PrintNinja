@@ -1,7 +1,7 @@
 # Feature Pack Plan — PrintNinja v2.5
 
 > Five features that close the loop between discovery, printing, and integration; §6–§9 add the follow-up work absorbed from the 2026-11 investigation (mobile redesign, documentation, extra features).
-> Status: **1–3 and 7 implemented (2026-11-02)** · Target: `v2.5` · Branch strategy: one branch per feature, merge to `develop`
+> Status: **1–3 and 7 implemented (2026-11-02) · 6 implemented (2026-11-03) · 4 implemented (2026-11-04)** · Target: `v2.5` · Branch strategy: one branch per feature, merge to `develop`
 
 ## Overview — sorted easy → hard
 
@@ -12,7 +12,7 @@
 | 3 | Auto discovery (mDNS) | ~4–7 days | "Add printer" requires typing an IP; finding a PC requires a `/24` brute scan | Printers and PCs appear automatically on the same LAN | ✅ Implemented |
 | 4 | Direct thermal printing from Android | ~5–8 days | Android offers only PDF — ESC/POS, ZPL, TSPL, CPCL, raster are disabled | An Android phone drives a thermal head directly, no PC needed | ⬜ Planned |
 | 5 | Encrypted LAN traffic | ~2–3 weeks | All LAN traffic (pairing, render, print) is plain HTTP | LAN traffic is encrypted with pinned certificates | ⬜ Planned |
-| 6 | Mobile redesign (vertical-only, portrait lock) | ~2 weeks | Print page is 2.7 screens of 15 fields; horizontal layouts; Designer is a desktop tool on phones | One-column phone UI, viewer-mode Designer, three-step pairing | ⬜ Planned |
+| 6 | Mobile redesign (vertical-only, portrait lock) | ~2 weeks | Print page is 2.7 screens of 15 fields; horizontal layouts; Designer is a desktop tool on phones | One-column phone UI, viewer-mode Designer, three-step pairing | ✅ Implemented |
 | 7 | Documentation cleanup + restructure | ~1 week | README overloaded, stale version badge; ARCHITECTURE.md hard to enter | Split docs, glossary, diagrams, badge automation | ✅ Implemented |
 | 8 | Extra feature backlog (F1, F3, F7–F9, F11–F13) | varies | See §8 backlog | QR pairing, mismatch warnings, Android share target, … | ⬜ Backlog |
 
@@ -224,7 +224,16 @@ Shippable independently. No migration, no schema change. Feature-flagged by `lan
 
 ---
 
-## 4. Direct thermal printing from Android (ESC/POS, ZPL, TSPL)
+## 4. Direct thermal printing from Android (ESC/POS, ZPL, TSPL) — ✅ Implemented (2026-11-04)
+
+### Finalized decisions (2026-11-03)
+
+| # | Decision |
+|---|---|
+| D4.1 | **No real thermal head available yet** — v1 QA runs on an Android emulator against the fake raw-TCP head (`dev-printer`). A real-device pass on a real head is an open sign-off, same pattern as the mobile redesign's device pass. |
+| D4.2 | **Device tests are local-only** — CI `android-check` stays compile + unit; `connectedCheck` runs on a dev machine with an emulator. No emulator in CI. |
+| D4.3 | **Multi-sheet: first sheet only** — matches desktop raster. Per-sheet bitmaps + label-gap handling is a follow-up with its own QA. |
+| D4.4 | **Printer form opens only QA'd languages** — two tiers: (1) fake-head framing test (automated), (2) real-head pass (manual sign-off). In v1, with no head: languages passing tier 1 (ESC/POS, ZPL, TSPL per the device tests below) are enabled and documented as "unverified on a real head"; flipping a language after its real-head pass is a one-line change in the per-language gate. |
 
 ### Current state
 
@@ -253,7 +262,7 @@ If WebView screenshot cannot hit print-quality (e.g., density scaling artifacts,
 
 Once a `RasterImage` is available, every thermal language already works — just stop gating the printer form:
 
-- `src/pages/PrinterSetup.tsx` + `src/lib/printerSchema.ts`: allow `escpos`/`tspl`/`zpl`/`cpcl`/`raster` when `isAndroid()`. Remove the "PDF only on Android" notice.
+- `src/pages/PrinterSetup.tsx` + `src/lib/printerSchema.ts`: allow `escpos`/`tspl`/`zpl`/`cpcl`/`raster` when `isAndroid()`, behind the per-language QA gate (D4.4 — v1: ESC/POS, ZPL, TSPL). Replace the "PDF only on Android" notice accordingly.
 - `src-tauri/src/commands/print.rs:need_peer` — today Android always borrows a PC for thermal jobs (`need_peer` returns true when `is_android && language != Pdf`). With local raster, that guard becomes `need_peer = is_android && language != Pdf && !local_raster_available` — or removed entirely if Path A ships.
 - `src-tauri/src/transport/mod.rs:create_transport` — Android arms already exist; no change needed once the raster path exists.
 
@@ -272,12 +281,23 @@ Thermal heads are typically 203 dpi (8 dots/mm). Reuse `dots_for_mm` and the `Pr
 
 - Kotlin unit: `RasterImage` threshold matches Rust `png_to_raster` (golden PNG → bit-identical raster).
 - Rust unit: `encode_for_language` already covered — add Android raster round-trip (HTML → bitmap → raster → ZPL/ESC/POS framing).
-- Device test: Android emulator (`./gradlew connectedCheck`) prints a 40 mm receipt to a fake raw-TCP listener (assert `ESC @` + `GS v 0` framing), and a 102×152 mm label to assert TSPL/ZPL headers. Use `dev-printer` raw-TCP mode as the fake head.
+- Device test (local-only, no emulator in CI — D4.2): Android emulator (`./gradlew connectedCheck`) prints a 40 mm receipt to a fake raw-TCP listener (assert `ESC @` + `GS v 0` framing), and a 102×152 mm label to assert TSPL/ZPL headers. Use `dev-printer` raw-TCP mode as the fake head. This test is the tier-1 gate for D4.4.
 - Frontend: form shows thermal options on Android UA, hides them nowhere else.
 
 ### Rollout
 
 Shippable after discovery (or before — no hard dependency). No schema migration. Gate by capability: `canRaster = Android && webViewScreenshotAvailable`. If the probe says no, the UI still shows PDF only and `need_peer` keeps borrowing a PC — no behaviour change for unsupported devices.
+
+### Implementation notes (2026-11-04)
+
+Shipped as Path A, with one deviation from the sketch: instead of `capturePicture`, the WebView is created from `context.createConfigurationContext(config)` with `densityDpi = 160` — at that density 1 CSS px = 1 device px, so the page measures exactly `w_px × h_px` and is drawn 1:1 into an ARGB bitmap. Thresholding runs on-device in Kotlin (`dotsFromArgb`: luminance `0.299R + 0.587G + 0.114B`, dot where the rounded value is `< 128`, MSB-first, 8 dots per byte); the packed dots go to a cache-dir file that `android_webview_raster` (render/mod.rs) reads into `RasterImage::from_packed`, which validates the size. Rust's 75 s deadline sits above Kotlin's 60 s watchdog, mirroring the USB path's layering.
+
+- `need_peer` (print.rs) is now `is_android && language == Pdf`: PDF still borrows the paired PC, thermal jobs render locally.
+- The printer form offers only the QA'd languages (D4.4): `ANDROID_THERMAL_QA_GATE` in `src/lib/platform.ts` = {escpos, zpl, tspl}, labeled "unverified on a real head". CPCL and raster still need the PC.
+- First sheet only (D4.3).
+- Tests: `RasterDotsTest.kt` (6 unit tests; the 8×1 golden row packs to `0xAD`, pinned against Rust's `raster_threshold_matches_the_kotlin_contract`), `RasterDotsInstrumentedTest.kt` (device-only, D4.2 — full-bleed and half-bleed pages assert 1 CSS px = 1 dot; **not yet run** on this branch's machine — run it with an emulator via `./gradlew connectedDebugAndroidTest` from the generated Android project), `platform.test.ts` and `androidPrinterTypes.test.tsx` (the gate and the form gating), plus the Rust round-trip tests in `render/`.
+- `dev-printer` gained `--raw`: a fake JetDirect head (default port 9100) that answers the three dialect status queries "healthy" with the exact bytes `status.rs` expects, logs the two-byte ESC-@ connectivity test, and saves jobs named by detected framing (`.escpos`/`.zpl`/`.tspl`/`.bin`) — the D4.4 tier-1 gate target.
+- Open: real-head sign-off per language (D4.1); CI `android-check` stays compile + unit only (D4.2).
 
 ---
 
@@ -365,7 +385,7 @@ Bundle a Noise_IK handshake (or `snow` crate) between the desktop and phone, wit
 
 ---
 
-## 6. Mobile redesign — vertical-only, portrait-locked
+## 6. Mobile redesign — vertical-only, portrait-locked — ✅ Implemented (2026-11-03)
 
 > Absorbed from the 2026-11 investigation. Scope: phone UI only; desktop stays unchanged.
 
@@ -465,6 +485,8 @@ Knock-on changes:
 - Remove (not leave untested) the landscape-phone code paths.
 - Extract new pieces from `Print.tsx`/`Designer.tsx` into components rather than growing those files.
 
+> ✅ **Implemented 2026-11-03** (PR #37) — `src/components/print/PhonePrintFlow.tsx` (task-first vertical Print page) and `src/components/designer/PhoneDesignerViewer.tsx` (D4 viewer: section picker, read-only code, name in header, computer-editing notice); three-step pairing in `DevicesCard.tsx`; vertical-only rule in `docs/UI_GUIDE.md` "Responsive and touch" with both e2e assertions in `e2e/tests/mobile.mobile.e2e.ts` (no horizontal-overflow container in `main`, no side-by-side data-entry controls) and one deliberate refresh of the seven phone baselines; portrait lock via `scripts/patch-android-orientation.mjs` (string-resource `app_orientation`: phones `portrait`, tablets/Chromebooks free; wired into CI and `release-local.mjs`, tested by `src/test/android-orientation.test.ts`); WCAG 1.3.4 recorded as the one declared exception in `UI_GUIDE.md`; "Connect to PC" / "Printers" naming in `en.ts`/`ja.ts`; `CommandPalette.tsx` drops phone "New template"; landscape dead code (`LANDSCAPE_QUERY`, `shortLandscape`) removed; per-page pickers/section lists used in place of a shared `ResponsiveTabs` primitive.
+
 ---
 
 ## 7. Documentation cleanup and restructure — ✅ Implemented (2026-11-02)
@@ -539,7 +561,7 @@ Suggested order: F3 quick win first, then F1 alongside the mobile redesign, then
 ### Ordering (after features 1–5)
 
 1. **Documentation cleanup + restructure** (~1 week) — repo hygiene, README restructure with screenshots/glossary/badge automation, ARCHITECTURE.md split per §7, design decisions recorded in `PHONE_AND_PC_SHARING.md`.
-2. **Mobile redesign** (~2 weeks) — vertical-only rule in `UI_GUIDE.md` + e2e assertions, portrait lock (manifest patch, tablet exception, dead-code removal, WCAG note), `ResponsiveTabs` primitive → Templates/Printers/Automation/Designer/Settings, Designer viewer mode, Print page + pairing rebuild, naming/errors/copy, refresh phone snapshots, `pnpm check:full`.
+2. **Mobile redesign** (~2 weeks) — ✅ Done 2026-11-03 (see §6).
 3. **Quick-win features** (~1 week) — F3 mismatch warnings, F1 QR pairing.
 4. **Larger features** — F7, F8, F9, F11, F12, F13 as demand dictates.
 
@@ -552,6 +574,7 @@ Each change lands on `develop` in small conventional-commit PRs with a regressio
 3. **Generated Android project** — the orientation patch must run on every `tauri android init`; CI must verify it.
 4. **Browser-preview limits** — the investigation saw the phone UI in a desktop browser with a fake backend; at least one real Android device pass is needed before sign-off on the redesign.
 5. **Snapshot churn** — one deliberate refresh of the phone e2e baselines after the redesign.
+6. **Android thermal real-head pass** — no real thermal head was available at decision time (D4.1). v1 ships emulator + fake-head QA; each enabled language carries an open real-head sign-off, and the printer form stays gated per-language (D4.4) until one lands.
 
 ---
 
@@ -593,6 +616,7 @@ Each change lands on `develop` in small conventional-commit PRs with a regressio
 | 3 Webhooks | §3 step 8 or §9 new subsection | Automation → Try the API example | `PRINTNINJA_CALLBACK_*` vars | Automate it |
 | 4 Template packs | §2 template creation | Designer → New template | — | Your first print / Design a template |
 | 5 LAN TLS | §9 "Pinned encryption" → concrete | Automation → Encryption card | `PRINTNINJA_TLS*` vars | Security note |
+| 6 Mobile redesign | — | "Responsive and touch" vertical-only rule, portrait exception, Designer viewer, test table | — | — |
 
 ### Open questions (resolve before coding)
 
@@ -600,7 +624,7 @@ Each change lands on `develop` in small conventional-commit PRs with a regressio
 2. **TLS port** — second port (`17718`) vs upgrading `17717` to TLS? Second port avoids breaking `is_private_host` + `pair_base` URL parsing that assumes `http://host:17717`. Keep `http://` on loopback, `https://` on LAN.
 3. **Webhook allowlist UX** — env var only, or a Settings UI field? Start with env var (`PRINTNINJA_CALLBACK_ALLOWLIST`); add a Settings field if operators ask.
 4. **Template pack thumbnails** — live `PaperThumb` render vs static SVG? Live is accurate but 6 renders on dialog open may jank on low-end Android. Use static SVG for v1, swap to live if perf is fine.
-5. **Android raster multi-sheet** — first-sheet-only (like desktop raster today) or all sheets? Start with first sheet; multi-sheet thermal is a follow-up with its own QA (label gap handling).
+5. **Android raster multi-sheet** — resolved 2026-11-03: first sheet only (D4.3); multi-sheet thermal is a follow-up with its own QA (label gap handling).
 
 ---
 
@@ -658,9 +682,12 @@ src/
     PrinterSetup.tsx               (3,4)
     Automation.tsx                 (2,5)
   components/
-    DevicesCard.tsx                (3,5)
+    DevicesCard.tsx                (3,5,6)
     designer/PackChooser.tsx       (1)
+    designer/PhoneDesignerViewer.tsx (6)
+    print/PhonePrintFlow.tsx       (6)
 
 dev-printer/server.cjs             (3)
+scripts/patch-android-orientation.mjs (6)
 ```
 

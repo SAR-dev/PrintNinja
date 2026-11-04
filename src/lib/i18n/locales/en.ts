@@ -646,7 +646,7 @@ const en = {
     lang_cpcl: "CPCL (label)",
     lang_raster: "Raster",
     lang_android_hint:
-      "Android prints PDF only for now. Receipt and label languages need a raster that Android cannot produce yet.",
+      "Android prints receipt and label languages itself (ESC/POS, ZPL, TSPL), verified against a fake head only — unverified on a real one. CPCL and raster are not offered yet.",
   },
   history: {
     title: "History",
