@@ -1824,12 +1824,11 @@ pub async fn list_bluetooth_devices(
     {
         use tauri_plugin_android_print::AndroidPrintExt;
 
-        let devices = tokio::task::spawn_blocking(move || {
-            app.android_print().list_bluetooth_devices()
-        })
-        .await
-        .map_err(|e| AppError::Internal(format!("bluetooth listing task failed: {e}")))?
-        .map_err(|e| AppError::Internal(format!("bluetooth listing failed: {e}")))?;
+        let devices =
+            tokio::task::spawn_blocking(move || app.android_print().list_bluetooth_devices())
+                .await
+                .map_err(|e| AppError::Internal(format!("bluetooth listing task failed: {e}")))?
+                .map_err(|e| AppError::Internal(format!("bluetooth listing failed: {e}")))?;
         Ok(devices
             .into_iter()
             .map(|d| crate::transport::PrinterInfo {
