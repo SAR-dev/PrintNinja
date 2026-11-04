@@ -130,7 +130,7 @@ Phones are small and Android cannot make every printer language — ESC/POS, ZPL
 
 **Let someone borrow your PC without an account.** On the PC, choose **Invite guest** and pick how long the invite lasts (24 hours by default), how many times it can be used, and whether the guest may print or only render. The guest enters a name, taps **Continue as guest** on the sign-in screen and types the code. Guests can use templates by name, but can never read or change them.
 
-An unpaired phone can browse the app, but printing needs a pair: opening Print (or sending `/v1/print` from Try the API) takes you to the pairing screen first, which greets you by name and returns afterwards.
+An unpaired phone can browse the app and print straight to thermal printers (ESC/POS, ZPL, TSPL) — no pair needed. A pair is only for PDF on the phone and Print via PC: choosing a PDF printer on the Print page offers the pairing screen, which greets you by name and returns afterwards.
 
 **Two ways to use a paired PC**
 

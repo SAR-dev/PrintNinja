@@ -151,11 +151,14 @@ timings, so the answer is in History, not in the log.
 - **Desktop, offline** — local printing works completely; the engine,
   templates and printers all live on the machine. Only remote data, cloud
   sync and release checks degrade.
-- **Phone paired with a PC** — an unpaired phone can still browse, but
-  printing goes to the pairing screen first. Once paired, every render is
-  done on the PC while it is on the same network and sharing. When the PC is
-  off, asleep or away, the job fails at once with a message that names the PC;
-  nothing is queued silently, and the failed job retries from History.
+- **Phone, unpaired** — browsing works, and thermal printers (ESC/POS,
+  ZPL, TSPL) print on the device itself (PLAN §4). Only PDF on the phone
+  needs a pair; choosing a PDF printer offers the pairing screen.
+- **Phone paired with a PC** — PDF jobs render on the PC while it is on
+  the same network and sharing (shared rendering, or the PC's own printers
+  with Print via PC). When the PC is off, asleep or away, the job fails at
+  once with a message that names the PC; nothing is queued silently, and
+  the failed job retries from History.
 - **Web preview** — the design and preview render in the browser, but nothing
   can print: there is no local backend to receive the job.
 - **Test vs real** — test prints run the full pipeline on mock data and are

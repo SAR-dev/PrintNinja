@@ -92,10 +92,10 @@ const en = {
     onboarding_setup: "Set up this workstation",
     onboarding_checklist_hint:
       "Setting up a printer, templates, or sharing? The checklist in Settings walks through it.",
-    pair_required_title: "Pair your PC to start printing",
-    pair_welcome_name: "Welcome {{name}} — pair your PC to start printing",
+    pair_required_title: "Pair your PC",
+    pair_welcome_name: "Welcome {{name}}",
     pair_required_body:
-      "Printing on this phone always goes through a paired PC: the PC renders each page and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. Pair once below — it stays paired.",
+      "Thermal printers (ESC/POS, ZPL and TSPL) print straight from this phone without a paired PC. Pair a PC to print PDF on this phone, or to print on the PC's own printers with Print via PC. The pair stays until you remove it.",
   },
   engine: {
     badge: "Browser missing",
@@ -458,6 +458,9 @@ const en = {
     failed_title: "Print failed",
     unknown_error: "Unknown error",
     pair_again_to_print: "Pair again to print.",
+    pdf_needs_pair:
+      "This printer prints PDF, which needs a paired PC to render — pair one, or choose a thermal printer.",
+    pdf_pair_now: "Pair a PC",
     via_pc_banner: "Printing on {{pc}} — the job runs on its printers.",
     via_pc_cached: "Printer list is cached: the PC is unreachable.",
     via_pc_templates_cached: "Template list is cached: the PC is unreachable.",
@@ -1355,9 +1358,6 @@ const en = {
     idem_hint: "replay-safe key for retries",
     sending: "Sending…",
     send: "Send {{method}} {{path}}",
-    print_needs_pair:
-      "Printing needs a paired PC on this phone — the request stays here until you pair.",
-    print_pair_now: "Pair a PC",
     response: "Response",
     toast_bad_json: "Request body is not valid JSON",
     toast_job_id_required: "Enter a job id first",

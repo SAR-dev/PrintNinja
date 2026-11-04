@@ -36,9 +36,10 @@ import type {
 } from "@/lib/agent/types";
 import { cacheNow } from "@/lib/sync/useSyncStatus";
 import { usePcStatus } from "@/lib/shell/usePcStatus";
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
-import { useCanPrint } from "@/lib/hooks/useCanPrint";
+import { isAndroid } from "@/lib/platform";
+import { hasPairedProvider } from "@/lib/pairing";
 import { notifySuccess, notifyError } from "@/lib/notify";
 import { usePrintStore } from "@/lib/store/printStore";
 import {
@@ -57,28 +58,14 @@ import { resolvePaper } from "@/lib/render/printLayout";
 import { PAPER_PRESETS } from "@/lib/paperPresets";
 import { PhonePrintFlow } from "@/components/print/PhonePrintFlow";
 
+/**
+ * The print form, always. An unpaired phone can still print: thermal
+ * languages render on the device itself (PLAN §4), so there is no
+ * pairing wall in front of this page. The one case that does need a
+ * pair — a PDF printer — says so on the form (the `pdfNeedsPair`
+ * blocker) instead of a redirect.
+ */
 export function PrintPage() {
-  const location = useLocation();
-  // Unpaired Android phones cannot print at all: back to the pairing
-  // screen (which returns here), instead of a dead print form. Null
-  // holds the spinner so nothing flashes before the redirect.
-  const canPrint = useCanPrint();
-  if (canPrint === false) {
-    return (
-      <Navigate
-        to="/pair"
-        replace
-        state={{ returnTo: `${location.pathname}${location.search}` }}
-      />
-    );
-  }
-  if (canPrint === null) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
-  }
   return <PrintForm />;
 }
 
@@ -129,6 +116,20 @@ function PrintForm() {
   const viaPcPair = resolvePhonePair(pairs, viaPcDevice);
   const { status: pcStatus } = usePcStatus();
   const pcUnpaired = pcStatus.state === "down" && pcStatus.kind === "unpaired";
+  // "Never paired" state for the PDF blocker below (a removed pair
+  // already shows through `pcUnpaired`). Desktop renders PDF locally,
+  // so it never checks.
+  const [hasPair, setHasPair] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!isAndroid()) return;
+    let cancelled = false;
+    void hasPairedProvider().then((paired) => {
+      if (!cancelled) setHasPair(paired);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const refreshPcPrinters = async (pairId?: string | null) => {
     try {
@@ -718,6 +719,20 @@ function PrintForm() {
   // Via-PC prints choose from the PC's listing (by server_id); local
   // prints choose a local row. One of them must be chosen.
   const templateChosen = viaPc ? pcTemplate !== "" : store.templateId !== "";
+  // The local row, for its language (the PDF blocker below) and paper
+  // width (the mismatch warning below).
+  const selectedPrinter = !viaPc
+    ? printers.find((p) => p.name === store.printerId)
+    : undefined;
+  // PDF is the one language the phone cannot render itself: with no
+  // pair, a PDF printer is blocked here while thermal printers go
+  // straight to the device. Rust `need_peer` repeats the rule as a
+  // backstop with the same message.
+  const pdfNeedsPair =
+    !viaPc &&
+    isAndroid() &&
+    hasPair === false &&
+    selectedPrinter?.language === "pdf";
   const canPrint =
     !!store.printerId &&
     templateChosen &&
@@ -725,24 +740,28 @@ function PrintForm() {
     store.status !== "printing" &&
     !loading &&
     (!viaPc || !!viaPcPair) &&
-    !pcUnpaired;
-  // An unpaired phone cannot print at all: say so first, with the way
-  // out. Everything else is secondary to re-pairing. A running print is not
-  // a blocker: the button already reads "Printing…" and is disabled, and a
-  // line appearing under it mid-print made the action bar jump.
+    !pcUnpaired &&
+    !pdfNeedsPair;
+  // A removed pair blocks everything: say so first, with the way out.
+  // A never-paired phone is blocked only for PDF (pdfNeedsPair). A
+  // running print is not a blocker: the button already reads
+  // "Printing…" and is disabled, and a line appearing under it
+  // mid-print made the action bar jump.
   const blocker = pcUnpaired
     ? t("print.pair_again_to_print")
-    : !store.printerId
-      ? t("print.blocker_printer")
-      : !templateChosen
-        ? t("print.blocker_template")
-        : store.copies < 1
-          ? t("print.blocker_copies")
-          : viaPc && !viaPcPair
-            ? t("print.via_pc_no_pair")
-            : loading
-              ? t("print.blocker_loading")
-              : "";
+    : pdfNeedsPair
+      ? t("print.pdf_needs_pair")
+      : !store.printerId
+        ? t("print.blocker_printer")
+        : !templateChosen
+          ? t("print.blocker_template")
+          : store.copies < 1
+            ? t("print.blocker_copies")
+            : viaPc && !viaPcPair
+              ? t("print.via_pc_no_pair")
+              : loading
+                ? t("print.blocker_loading")
+                : "";
   const field = "space-y-1.5";
 
   // Paper presets: physical sheets. "auto" means the template's design
@@ -774,9 +793,6 @@ function PrintForm() {
   // 80 mm thermal). previewPaperW is the wide axis after the orientation
   // swap, so landscape is covered too. OS printers have no registered
   // width and never warn; 1 mm absorbs rounding.
-  const selectedPrinter = !viaPc
-    ? printers.find((p) => p.name === store.printerId)
-    : undefined;
   const printerPaperWidth = selectedPrinter?.paper_width_mm ?? null;
   const paperMismatch =
     Number.isFinite(printerPaperWidth) &&
@@ -1493,6 +1509,15 @@ function PrintForm() {
                         className="underline underline-offset-2"
                       >
                         {t("shell.pc_pair_again")}
+                      </Link>
+                    )}
+                    {pdfNeedsPair && (
+                      <Link
+                        to="/pair"
+                        state={{ returnTo: "/print" }}
+                        className="underline underline-offset-2"
+                      >
+                        {t("print.pdf_pair_now")}
                       </Link>
                     )}
                   </p>
