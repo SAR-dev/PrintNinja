@@ -60,6 +60,8 @@ export const testids = {
   settingsBrandName: "settings-brand-name",
   /** Settings appearance: density radio group. */
   settingsDensity: "settings-density",
+  /** Settings appearance: theme radio group (Light/Dark/System). */
+  settingsTheme: "settings-theme",
   /** Settings appearance: logo upload button. */
   settingsLogoUpload: "settings-logo-upload",
   /** Automation → API server: port field (device-local, never syncs). */

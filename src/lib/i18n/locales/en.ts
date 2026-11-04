@@ -799,6 +799,15 @@ const en = {
     appearance_language: "Language",
     appearance_language_hint:
       "Applies right away and is remembered on this device.",
+    appearance_theme: "Theme",
+    appearance_theme_light: "Light",
+    appearance_theme_light_hint: "Bright surfaces. Default.",
+    appearance_theme_dark: "Dark",
+    appearance_theme_dark_hint: "Dark surfaces, easier on the eyes at night.",
+    appearance_theme_system: "System",
+    appearance_theme_system_hint: "Follows the device setting.",
+    appearance_theme_note:
+      "Print output and the template preview always stay light.",
     appearance_density: "Density",
     appearance_density_comfortable: "Comfortable",
     appearance_density_comfortable_hint:
