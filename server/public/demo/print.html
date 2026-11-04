@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Print API demo — PrintNinja</title>
+  <!-- Demo page: plain HTML + Tailwind (Play CDN) + Alpine. No build
+       step, no framework. It mirrors the app's Print page and calls
+       the local REST API the app exposes (127.0.0.1:17717 by default). -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+  <style>[x-cloak] { display: none !important; }</style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen" x-data="printDemo()" x-cloak>
+  <div class="max-w-2xl mx-auto p-4 sm:p-6 space-y-4">
+
+    <!-- Header: what this is, and which API it talks to. -->
+    <header class="bg-white rounded-lg border border-slate-200 p-4 space-y-3">
+      <div>
+        <h1 class="text-lg font-semibold">PrintNinja — print API demo</h1>
+        <p class="text-sm text-slate-500">
+          The same form as the app's Print page, straight against the REST API.
+        </p>
+      </div>
+      <div class="flex flex-wrap items-end gap-2">
+        <label class="flex-1 min-w-56">
+          <span class="block text-xs font-medium text-slate-500 mb-1">API server</span>
+          <input type="text" x-model="base" class="w-full rounded-md border-slate-300 border px-3 py-1.5 text-sm font-mono" />
+        </label>
+        <button @click="loadLists()" :disabled="busy"
+                class="rounded-md bg-slate-900 text-white px-3 py-1.5 text-sm disabled:opacity-50">
+          Load lists
+        </button>
+        <span class="text-xs" :class="apiOk === null ? 'text-slate-400' : apiOk ? 'text-emerald-600' : 'text-red-600'">
+          <template x-if="apiOk === null">not checked</template>
+          <template x-if="apiOk">reachable</template>
+          <template x-if="apiOk === false">unreachable</template>
+        </span>
+      </div>
+    </header>
+
+    <!-- The job: printer, template, data, copies — like the Print page. -->
+    <section class="bg-white rounded-lg border border-slate-200 p-4 space-y-3">
+      <h2 class="text-sm font-semibold">Job</h2>
+
+      <div class="grid sm:grid-cols-2 gap-3">
+        <label>
+          <span class="block text-xs font-medium text-slate-500 mb-1">Printer</span>
+          <select x-model="printer" class="w-full rounded-md border-slate-300 border px-3 py-1.5 text-sm bg-white">
+            <option value="" disabled x-text="printers.length ? 'Choose a printer' : 'No printers loaded'"></option>
+            <template x-for="p in printers" :key="p.id">
+              <option :value="p.name" x-text="`${p.name} (${p.type}, ${p.language})`"></option>
+            </template>
+          </select>
+        </label>
+        <label>
+          <span class="block text-xs font-medium text-slate-500 mb-1">Template</span>
+          <select x-model="template" class="w-full rounded-md border-slate-300 border px-3 py-1.5 text-sm bg-white">
+            <option value="" disabled x-text="templates.length ? 'Choose a template' : 'No templates loaded'"></option>
+            <template x-for="t in templates" :key="t.id">
+              <option :value="t.name" x-text="`${t.name} (${t.page_w_mm} × ${t.page_h_mm} mm)`"></option>
+            </template>
+          </select>
+        </label>
+      </div>
+
+      <!-- Data source: a JSON body, or a URL the server fetches. -->
+      <div>
+        <div class="flex gap-1 mb-1">
+          <button @click="source = 'json'" :class="source === 'json' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'"
+                  class="px-2.5 py-1 rounded-md text-xs font-medium">JSON</button>
+          <button @click="source = 'url'" :class="source === 'url' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'"
+                  class="px-2.5 py-1 rounded-md text-xs font-medium">Data URL</button>
+        </div>
+        <template x-if="source === 'json'">
+          <textarea x-model="dataJson" rows="8" spellcheck="false"
+                    class="w-full rounded-md border-slate-300 border px-3 py-2 text-sm font-mono"></textarea>
+        </template>
+        <template x-if="source === 'url'">
+          <input type="url" x-model="dataUrl" placeholder="https://…"
+                 class="w-full rounded-md border-slate-300 border px-3 py-1.5 text-sm font-mono" />
+        </template>
+      </div>
+
+      <div class="flex items-end gap-3">
+        <label class="w-24">
+          <span class="block text-xs font-medium text-slate-500 mb-1">Copies</span>
+          <input type="number" min="1" max="99" x-model.number="copies"
+                 class="w-full rounded-md border-slate-300 border px-3 py-1.5 text-sm" />
+        </label>
+        <button @click="print()" :disabled="!printer || !template || busy"
+                class="rounded-md bg-slate-900 text-white px-4 py-1.5 text-sm font-medium disabled:opacity-50">
+          Print
+        </button>
+      </div>
+    </section>
+
+    <!-- The result: job id, status, the real reason when it fails. -->
+    <section class="bg-white rounded-lg border border-slate-200 p-4 space-y-2" x-show="job">
+      <h2 class="text-sm font-semibold">Result</h2>
+      <p class="text-sm">
+        Job <span class="font-mono" x-text="job.id"></span> —
+        <span :class="{
+          'text-emerald-600': job.status === 'printed',
+          'text-red-600': job.status === 'failed',
+          'text-amber-600': job.status === 'queued' || job.status === 'running',
+        }" x-text="job.status"></span>
+        <span x-show="job.duration_ms != null" class="text-slate-500"
+              x-text="job.duration_ms + ' ms'"></span>
+      </p>
+      <p class="text-sm text-red-600" x-show="job.error" x-text="job.error"></p>
+    </section>
+
+    <!-- Advanced: only needed when the page is opened from another
+         device on the LAN (those calls must present a device token). -->
+    <details class="bg-white rounded-lg border border-slate-200 p-4">
+      <summary class="text-sm font-medium cursor-pointer">Advanced</summary>
+      <div class="mt-3 space-y-2">
+        <label>
+          <span class="block text-xs font-medium text-slate-500 mb-1">Device token</span>
+          <input type="text" x-model="token" placeholder="Leave empty when using this PC"
+                 class="w-full rounded-md border-slate-300 border px-3 py-1.5 text-sm font-mono" />
+        </label>
+        <p class="text-xs text-slate-500">
+          Browsers on this PC are trusted (loopback) and need no token.
+          From another device on your network, paste the device token the
+          app shows for that phone.
+        </p>
+      </div>
+    </details>
+
+    <footer class="text-xs text-slate-400 pb-4">
+      GET /v1/printers · GET /v1/templates · POST /v1/print · GET /v1/jobs/{id}
+    </footer>
+  </div>
+
+  <script>
+    // The whole page in one object: state on top, actions below.
+    function printDemo() {
+      return {
+        // ── state ────────────────────────────────────────────────
+        base: "http://127.0.0.1:17717",
+        token: "",
+        busy: false,
+        apiOk: null,               // null = not checked yet
+        printers: [],
+        templates: [],
+        printer: "",
+        template: "",
+        source: "json",            // "json" | "url"
+        dataJson: JSON.stringify({
+          order: {
+            id: "1042",
+            total: 18.5,
+            createdAt: "2026-11-04T12:00:00Z",
+          },
+          customer: { name: "John Doe" },
+        }, null, 2),
+        dataUrl: "",
+        copies: 1,
+        job: null,
+        pollTimer: null,
+
+        // ── helpers ──────────────────────────────────────────────
+        headers() {
+          const h = { "content-type": "application/json" };
+          if (this.token) h["authorization"] = `Bearer ${this.token}`;
+          return h;
+        },
+        async api(path, init = {}) {
+          const res = await fetch(this.base.replace(/\/$/, "") + path, {
+            ...init,
+            headers: { ...this.headers(), ...(init.headers || {}) },
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const msg = body?.error?.message || body?.error || `HTTP ${res.status}`;
+            throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+          }
+          return body;
+        },
+
+        // ── actions ──────────────────────────────────────────────
+        async loadLists() {
+          this.busy = true;
+          try {
+            const [printers, templates] = await Promise.all([
+              this.api("/v1/printers"),
+              this.api("/v1/templates"),
+            ]);
+            this.printers = printers.printers || [];
+            this.templates = templates.templates || [];
+            if (this.printers.length && !this.printers.some((p) => p.name === this.printer))
+              this.printer = this.printers[0].name;
+            if (this.templates.length && !this.templates.some((t) => t.name === this.template))
+              this.template = this.templates[0].name;
+            this.apiOk = true;
+          } catch (e) {
+            this.apiOk = false;
+            this.job = { id: null, status: "failed", error: "Cannot reach the API: " + e.message };
+          } finally {
+            this.busy = false;
+          }
+        },
+
+        async print() {
+          this.stopPolling();
+          this.job = null;
+          this.busy = true;
+          const body = {
+            template: this.template,
+            printer: this.printer,
+            settings: { copies: this.copies },
+          };
+          if (this.source === "json") {
+            try { body.data = JSON.parse(this.dataJson); }
+            catch (e) {
+              this.busy = false;
+              this.job = { id: null, status: "failed", error: "The JSON is not valid: " + e.message };
+              return;
+            }
+          } else {
+            body.data_url = this.dataUrl;
+          }
+          try {
+            const created = await this.api("/v1/print", {
+              method: "POST",
+              body: JSON.stringify(body),
+              headers: { "idempotency-key": "demo-" + Date.now() },
+            });
+            this.job = { id: created.id, status: created.status || "queued", error: null, duration_ms: null };
+            this.startPolling(created.id);
+          } catch (e) {
+            this.job = { id: null, status: "failed", error: e.message, duration_ms: null };
+          } finally {
+            this.busy = false;
+          }
+        },
+
+        startPolling(id) {
+          this.pollTimer = setInterval(async () => {
+            try {
+              const job = await this.api(`/v1/jobs/${id}`);
+              this.job = {
+                id: job.id,
+                status: job.status,
+                error: job.error || null,
+                duration_ms: job.duration_ms ?? null,
+              };
+              // Terminal states: stop asking.
+              if (["printed", "failed", "cancelled", "canceled"].includes(job.status))
+                this.stopPolling();
+            } catch {
+              // The API blinked once; keep polling, give up after a
+              // long silence.
+              if (!this.job || this.job.status === "failed") this.stopPolling();
+            }
+          }, 1000);
+          // Give up after two minutes of no answer.
+          setTimeout(() => this.stopPolling(), 120000);
+        },
+
+        stopPolling() {
+          if (this.pollTimer) clearInterval(this.pollTimer);
+          this.pollTimer = null;
+        },
+      };
+    }
+  </script>
+</body>
+</html>

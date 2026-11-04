@@ -1359,6 +1359,9 @@ const ja: Translation = {
     tab_links: "ディープリンク",
     server_title: "ローカルAPIサーバー",
     open_explorer: "APIを試す",
+    demo_open: "デモページを開く",
+    demo_no_service:
+      "共有サービスのURLが設定されていません。設定でURLを追加するとデモページを開けます。",
     links_title: "信頼するディープリンクの送信元",
     status_running: "稼働中",
     status_disabled: "停止中",

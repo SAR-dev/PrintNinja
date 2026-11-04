@@ -1327,6 +1327,9 @@ const en = {
     tab_links: "Deep links",
     server_title: "Local API server",
     open_explorer: "Try the API",
+    demo_open: "Open demo page",
+    demo_no_service:
+      "No share service URL set — add one in Settings to open the demo page.",
     links_title: "Trusted deep-link sources",
     status_running: "running",
     status_disabled: "disabled",
