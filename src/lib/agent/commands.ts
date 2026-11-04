@@ -224,7 +224,7 @@ export interface AgentCommands {
   // One-click repair for the Windows print pipeline (Settings → Diagnostics):
   // close a running Edge, clear stale render profiles, reset the persistent
   // browser cooldown, then prove the pipeline with a test render.
-  fix_pc_print: [{ closeEdge: boolean }, FixReport];
+  fix_pc_print: [{ close_edge: boolean }, FixReport];
   // The Explorer's HTTP client. Requests go through Rust, not the WebView:
   // the page's fetch to 127.0.0.1 is cross-origin (no ACAO on a loopback
   // bind) and mixed content (Android refuses cleartext from https).

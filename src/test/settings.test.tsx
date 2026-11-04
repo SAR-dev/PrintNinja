@@ -392,7 +392,7 @@ describe("Settings print repair (Windows)", () => {
     expect(result).toHaveTextContent("Removed 1 stale render profile(s)");
     expect(result).toHaveTextContent("Persistent browser cooldown reset");
     expect(result).toHaveTextContent("Test render succeeded");
-    expect(invoke).toHaveBeenCalledWith("fix_pc_print", { closeEdge: true });
+    expect(invoke).toHaveBeenCalledWith("fix_pc_print", { close_edge: true });
   });
 
   it("shows the failure text when the test render fails", async () => {

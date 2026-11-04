@@ -183,7 +183,7 @@ export function SettingsPage() {
     setFixing(true);
     setFixReport(null);
     try {
-      const report = await agent("fix_pc_print", { closeEdge: true });
+      const report = await agent("fix_pc_print", { close_edge: true });
       setFixReport(report);
       if (report?.test_render_ok) {
         notifySuccess(t("settings_page.toast_fix_ok"));
