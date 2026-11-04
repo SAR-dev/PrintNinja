@@ -94,11 +94,10 @@ const ja: Translation = {
     onboarding_setup: "このワークステーションを設定",
     onboarding_checklist_hint:
       "プリンター、テンプレート、共有の設定は、設定内のチェックリストで順に確認できます。",
-    pair_required_title: "印刷を開始するにはPCとペアリングしてください",
-    pair_welcome_name:
-      "ようこそ {{name}} さん — 印刷を開始するにはPCとペアリングしてください",
+    pair_required_title: "PCとペアリングする",
+    pair_welcome_name: "ようこそ {{name}} さん",
     pair_required_body:
-      "この電話での印刷は常にペアリングされたPCを経由します: PCが各ページをレンダリングし、電話が印刷するか — PC経由印刷がオンならPC自身のプリンターで印刷します。一度ペアリングすれば、そのまま保持されます。",
+      "サーマルプリンター(ESC/POS、ZPL、TSPL)は、ペアリングされたPCなしでこの電話からそのまま印刷できます。PDFをこの電話で印刷する場合、またはPC経由印刷でPC自身のプリンターに印刷する場合は、PCをペアリングしてください。一度ペアリングすれば、削除するまでそのまま保持されます。",
   },
   engine: {
     badge: "ブラウザー未検出",
@@ -469,6 +468,9 @@ const ja: Translation = {
     failed_title: "印刷に失敗しました",
     unknown_error: "不明なエラー",
     pair_again_to_print: "印刷するには再ペアリングしてください。",
+    pdf_needs_pair:
+      "このプリンターはPDFを印刷します。PDFのレンダリングにはペアリングされたPCが必要です — ペアリングするか、サーマルプリンターを選択してください。",
+    pdf_pair_now: "PCとペアリングする",
     via_pc_banner:
       "{{pc}}で印刷中 — ジョブはそのPCのプリンターで実行されます。",
     via_pc_cached: "プリンター一覧はキャッシュです。PCに到達できません。",
@@ -1389,9 +1391,6 @@ const ja: Translation = {
     idem_hint: "再試行時に重複実行を防ぐキー",
     sending: "送信しています…",
     send: "{{method}} {{path}} を送信",
-    print_needs_pair:
-      "この電話での印刷にはペアリングされたPCが必要です。ペアリングするまでリクエストはここに保持されます。",
-    print_pair_now: "PCとペアリングする",
     response: "レスポンス",
     toast_bad_json: "リクエストボディが有効なJSONではありません",
     toast_job_id_required: "先にジョブIDを入力してください",

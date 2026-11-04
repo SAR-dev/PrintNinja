@@ -61,9 +61,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           return;
         }
         // Pairing needs no share server (LAN phone to PC), so an unpaired
-        // Android phone must reach the pairing screen — not stall on this
-        // error. The pairing gate still blocks everything until a PC is
-        // paired, and a paired phone stays on the error like before.
+        // Android phone must be let into the app — not stall on this
+        // error. A paired phone stays on the error like before.
         if (isAndroid()) {
           void hasPairedProvider().then((paired) => {
             setGate(
