@@ -55,7 +55,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
-import { validatePrinterForm } from "@/lib/printerSchema";
+import {
+  defaultLanguageFor,
+  validatePrinterForm,
+  type LoosePrinterForm,
+} from "@/lib/printerSchema";
 import type { PrinterRow } from "@/lib/agent/types";
 
 const PRINTER_TYPES = [
@@ -166,22 +170,30 @@ export function PrinterSetupPage() {
       cancelled = true;
     };
   }, []);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<LoosePrinterForm>({
     name: "",
     printer_type: "ipp",
     address: "",
     language: "pdf",
     paper_width_mm: "80",
     dpi: "203",
+    label_gap_mm: "",
+    username: "",
+    password: "",
+    skip_tls_verification: false,
   });
 
-  const blankForm = {
+  const blankForm: LoosePrinterForm = {
     name: "",
     printer_type: "ipp",
     address: "",
     language: "pdf",
     paper_width_mm: "80",
     dpi: "203",
+    label_gap_mm: "",
+    username: "",
+    password: "",
+    skip_tls_verification: false,
   };
 
   const openAdd = () => {
@@ -199,6 +211,10 @@ export function PrinterSetupPage() {
       language: p.language,
       paper_width_mm: String(p.paper_width_mm ?? "80"),
       dpi: String(p.dpi ?? "203"),
+      label_gap_mm: p.label_gap_mm != null ? String(p.label_gap_mm) : "",
+      username: p.username ?? "",
+      password: p.password ?? "",
+      skip_tls_verification: p.skip_tls_verification ?? false,
     });
     setShowAdd(true);
   };
@@ -311,9 +327,15 @@ export function PrinterSetupPage() {
           printer_type: printerType,
           address,
           // Android rasterizes thermal languages locally (PLAN §4), so a
-          // non-IPP add starts at ESC/POS there.
+          // non-IPP add starts at ESC/POS there. On desktop a raw
+          // USB/Bluetooth wire needs a command language too (a PDF would
+          // print as gibberish); everything else keeps PDF.
           language:
-            printerType === "ipp" ? "pdf" : isAndroid() ? "escpos" : "pdf",
+            printerType === "ipp"
+              ? "pdf"
+              : isAndroid()
+                ? "escpos"
+                : defaultLanguageFor(printerType, "pdf"),
           paper_width_mm: 80,
           dpi: 203,
         },
@@ -890,7 +912,10 @@ export function PrinterSetupPage() {
                                   ? "pdf"
                                   : isAndroid()
                                     ? "escpos"
-                                    : f.language,
+                                    : defaultLanguageFor(
+                                        np.printer_type ?? "ipp",
+                                        f.language,
+                                      ),
                             }))
                           }
                         >
@@ -1011,18 +1036,13 @@ export function PrinterSetupPage() {
                     setForm((f) => ({
                       ...f,
                       printer_type: v,
-                      // New USB/Bluetooth printers on Android print
-                      // locally: the WebView rasterizes the thermal
-                      // languages (PLAN §4), so a PDF default would put an
-                      // unreadable page on a thermal head — start at
-                      // ESC/POS instead. An explicitly chosen language is
-                      // left alone.
-                      language:
-                        isAndroid() &&
-                        (v === "usb" || v === "bluetooth") &&
-                        f.language === "pdf"
-                          ? "escpos"
-                          : f.language,
+                      // New USB/Bluetooth printers send raw bytes on every
+                      // platform (the WebView rasterizes on Android, the
+                      // Windows spooler passes the job through as RAW), so
+                      // a PDF default would put an unreadable page on a
+                      // thermal head — start at ESC/POS instead. An
+                      // explicitly chosen language is left alone.
+                      language: defaultLanguageFor(v, f.language),
                     }))
                   }
                 >
@@ -1137,6 +1157,100 @@ export function PrinterSetupPage() {
                 </datalist>
               </div>
             </div>
+
+            {form.language === "tspl" && (
+              <div className={field}>
+                <Label htmlFor="printer-label-gap">
+                  {t("printers.label_gap_mm")}
+                </Label>
+                <Input
+                  id="printer-label-gap"
+                  type="number"
+                  min="0.1"
+                  max="50"
+                  step="0.1"
+                  value={form.label_gap_mm}
+                  aria-describedby="printer-label-gap-hint"
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, label_gap_mm: e.target.value }))
+                  }
+                />
+                <p
+                  id="printer-label-gap-hint"
+                  className="text-xs text-muted-foreground"
+                >
+                  {t("printers.label_gap_hint")}
+                </p>
+              </div>
+            )}
+
+            {form.printer_type === "ipp" && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium">
+                  {t("printers.ipp_signin")}
+                </p>
+                <div className={field}>
+                  <Label htmlFor="printer-username">
+                    {t("printers.ipp_username")}
+                  </Label>
+                  <Input
+                    id="printer-username"
+                    autoComplete="off"
+                    value={form.username}
+                    aria-describedby="printer-username-hint"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, username: e.target.value }))
+                    }
+                  />
+                  <p
+                    id="printer-username-hint"
+                    className="text-xs text-muted-foreground"
+                  >
+                    {t("printers.ipp_username_hint")}
+                  </p>
+                </div>
+                <div className={field}>
+                  <Label htmlFor="printer-password">
+                    {t("printers.ipp_password")}
+                  </Label>
+                  <Input
+                    id="printer-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={form.password}
+                    aria-describedby="printer-password-hint"
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, password: e.target.value }))
+                    }
+                  />
+                  <p
+                    id="printer-password-hint"
+                    className="text-xs text-muted-foreground"
+                  >
+                    {t("printers.ipp_password_hint")}
+                  </p>
+                </div>
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4"
+                    checked={form.skip_tls_verification}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        skip_tls_verification: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>
+                    {t("printers.ipp_skip_cert")}
+                    <span className="block text-xs text-muted-foreground">
+                      {t("printers.ipp_skip_cert_hint")}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
           </div>
 
           <DialogFooter className="gap-2 border-t p-5 sm:space-x-0">

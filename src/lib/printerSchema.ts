@@ -22,6 +22,25 @@ export const PRINTER_LANGUAGES = [
   "raster",
 ] as const;
 
+/**
+ * The language a printer should start with once its connection type is
+ * known.
+ *
+ * USB and Bluetooth are raw wires: the bytes go to the printer unchanged,
+ * with no driver in between to rasterize a document. A PDF sent that way
+ * prints as pages of gibberish on a receipt or label head, so those types
+ * start at ESC/POS instead of the PDF default. Anything the person already
+ * moved off PDF is left alone, and every other connection type keeps what
+ * it had (IPP and system printers read PDF; JetDirect lasers do too).
+ */
+export function defaultLanguageFor(
+  printerType: string,
+  current: string,
+): string {
+  const rawWire = printerType === "usb" || printerType === "bluetooth";
+  return rawWire && current === "pdf" ? "escpos" : current;
+}
+
 const HOST_RE = /^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|\[[^\]]+\])$/i;
 
 /** The schemes an IPP endpoint may be written with. */
@@ -84,6 +103,28 @@ function addressError(printerType: string, address: string): string | null {
   }
 }
 
+/** A positive, finite, fractional number; blank is `undefined`. */
+const finitePositive = (
+  notNumberKey: string,
+  minKey: string,
+  maxKey: string,
+  min: number,
+  max: number,
+) =>
+  z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : Number(v)),
+    z
+      .number({ invalid_type_error: notNumberKey })
+      .min(min, minKey)
+      .max(max, maxKey)
+      .refine((n) => Number.isFinite(n), {
+        message: notNumberKey,
+      })
+      // Blank is the encoder default, not an error — the field may be
+      // left empty, which the preprocess above maps to `undefined`.
+      .optional(),
+  );
+
 const finitePositiveInt = (
   notNumberKey: string,
   notIntKey: string,
@@ -130,6 +171,23 @@ export const printerFormSchema = z
       50,
       2400,
     ),
+    // TSPL media gap in mm. Blank means the encoder default (2 mm); the
+    // value is only meaningful for a TSPL label, but accepting it for
+    // other languages costs nothing and keeps one rulebook. Fractional
+    // gaps are real (a 1.5 mm gap), so this is a positive number, not
+    // an integer, between 0.1 and 50 mm.
+    label_gap_mm: finitePositive(
+      "printers.err_gap_number",
+      "printers.err_gap_min",
+      "printers.err_gap_max",
+      0.1,
+      50,
+    ),
+    // IPP sign-in: blank user means the built-in `PrintNinja` identity,
+    // blank password means no HTTP authentication at all.
+    username: z.string().trim().max(200).optional(),
+    password: z.string().max(200).optional(),
+    skip_tls_verification: z.boolean().optional(),
   })
   .superRefine((form, ctx) => {
     const err = addressError(form.printer_type, form.address);
@@ -153,6 +211,10 @@ export interface LoosePrinterForm {
   language: string;
   paper_width_mm: string;
   dpi: string;
+  label_gap_mm: string;
+  username: string;
+  password: string;
+  skip_tls_verification: boolean;
 }
 
 /** One friendly message for the toast: the first failing field, as an i18n key. */

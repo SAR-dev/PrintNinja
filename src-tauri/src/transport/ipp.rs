@@ -22,6 +22,13 @@ const DIAGNOSE_TIMEOUT: Duration = Duration::from_secs(10);
 /// printer must fail in seconds, not after the whole send budget.
 const REACH_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// The follow-up budget for a job the Print-Job reply reported pending or
+/// processing: how often to ask, and how often is enough. The budget
+/// bounds the *waiting*, not the printing — a job still running when it
+/// expires is left to the printer, not failed.
+const JOB_WAIT_POLLS: u32 = 10;
+const JOB_WAIT_INTERVAL: Duration = Duration::from_secs(1);
+
 /// IPP (Internet Printing Protocol) sender for Wi-Fi/LAN printers
 pub struct IppPrinter {
     pub name: String,
@@ -29,6 +36,15 @@ pub struct IppPrinter {
     /// parses it into `endpoint`.
     pub address: String,
     endpoint: IppEndpoint,
+    /// IPP sign-in user; `None` keeps the built-in `PrintNinja`
+    /// (`requesting-user-name`).
+    username: Option<String>,
+    /// `None` sends no HTTP authentication; `Some` sends an
+    /// `Authorization: Basic` header with every request.
+    password: Option<String>,
+    /// Accept a self-signed (or otherwise unverifiable) certificate on
+    /// this endpoint — a per-printer opt-in, never global.
+    skip_tls_verification: bool,
 }
 
 /// Where a job is POSTed and which `printer-uri` to declare, parsed from the
@@ -91,7 +107,37 @@ impl IppPrinter {
             name,
             address,
             endpoint,
+            username: None,
+            password: None,
+            skip_tls_verification: false,
         }
+    }
+
+    /// Per-printer sign-in and certificate handling: the printer row's
+    /// username and password (item 15) and the operator's explicit
+    /// acceptance of its self-signed certificate (item 16).
+    pub fn with_credentials(
+        mut self,
+        username: Option<String>,
+        password: Option<String>,
+        skip_tls_verification: bool,
+    ) -> Self {
+        self.username = username;
+        self.password = password;
+        self.skip_tls_verification = skip_tls_verification;
+        self
+    }
+
+    /// `Authorization: Basic …` when the row carries a password; the user
+    /// is the configured sign-in or the built-in `PrintNinja`.
+    fn auth_header(&self) -> Option<String> {
+        use base64::Engine;
+        let password = self.password.as_deref()?;
+        let user = self.username.as_deref().unwrap_or("PrintNinja");
+        Some(format!(
+            "Basic {}",
+            base64::engine::general_purpose::STANDARD.encode(format!("{user}:{password}"))
+        ))
     }
 
     /// Send an IPP Print-Job request with PDF data
@@ -117,14 +163,24 @@ impl IppPrinter {
         let response_timeout = send_timeout(RESPONSE_TIMEOUT);
         // Shared client (L2): keep-alive across jobs. The deadline stays
         // per request so PRINTNINJA_SEND_TIMEOUT_SECS is still read fresh
-        // on every send.
-        let client = crate::transport::shared_http_client();
+        // on every send. A row that accepted a self-signed certificate
+        // switches to the dedicated insecure client instead of relaxing
+        // the shared one for every other connection the app makes.
+        let client = if self.skip_tls_verification {
+            crate::transport::insecure_http_client()
+        } else {
+            crate::transport::shared_http_client()
+        };
 
-        let response = client
+        let mut request = client
             .post(&self.endpoint.url)
             .header("Content-Type", "application/ipp")
             .timeout(response_timeout)
-            .body(ipp_body)
+            .body(ipp_body);
+        if let Some(auth) = self.auth_header() {
+            request = request.header("Authorization", auth);
+        }
+        let response = request
             .send()
             .await
             .map_err(|e| {
@@ -193,6 +249,16 @@ impl IppPrinter {
                 None => format!("{at} did not print the job: {}", outcome.sentence()),
             });
         }
+        // A job accepted as pending or processing can still die while it
+        // waits in the queue — power cut, a jam, a cancel on the panel.
+        // One bounded follow-up (item 17) turns that into the error it
+        // deserves; a job that already reports completed, or a reply with
+        // no job reference, pays nothing.
+        if matches!(outcome.state, Some(3) | Some(4) | Some(5)) {
+            if let Some(job_uri) = self.job_ref(&body) {
+                self.wait_for_job(&job_uri).await?;
+            }
+        }
         Ok(())
     }
 
@@ -205,13 +271,44 @@ impl IppPrinter {
     /// against an offline printer fails in seconds instead of paying a
     /// render (60 s worst case on Android) first.
     ///
-    /// It proves reachability, not that an IPP server answers there: an
-    /// HTTPS endpoint only gets a TCP connect, no TLS handshake. Anything
-    /// deeper shows up in the request itself, which reports its own error.
+    /// It proves reachability, not that an IPP server answers there:
+    /// anything deeper shows up in the request itself, which reports its
+    /// own error. A certificate the operator already accepted
+    /// (`skip_tls_verification`) is no failure here, because they have
+    /// said they trust it.
     pub async fn reach(&self) -> Result<(), String> {
-        use tokio::net::TcpStream;
-
         let at = format!("the printer at {}", self.endpoint.url);
+        // A TLS endpoint is probed with one tiny GET, not a bare TCP
+        // connect: the connect would pass while the handshake — the part
+        // that actually fails on a self-signed certificate — was never
+        // tried. Any HTTP answer, even a 404, means the endpoint is up.
+        if self.endpoint.url.starts_with("https://") {
+            let client = if self.skip_tls_verification {
+                crate::transport::insecure_http_client()
+            } else {
+                crate::transport::shared_http_client()
+            };
+            return match client
+                .get(&self.endpoint.url)
+                .timeout(REACH_TIMEOUT)
+                .send()
+                .await
+            {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    let text = e.to_string().to_lowercase();
+                    if text.contains("certificate") || text.contains("tls") {
+                        Err(format!(
+                            "Could not reach {at}: its certificate could not be verified — enable 'Skip certificate verification' for this printer if you trust it"
+                        ))
+                    } else {
+                        Err(format!("Could not reach {at}: {e}"))
+                    }
+                }
+            };
+        }
+
+        use tokio::net::TcpStream;
         match tokio::time::timeout(REACH_TIMEOUT, TcpStream::connect(&self.endpoint.authority))
             .await
         {
@@ -234,7 +331,11 @@ impl IppPrinter {
     async fn printer_state_reasons(&self) -> Vec<String> {
         let body = Self::build_get_printer_attributes(&self.endpoint.printer_uri);
         let mut reasons = Vec::new();
-        let client = crate::transport::shared_http_client();
+        let client = if self.skip_tls_verification {
+            crate::transport::insecure_http_client()
+        } else {
+            crate::transport::shared_http_client()
+        };
         let Ok(response) = client
             .post(&self.endpoint.url)
             .header("Content-Type", "application/ipp")
@@ -307,8 +408,14 @@ impl IppPrinter {
             self.endpoint.printer_uri.as_bytes(),
         );
 
-        // Optional but expected by most servers
-        Self::push_attr(&mut body, 0x42, "requesting-user-name", b"PrintNinja");
+        // Optional but expected by most servers; the sign-in user when the
+        // printer row has one, the built-in identity otherwise.
+        Self::push_attr(
+            &mut body,
+            0x42,
+            "requesting-user-name",
+            self.username.as_deref().unwrap_or("PrintNinja").as_bytes(),
+        );
         Self::push_attr(&mut body, 0x42, "job-name", b"PrintNinja Job");
         Self::push_attr(
             &mut body,
@@ -363,6 +470,115 @@ impl IppPrinter {
         Self::push_attr(&mut body, 0x45, "printer-uri", printer_uri.as_bytes());
         body.push(0x03); // end of attributes
         body
+    }
+
+    /// RFC 8011 §5.3 Get-Job-Attributes: how a just-accepted job finds out
+    /// whether it actually printed.
+    pub(crate) fn build_get_job_attributes(job_uri: &str) -> Vec<u8> {
+        let mut body = Vec::new();
+        body.extend_from_slice(&[0x01, 0x01]); // IPP 1.1
+        body.extend_from_slice(&[0x00, 0x08]); // Get-Job-Attributes
+        body.extend_from_slice(&[0x00, 0x00, 0x00, 0x01]); // request id
+        body.push(0x01); // operation attributes group
+        Self::push_attr(&mut body, 0x47, "attributes-charset", b"utf-8");
+        Self::push_attr(&mut body, 0x48, "attributes-natural-language", b"en");
+        Self::push_attr(&mut body, 0x45, "job-uri", job_uri.as_bytes());
+        body.push(0x03); // end of attributes
+        body
+    }
+
+    /// The submitted job's `job-uri`, or the CUPS form
+    /// `ipp(s)://<authority>/jobs/<id>` when the reply gave a `job-id`
+    /// but no URI. `None` when it gave neither — nothing to poll by.
+    fn job_ref(&self, body: &[u8]) -> Option<String> {
+        let mut id: Option<u32> = None;
+        let mut uri: Option<String> = None;
+        for (name, tag, value) in parse_attributes(body) {
+            match (name.as_str(), tag) {
+                ("job-id", 0x21) if value.len() == 4 => {
+                    id = u32::from_be_bytes(value[..4].try_into().unwrap()).into()
+                }
+                ("job-uri", 0x45) => uri = Some(String::from_utf8_lossy(&value).into_owned()),
+                _ => {}
+            }
+        }
+        uri.or_else(|| {
+            id.map(|id| {
+                let scheme = if self.endpoint.url.starts_with("https://") {
+                    "ipps"
+                } else {
+                    "ipp"
+                };
+                format!("{scheme}://{}/jobs/{id}", self.endpoint.authority)
+            })
+        })
+    }
+
+    /// Follow a just-accepted job until the printer says it printed.
+    ///
+    /// Called only when the Print-Job reply itself reported the job
+    /// pending or processing (states 3, 4, 5). The follow-up is
+    /// best-effort in the other direction: a printer that refuses or
+    /// cannot answer Get-Job-Attributes still counts as having accepted
+    /// the job, because the Print-Job reply already said so.
+    async fn wait_for_job(&self, job_uri: &str) -> Result<(), String> {
+        let at = format!("the printer at {}", self.endpoint.url);
+        let client = if self.skip_tls_verification {
+            crate::transport::insecure_http_client()
+        } else {
+            crate::transport::shared_http_client()
+        };
+        for _ in 0..JOB_WAIT_POLLS {
+            tokio::time::sleep(JOB_WAIT_INTERVAL).await;
+            let body = Self::build_get_job_attributes(job_uri);
+            let Ok(response) = client
+                .post(&self.endpoint.url)
+                .header("Content-Type", "application/ipp")
+                .timeout(DIAGNOSE_TIMEOUT)
+                .body(body)
+                .send()
+                .await
+            else {
+                return Ok(());
+            };
+            if !response.status().is_success() {
+                return Ok(());
+            }
+            let Ok(body) = response.bytes().await else {
+                return Ok(());
+            };
+            let Ok(status) = parse_status_code(&body) else {
+                return Ok(());
+            };
+            if status >> 8 != 0 {
+                return Ok(());
+            }
+            let outcome = parse_job_outcome(&body);
+            match outcome.state {
+                Some(9) => return Ok(()),
+                Some(6) | Some(7) | Some(8) => {
+                    return Err(match describe_reasons(&outcome.reasons) {
+                        Some(sentence) => format!(
+                            "{at} did not print the job: {sentence} [{}]",
+                            outcome.reasons.join(", ")
+                        ),
+                        None => format!("{at} did not print the job: {}", outcome.sentence()),
+                    });
+                }
+                Some(3) | Some(4) | Some(5) => continue,
+                // No job group: the printer will not track the job.
+                _ => return Ok(()),
+            }
+        }
+        // The budget is spent and the job is still moving: it was
+        // accepted and the printer keeps working on it. Reporting a
+        // failure here would mean "we stopped asking", not "it did not
+        // print".
+        tracing::debug!(
+            job_uri = %job_uri,
+            "job still running after the follow-up budget; leaving it to the printer"
+        );
+        Ok(())
     }
 }
 
@@ -929,5 +1145,219 @@ mod tests {
         let text = describe_reasons(&["none".to_string(), "media-jam".to_string()])
             .expect("the jam is actionable");
         assert!(text.contains("paper jam"), "{text}");
+    }
+
+    // ── sign-in and certificates (items 15/16) ────────────────────────
+
+    #[test]
+    fn a_password_builds_a_basic_authorization_header() {
+        use base64::Engine;
+        let p = IppPrinter::new("t".into(), "192.168.1.10".into()).with_credentials(
+            Some("admin".into()),
+            Some("s3cret".into()),
+            false,
+        );
+        let auth = p.auth_header().expect("a password means an auth header");
+        assert!(auth.starts_with("Basic "), "{auth}");
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(&auth.as_bytes()["Basic ".len()..])
+            .unwrap();
+        assert_eq!(String::from_utf8(decoded).unwrap(), "admin:s3cret");
+    }
+
+    #[test]
+    fn the_auth_user_falls_back_to_the_built_in_identity() {
+        // A password without a configured user signs in as PrintNinja —
+        // the same name the request already sends as requesting-user.
+        use base64::Engine;
+        let p = IppPrinter::new("t".into(), "192.168.1.10".into()).with_credentials(
+            None,
+            Some("pw".into()),
+            false,
+        );
+        let auth = p.auth_header().unwrap();
+        let decoded = String::from_utf8(
+            base64::engine::general_purpose::STANDARD
+                .decode(&auth.as_bytes()["Basic ".len()..])
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(decoded, "PrintNinja:pw");
+    }
+
+    #[test]
+    fn no_password_means_no_http_authentication() {
+        let p = IppPrinter::new("t".into(), "192.168.1.10".into()).with_credentials(
+            Some("admin".into()),
+            None,
+            false,
+        );
+        assert!(p.auth_header().is_none());
+        assert!(IppPrinter::new("t".into(), "192.168.1.10".into())
+            .auth_header()
+            .is_none());
+    }
+
+    #[test]
+    fn the_requesting_user_follows_the_signed_in_user() {
+        let p = IppPrinter::new("t".into(), "192.168.1.10".into()).with_credentials(
+            Some("ada".into()),
+            None,
+            false,
+        );
+        let b = p.build_ipp_request_with_format(b"%PDF", 1, "application/pdf");
+        let s = String::from_utf8_lossy(&b);
+        assert!(s.contains("ada"), "{s}");
+
+        // The built-in identity stays the default.
+        let p = IppPrinter::new("t".into(), "192.168.1.10".into());
+        let b = p.build_ipp_request_with_format(b"%PDF", 1, "application/pdf");
+        let s = String::from_utf8_lossy(&b);
+        assert!(s.contains("PrintNinja"), "{s}");
+    }
+
+    // ── the job follow-up (item 17) ──────────────────────────────────
+
+    fn name_len(body: &mut Vec<u8>, n: &str) {
+        body.extend_from_slice(&(n.len() as u16).to_be_bytes());
+        body.extend_from_slice(n.as_bytes());
+    }
+
+    /// A Print-Job reply that accepted the job but has not printed it yet:
+    /// state 5 with the reference (id and URI) the follow-up asks by.
+    fn accepted_job_body(job_id: u32, authority: &str) -> Vec<u8> {
+        let mut b = vec![0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
+        b.push(0x02); // job attributes group
+        IppPrinter::push_integer(&mut b, "job-id", job_id as i32);
+        b.push(0x45); // uri
+        name_len(&mut b, "job-uri");
+        let uri = format!("ipp://{authority}/jobs/{job_id}");
+        b.extend_from_slice(&(uri.len() as u16).to_be_bytes());
+        b.extend_from_slice(uri.as_bytes());
+        b.push(0x23); // enum
+        name_len(&mut b, "job-state");
+        b.extend_from_slice(&4u16.to_be_bytes());
+        b.extend_from_slice(&5i32.to_be_bytes()); // processing
+        b.push(0x03); // end of attributes
+        b
+    }
+
+    /// A keep-alive IPP-over-HTTP stand-in: each request gets the next body
+    /// from the script, and a bare successful-ok once the script runs out.
+    /// The connections stay open, so the follow-up rides the pooled socket
+    /// the way reqwest really does it.
+    async fn ipp_mock_server(responses: Vec<Vec<u8>>) -> u16 {
+        use std::collections::VecDeque;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let queue: std::sync::Arc<std::sync::Mutex<VecDeque<Vec<u8>>>> =
+            std::sync::Arc::new(std::sync::Mutex::new(responses.into()));
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else {
+                    return;
+                };
+                let queue = queue.clone();
+                tokio::spawn(async move {
+                    let mut buf = Vec::new();
+                    let mut chunk = [0u8; 4096];
+                    // Read until the header is complete; the document
+                    // bytes after it can be ignored.
+                    loop {
+                        let n = match stream.read(&mut chunk).await {
+                            Ok(0) | Err(_) => return,
+                            Ok(n) => n,
+                        };
+                        buf.extend_from_slice(&chunk[..n]);
+                        if buf.len() > 256 * 1024 || buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                            break;
+                        }
+                    }
+                    let body = {
+                        let mut q = queue.lock().unwrap();
+                        q.pop_front().unwrap_or_else(|| {
+                            vec![0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x03]
+                        })
+                    };
+                    let head = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/ipp\r\nContent-Length: {}\r\n\r\n",
+                        body.len()
+                    );
+                    // A failed write leaves a dead socket: nothing more to
+                    // say on this connection, so just drop it.
+                    if stream.write_all(head.as_bytes()).await.is_ok() {
+                        let _ = stream.write_all(&body).await;
+                    }
+                    // The connection stays open for the next request.
+                });
+            }
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn a_pending_job_is_polled_until_it_completes() {
+        let port = ipp_mock_server(vec![
+            accepted_job_body(7, "127.0.0.1"),
+            job_group(Some(9), &[]),
+        ])
+        .await;
+        let p = IppPrinter::new("t".into(), format!("127.0.0.1:{port}"));
+        p.send_bytes(b"%PDF-1.4", 1, "application/pdf")
+            .await
+            .expect("accepted, then completed — the job must print");
+    }
+
+    #[tokio::test]
+    async fn a_job_that_stops_in_the_queue_fails_loudly() {
+        let port = ipp_mock_server(vec![
+            accepted_job_body(8, "127.0.0.1"),
+            job_group(Some(6), &["media-jam"]),
+        ])
+        .await;
+        let p = IppPrinter::new("t".into(), format!("127.0.0.1:{port}"));
+        let err = p
+            .send_bytes(b"%PDF-1.4", 1, "application/pdf")
+            .await
+            .unwrap_err();
+        assert!(err.contains("paper jam"), "{err}");
+        assert!(err.contains("media-jam"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn a_completed_job_needs_no_follow_up() {
+        // The reply already says printed: exactly one request may go out.
+        // The sentinel answers a spurious second request with "canceled",
+        // which would turn a good print into a reported failure.
+        let sentinel = job_group(Some(7), &[]);
+        let port = ipp_mock_server(vec![job_group(Some(9), &[]), sentinel]).await;
+        let p = IppPrinter::new("t".into(), format!("127.0.0.1:{port}"));
+        p.send_bytes(b"%PDF-1.4", 1, "application/pdf")
+            .await
+            .expect("already completed — a spurious poll would have seen the sentinel");
+    }
+
+    #[test]
+    fn the_job_reference_falls_back_to_the_id() {
+        // A reply with a job-id but no job-uri is still pollable: the URI
+        // is built the way CUPS builds it.
+        let mut b = vec![0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
+        b.push(0x02);
+        IppPrinter::push_integer(&mut b, "job-id", 42);
+        b.push(0x23);
+        name_len(&mut b, "job-state");
+        b.extend_from_slice(&4u16.to_be_bytes());
+        b.extend_from_slice(&5i32.to_be_bytes());
+        b.push(0x03);
+        let p = IppPrinter::new("t".into(), "192.168.1.10".into());
+        assert_eq!(
+            p.job_ref(&b).as_deref(),
+            Some("ipp://192.168.1.10:631/jobs/42")
+        );
+        // And a reply with neither is not pollable.
+        let bare = job_group(Some(5), &[]);
+        assert!(p.job_ref(&bare).is_none());
     }
 }

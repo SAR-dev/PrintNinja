@@ -129,6 +129,11 @@ pub struct PrintResponse {
     /// Which paired provider rendered the document, if any. `None` means
     /// this device rendered locally (or the job never reached rendering).
     pub rendered_by: Option<String>,
+    /// Warnings that do not fail the job but the user should see: the
+    /// print went out, but the output may be wrong (a PDF on a raw wire,
+    /// a GDI-only queue that cannot take PDF). Empty when nothing is
+    /// amiss.
+    pub warnings: Vec<String>,
 }
 
 /// The render stage of the print pipeline, as a trait.
@@ -173,6 +178,10 @@ pub trait JobRenderer: Send + Sync {
     /// identical step: PDF printers get document bytes, command-language
     /// printers get a raster at their head's own resolution encoded for
     /// their dialect.
+    ///
+    /// `label_gap_mm` is the TSPL media gap in mm; `None` keeps the
+    /// encoder's built-in default (2 mm). Only the TSPL path reads it.
+    #[allow(clippy::too_many_arguments)]
     async fn render_for_language(
         &self,
         final_html: &str,
@@ -181,6 +190,7 @@ pub trait JobRenderer: Send + Sync {
         orientation: &str,
         language: crate::transport::PrinterLanguage,
         dpi: u32,
+        label_gap_mm: Option<f64>,
     ) -> anyhow::Result<(Vec<u8>, &'static str)> {
         match language {
             crate::transport::PrinterLanguage::Pdf => self
@@ -201,7 +211,12 @@ pub trait JobRenderer: Send + Sync {
                     .await
                     .and_then(|raster| {
                         crate::transport::encode_for_language(
-                            lang, &raster, paper_w_mm, paper_h_mm, dpi,
+                            lang,
+                            &raster,
+                            paper_w_mm,
+                            paper_h_mm,
+                            dpi,
+                            label_gap_mm,
                         )
                         .map_err(|e| anyhow::anyhow!(e))
                     })
@@ -562,6 +577,7 @@ pub async fn run_claimed_job(
                 error: Some(e.to_string()),
                 timings: None,
                 rendered_by: None,
+                warnings: Vec::new(),
             });
         }
     };
@@ -607,6 +623,7 @@ pub async fn run_claimed_job(
                     error: Some(msg),
                     timings: None,
                     rendered_by: None,
+                    warnings: Vec::new(),
                 });
             }
         },
@@ -789,6 +806,11 @@ async fn run_stages(
     // job row on every exit path, so History can show it.
     let mut timings = StageTimings::default();
 
+    // Warnings that do not fail the job but the app should show: the
+    // print went out, but the output may be wrong. Collected in the
+    // preflight and send stages, attached on every exit from there on.
+    let mut warnings: Vec<String> = Vec::new();
+
     // Fetch live data when a URL is supplied and test mode is off.
     let t_fetch = Instant::now();
     let mut fetched: Option<serde_json::Value> = req.data.clone();
@@ -885,6 +907,8 @@ async fn run_stages(
                 error: Some(msg),
                 timings: None,
                 rendered_by: None,
+                // The template stage fails before any warning is collected.
+                warnings: Vec::new(),
             })
         };
         if req.records.is_some_and(|n| n > MAX_RECORDS) {
@@ -944,6 +968,9 @@ async fn run_stages(
                         error: Some(msg),
                         timings: Some(timings),
                         rendered_by: None,
+                        // The template stage fails before any warning is
+                        // collected.
+                        warnings: Vec::new(),
                     });
                 }
             }
@@ -991,6 +1018,17 @@ async fn run_stages(
         .and_then(|p| p.dpi)
         .unwrap_or(203)
         .clamp(1, 1200) as u32;
+    // Per-printer wire settings (IPP sign-in, accepted self-signed
+    // certificate). A printer not in the DB gets the defaults: no
+    // credentials, full TLS verification.
+    let transport_settings = printer
+        .as_ref()
+        .map(|p| crate::transport::TransportSettings {
+            username: p.username.clone(),
+            password: p.password.clone(),
+            skip_tls_verification: p.skip_tls_verification,
+        })
+        .unwrap_or_default();
 
     // ── 3b. Preflight probe (Phase 2) ─────────────────────────────────
     // Fail an offline / missing queue *before* paying the render cost
@@ -1034,6 +1072,18 @@ async fn run_stages(
              if this is a label or receipt printer, set its language to the \
              native command language (ESC/POS, ZPL, TSPL, CPCL) or it prints garbage"
         );
+        // The log line alone is invisible to the user, and this is the
+        // misconfiguration that prints pages of random characters. The
+        // job still goes out (warn-only, by design), so the warning rides
+        // on the response instead.
+        warnings.push(
+            "This printer's language is set to PDF, but USB and Bluetooth \
+             send bytes straight to the printer with no driver in between. \
+             If this is a label or receipt printer, set its language to the \
+             native command language (ESC/POS, ZPL, TSPL, CPCL) — otherwise \
+             it will print pages of random characters."
+                .to_string(),
+        );
     }
     let needs_preflight = matches!(
         printer_type_for_probe,
@@ -1057,8 +1107,10 @@ async fn run_stages(
         let printer_type = printer_type_for_probe.clone();
         let name = req.printer_name.clone();
         let address = address_for_probe.clone();
+        let settings = transport_settings.clone();
         tokio::spawn(async move {
-            crate::transport::TransportRegistry::probe(&printer_type, &name, &address).await
+            crate::transport::TransportRegistry::probe(&printer_type, &name, &address, &settings)
+                .await
         })
     });
 
@@ -1170,6 +1222,7 @@ async fn run_stages(
                     &orientation,
                     language.clone(),
                     dpi,
+                    printer.as_ref().and_then(|p| p.label_gap_mm),
                 )
                 .await
                 .map(|(b, m)| (b, m.to_string()))
@@ -1210,6 +1263,7 @@ async fn run_stages(
                 error: Some(msg),
                 timings: Some(timings),
                 rendered_by: None,
+                warnings: warnings.clone(),
             });
         }
     };
@@ -1251,6 +1305,7 @@ async fn run_stages(
                 error: Some(msg),
                 timings: Some(timings),
                 rendered_by: None,
+                warnings: warnings.clone(),
             });
         }
     }
@@ -1286,37 +1341,70 @@ async fn run_stages(
     // payload repeated N times in a single write. Either way the printer
     // sees N back-to-back copies through one precheck and one
     // connection.
+    //
+    // The exception is a PDF on a raw wire: the repeated payload is N
+    // PDF files glued end to end, and a PDF reader may print only the
+    // first. Command languages are the intended N labels there, so they
+    // keep the batched write; a PDF goes out as one job per copy, still
+    // under this printer's permit.
     let honors_copies = matches!(printer_type, crate::transport::PrinterType::Ipp)
         || (cfg!(target_os = "linux")
             && matches!(printer_type, crate::transport::PrinterType::System));
-    let (send_data, send_copies) = if honors_copies {
-        (payload.clone(), copies)
-    } else if copies == 1 {
-        (payload.clone(), 1)
-    } else {
-        let mut batched = Vec::with_capacity(payload.len() * copies as usize);
-        for _ in 0..copies {
-            batched.extend_from_slice(&payload);
-        }
-        (batched, 1)
-    };
+    let pdf_per_copy =
+        !honors_copies && copies > 1 && matches!(language, crate::transport::PrinterLanguage::Pdf);
     let t_send = Instant::now();
     let result = queue
         .with_permit(&req.printer_name, async {
-            crate::transport::TransportRegistry::send_to(
-                &printer_type,
-                &req.printer_name,
-                address,
-                crate::transport::RenderedJob {
-                    job_id: req.printer_name.clone(),
-                    printer_id: req.printer_name.clone(),
-                    data: send_data,
-                    mime_type: mime_type.to_string(),
-                    copies: send_copies,
-                    language: language.clone(),
-                },
-            )
-            .await
+            if pdf_per_copy {
+                // One job per copy: the printer's PDF reader takes one
+                // document, so each copy is its own job.
+                for copy in 1..=copies {
+                    crate::transport::TransportRegistry::send_to(
+                        &printer_type,
+                        &req.printer_name,
+                        address,
+                        crate::transport::RenderedJob {
+                            job_id: req.printer_name.clone(),
+                            printer_id: req.printer_name.clone(),
+                            data: payload.clone(),
+                            mime_type: mime_type.to_string(),
+                            copies: 1,
+                            language: language.clone(),
+                        },
+                        &transport_settings,
+                    )
+                    .await
+                    .map_err(|e| format!("{e} (copy {copy} of {copies})"))?;
+                }
+                Ok(())
+            } else {
+                let (send_data, send_copies) = if honors_copies {
+                    (payload.clone(), copies)
+                } else if copies == 1 {
+                    (payload.clone(), 1)
+                } else {
+                    let mut batched = Vec::with_capacity(payload.len() * copies as usize);
+                    for _ in 0..copies {
+                        batched.extend_from_slice(&payload);
+                    }
+                    (batched, 1)
+                };
+                crate::transport::TransportRegistry::send_to(
+                    &printer_type,
+                    &req.printer_name,
+                    address,
+                    crate::transport::RenderedJob {
+                        job_id: req.printer_name.clone(),
+                        printer_id: req.printer_name.clone(),
+                        data: send_data,
+                        mime_type: mime_type.to_string(),
+                        copies: send_copies,
+                        language: language.clone(),
+                    },
+                    &transport_settings,
+                )
+                .await
+            }
         })
         .await;
     // Includes any wait for this printer's turn, not just the transport.
@@ -1331,6 +1419,31 @@ async fn run_stages(
             ("failed", Some(e))
         }
     };
+
+    // Phase 4 (GDI queues, Windows): the spooler send logs the RAW
+    // fallback, but the app cannot read the log. A successful PDF job on
+    // a Windows queue that offers no PDF datatype is exactly the case
+    // where a GDI-only driver prints the PDF source or nothing, so the
+    // warning rides on the response like the raw-wire one above.
+    // `pdf_sent_as_raw` reads the per-queue cache the send just
+    // populated; an unreadable datatype list reports false, and there
+    // the job declared PDF, so a refusing queue would have failed it
+    // loudly instead.
+    if status == "success"
+        && cfg!(windows)
+        && matches!(printer_type, crate::transport::PrinterType::System)
+        && matches!(language, crate::transport::PrinterLanguage::Pdf)
+        && crate::transport::windows_spooler::pdf_sent_as_raw(&req.printer_name).await
+    {
+        warnings.push(
+            "This Windows print queue does not offer a PDF datatype, so \
+             the job was sent as RAW. A driver that only understands GDI \
+             will print the PDF source or nothing. If this printer reads \
+             PDF, add it by network address as ipp or raw TCP instead; \
+             otherwise choose a queue whose driver lists PDF."
+                .to_string(),
+        );
+    }
 
     // ── 6. History ──────────────────────────────────────────────────
     let t_history = Instant::now();
@@ -1377,6 +1490,7 @@ async fn run_stages(
         error: err,
         timings: Some(timings),
         rendered_by,
+        warnings,
     })
 }
 
@@ -1392,6 +1506,14 @@ pub struct StoredPrinter {
     pub language: String,
     pub paper_width_mm: Option<i64>,
     pub dpi: Option<i64>,
+    /// TSPL media gap in mm; `None` means the encoder default (2 mm).
+    pub label_gap_mm: Option<f64>,
+    /// IPP sign-in user; `None` keeps the built-in `PrintNinja`.
+    pub username: Option<String>,
+    /// IPP password; `None` sends no HTTP authentication.
+    pub password: Option<String>,
+    /// Accept a self-signed certificate on this printer's endpoint.
+    pub skip_tls_verification: bool,
 }
 
 /// Look up a printer's stored row by name.
@@ -1404,7 +1526,8 @@ pub fn lookup_printer(db: &DbState, name: &str) -> Option<StoredPrinter> {
     let conn = guard.connection();
     conn.query_row(
         "SELECT type, COALESCE(address, ''), COALESCE(language, 'pdf'), \
-                paper_width_mm, dpi \
+                paper_width_mm, dpi, label_gap_mm, username, password, \
+                skip_tls_verification \
          FROM printers WHERE name = ?1 COLLATE NOCASE",
         [name],
         |r| {
@@ -1414,6 +1537,10 @@ pub fn lookup_printer(db: &DbState, name: &str) -> Option<StoredPrinter> {
                 language: r.get(2)?,
                 paper_width_mm: r.get(3)?,
                 dpi: r.get(4)?,
+                label_gap_mm: r.get(5)?,
+                username: r.get(6)?,
+                password: r.get(7)?,
+                skip_tls_verification: r.get(8)?,
             })
         },
     )

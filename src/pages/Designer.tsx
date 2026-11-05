@@ -1164,6 +1164,7 @@ export function DesignerPage() {
             remoteId={remoteId}
             readOnly={isReadOnly({ origin })}
             busy={pending != null}
+            dirty={dirty}
             onVisibilityChange={(v) => void handleVisibilityChange(v)}
           />
         </PageHeader>

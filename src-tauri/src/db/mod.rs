@@ -289,6 +289,26 @@ pub fn ensure_v2_schema(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    // Per-printer settings: the TSPL media gap and the IPP sign-in plus
+    // self-signed-certificate override. Old rows keep NULL/0, which the
+    // code reads as "use the built-in default".
+    for (col, ddl) in [
+        (
+            "label_gap_mm",
+            "ALTER TABLE printers ADD COLUMN label_gap_mm REAL CHECK(label_gap_mm IS NULL OR label_gap_mm > 0)",
+        ),
+        ("username", "ALTER TABLE printers ADD COLUMN username TEXT"),
+        ("password", "ALTER TABLE printers ADD COLUMN password TEXT"),
+        (
+            "skip_tls_verification",
+            "ALTER TABLE printers ADD COLUMN skip_tls_verification INTEGER NOT NULL DEFAULT 0",
+        ),
+    ] {
+        if !column_exists(conn, "printers", col)? {
+            conn.execute(ddl, [])?;
+        }
+    }
+
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_templates_remote ON templates(remote_id)",
         [],
@@ -818,11 +838,15 @@ fn ensure_p2_checks(conn: &Connection) -> rusqlite::Result<()> {
             language TEXT NOT NULL DEFAULT 'pdf' CHECK(language IN ('pdf', 'escpos', 'tspl', 'zpl', 'cpcl', 'raster')),
             paper_width_mm INTEGER CHECK(paper_width_mm IS NULL OR paper_width_mm > 0),
             dpi INTEGER DEFAULT 203 CHECK(dpi IS NULL OR dpi > 0),
+            label_gap_mm REAL CHECK(label_gap_mm IS NULL OR label_gap_mm > 0),
+            username TEXT,
+            password TEXT,
+            skip_tls_verification INTEGER NOT NULL DEFAULT 0,
             default_settings_json TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );",
-        "id, name, type, address, language, paper_width_mm, dpi, default_settings_json, created_at, updated_at",
+        "id, name, type, address, language, paper_width_mm, dpi, label_gap_mm, username, password, skip_tls_verification, default_settings_json, created_at, updated_at",
         &[],
     )?;
     rebuild_p2(

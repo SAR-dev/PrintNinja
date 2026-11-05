@@ -79,6 +79,10 @@ pub struct RemotePrintResult {
     pub error: Option<String>,
     pub code: Option<String>,
     pub pc_name: String,
+    /// The PC's non-fatal warnings for the job (a PDF on a raw wire, a
+    /// GDI-only queue): the print succeeded, but the output may be
+    /// wrong. Empty when nothing is amiss.
+    pub warnings: Vec<String>,
 }
 
 /// One PC printer, as its `GET /v1/printers` reports it. No address: the
@@ -472,6 +476,20 @@ fn record_remote_job(
     Ok(())
 }
 
+/// The PC's non-fatal warnings for a job, from its print reply: a
+/// string array when it has any, absent otherwise.
+fn warnings_from_reply(reply: &serde_json::Value) -> Vec<String> {
+    reply
+        .get("warnings")
+        .and_then(|w| w.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|w| w.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Print through the paired PC and record the outcome locally.
 /// See the module docs for the no-fallback contract.
 pub async fn remote_print_inner(
@@ -633,11 +651,12 @@ pub async fn remote_print_inner(
     // The PC's answer, normalised to (terminal status, error, code).
     // Success already ran the whole pipeline, so no poll is needed;
     // a duplicate replays an earlier key, so poll that job instead.
-    let (final_status, error, code, pc_job_id): (
+    let (final_status, error, code, pc_job_id, warnings): (
         String,
         Option<String>,
         Option<String>,
         Option<String>,
+        Vec<String>,
     ) = if status.is_success() && reply.get("status").and_then(|s| s.as_str()) != Some("duplicate")
     {
         (
@@ -652,6 +671,7 @@ pub async fn remote_print_inner(
                 .get("job_id")
                 .and_then(|j| j.as_str())
                 .map(str::to_string),
+            warnings_from_reply(&reply),
         )
     } else if status.is_success() {
         let job_id = reply
@@ -661,7 +681,9 @@ pub async fn remote_print_inner(
             .to_string();
         let client2 = print_client(POLL_TIMEOUT_SECS + 10)?;
         match poll_job(&client2, &base, &pair.secret, &job_id).await {
-            Ok((st, err)) => (st, err, None, Some(job_id)),
+            // A duplicate replays the reply of an earlier job, whose
+            // warnings are not in this reply.
+            Ok((st, err)) => (st, err, None, Some(job_id), Vec::new()),
             Err(e) => {
                 let msg = e.to_string();
                 record_remote_job(
@@ -723,6 +745,7 @@ pub async fn remote_print_inner(
             error: Some(msg),
             code: Some(code),
             pc_name: pair.name.clone(),
+            warnings: Vec::new(),
         });
     } else if status == reqwest::StatusCode::INTERNAL_SERVER_ERROR {
         // The pipeline ran and failed (offline printer, …): an
@@ -757,6 +780,8 @@ pub async fn remote_print_inner(
             error: Some(msg),
             code: None,
             pc_name: pair.name.clone(),
+            // The PC's error reply carries no warnings.
+            warnings: Vec::new(),
         });
     } else {
         let err = refusal(status, &reply);
@@ -809,6 +834,7 @@ pub async fn remote_print_inner(
         error,
         code,
         pc_name: pair.name.clone(),
+        warnings,
     })
 }
 

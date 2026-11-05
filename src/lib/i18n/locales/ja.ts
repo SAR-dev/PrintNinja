@@ -258,6 +258,7 @@ const ja: Translation = {
     reason_readonly: "コミュニティから保存したコピーのため、変更できません。",
     reason_readonly_visibility:
       "コミュニティから保存したコピーの公開設定は変更できません。",
+    reason_unsaved_visibility: "公開するには、先に保存してください。",
     only_local: "このコンピューターのみ",
     visibility_public: "公開",
     visibility_private: "非公開",
@@ -466,6 +467,7 @@ const ja: Translation = {
     rendered_on: "{{peer}}でレンダリングしました",
     finished: "{{seconds}}で完了しました。",
     failed_title: "印刷に失敗しました",
+    warnings_title: "注意",
     unknown_error: "不明なエラー",
     pair_again_to_print: "印刷するには再ペアリングしてください。",
     pdf_needs_pair:
@@ -520,6 +522,11 @@ const ja: Translation = {
       "テンプレートは {{tw}}×{{th}} mm です。このプリンターは {{pw}} mm の用紙です。",
     paper_mismatch_paper:
       "用紙は {{pw2}}×{{ph2}} mm です。このプリンターは {{pw}} mm の用紙です。",
+    paper_size_action: "用紙サイズを設定",
+    paper_size_title: "{{name}} の用紙幅",
+    paper_size_hint:
+      "この印刷は {{w}} mm の用紙を使います。プリンターは {{cur}} mm として登録されています。実際に使う用紙の幅を入力してください。",
+    toast_paper_saved: "{{name}} の用紙幅を {{w}} mm に設定しました",
     test_hint: "内蔵ページを印刷して、プリンターの動作を確認します。",
     send_test: "テストページを送信",
     preview_sample: "サンプルデータ",
@@ -571,6 +578,19 @@ const ja: Translation = {
     test_print: "テスト印刷",
     paper_width_mm: "用紙幅 (mm)",
     dpi: "DPI",
+    label_gap_mm: "ラベルギャップ (mm)",
+    label_gap_hint:
+      "TSPLラベル専用。空欄のままにすると組み込み既定値 (2 mm) が使われます。",
+    ipp_signin: "サインイン（任意）",
+    ipp_username: "ユーザー名",
+    ipp_password: "パスワード",
+    ipp_username_hint:
+      "IPPサインインのユーザー名。空欄なら組み込みの PrintNinja アイデンティティを使います。",
+    ipp_password_hint:
+      "すべてのリクエストに HTTP Basic 認証として送られます。空欄なら認証は送られません。",
+    ipp_skip_cert: "証明書検証をスキップ",
+    ipp_skip_cert_hint:
+      "https:// のエンドポイント専用。自己署名など検証できない証明書を通します。",
     conn_ipp: "Wi-Fi / LAN (IPP)",
     conn_raw: "Wi-Fi / LAN (Raw TCP 9100)",
     conn_usb: "USB",
@@ -662,6 +682,9 @@ const ja: Translation = {
     err_dpi_int: "DPIは整数で入力してください",
     err_dpi_min: "DPIは50以上にしてください",
     err_dpi_max: "DPIは2400以下にしてください",
+    err_gap_number: "ラベルギャップは数値で入力してください",
+    err_gap_min: "ラベルギャップは0.1以上にしてください",
+    err_gap_max: "ラベルギャップは50以下にしてください",
     err_invalid: "プリンターの設定が正しくありません",
     lang_pdf: "PDF",
     lang_escpos: "ESC/POS（レシート）",
