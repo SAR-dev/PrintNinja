@@ -51,10 +51,9 @@ testing. *Workaround:* none today. *Code:* `AndroidPrintPlugin.kt`
 
 ## Printer languages
 
-**4. [Medium] TSPL has no print tuning.** The label gap itself is now a
-per-printer setting (`label_gap_mm`), but the encoder still never sets
-density or speed and still does not handle continuous (gapless) media.
-*Code:* `transport/label_langs.rs`.
+**4. [Medium] TSPL has no print tuning.** The encoder never sets density
+or speed and does not handle continuous (gapless) media. *Code:*
+`transport/label_langs.rs`.
 
 **5. [Low] Status checks cover three languages only.** Before a job, the printer is
 asked whether it can print only for ESC/POS, ZPL and TSPL. CPCL, raster and
@@ -74,14 +73,11 @@ guaranteed. See [printers and transports](./PRINTERS_AND_TRANSPORTS.md#per-opera
 
 ## USB on Android
 
-**8. [High] The USB permission dialog is asked on every connect.** The Rust side
-already gives opening and probing 90 s (`USB_OPEN_TIMEOUT`), so it outlasts
-the plugin's 60 s dialog wait and a slow answer no longer ends as "stopped
-responding while opening"; the pure transfers keep the 30 s `USB_TIMEOUT`.
-What is still open: the dialog is asked on every connect and the plugin
-manifest declares no USB-attached intent filter, so there is no "always open
-with PrintNinja" grant to remember the choice. *Code:* `transport/android_usb.rs`
-(`USB_OPEN_TIMEOUT`), `AndroidPrintPlugin.kt` (`ensureUsbPermission`).
+**8. [High] The USB permission dialog is asked on every connect.** The
+plugin manifest declares no USB-attached intent filter, so there is no
+"always open with PrintNinja" grant to remember the choice, and the
+dialog comes back on every connect. *Code:* `AndroidPrintPlugin.kt`
+(`ensureUsbPermission`).
 
 **9. [Low] The first bulk-OUT endpoint is used, whatever interface it is on.** A
 device that exposes more than one interface (a printer with a card reader or
@@ -128,13 +124,10 @@ add the remote queue as an `ipp` printer. *Code:* `transport/cups.rs`
 ## Platforms
 
 **15. [High] Windows system printers with a GDI-only driver cannot print the PDF.**
-The app already declares the PDF datatype only when the queue offers it and,
-when it does not (the stock Windows print processor lists `RAW`, `NT EMF` and
-`TEXT`), sends the job as `RAW` and says so on the print response. The limit
-that remains is in the driver: a GDI-only driver still cannot rasterize the
-PDF, and the app cannot fix that. *Workaround:* add the printer by its
-network address as `ipp` or raw TCP if it reads PDF, or choose a queue whose
-driver lists `PDF`. *Code:* `transport/windows_spooler.rs` (`choose_datatype`).
+A GDI-only driver cannot rasterize a PDF, and the app cannot fix that.
+*Workaround:* add the printer by its network address as `ipp` or raw TCP
+if it reads PDF, or choose a queue whose driver lists `PDF`. *Code:*
+`transport/windows_spooler.rs`.
 
 **16. [Low] Android has no system printer type.** `system` printers exist only on
 Windows and Linux, so a printer that Android reaches through a print service
@@ -193,11 +186,3 @@ estimates, not measurements.
 
 Item 7 (checking on a real print head) is High but is testing work, not code,
 so it is not in the table.
-
-The items fixed since the last revision of this page are no longer listed:
-the insecure RFCOMM fallback, the ESC/POS receipt frame, the TSPL gap
-setting, the PDF warning on a USB or Bluetooth wire, the USB list and stable
-address, IPP sign-in, self-signed certificates, job status after acceptance,
-copies on a raw wire, and the GDI-visible RAW fallback. Items 4, 8 and 15
-are the still-open halves of items that were only partly fixed; the rest of
-their text is gone with the fixes.
