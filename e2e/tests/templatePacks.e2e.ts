@@ -2,8 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { signedSeed } from "../support/fixtures";
 import { testids } from "../support/testids";
 
-// Feature 1 (docs/PLAN.md): the two-step new-template chooser starts a
-// template from a pack, and the pack's body lands on the created copy.
+// The two-step new-template chooser starts a template from a pack, and the
+// pack's body lands on the created copy.
 
 async function invoke(
   page: Page,

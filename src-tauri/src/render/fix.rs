@@ -53,7 +53,9 @@ pub struct FixReport {
 }
 
 /// The document the test render prints: one page, the size the pipeline
-/// is told to render, nothing that depends on app state.
+/// is told to render, nothing that depends on app state. Windows-only,
+/// with the repair itself.
+#[cfg(windows)]
 const TEST_HTML: &str = concat!(
     "<!DOCTYPE html><html><head><meta charset=\"utf-8\">",
     "<style>@page { size: 100mm 150mm; margin: 0; }",
