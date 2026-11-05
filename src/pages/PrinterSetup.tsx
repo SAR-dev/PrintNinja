@@ -55,7 +55,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
-import { validatePrinterForm } from "@/lib/printerSchema";
+import { defaultLanguageFor, validatePrinterForm } from "@/lib/printerSchema";
 import type { PrinterRow } from "@/lib/agent/types";
 
 const PRINTER_TYPES = [
@@ -311,9 +311,15 @@ export function PrinterSetupPage() {
           printer_type: printerType,
           address,
           // Android rasterizes thermal languages locally (PLAN §4), so a
-          // non-IPP add starts at ESC/POS there.
+          // non-IPP add starts at ESC/POS there. On desktop a raw
+          // USB/Bluetooth wire needs a command language too (a PDF would
+          // print as gibberish); everything else keeps PDF.
           language:
-            printerType === "ipp" ? "pdf" : isAndroid() ? "escpos" : "pdf",
+            printerType === "ipp"
+              ? "pdf"
+              : isAndroid()
+                ? "escpos"
+                : defaultLanguageFor(printerType, "pdf"),
           paper_width_mm: 80,
           dpi: 203,
         },
@@ -890,7 +896,10 @@ export function PrinterSetupPage() {
                                   ? "pdf"
                                   : isAndroid()
                                     ? "escpos"
-                                    : f.language,
+                                    : defaultLanguageFor(
+                                        np.printer_type ?? "ipp",
+                                        f.language,
+                                      ),
                             }))
                           }
                         >
@@ -1011,18 +1020,13 @@ export function PrinterSetupPage() {
                     setForm((f) => ({
                       ...f,
                       printer_type: v,
-                      // New USB/Bluetooth printers on Android print
-                      // locally: the WebView rasterizes the thermal
-                      // languages (PLAN §4), so a PDF default would put an
-                      // unreadable page on a thermal head — start at
-                      // ESC/POS instead. An explicitly chosen language is
-                      // left alone.
-                      language:
-                        isAndroid() &&
-                        (v === "usb" || v === "bluetooth") &&
-                        f.language === "pdf"
-                          ? "escpos"
-                          : f.language,
+                      // New USB/Bluetooth printers send raw bytes on every
+                      // platform (the WebView rasterizes on Android, the
+                      // Windows spooler passes the job through as RAW), so
+                      // a PDF default would put an unreadable page on a
+                      // thermal head — start at ESC/POS instead. An
+                      // explicitly chosen language is left alone.
+                      language: defaultLanguageFor(v, f.language),
                     }))
                   }
                 >

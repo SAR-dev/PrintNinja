@@ -22,6 +22,25 @@ export const PRINTER_LANGUAGES = [
   "raster",
 ] as const;
 
+/**
+ * The language a printer should start with once its connection type is
+ * known.
+ *
+ * USB and Bluetooth are raw wires: the bytes go to the printer unchanged,
+ * with no driver in between to rasterize a document. A PDF sent that way
+ * prints as pages of gibberish on a receipt or label head, so those types
+ * start at ESC/POS instead of the PDF default. Anything the person already
+ * moved off PDF is left alone, and every other connection type keeps what
+ * it had (IPP and system printers read PDF; JetDirect lasers do too).
+ */
+export function defaultLanguageFor(
+  printerType: string,
+  current: string,
+): string {
+  const rawWire = printerType === "usb" || printerType === "bluetooth";
+  return rawWire && current === "pdf" ? "escpos" : current;
+}
+
 const HOST_RE = /^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|\[[^\]]+\])$/i;
 
 /** The schemes an IPP endpoint may be written with. */

@@ -270,15 +270,38 @@ describe("printer types per platform", () => {
     );
   });
 
-  it("keeps PDF for new USB printers on desktop", async () => {
+  // A raw USB/Bluetooth wire has no driver to rasterize a PDF, so a PDF
+  // default prints pages of gibberish on a thermal head.
+  it.each(["USB", "Bluetooth"])(
+    "defaults a new %s printer to ESC/POS on desktop too",
+    async (type) => {
+      stubUA(realUA);
+      renderPage();
+      await screen.findByRole("button", { name: /Add printer/i });
+      fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));
+      const panel = await screen.findByRole("dialog");
+      expect(within(panel).getByLabelText("Language")).toHaveTextContent("PDF");
+      fireEvent.click(within(panel).getByLabelText("Connection"));
+      fireEvent.click(await screen.findByRole("option", { name: type }));
+      expect(within(panel).getByLabelText("Connection")).toHaveTextContent(
+        type,
+      );
+      expect(within(panel).getByLabelText("Language")).toHaveTextContent(
+        /ESC\/POS/,
+      );
+    },
+  );
+
+  it("leaves a language the person chose alone when switching to USB", async () => {
     stubUA(realUA);
     renderPage();
     await screen.findByRole("button", { name: /Add printer/i });
     fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));
     const panel = await screen.findByRole("dialog");
+    fireEvent.click(within(panel).getByLabelText("Language"));
+    fireEvent.click(await screen.findByRole("option", { name: /ZPL/ }));
     fireEvent.click(within(panel).getByLabelText("Connection"));
     fireEvent.click(await screen.findByRole("option", { name: "USB" }));
-    expect(within(panel).getByLabelText("Connection")).toHaveTextContent("USB");
-    expect(within(panel).getByLabelText("Language")).toHaveTextContent("PDF");
+    expect(within(panel).getByLabelText("Language")).toHaveTextContent(/ZPL/);
   });
 });
