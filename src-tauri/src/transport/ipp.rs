@@ -1160,7 +1160,7 @@ mod tests {
         let auth = p.auth_header().expect("a password means an auth header");
         assert!(auth.starts_with("Basic "), "{auth}");
         let decoded = base64::engine::general_purpose::STANDARD
-            .decode(auth["Basic ".len()..].as_bytes())
+            .decode(&auth.as_bytes()["Basic ".len()..])
             .unwrap();
         assert_eq!(String::from_utf8(decoded).unwrap(), "admin:s3cret");
     }
@@ -1178,7 +1178,7 @@ mod tests {
         let auth = p.auth_header().unwrap();
         let decoded = String::from_utf8(
             base64::engine::general_purpose::STANDARD
-                .decode(auth["Basic ".len()..].as_bytes())
+                .decode(&auth.as_bytes()["Basic ".len()..])
                 .unwrap(),
         )
         .unwrap();
@@ -1285,12 +1285,12 @@ mod tests {
                         "HTTP/1.1 200 OK\r\nContent-Type: application/ipp\r\nContent-Length: {}\r\n\r\n",
                         body.len()
                     );
-                    if stream.write_all(head.as_bytes()).await.is_err() {
-                        return;
-                    }
-                    if stream.write_all(&body).await.is_err() {
-                        return;
-                    }
+                    // A failed write leaves a dead socket: nothing more to
+                    // say on this connection, so just drop it.
+                    let _ = stream
+                        .write_all(head.as_bytes())
+                        .await
+                        .and_then(|_| stream.write_all(&body).await);
                     // The connection stays open for the next request.
                 });
             }

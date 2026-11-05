@@ -181,6 +181,7 @@ pub trait JobRenderer: Send + Sync {
     ///
     /// `label_gap_mm` is the TSPL media gap in mm; `None` keeps the
     /// encoder's built-in default (2 mm). Only the TSPL path reads it.
+    #[allow(clippy::too_many_arguments)]
     async fn render_for_language(
         &self,
         final_html: &str,
