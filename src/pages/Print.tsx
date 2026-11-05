@@ -1233,7 +1233,10 @@ function PrintForm() {
           data-testid="print-warnings"
           className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning-soft px-4 py-3 text-warning"
         >
-          <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          <TriangleAlert
+            className="mt-0.5 h-5 w-5 shrink-0"
+            aria-hidden="true"
+          />
           <div className="min-w-0 flex-1 space-y-1">
             <p className="text-sm font-medium">{t("print.warnings_title")}</p>
             {store.warnings.map((w) => (
