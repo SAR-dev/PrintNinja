@@ -258,6 +258,7 @@ const ja: Translation = {
     reason_readonly: "コミュニティから保存したコピーのため、変更できません。",
     reason_readonly_visibility:
       "コミュニティから保存したコピーの公開設定は変更できません。",
+    reason_unsaved_visibility: "公開するには、先に保存してください。",
     only_local: "このコンピューターのみ",
     visibility_public: "公開",
     visibility_private: "非公開",
@@ -520,6 +521,11 @@ const ja: Translation = {
       "テンプレートは {{tw}}×{{th}} mm です。このプリンターは {{pw}} mm の用紙です。",
     paper_mismatch_paper:
       "用紙は {{pw2}}×{{ph2}} mm です。このプリンターは {{pw}} mm の用紙です。",
+    paper_size_action: "用紙サイズを設定",
+    paper_size_title: "{{name}} の用紙幅",
+    paper_size_hint:
+      "この印刷は {{w}} mm の用紙を使います。プリンターは {{cur}} mm として登録されています。実際に使う用紙の幅を入力してください。",
+    toast_paper_saved: "{{name}} の用紙幅を {{w}} mm に設定しました",
     test_hint: "内蔵ページを印刷して、プリンターの動作を確認します。",
     send_test: "テストページを送信",
     preview_sample: "サンプルデータ",
