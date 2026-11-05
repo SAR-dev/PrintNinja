@@ -1287,10 +1287,9 @@ mod tests {
                     );
                     // A failed write leaves a dead socket: nothing more to
                     // say on this connection, so just drop it.
-                    let _ = stream
-                        .write_all(head.as_bytes())
-                        .await
-                        .and_then(|_| stream.write_all(&body).await);
+                    if stream.write_all(head.as_bytes()).await.is_ok() {
+                        let _ = stream.write_all(&body).await;
+                    }
                     // The connection stays open for the next request.
                 });
             }
