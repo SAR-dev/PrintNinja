@@ -1,8 +1,9 @@
 //! Phase 0 spike internals — everything is Windows-only (the example's
 //! `main` is the non-Windows stub).
 //!
-//! Answers, in order, the five open questions from
-//! `docs/DIRECT_PRINTING.md` §8 Phase 0:
+//! Answers the open questions from
+//! `docs/planned/DIRECT_PRINTING.md` §8 Phase 0 (BLE is out of scope;
+//! its subcommands are kept for reference):
 //! 1. USB access while a queue exists        → `usb`, `usb-wait`, `pause`, `resume`
 //! 2. Queue ↔ device mapping (ContainerId)   → `mapping`
 //! 3. Vendor-class USB (which driver binds)  → `mapping` (driver + hardware ids)
