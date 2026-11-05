@@ -814,6 +814,15 @@ const ja: Translation = {
     section_diagnostics: "診断",
     appearance_language: "言語",
     appearance_language_hint: "すぐに反映され、このデバイスに記憶されます。",
+    appearance_theme: "テーマ",
+    appearance_theme_light: "ライト",
+    appearance_theme_light_hint: "明るい画面。デフォルトです。",
+    appearance_theme_dark: "ダーク",
+    appearance_theme_dark_hint: "暗い画面で、夜でも目に優しく表示します。",
+    appearance_theme_system: "システム",
+    appearance_theme_system_hint: "デバイスの設定に従います。",
+    appearance_theme_note:
+      "印刷物とテンプレートのプレビューは、常にライトのままです。",
     appearance_density: "表示密度",
     appearance_density_comfortable: "標準",
     appearance_density_comfortable_hint:

@@ -12,17 +12,24 @@ import {
   SETTING_KEYS,
   isValidLogoDataUrl,
   parseDensity,
+  parseTheme,
+  resolveTheme,
   sanitizeAppName,
+  systemIsDark,
   windowTitle,
   type Density,
+  type Theme,
 } from "./prefs";
 
 interface Prefs {
   density: Density;
+  /** The user's theme choice; "system" follows the OS preference. */
+  theme: Theme;
   appName: string;
   /** Data URL of the custom logo, or null for the built-in PrintNinja mark. */
   logo: string | null;
   setDensity: (d: Density) => Promise<void>;
+  setTheme: (t: Theme) => Promise<void>;
   setAppName: (name: string) => Promise<void>;
   setLogo: (dataUrl: string | null) => Promise<void>;
 }
@@ -30,9 +37,11 @@ interface Prefs {
 const noop = async () => {};
 const DEFAULTS: Prefs = {
   density: "comfortable",
+  theme: "light",
   appName: DEFAULT_APP_NAME,
   logo: null,
   setDensity: noop,
+  setTheme: noop,
   setAppName: noop,
   setLogo: noop,
 };
@@ -61,6 +70,11 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const [density, setDensityState] = useState<Density>(() =>
     parseDensity(readCachedSetting(SETTING_KEYS.density)),
   );
+  const [theme, setThemeState] = useState<Theme>(() =>
+    parseTheme(readCachedSetting(SETTING_KEYS.theme)),
+  );
+  // Only consulted while theme is "system".
+  const [osDark, setOsDark] = useState(systemIsDark);
   const [appName, setAppNameState] = useState(() =>
     sanitizeAppName(readCachedSetting(SETTING_KEYS.appName)),
   );
@@ -72,13 +86,15 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     const readAll = async () => {
-      const [d, n, l] = await Promise.all([
+      const [d, th, n, l] = await Promise.all([
         readSetting(SETTING_KEYS.density),
+        readSetting(SETTING_KEYS.theme),
         readSetting(SETTING_KEYS.appName),
         readSetting(SETTING_KEYS.logo),
       ]);
       if (cancelled) return;
       setDensityState(parseDensity(d));
+      setThemeState(parseTheme(th));
       setAppNameState(sanitizeAppName(n));
       setLogoState(isValidLogoDataUrl(l) ? l : null);
     };
@@ -97,6 +113,22 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.dataset.density = density;
   }, [density]);
 
+  // Track the OS preference while "system" is selected, so a live OS switch
+  // applies without a reload (or the user changing the setting).
+  useEffect(() => {
+    if (theme !== "system") return;
+    if (typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => setOsDark(mq.matches);
+    setOsDark(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolveTheme(theme, osDark);
+  }, [theme, osDark]);
+
   useEffect(() => {
     const title = windowTitle(appName);
     document.title = title;
@@ -106,6 +138,11 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const setDensity = useCallback(async (d: Density) => {
     setDensityState(d);
     await writeSetting(SETTING_KEYS.density, d);
+    // Saved locally; an explicit Save in Settings sends it to the server.
+  }, []);
+  const setTheme = useCallback(async (t: Theme) => {
+    setThemeState(t);
+    await writeSetting(SETTING_KEYS.theme, t);
     // Saved locally; an explicit Save in Settings sends it to the server.
   }, []);
   const setAppName = useCallback(async (name: string) => {
@@ -126,8 +163,17 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ density, appName, logo, setDensity, setAppName, setLogo }),
-    [density, appName, logo, setDensity, setAppName, setLogo],
+    () => ({
+      density,
+      theme,
+      appName,
+      logo,
+      setDensity,
+      setTheme,
+      setAppName,
+      setLogo,
+    }),
+    [density, theme, appName, logo, setDensity, setTheme, setAppName, setLogo],
   );
   return (
     <PrefsContext.Provider value={value}>{children}</PrefsContext.Provider>

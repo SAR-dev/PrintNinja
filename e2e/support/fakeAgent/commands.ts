@@ -598,6 +598,10 @@ const acknowledgedStubs: string[] = [
   // Render-sharing provider (the PC half of Settings → Devices): the
   // pairing window and device registry live in Rust, so the browser only
   // acknowledges the sharing toggle and the contract test pins the rest.
+  // One-click PC print repair (Settings → Diagnostics): the pipeline is
+  // Windows-only and lives in Rust (render::fix); the fake engine reports
+  // platform "other", so the button never appears in the browser.
+  "fix_pc_print",
   "get_render_status",
   "set_render_sharing",
   // Render-sharing consumer: the Devices UI "test" button works in e2e

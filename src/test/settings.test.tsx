@@ -68,9 +68,20 @@ describe("Settings page", () => {
     }
   });
 
-  it("has no theme control (single light theme)", () => {
+  it("offers a Light/Dark/System theme control under General", async () => {
     renderPage();
-    expect(screen.queryByText(/^Theme$/)).toBeNull();
+    open("General");
+    const group = await screen.findByRole("radiogroup", { name: "Theme" });
+    expect(within(group).getByRole("radio", { name: "Light" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(
+      within(group).getByRole("radio", { name: "Dark" }),
+    ).toBeInTheDocument();
+    expect(
+      within(group).getByRole("radio", { name: "System" }),
+    ).toBeInTheDocument();
   });
 
   it("rejects an invalid retention value inline and does not save it", async () => {
@@ -381,7 +392,7 @@ describe("Settings print repair (Windows)", () => {
     expect(result).toHaveTextContent("Removed 1 stale render profile(s)");
     expect(result).toHaveTextContent("Persistent browser cooldown reset");
     expect(result).toHaveTextContent("Test render succeeded");
-    expect(invoke).toHaveBeenCalledWith("fix_pc_print", { closeEdge: true });
+    expect(invoke).toHaveBeenCalledWith("fix_pc_print", { close_edge: true });
   });
 
   it("shows the failure text when the test render fails", async () => {

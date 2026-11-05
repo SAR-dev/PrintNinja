@@ -29,6 +29,20 @@ export const SETTING_SEARCH_ENTRIES: SettingSearchEntry[] = [
   },
   {
     section: "general",
+    field: "settings-theme",
+    labelKey: "settings_page.appearance_theme",
+    keywords: [
+      "theme",
+      "dark",
+      "light",
+      "system",
+      "mode",
+      "appearance",
+      "color",
+    ],
+  },
+  {
+    section: "general",
     field: "settings-density",
     labelKey: "settings_page.appearance_density",
     keywords: ["density", "comfortable", "compact", "spacing"],

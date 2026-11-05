@@ -2,8 +2,7 @@
 
 > **Status:** final scope, ready to start with Phase 0. Not yet implemented.
 > **Audience:** whoever implements the Windows USB and Bluetooth transports.
-> **Platform:** Windows. Android already prints directly; Linux is unchanged
-> (see `docs/PLAN.md` §8, F14–F15).
+> **Platform:** Windows. Android already prints directly; Linux is unchanged.
 > **Target hardware:** Toshiba TEC B-FP2D (older revision: USB + classic
 > Bluetooth, no WLAN). See §3.
 > **Supersedes:** the earlier four-transport plan (USB, Bluetooth, WinUSB, BLE).
@@ -472,7 +471,7 @@ range fail within the deadline.
   entries for the queue conflict, sleeping or out-of-range Bluetooth printers,
   and switching a printer back to the Windows printer (spooler) mode.
 - Release notes follow the rollout in §9.
-- Metrics for observability, following the pattern in `docs/PLAN.md`:
+- Metrics for observability:
   `direct_prints_total{transport="usb|bluetooth",result}` and
   `windows_queue_conflicts_total{action}`. Logs follow the existing redaction
   rules (no full device paths with serials at `info`).

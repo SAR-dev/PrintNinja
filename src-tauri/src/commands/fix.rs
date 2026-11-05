@@ -8,7 +8,7 @@ use tauri::{AppHandle, Manager};
 /// stale render profiles, reset the persistent-browser cooldown and prove
 /// the pipeline with a test render. Returns a per-step report for the
 /// settings page.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn fix_pc_print(app: AppHandle, close_edge: bool) -> AppResult<FixReport> {
     let cache_dir = app
         .path()
