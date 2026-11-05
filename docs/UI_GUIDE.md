@@ -374,8 +374,17 @@ blocking problem inside a panel can use a `danger-soft` background with a `dange
 - **Dialog** for a decision or a short task: confirm, rename, preview, template
   conflicts, the two-step new-template pack chooser (see Pages, Designer).
   Default width is `max-w-lg`; wide previews use `max-w-2xl` or `max-w-3xl`.
-- **Sheet** (slides in from the side) for a longer form that should keep the list visible
-  behind it. The "Add printer" panel on the Printers page is the only use today.
+- **Sheet** (slides in from a side or the bottom) for a longer form or a list that should
+  keep the page visible behind it: the "Add printer" panel, the Designer's settings,
+  history detail, and the phone print flow's template picker and layout options.
+- **Sheets reserve the close-button zone.** The sheet's close button is absolutely
+  positioned at `top-1 right-1` (40 px, 44 px on touch screens). So every sheet uses
+  `SheetContent` with `flex flex-col gap-0 p-0`, a `DialogHeader` with
+  `className="border-b p-5 pr-12"` for the title (the `pr-12` keeps the header clear of
+  the button; the border separates the header from the body), and a body div
+  `flex-1 overflow-y-auto p-5` that alone scrolls. Never put a bare heading in the base
+  padding and scroll the whole sheet: the list slips under the close X, and the button
+  itself scrolls off with the content.
 - Title says what the dialog does, in the same words as the button that opened it. The close
   button and Escape always work.
 - Footer: Cancel on the left, the action on the right, destructive actions in the `destructive`

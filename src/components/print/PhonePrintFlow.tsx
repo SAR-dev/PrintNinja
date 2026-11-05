@@ -16,6 +16,7 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -465,7 +466,7 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
             <div
               role="radiogroup"
               aria-label={t("print.phone.data")}
-              className="space-y-2"
+              className="grid grid-cols-2 gap-2"
             >
               <button
                 type="button"
@@ -473,19 +474,13 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
                 aria-checked={store.useTestData}
                 onClick={() => store.setUseTestData(true)}
                 className={cn(
-                  "flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border px-3 text-left text-sm",
+                  "flex min-h-11 items-center justify-center rounded-xl border px-2 text-sm",
                   store.useTestData
                     ? "border-primary bg-primary/5"
                     : "border-border",
                 )}
               >
-                {t("print.phone.data_sample")}
-                {store.useTestData && (
-                  <Check
-                    className="h-4 w-4 shrink-0 text-primary"
-                    aria-hidden="true"
-                  />
-                )}
+                <span className="truncate">{t("print.phone.data_sample")}</span>
               </button>
               <button
                 type="button"
@@ -493,19 +488,13 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
                 aria-checked={!store.useTestData}
                 onClick={() => store.setUseTestData(false)}
                 className={cn(
-                  "flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border px-3 text-left text-sm",
+                  "flex min-h-11 items-center justify-center rounded-xl border px-2 text-sm",
                   !store.useTestData
                     ? "border-primary bg-primary/5"
                     : "border-border",
                 )}
               >
-                {t("print.phone.data_link")}
-                {!store.useTestData && (
-                  <Check
-                    className="h-4 w-4 shrink-0 text-primary"
-                    aria-hidden="true"
-                  />
-                )}
+                <span className="truncate">{t("print.phone.data_link")}</span>
               </button>
             </div>
             {store.useTestData ? (
@@ -905,86 +894,92 @@ function TemplatePickerSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="max-h-[80vh] overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+1.5rem)]"
+        className="flex max-h-[80vh] w-full flex-col gap-0 p-0"
       >
-        <h2 className="text-base font-semibold">
-          {t("print.phone.template_picker")}
-        </h2>
-        {empty ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            {t("print.no_templates")}
-          </p>
-        ) : (
-          <div className="-mx-2 space-y-1">
-            {viaPc
-              ? pcTemplates.map((x) => {
-                  const selected = x.server_id === selectedKey;
-                  return (
-                    <button
-                      key={x.server_id}
-                      type="button"
-                      onClick={() => onPick(x.server_id)}
-                      className={cn(
-                        "flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-2 text-left",
-                        selected && "bg-accent",
-                      )}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent"
-                      >
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm">{x.name}</span>
-                        {pcName && (
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {pcName}
-                          </span>
+        <DialogHeader className="border-b p-5 pr-12">
+          <DialogTitle>{t("print.phone.template_picker")}</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto p-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
+          {empty ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {t("print.no_templates")}
+            </p>
+          ) : (
+            <div className="-mx-2 space-y-1">
+              {viaPc
+                ? pcTemplates.map((x) => {
+                    const selected = x.server_id === selectedKey;
+                    return (
+                      <button
+                        key={x.server_id}
+                        type="button"
+                        onClick={() => onPick(x.server_id)}
+                        className={cn(
+                          "flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-2 text-left",
+                          selected && "bg-accent",
                         )}
-                      </span>
-                      {selected && (
-                        <Check
-                          className="h-4 w-4 shrink-0 text-primary"
+                      >
+                        <span
                           aria-hidden="true"
-                        />
-                      )}
-                    </button>
-                  );
-                })
-              : templates.map((x) => {
-                  const selected = String(x.id) === selectedKey;
-                  return (
-                    <button
-                      key={x.id}
-                      type="button"
-                      onClick={() => onPick(String(x.id))}
-                      className={cn(
-                        "flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-2 text-left",
-                        selected && "bg-accent",
-                      )}
-                    >
-                      <TemplateThumb tpl={x} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm">{x.name}</span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {t("designer.pack_size", {
-                            w: x.page_w_mm,
-                            h: x.page_h_mm,
-                          })}
+                          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent"
+                        >
+                          <FileText className="h-5 w-5 text-muted-foreground" />
                         </span>
-                      </span>
-                      {selected && (
-                        <Check
-                          className="h-4 w-4 shrink-0 text-primary"
-                          aria-hidden="true"
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-          </div>
-        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm">
+                            {x.name}
+                          </span>
+                          {pcName && (
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {pcName}
+                            </span>
+                          )}
+                        </span>
+                        {selected && (
+                          <Check
+                            className="h-4 w-4 shrink-0 text-primary"
+                            aria-hidden="true"
+                          />
+                        )}
+                      </button>
+                    );
+                  })
+                : templates.map((x) => {
+                    const selected = String(x.id) === selectedKey;
+                    return (
+                      <button
+                        key={x.id}
+                        type="button"
+                        onClick={() => onPick(String(x.id))}
+                        className={cn(
+                          "flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-2 text-left",
+                          selected && "bg-accent",
+                        )}
+                      >
+                        <TemplateThumb tpl={x} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm">
+                            {x.name}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {t("designer.pack_size", {
+                              w: x.page_w_mm,
+                              h: x.page_h_mm,
+                            })}
+                          </span>
+                        </span>
+                        {selected && (
+                          <Check
+                            className="h-4 w-4 shrink-0 text-primary"
+                            aria-hidden="true"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+            </div>
+          )}
+        </div>
       </SheetContent>
     </Sheet>
   );
@@ -1019,247 +1014,266 @@ function LayoutOptionsSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="max-h-[85vh] overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+1.5rem)]"
+        className="flex max-h-[85vh] w-full flex-col gap-0 p-0"
       >
-        <h2 className="text-base font-semibold">
-          {t("print.phone.layout_options")}
-        </h2>
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="phone-paper">{t("print.paper_size")}</Label>
-            <Select
-              value={paperPreset}
-              onValueChange={(v) => {
-                // "auto" (template size) is not a preset: clear the
-                // explicit override so the design size applies again.
-                if (v === "auto") {
-                  store.setPaperW(null);
-                  store.setPaperH(null);
-                  return;
-                }
-                const preset = PAPER_PRESETS.find((x) => x.key === v);
-                if (!preset) {
-                  // Custom: start from the current effective size so
-                  // the inputs below are populated.
-                  store.setPaperW(effPaperW);
-                  store.setPaperH(effPaperH);
-                  return;
-                }
-                store.setPaperW(preset.w);
-                store.setPaperH(preset.h);
-              }}
-            >
-              <SelectTrigger
-                id="phone-paper"
-                aria-label={t("print.paper_size")}
-                className="w-full"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">{t("print.paper_auto")}</SelectItem>
-                {PAPER_PRESETS.map((x) => (
-                  <SelectItem key={x.key} value={x.key}>
-                    {t(x.labelKey)}
-                  </SelectItem>
-                ))}
-                <SelectItem value="custom">
-                  {t("print.paper_custom")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {custom && (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="phone-paper-w">{t("print.paper_width")}</Label>
-                <Input
-                  id="phone-paper-w"
-                  type="number"
-                  min="1"
-                  value={store.paperW ?? ""}
-                  placeholder={String(designW)}
-                  onChange={(e) =>
-                    store.setPaperW(
-                      e.target.value === ""
-                        ? null
-                        : Math.max(1, Number(e.target.value) || 1),
-                    )
+        <DialogHeader className="border-b p-5 pr-12">
+          <DialogTitle>{t("print.phone.layout_options")}</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto p-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="phone-paper">{t("print.paper_size")}</Label>
+              <Select
+                value={paperPreset}
+                onValueChange={(v) => {
+                  // "auto" (template size) is not a preset: clear the
+                  // explicit override so the design size applies again.
+                  if (v === "auto") {
+                    store.setPaperW(null);
+                    store.setPaperH(null);
+                    return;
                   }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="phone-paper-h">{t("print.paper_height")}</Label>
-                <Input
-                  id="phone-paper-h"
-                  type="number"
-                  min="1"
-                  value={store.paperH ?? ""}
-                  placeholder={String(designH)}
-                  onChange={(e) =>
-                    store.setPaperH(
-                      e.target.value === ""
-                        ? null
-                        : Math.max(1, Number(e.target.value) || 1),
-                    )
+                  const preset = PAPER_PRESETS.find((x) => x.key === v);
+                  if (!preset) {
+                    // Custom: start from the current effective size so
+                    // the inputs below are populated.
+                    store.setPaperW(effPaperW);
+                    store.setPaperH(effPaperH);
+                    return;
                   }
-                />
-              </div>
-            </>
-          )}
-          <p className="text-xs text-muted-foreground">
-            {t("print.paper_note", {
-              dw: designW,
-              dh: designH,
-              pw: effPaperW,
-              ph: effPaperH,
-            })}
-          </p>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="phone-orientation">{t("print.orientation")}</Label>
-            <Select
-              value={store.orientation}
-              onValueChange={(v) =>
-                store.setOrientation(v as "portrait" | "landscape")
-              }
-            >
-              <SelectTrigger
-                id="phone-orientation"
-                aria-label={t("print.orientation")}
-                className="w-full"
+                  store.setPaperW(preset.w);
+                  store.setPaperH(preset.h);
+                }}
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="portrait">
-                  {t("designer.portrait")}
-                </SelectItem>
-                <SelectItem value="landscape">
-                  {t("designer.landscape")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="phone-fit">{t("print.fit_mode")}</Label>
-            <Select
-              value={store.fitMode}
-              onValueChange={(v) =>
-                store.setFitMode(
-                  v as "actual" | "fit-width" | "fit-page" | "shrink" | "fill",
-                )
-              }
-            >
-              <SelectTrigger
-                id="phone-fit"
-                aria-label={t("print.fit_mode")}
-                className="w-full"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="actual">{t("print.fit_actual")}</SelectItem>
-                <SelectItem value="fit-width">
-                  {t("print.fit_width")}
-                </SelectItem>
-                <SelectItem value="fit-page">{t("print.fit_page")}</SelectItem>
-                <SelectItem value="shrink">{t("print.fit_shrink")}</SelectItem>
-                <SelectItem value="fill">{t("print.fit_fill")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">
-              {t("print.margins")} (mm)
-            </legend>
-            {(
-              [
-                [
-                  "phone-mt",
-                  "print.margin_top",
-                  store.marginTop,
-                  store.setMarginTop,
-                ],
-                [
-                  "phone-mr",
-                  "print.margin_right",
-                  store.marginRight,
-                  store.setMarginRight,
-                ],
-                [
-                  "phone-mb",
-                  "print.margin_bottom",
-                  store.marginBottom,
-                  store.setMarginBottom,
-                ],
-                [
-                  "phone-ml",
-                  "print.margin_left",
-                  store.marginLeft,
-                  store.setMarginLeft,
-                ],
-              ] as const
-            ).map(([id, key, value, set]) => (
-              <div key={id} className="space-y-1.5">
-                <Label
-                  htmlFor={id}
-                  className="text-xs font-normal text-muted-foreground"
+                <SelectTrigger
+                  id="phone-paper"
+                  aria-label={t("print.paper_size")}
+                  className="w-full"
                 >
-                  {t(key)}
-                </Label>
-                <Input
-                  id={id}
-                  type="number"
-                  value={value}
-                  onChange={(e) => set(Number(e.target.value))}
-                />
-              </div>
-            ))}
-          </fieldset>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="phone-page-range">{t("print.page_range")}</Label>
-            <Input
-              id="phone-page-range"
-              placeholder={t("print.page_range_example")}
-              value={store.pageRange}
-              onChange={(e) => store.setPageRange(e.target.value)}
-            />
-          </div>
-
-          <div className="flex min-h-11 items-center justify-between">
-            <Label htmlFor="phone-grayscale" className="font-normal">
-              {t("print.grayscale")}
-            </Label>
-            <Switch
-              id="phone-grayscale"
-              checked={store.grayscale}
-              onCheckedChange={store.setGrayscale}
-            />
-          </div>
-
-          {/* Local test page: hidden while printing through a PC. */}
-          {!viaPc && (
-            <div className="space-y-2 border-t pt-3">
-              <p className="text-xs text-muted-foreground">
-                {t("print.test_hint")}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11 w-full"
-                data-testid="print-spike-test"
-                onClick={onSpikeTest}
-                disabled={store.status === "printing"}
-              >
-                <Zap className="h-4 w-4" aria-hidden="true" />
-                {t("print.send_test")}
-              </Button>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">{t("print.paper_auto")}</SelectItem>
+                  {PAPER_PRESETS.map((x) => (
+                    <SelectItem key={x.key} value={x.key}>
+                      {t(x.labelKey)}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom">
+                    {t("print.paper_custom")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          )}
+            {custom && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="phone-paper-w">
+                    {t("print.paper_width")}
+                  </Label>
+                  <Input
+                    id="phone-paper-w"
+                    type="number"
+                    min="1"
+                    value={store.paperW ?? ""}
+                    placeholder={String(designW)}
+                    onChange={(e) =>
+                      store.setPaperW(
+                        e.target.value === ""
+                          ? null
+                          : Math.max(1, Number(e.target.value) || 1),
+                      )
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="phone-paper-h">
+                    {t("print.paper_height")}
+                  </Label>
+                  <Input
+                    id="phone-paper-h"
+                    type="number"
+                    min="1"
+                    value={store.paperH ?? ""}
+                    placeholder={String(designH)}
+                    onChange={(e) =>
+                      store.setPaperH(
+                        e.target.value === ""
+                          ? null
+                          : Math.max(1, Number(e.target.value) || 1),
+                      )
+                    }
+                  />
+                </div>
+              </>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {t("print.paper_note", {
+                dw: designW,
+                dh: designH,
+                pw: effPaperW,
+                ph: effPaperH,
+              })}
+            </p>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="phone-orientation">
+                {t("print.orientation")}
+              </Label>
+              <Select
+                value={store.orientation}
+                onValueChange={(v) =>
+                  store.setOrientation(v as "portrait" | "landscape")
+                }
+              >
+                <SelectTrigger
+                  id="phone-orientation"
+                  aria-label={t("print.orientation")}
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="portrait">
+                    {t("designer.portrait")}
+                  </SelectItem>
+                  <SelectItem value="landscape">
+                    {t("designer.landscape")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="phone-fit">{t("print.fit_mode")}</Label>
+              <Select
+                value={store.fitMode}
+                onValueChange={(v) =>
+                  store.setFitMode(
+                    v as
+                      | "actual"
+                      | "fit-width"
+                      | "fit-page"
+                      | "shrink"
+                      | "fill",
+                  )
+                }
+              >
+                <SelectTrigger
+                  id="phone-fit"
+                  aria-label={t("print.fit_mode")}
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="actual">
+                    {t("print.fit_actual")}
+                  </SelectItem>
+                  <SelectItem value="fit-width">
+                    {t("print.fit_width")}
+                  </SelectItem>
+                  <SelectItem value="fit-page">
+                    {t("print.fit_page")}
+                  </SelectItem>
+                  <SelectItem value="shrink">
+                    {t("print.fit_shrink")}
+                  </SelectItem>
+                  <SelectItem value="fill">{t("print.fit_fill")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">
+                {t("print.margins")} (mm)
+              </legend>
+              {(
+                [
+                  [
+                    "phone-mt",
+                    "print.margin_top",
+                    store.marginTop,
+                    store.setMarginTop,
+                  ],
+                  [
+                    "phone-mr",
+                    "print.margin_right",
+                    store.marginRight,
+                    store.setMarginRight,
+                  ],
+                  [
+                    "phone-mb",
+                    "print.margin_bottom",
+                    store.marginBottom,
+                    store.setMarginBottom,
+                  ],
+                  [
+                    "phone-ml",
+                    "print.margin_left",
+                    store.marginLeft,
+                    store.setMarginLeft,
+                  ],
+                ] as const
+              ).map(([id, key, value, set]) => (
+                <div key={id} className="space-y-1.5">
+                  <Label
+                    htmlFor={id}
+                    className="text-xs font-normal text-muted-foreground"
+                  >
+                    {t(key)}
+                  </Label>
+                  <Input
+                    id={id}
+                    type="number"
+                    value={value}
+                    onChange={(e) => set(Number(e.target.value))}
+                  />
+                </div>
+              ))}
+            </fieldset>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="phone-page-range">{t("print.page_range")}</Label>
+              <Input
+                id="phone-page-range"
+                placeholder={t("print.page_range_example")}
+                value={store.pageRange}
+                onChange={(e) => store.setPageRange(e.target.value)}
+              />
+            </div>
+
+            <div className="flex min-h-11 items-center justify-between">
+              <Label htmlFor="phone-grayscale" className="font-normal">
+                {t("print.grayscale")}
+              </Label>
+              <Switch
+                id="phone-grayscale"
+                checked={store.grayscale}
+                onCheckedChange={store.setGrayscale}
+              />
+            </div>
+
+            {/* Local test page: hidden while printing through a PC. */}
+            {!viaPc && (
+              <div className="space-y-2 border-t pt-3">
+                <p className="text-xs text-muted-foreground">
+                  {t("print.test_hint")}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11 w-full"
+                  data-testid="print-spike-test"
+                  onClick={onSpikeTest}
+                  disabled={store.status === "printing"}
+                >
+                  <Zap className="h-4 w-4" aria-hidden="true" />
+                  {t("print.send_test")}
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </SheetContent>
     </Sheet>
