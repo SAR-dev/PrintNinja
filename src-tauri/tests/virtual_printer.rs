@@ -842,6 +842,7 @@ async fn the_registry_dispatches_a_raw_printer_to_the_virtual_one() {
         &PrinterType::RawTcp,
         "Virtual",
         &format!("127.0.0.1:{}", printer.raw_port()),
+        &printninja_lib::transport::TransportSettings::default(),
     )
     .await
     .expect("test connection to a working raw printer");
@@ -1217,6 +1218,7 @@ async fn the_raster_language_prints_bare_dots() {
         100.0,
         150.0,
         203,
+        None,
     )
     .expect("encoder output");
     assert_eq!(mime, "application/octet-stream");
@@ -1312,17 +1314,17 @@ async fn one_copy_prints_once_in_one_send() {
     assert_eq!(repeats, 1, "one copy");
 }
 
-/// A11: N copies go out in a single send, not N connects. Three separate
-/// sends would store three files; batching stores one file with three
-/// back-to-back markers.
+/// A11 (item 21): a PDF on a raw wire now goes out as one job per copy —
+/// three sends store three files — instead of one send with the file
+/// repeated. The copy count still lands byte for byte.
 #[tokio::test]
-async fn three_copies_print_in_a_single_send() {
+async fn three_pdf_copies_print_as_one_job_each() {
     let Some((files, repeats)) = print_copies(3).await else {
         return;
     };
     assert_eq!(
-        files, 1,
-        "copies must batch into one send, not one connect each"
+        files, 3,
+        "each PDF copy is its own send on a raw wire, not one batched send"
     );
     assert_eq!(repeats, 3, "all three copies must reach the printer");
 }
