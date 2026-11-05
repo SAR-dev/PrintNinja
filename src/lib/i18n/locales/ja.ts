@@ -518,6 +518,7 @@ const ja: Translation = {
     paper_width: "幅 (mm)",
     paper_height: "高さ (mm)",
     paper_note: "デザイン {{dw}}×{{dh}} mm → 用紙 {{pw}}×{{ph}} mm",
+    paper_via_pc: "PC経由の印刷では、テンプレートの用紙サイズが使われます。",
     paper_mismatch_template:
       "テンプレートは {{tw}}×{{th}} mm です。このプリンターは {{pw}} mm の用紙です。",
     paper_mismatch_paper:

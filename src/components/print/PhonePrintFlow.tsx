@@ -34,7 +34,8 @@ import { MM_TO_PX } from "@/lib/render/paginate";
 import { renderDesignPages } from "@/lib/render/renderTemplate";
 import { cn } from "@/lib/utils";
 import { formatSeconds } from "@/lib/timings";
-import { PAPER_PRESETS } from "@/lib/paperPresets";
+import type { PaperKey } from "@/lib/paperPresets";
+import { PaperSizeFields } from "@/components/print/PaperSizeFields";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
 import type { TemplateListRow } from "@/lib/templates/listTemplates";
 import type {
@@ -64,6 +65,8 @@ interface PhonePrintFlowProps {
   pcTemplates: PcTemplateInfo[];
   pcTemplate: string;
   onPcTemplateChange: (serverId: string) => void;
+  /** Local template picked: resets the page range and the last outcome. */
+  onTemplateChange: (id: string) => void;
   pcTemplatesCached: boolean;
   printedVia: string | null;
   remoteCode: string | null;
@@ -86,7 +89,7 @@ interface PhonePrintFlowProps {
   effPaperH: number;
   previewPaperW: number;
   previewPaperH: number;
-  paperPreset: string;
+  paperPreset: PaperKey;
   paperMismatch: string;
 
   canPrint: boolean;
@@ -135,8 +138,8 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
   if (props.paperPreset !== "auto") {
     summaryParts.push(
       t("print.phone.sum_paper", {
-        pw: props.effPaperW,
-        ph: props.effPaperH,
+        pw: props.previewPaperW,
+        ph: props.previewPaperH,
       }),
     );
   }
@@ -746,6 +749,8 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
         paperPreset={props.paperPreset}
         effPaperW={props.effPaperW}
         effPaperH={props.effPaperH}
+        previewPaperW={props.previewPaperW}
+        previewPaperH={props.previewPaperH}
         designW={props.designW}
         designH={props.designH}
         onSpikeTest={props.onSpikeTest}
@@ -763,7 +768,7 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
         selectedKey={props.viaPc ? props.pcTemplate : store.templateId}
         onPick={(key) => {
           if (props.viaPc) props.onPcTemplateChange(key);
-          else store.setTemplateId(key);
+          else props.onTemplateChange(key);
           setPickerOpen(false);
         }}
       />
@@ -1008,6 +1013,8 @@ function LayoutOptionsSheet({
   paperPreset,
   effPaperW,
   effPaperH,
+  previewPaperW,
+  previewPaperH,
   designW,
   designH,
   onSpikeTest,
@@ -1015,16 +1022,20 @@ function LayoutOptionsSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   viaPc: boolean;
-  paperPreset: string;
+  paperPreset: PaperKey;
+  /** Effective paper size before orientation: what is sent and what Custom
+   * starts from. */
   effPaperW: number;
   effPaperH: number;
+  /** The sheet that prints (orientation applied): what the note shows. */
+  previewPaperW: number;
+  previewPaperH: number;
   designW: number;
   designH: number;
   onSpikeTest: () => void;
 }) {
   const { t } = useTranslation();
   const store = usePrintStore();
-  const custom = paperPreset === "custom";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -1037,100 +1048,35 @@ function LayoutOptionsSheet({
         </DialogHeader>
         <div className="flex-1 overflow-y-auto p-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="phone-paper">{t("print.paper_size")}</Label>
-              <Select
-                value={paperPreset}
-                onValueChange={(v) => {
-                  // "auto" (template size) is not a preset: clear the
-                  // explicit override so the design size applies again.
-                  if (v === "auto") {
-                    store.setPaperW(null);
-                    store.setPaperH(null);
-                    return;
-                  }
-                  const preset = PAPER_PRESETS.find((x) => x.key === v);
-                  if (!preset) {
-                    // Custom: start from the current effective size so
-                    // the inputs below are populated.
-                    store.setPaperW(effPaperW);
-                    store.setPaperH(effPaperH);
-                    return;
-                  }
-                  store.setPaperW(preset.w);
-                  store.setPaperH(preset.h);
-                }}
-              >
-                <SelectTrigger
-                  id="phone-paper"
-                  aria-label={t("print.paper_size")}
-                  className="w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">{t("print.paper_auto")}</SelectItem>
-                  {PAPER_PRESETS.map((x) => (
-                    <SelectItem key={x.key} value={x.key}>
-                      {t(x.labelKey)}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="custom">
-                    {t("print.paper_custom")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {custom && (
+            {viaPc ? (
+              <p className="text-xs text-muted-foreground">
+                {t("print.paper_via_pc")}
+              </p>
+            ) : (
               <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="phone-paper-w">
-                    {t("print.paper_width")}
-                  </Label>
-                  <Input
-                    id="phone-paper-w"
-                    type="number"
-                    min="1"
-                    value={store.paperW ?? ""}
-                    placeholder={String(designW)}
-                    onChange={(e) =>
-                      store.setPaperW(
-                        e.target.value === ""
-                          ? null
-                          : Math.max(1, Number(e.target.value) || 1),
-                      )
-                    }
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="phone-paper-h">
-                    {t("print.paper_height")}
-                  </Label>
-                  <Input
-                    id="phone-paper-h"
-                    type="number"
-                    min="1"
-                    value={store.paperH ?? ""}
-                    placeholder={String(designH)}
-                    onChange={(e) =>
-                      store.setPaperH(
-                        e.target.value === ""
-                          ? null
-                          : Math.max(1, Number(e.target.value) || 1),
-                      )
-                    }
-                  />
-                </div>
+                <PaperSizeFields
+                  ids={{
+                    select: "phone-paper",
+                    width: "phone-paper-w",
+                    height: "phone-paper-h",
+                  }}
+                  layout="stack"
+                  paperPreset={paperPreset}
+                  seedW={effPaperW}
+                  seedH={effPaperH}
+                  designW={designW}
+                  designH={designH}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("print.paper_note", {
+                    dw: designW,
+                    dh: designH,
+                    pw: previewPaperW,
+                    ph: previewPaperH,
+                  })}
+                </p>
               </>
             )}
-            <p className="text-xs text-muted-foreground">
-              {t("print.paper_note", {
-                dw: designW,
-                dh: designH,
-                pw: effPaperW,
-                ph: effPaperH,
-              })}
-            </p>
 
             <div className="space-y-1.5">
               <Label htmlFor="phone-orientation">

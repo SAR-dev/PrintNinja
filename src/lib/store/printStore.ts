@@ -1,5 +1,10 @@
 import { create } from "zustand";
 import type { StageTimings } from "@/lib/agent/types";
+import {
+  PAPER_PRESETS,
+  derivePaperKey,
+  type PaperKey,
+} from "@/lib/paperPresets";
 
 export interface PrinterProfile {
   id: number;
@@ -34,6 +39,10 @@ interface PrintState {
   /** Explicit paper size in mm; null means the template's design size. */
   paperW: number | null;
   paperH: number | null;
+  /** "Custom…" was chosen on purpose. Kept apart from paperW/paperH so the
+   * custom inputs stay open even when the typed size looks like a preset
+   * (or is cleared); otherwise the dropdown re-derives and snaps away. */
+  paperCustom: boolean;
   status: "idle" | "queued" | "printing" | "success" | "failed";
   error: string;
   durationMs: number;
@@ -63,6 +72,10 @@ interface PrintState {
   setGrayscale: (v: boolean) => void;
   setPaperW: (v: number | null) => void;
   setPaperH: (v: number | null) => void;
+  /** Restore a remembered size; Custom only when it matches no preset. */
+  setPaper: (w: number | null, h: number | null) => void;
+  /** Apply a dropdown choice. `seed` is the size Custom starts from. */
+  selectPaper: (key: PaperKey, seed?: { w: number; h: number }) => void;
   setStatus: (v: "idle" | "queued" | "printing" | "success" | "failed") => void;
   setError: (v: string) => void;
   setDurationMs: (v: number) => void;
@@ -89,6 +102,7 @@ export const usePrintStore = create<PrintState>((set) => ({
   grayscale: false,
   paperW: null,
   paperH: null,
+  paperCustom: false,
   status: "idle",
   error: "",
   durationMs: 0,
@@ -117,6 +131,26 @@ export const usePrintStore = create<PrintState>((set) => ({
   setGrayscale: (grayscale) => set({ grayscale }),
   setPaperW: (paperW) => set({ paperW }),
   setPaperH: (paperH) => set({ paperH }),
+  setPaper: (paperW, paperH) =>
+    set({
+      paperW,
+      paperH,
+      paperCustom: derivePaperKey(paperW, paperH) === "custom",
+    }),
+  selectPaper: (key, seed) => {
+    if (key === "auto") {
+      set({ paperW: null, paperH: null, paperCustom: false });
+    } else if (key === "custom") {
+      set({
+        paperCustom: true,
+        ...(seed ? { paperW: seed.w, paperH: seed.h } : {}),
+      });
+    } else {
+      const preset = PAPER_PRESETS.find((x) => x.key === key);
+      if (preset)
+        set({ paperW: preset.w, paperH: preset.h, paperCustom: false });
+    }
+  },
   setStatus: (status) => set({ status }),
   setError: (error) => set({ error }),
   setDurationMs: (durationMs) => set({ durationMs }),
