@@ -631,8 +631,21 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
     private fun usbManager(): UsbManager =
         activity.getSystemService(Context.USB_SERVICE) as UsbManager
 
-    private fun findUsbDevice(deviceName: String): UsbDevice? =
-        usbManager().deviceList.values.firstOrNull { it.deviceName == deviceName }
+    /** A saved address in the stable `0458:7000` form: vendor and product ID, hex. */
+    private val USB_VID_PID = Regex("^[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}$")
+
+    private fun findUsbDevice(address: String): UsbDevice? {
+        val devices = usbManager().deviceList.values
+        // Exact device-name match first: rows saved before the stable address
+        // existed still hold the bus path.
+        devices.firstOrNull { it.deviceName == address }?.let { return it }
+        // Then vendor and product ID: unlike the bus path, they survive a
+        // port change, a hub or a reboot.
+        val match = USB_VID_PID.matchEntire(address) ?: return null
+        val vid = match.groupValues[1].toInt(16)
+        val pid = match.groupValues[2].toInt(16)
+        return devices.firstOrNull { it.vendorId == vid && it.productId == pid }
+    }
 
     /**
      * Blocks until the user answers the system USB dialog (call off the
@@ -1313,14 +1326,25 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 throw IllegalArgumentException("not a Bluetooth address: $address")
             }
         runCatching { adapter.cancelDiscovery() }
-        val socket = device.createRfcommSocketToServiceRecord(sppUuid)
+        // Secure SPP first: the channel a spec-compliant printer should
+        // accept. Some cheaper heads only answer on the insecure channel,
+        // so a failed secure connect retries through it before giving up
+        // (the last error is the one that reaches the user).
+        val secure = device.createRfcommSocketToServiceRecord(sppUuid)
         try {
-            socket.connect()
+            secure.connect()
+            return secure
         } catch (e: Exception) {
-            runCatching { socket.close() }
+            runCatching { secure.close() }
+        }
+        val insecure = device.createInsecureRfcommSocketToServiceRecord(sppUuid)
+        try {
+            insecure.connect()
+        } catch (e: Exception) {
+            runCatching { insecure.close() }
             throw e
         }
-        return socket
+        return insecure
     }
 
     /** Connect and close: proves the printer answers without writing anything. */

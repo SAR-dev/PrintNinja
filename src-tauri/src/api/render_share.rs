@@ -604,6 +604,10 @@ pub async fn peer_render(
             &orientation,
             language,
             dpi,
+            // The peer endpoint sees no printer row, so a TSPL label gap
+            // set on the requesting device is not knowable here: the
+            // encoder default (2 mm) applies.
+            None,
         ),
     )
     .await;

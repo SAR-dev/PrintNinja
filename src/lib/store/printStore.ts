@@ -40,6 +40,9 @@ interface PrintState {
   timings: StageTimings | null;
   /** Which paired provider rendered the last print, if any. */
   renderedBy: string | null;
+  /** Non-fatal warnings from the last print: the job went out, but the
+   * output may be wrong. */
+  warnings: string[];
 
   setPrinterId: (v: string) => void;
   setTemplateId: (v: string) => void;
@@ -65,6 +68,7 @@ interface PrintState {
   setDurationMs: (v: number) => void;
   setTimings: (v: StageTimings | null) => void;
   setRenderedBy: (v: string | null) => void;
+  setWarnings: (v: string[]) => void;
 }
 
 export const usePrintStore = create<PrintState>((set) => ({
@@ -90,6 +94,7 @@ export const usePrintStore = create<PrintState>((set) => ({
   durationMs: 0,
   timings: null,
   renderedBy: null,
+  warnings: [],
 
   setPrinterId: (printerId) => set({ printerId }),
   setTemplateId: (templateId) => set({ templateId }),
@@ -117,4 +122,5 @@ export const usePrintStore = create<PrintState>((set) => ({
   setDurationMs: (durationMs) => set({ durationMs }),
   setTimings: (timings) => set({ timings }),
   setRenderedBy: (renderedBy) => set({ renderedBy }),
+  setWarnings: (warnings) => set({ warnings }),
 }));
