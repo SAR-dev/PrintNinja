@@ -22,6 +22,7 @@ export function DesignerOverflowMenu({
   remoteId,
   readOnly,
   busy,
+  dirty = false,
   onVisibilityChange,
 }: {
   onNew: () => void;
@@ -29,6 +30,8 @@ export function DesignerOverflowMenu({
   remoteId: string | null;
   readOnly: boolean;
   busy: boolean;
+  /** Unsaved edits: the toggle waits for Save, like the desktop toolbar. */
+  dirty?: boolean;
   onVisibilityChange: (v: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -82,16 +85,23 @@ export function DesignerOverflowMenu({
               {t("designer.only_local")}
             </DropdownMenuLabel>
           ) : (
-            <DropdownMenuCheckboxItem
-              data-testid="template-visibility-menu"
-              checked={published}
-              disabled={busy}
-              onCheckedChange={onVisibilityChange}
-            >
-              {published
-                ? t("designer.visibility_public")
-                : t("designer.visibility_private")}
-            </DropdownMenuCheckboxItem>
+            <>
+              <DropdownMenuCheckboxItem
+                data-testid="template-visibility-menu"
+                checked={published}
+                disabled={busy || dirty}
+                onCheckedChange={onVisibilityChange}
+              >
+                {published
+                  ? t("designer.visibility_public")
+                  : t("designer.visibility_private")}
+              </DropdownMenuCheckboxItem>
+              {dirty && (
+                <DropdownMenuLabel className="max-w-56 whitespace-normal pt-0 text-xs font-normal text-muted-foreground">
+                  {t("designer.reason_unsaved_visibility")}
+                </DropdownMenuLabel>
+              )}
+            </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>

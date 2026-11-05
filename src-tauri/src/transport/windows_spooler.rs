@@ -607,6 +607,38 @@ impl PrinterTransport for WindowsSpooler {
     }
 }
 
+/// True when the queue's print processor offers no `PDF` datatype — the
+/// condition under which a PDF job sent to it went out as `RAW`
+/// (see [`choose_datatype`]).
+///
+/// The send already ran `offered_datatypes()` and cached the answer per
+/// queue, so on the common path this is a cache read. The live query
+/// still touches Win32, so it runs off the tokio workers like the rest
+/// of the module. Used to surface the "a GDI-only driver prints the PDF
+/// source" case in the app; the send path only logs it. An unreadable
+/// list reports `false`: there the job declared `PDF` and a queue that
+/// does not take it refused it loudly (1804) instead of printing
+/// garbage.
+#[cfg(windows)]
+pub async fn pdf_sent_as_raw(printer_name: &str) -> bool {
+    let name = printer_name.to_string();
+    tokio::task::spawn_blocking(move || {
+        WindowsSpooler::new(name)
+            .offered_datatypes()
+            .map(|list| !list.iter().any(|d| d.trim().eq_ignore_ascii_case("pdf")))
+            .unwrap_or(false)
+    })
+    .await
+    .unwrap_or(false)
+}
+
+/// Not the Windows spooler: there is no queue to fall back from, so a
+/// PDF can never have been sent as RAW here.
+#[cfg(not(windows))]
+pub async fn pdf_sent_as_raw(_printer_name: &str) -> bool {
+    false
+}
+
 #[cfg(not(windows))]
 pub struct WindowsSpooler;
 

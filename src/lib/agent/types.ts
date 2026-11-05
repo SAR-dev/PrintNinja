@@ -129,6 +129,14 @@ export interface PrinterRow {
   language: string;
   paper_width_mm?: number | null;
   dpi?: number | null;
+  /** TSPL media gap in mm; null means the built-in default (2 mm). */
+  label_gap_mm?: number | null;
+  /** IPP sign-in user; null means the built-in `PrintNinja`. */
+  username?: string | null;
+  /** IPP password; null means no HTTP authentication is sent. */
+  password?: string | null;
+  /** Accept self-signed certificates on this printer's TLS endpoint. */
+  skip_tls_verification?: boolean;
   /** UI-only: last test-print outcome, not stored server-side. */
   status?: string;
 }
@@ -140,6 +148,14 @@ export interface AddPrinterReq {
   language: string;
   paper_width_mm?: number;
   dpi?: number;
+  /** TSPL media gap in mm; undefined leaves the built-in default (2 mm). */
+  label_gap_mm?: number;
+  /** IPP sign-in user; undefined leaves the built-in `PrintNinja`. */
+  username?: string;
+  /** IPP password; undefined sends no HTTP authentication. */
+  password?: string;
+  /** Accept self-signed certificates on this printer's TLS endpoint. */
+  skip_tls_verification?: boolean;
 }
 
 export interface SystemPrinterRow {
@@ -196,6 +212,9 @@ export interface PrintResponse {
   timings?: StageTimings | null;
   /** Paired provider that rendered the document, if shared rendering was used. */
   rendered_by?: string | null;
+  /** Non-fatal warnings: the job went out, but the output may be wrong
+   * (a PDF on a raw wire, a GDI-only Windows queue). */
+  warnings?: string[];
 }
 
 /** One guest invite. The code itself is shown once and never listed. */
@@ -256,6 +275,8 @@ export interface RemotePrintResult {
   error: string | null;
   code: string | null;
   pc_name: string;
+  /** The PC's non-fatal warnings for the job, forwarded from its reply. */
+  warnings?: string[];
 }
 
 /** One PC printer, as its `GET /v1/printers` reports it. */

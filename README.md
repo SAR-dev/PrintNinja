@@ -240,6 +240,8 @@ Each badge links to the place where you can turn that switch off.
 
 **Printing from Linux fails.** Install CUPS and Chromium or Chrome. For USB and Bluetooth thermal printers, use a CUPS raw queue; PrintNinja cannot talk to them directly on Linux.
 
+**A USB or Bluetooth receipt or label printer prints pages of random characters.** The printer's language is set to PDF, so the raw PDF file is being sent to a head that only understands a command language. Open **Printers**, edit the printer and set **Language** to the one it speaks (ESC/POS for most receipt printers; ZPL, TSPL or CPCL for label printers). If it was already ESC/POS, check that the printer itself is in that mode; many label printers ship in a different one.
+
 **My USB or Bluetooth printer is not listed on Windows.** Install it as a Windows printer first. PrintNinja uses the Windows spooler for both.
 
 **Android stops printing after I close the app.** Open Settings and check that the background service is running and that battery optimizations are ignored for PrintNinja.
@@ -256,6 +258,7 @@ If you are stuck, export logs from **Settings → Diagnostics** and attach them 
 - [`docs/GLOSSARY.md`](docs/GLOSSARY.md): the plain meaning of every term the app uses
 - [`docs/architecture/RENDERING_AND_LAYOUT.md`](docs/architecture/RENDERING_AND_LAYOUT.md): how a design becomes pages and sheets
 - [`docs/architecture/PRINTERS_AND_TRANSPORTS.md`](docs/architecture/PRINTERS_AND_TRANSPORTS.md): transports, printer languages, per-OS notes
+- [`docs/MISSING_FEATURES.md`](docs/MISSING_FEATURES.md): printer support gaps by platform and connection type, with priorities and workarounds
 - [`docs/architecture/QUEUE_AND_HISTORY.md`](docs/architecture/QUEUE_AND_HISTORY.md): the queue, timings, metrics and callbacks
 - [`docs/architecture/PHONE_AND_PC_SHARING.md`](docs/architecture/PHONE_AND_PC_SHARING.md): pairing, tokens, guests and Print via PC, plus the recorded "why" behind the rules
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): developer quick start, project layout, commands, release

@@ -53,8 +53,9 @@ function Divider() {
  * Save). Save is the one manual push to the server; offline it is disabled
  * because viewing and printing are all the cache can do. Visibility is
  * publish/unpublish applied immediately via the switch, whose Public/Private
- * label already describes the state. Every control is 32 px tall so the row
- * reads as one line. */
+ * label already describes the state; while the editor is dirty the switch
+ * waits for Save, since publishing would only flip the saved copy. Every
+ * control is 32 px tall so the row reads as one line. */
 export function DesignerToolbar({
   templates,
   currentTemplateId = null,
@@ -190,34 +191,39 @@ export function DesignerToolbar({
             {t("designer.only_local")}
           </span>
         ) : (
-          <div className="flex h-8 items-center gap-2" title={remoteId}>
-            <Label htmlFor="template-visibility" className="text-xs">
-              {published
-                ? t("designer.visibility_public")
-                : t("designer.visibility_private")}
-            </Label>
-            <Switch
-              id="template-visibility"
-              data-testid="template-visibility"
-              checked={published}
-              disabled={busy}
-              onCheckedChange={(v) => onVisibilityChange(v)}
-              aria-label={t("designer.visibility_toggle", {
-                state: published
+          <DisabledReason
+            reason={dirty ? t("designer.reason_unsaved_visibility") : undefined}
+            data-testid="visibility-disabled-reason"
+          >
+            <div className="flex h-8 items-center gap-2" title={remoteId}>
+              <Label htmlFor="template-visibility" className="text-xs">
+                {published
                   ? t("designer.visibility_public")
-                  : t("designer.visibility_private"),
-              })}
-            />
-            {/* The server id is for support and debugging, so it sits in a
-                tooltip instead of taking space in the row. */}
-            <span
-              className="sr-only"
-              title={remoteId}
-              data-testid="designer-sync-id"
-            >
-              {remoteId.slice(0, 8)}
-            </span>
-          </div>
+                  : t("designer.visibility_private")}
+              </Label>
+              <Switch
+                id="template-visibility"
+                data-testid="template-visibility"
+                checked={published}
+                disabled={busy || dirty}
+                onCheckedChange={(v) => onVisibilityChange(v)}
+                aria-label={t("designer.visibility_toggle", {
+                  state: published
+                    ? t("designer.visibility_public")
+                    : t("designer.visibility_private"),
+                })}
+              />
+              {/* The server id is for support and debugging, so it sits in a
+                  tooltip instead of taking space in the row. */}
+              <span
+                className="sr-only"
+                title={remoteId}
+                data-testid="designer-sync-id"
+              >
+                {remoteId.slice(0, 8)}
+              </span>
+            </div>
+          </DisabledReason>
         ))}
       {!noTemplate || (layout && onLayoutChange) ? <Divider /> : null}
       <div className="flex items-center gap-2">

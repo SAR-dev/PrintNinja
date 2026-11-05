@@ -12,6 +12,14 @@ pub struct Printer {
     pub language: String,
     pub paper_width_mm: Option<i64>,
     pub dpi: Option<i64>,
+    /** TSPL media gap in mm; null means the built-in default (2 mm). */
+    pub label_gap_mm: Option<f64>,
+    /** IPP sign-in user; null means the built-in `PrintNinja`. */
+    pub username: Option<String>,
+    /** IPP password; null means no HTTP authentication is sent. */
+    pub password: Option<String>,
+    /** Accept self-signed certificates on this printer's TLS endpoint. */
+    pub skip_tls_verification: bool,
     pub default_settings_json: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -51,6 +59,7 @@ pub fn list_printers(db: State<DbState>) -> AppResult<Vec<Printer>> {
 
     let mut stmt = conn.prepare(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
+                label_gap_mm, username, password, skip_tls_verification,
                 default_settings_json, created_at, updated_at
          FROM printers ORDER BY name COLLATE NOCASE",
     )?;
@@ -65,9 +74,13 @@ pub fn list_printers(db: State<DbState>) -> AppResult<Vec<Printer>> {
                 language: row.get(4)?,
                 paper_width_mm: row.get(5)?,
                 dpi: row.get(6)?,
-                default_settings_json: row.get(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
+                label_gap_mm: row.get(7)?,
+                username: row.get(8)?,
+                password: row.get(9)?,
+                skip_tls_verification: row.get(10)?,
+                default_settings_json: row.get(11)?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -83,6 +96,14 @@ pub struct AddPrinterRequest {
     pub language: String,
     pub paper_width_mm: Option<i64>,
     pub dpi: Option<i64>,
+    #[serde(default)]
+    pub label_gap_mm: Option<f64>,
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default)]
+    pub password: Option<String>,
+    #[serde(default)]
+    pub skip_tls_verification: Option<bool>,
 }
 
 #[tauri::command]
@@ -107,8 +128,12 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
     }
 
     conn.execute(
-        "INSERT INTO printers (name, type, address, language, paper_width_mm, dpi)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO printers
+             (name, type, address, language, paper_width_mm, dpi,
+              label_gap_mm, username, password, skip_tls_verification)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        // Blank credentials store as NULL, not `""` — an empty password
+        // must not turn into a Basic-auth header downstream.
         rusqlite::params![
             name,
             req.printer_type,
@@ -116,12 +141,17 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
             req.language,
             req.paper_width_mm,
             req.dpi,
+            req.label_gap_mm,
+            req.username.as_ref().filter(|s| !s.is_empty()),
+            req.password.as_ref().filter(|s| !s.is_empty()),
+            req.skip_tls_verification.unwrap_or(false) as i64,
         ],
     )?;
 
     let id = conn.last_insert_rowid();
     let printer = conn.query_row(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
+                label_gap_mm, username, password, skip_tls_verification,
                 default_settings_json, created_at, updated_at
          FROM printers WHERE id = ?1",
         [id],
@@ -134,9 +164,13 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
                 language: row.get(4)?,
                 paper_width_mm: row.get(5)?,
                 dpi: row.get(6)?,
-                default_settings_json: row.get(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
+                label_gap_mm: row.get(7)?,
+                username: row.get(8)?,
+                password: row.get(9)?,
+                skip_tls_verification: row.get(10)?,
+                default_settings_json: row.get(11)?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
             })
         },
     )?;
@@ -179,8 +213,12 @@ pub fn update_printer_conn(
 
     let affected = conn.execute(
         "UPDATE printers SET name = ?1, type = ?2, address = ?3, language = ?4,
-                paper_width_mm = ?5, dpi = ?6, updated_at = datetime('now')
-         WHERE id = ?7",
+                paper_width_mm = ?5, dpi = ?6, label_gap_mm = ?7, username = ?8,
+                password = ?9, skip_tls_verification = ?10,
+                updated_at = datetime('now')
+         WHERE id = ?11",
+        // Blank credentials store as NULL, not `""` — an empty password
+        // must not turn into a Basic-auth header downstream.
         rusqlite::params![
             name,
             req.printer_type,
@@ -188,6 +226,10 @@ pub fn update_printer_conn(
             req.language,
             req.paper_width_mm,
             req.dpi,
+            req.label_gap_mm,
+            req.username.as_ref().filter(|s| !s.is_empty()),
+            req.password.as_ref().filter(|s| !s.is_empty()),
+            req.skip_tls_verification.unwrap_or(false) as i64,
             id,
         ],
     )?;
@@ -196,6 +238,7 @@ pub fn update_printer_conn(
     }
     conn.query_row(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
+                label_gap_mm, username, password, skip_tls_verification,
                 default_settings_json, created_at, updated_at
          FROM printers WHERE id = ?1",
         [id],
@@ -208,9 +251,13 @@ pub fn update_printer_conn(
                 language: row.get(4)?,
                 paper_width_mm: row.get(5)?,
                 dpi: row.get(6)?,
-                default_settings_json: row.get(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
+                label_gap_mm: row.get(7)?,
+                username: row.get(8)?,
+                password: row.get(9)?,
+                skip_tls_verification: row.get(10)?,
+                default_settings_json: row.get(11)?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
             })
         },
     )
@@ -225,7 +272,8 @@ fn get_printer_inner(db: &DbState, id: i64) -> AppResult<Printer> {
         .connection()
         .query_row(
             "SELECT id, name, type, address, language, paper_width_mm, dpi,
-                    default_settings_json, created_at, updated_at
+                    label_gap_mm, username, password, skip_tls_verification,
+                default_settings_json, created_at, updated_at
              FROM printers WHERE id = ?1",
             [id],
             |row| {
@@ -237,9 +285,13 @@ fn get_printer_inner(db: &DbState, id: i64) -> AppResult<Printer> {
                     language: row.get(4)?,
                     paper_width_mm: row.get(5)?,
                     dpi: row.get(6)?,
-                    default_settings_json: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    label_gap_mm: row.get(7)?,
+                    username: row.get(8)?,
+                    password: row.get(9)?,
+                    skip_tls_verification: row.get(10)?,
+                    default_settings_json: row.get(11)?,
+                    created_at: row.get(12)?,
+                    updated_at: row.get(13)?,
                 })
             },
         )
@@ -281,7 +333,8 @@ pub async fn test_printer(
         let conn = guard.connection();
         conn.query_row(
             "SELECT id, name, type, address, language, paper_width_mm, dpi,
-                    default_settings_json, created_at, updated_at
+                    label_gap_mm, username, password, skip_tls_verification,
+                default_settings_json, created_at, updated_at
              FROM printers WHERE id = ?1",
             [id],
             |row| {
@@ -293,9 +346,13 @@ pub async fn test_printer(
                     language: row.get(4)?,
                     paper_width_mm: row.get(5)?,
                     dpi: row.get(6)?,
-                    default_settings_json: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    label_gap_mm: row.get(7)?,
+                    username: row.get(8)?,
+                    password: row.get(9)?,
+                    skip_tls_verification: row.get(10)?,
+                    default_settings_json: row.get(11)?,
+                    created_at: row.get(12)?,
+                    updated_at: row.get(13)?,
                 })
             },
         )
@@ -311,9 +368,18 @@ pub async fn test_printer(
     // printer was offline. The probe only opens and closes a connection:
     // it cannot print, so nothing is put on paper by looking.
     let printer_type = crate::transport::parse_printer_type(&printer.printer_type);
-    crate::transport::TransportRegistry::probe(&printer_type, &printer.name, &printer.address)
-        .await
-        .map_err(AppError::Internal)?;
+    crate::transport::TransportRegistry::probe(
+        &printer_type,
+        &printer.name,
+        &printer.address,
+        &crate::transport::TransportSettings {
+            username: printer.username.clone(),
+            password: printer.password.clone(),
+            skip_tls_verification: printer.skip_tls_verification,
+        },
+    )
+    .await
+    .map_err(AppError::Internal)?;
 
     let req = crate::commands::print::PrintRequest {
         printer_name: printer.name.clone(),
