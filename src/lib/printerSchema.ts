@@ -119,7 +119,10 @@ const finitePositive = (
       .max(max, maxKey)
       .refine((n) => Number.isFinite(n), {
         message: notNumberKey,
-      }),
+      })
+      // Blank is the encoder default, not an error — the field may be
+      // left empty, which the preprocess above maps to `undefined`.
+      .optional(),
   );
 
 const finitePositiveInt = (
