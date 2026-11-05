@@ -135,6 +135,44 @@ describe("paper size mismatch warning", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("sets the registered paper width from the warning", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_printer") {
+        return {
+          id: 1,
+          name: "Thermal 80",
+          address: "usb:001",
+          printer_type: "usb",
+          language: "escpos",
+          paper_width_mm: 80,
+          dpi: null,
+        };
+      }
+      if (cmd === "print_html") {
+        return { success: true, job_id: "1", duration_ms: 50, timings: null };
+      }
+      return null;
+    });
+    renderPage();
+    await screen.findByText(/this printer uses 80 mm paper/);
+    fireEvent.click(screen.getByRole("button", { name: "Set paper size" }));
+    // Prefilled with the width the current print needs, not the
+    // printer's registered 80 mm.
+    const input = await screen.findByLabelText("Paper width (mm)");
+    expect(input).toHaveValue(100);
+    fireEvent.click(screen.getByTestId("save-paper-width"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "update_printer",
+        expect.objectContaining({
+          id: 1,
+          req: expect.objectContaining({ paper_width_mm: 100 }),
+        }),
+      ),
+    );
+    expect(vi.mocked(toast.success)).toHaveBeenCalled();
+  });
 });
 
 describe("per-printer remembered choices", () => {

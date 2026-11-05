@@ -95,6 +95,9 @@ interface PhonePrintFlowProps {
   onRetry: () => void;
   onSyncTemplates: () => void;
   onSpikeTest: () => void;
+  /** Present when the selected printer has an editable registered width:
+   * opens the paper-size dialog from the mismatch warning. */
+  onSetPaperWidth?: () => void;
 }
 
 /** Store fit values → their display key (the ids are kebab, keys are not). */
@@ -452,12 +455,25 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
               </SelectContent>
             </Select>
             {props.paperMismatch && (
-              <p
-                role="status"
-                className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-xs text-warning"
-              >
-                {props.paperMismatch}
-              </p>
+              <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2">
+                <p
+                  role="status"
+                  className="min-w-0 flex-1 text-xs text-warning"
+                >
+                  {props.paperMismatch}
+                </p>
+                {props.onSetPaperWidth && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 shrink-0 px-2 text-xs"
+                    onClick={props.onSetPaperWidth}
+                    data-testid="set-paper-size"
+                  >
+                    {t("print.paper_size_action")}
+                  </Button>
+                )}
+              </div>
             )}
           </div>
 

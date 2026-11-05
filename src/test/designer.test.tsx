@@ -318,6 +318,28 @@ describe("DesignerToolbar", () => {
     expect(onVisibilityChange).toHaveBeenCalled();
   });
 
+  it("waits for Save while dirty: the visibility switch is disabled, with the reason on focus", async () => {
+    render(
+      <DesignerToolbar
+        {...base}
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+        remoteId="r1"
+        publishedAt={null}
+        dirty
+        onVisibilityChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("template-visibility")).toBeDisabled();
+
+    // A disabled control sends no hover or focus, so the reason hangs on its wrapper.
+    fireEvent.focus(screen.getByTestId("visibility-disabled-reason"));
+    expect(
+      (await screen.findAllByText("Save first to publish the current changes."))
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
   it("keeps Save and the visibility switch on a saved copy, disabled, with the reason on focus", async () => {
     render(
       <DesignerToolbar
