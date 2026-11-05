@@ -4,6 +4,10 @@ version = "3.2.6"
 description = "Cross-platform silent print app"
 authors = ["PrintNinja"]
 edition = "2021"
+# The Phase 0 spike (examples/direct_print_spike.rs + its `mod spike`
+# file) is declared explicitly below; auto-discovery would build
+# spike.rs as a standalone example and fail (it has no main).
+autoexamples = false
 
 [lib]
 name = "printninja_lib"
@@ -90,3 +94,10 @@ windows = { version = "0.58", features = [
 # Phase 0 spike only (examples/direct_print_spike.rs): BLE scan/probe.
 # Moves to [dependencies] in Phase 6.
 btleplug = "0.11"
+
+# Declare the Phase 0 spike (with `autoexamples = false` above):
+# direct_print_spike.rs is the main, spike.rs its `mod spike`
+# internals (Windows-only). Without this, spike.rs is auto-discovered
+# as a standalone example with no main and fails `cargo test`.
+[[example]]
+name = "direct_print_spike"
