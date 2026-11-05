@@ -1,6 +1,8 @@
 # Direct printing on Windows (no spooler) — implementation plan
 
-> **Status:** final scope, ready to start with Phase 0. Not yet implemented.
+> **Status:** final scope. The Phase 0 spike tool is built
+> (`src-tauri/examples/direct_print_spike.rs`); the Phase 0 hardware run is
+> pending. Phases 1–5 are not yet implemented.
 > **Audience:** whoever implements the Windows USB and Bluetooth transports.
 > **Platform:** Windows. Android already prints directly; Linux is unchanged.
 > **Target hardware:** Toshiba TEC B-FP2D (older revision: USB + classic
@@ -29,8 +31,8 @@ Phases were renumbered: the old Phase 7 (docs and release hardening) is now Phas
 
 The Phase 0 spike is a standalone example:
 `src-tauri/examples/direct_print_spike.rs` (internals in
-`src-tauri/examples/spike.rs`). It probes real hardware and prints its findings
-to the console; it touches no app state and merges nothing.
+`src-tauri/examples/spike.rs`). It is merged; it probes real hardware and
+prints its findings to the console and touches no app state.
 
 Run from the repo root (`PrintNinja/`), with the printer attached and powered
 on. Every write subcommand feeds the printer real bytes — **it will print
@@ -243,8 +245,9 @@ switch above. Nothing retries through the spooler on its own (D7).
 
 ## 7. Windows crate and dependencies
 
-`src-tauri/Cargo.toml` enables only `Win32_System_Threading`, `Win32_Security`
-and `Win32_System_Com` today. Add as each phase needs them:
+`src-tauri/Cargo.toml` enables, on top of `Win32_System_Threading`,
+`Win32_Security` and `Win32_System_Com`, the whole list below — the Phase 0
+spike tool added them all at once, so Phases 1–4 need no Cargo changes:
 
 ```toml
 [target.'cfg(windows)'.dependencies]
@@ -260,7 +263,9 @@ windows = { version = "0.58", features = [
 ] }
 ```
 
-`nusb` and `btleplug` are no longer needed. Pin the `windows` crate version and
+`nusb` is not used. `btleplug` 0.11 remains in the Windows *dev*-dependencies
+for the spike's `ble` and `ble-scan` subcommands only; it is not an app
+dependency and no phase needs it. Pin the `windows` crate version and
 bump it deliberately, with the `rust-test-windows` job as the gate. Module
 paths and feature names vary between `windows` versions: confirm every symbol
 compiles on `rust-test-windows` as each phase lands.
@@ -276,8 +281,8 @@ plumbing first, then Phase 4.
 
 ### Phase 0 — Spike on real hardware (0.5–1 day)
 
-Verify what the rest of the plan assumes. Nothing is merged; the output is a
-short "findings" note appended to this doc (§13).
+Verify what the rest of the plan assumes. The spike itself is merged; its
+output is a short "findings" note appended to this doc (§13).
 
 Run on the target printer (Toshiba B-FP2D, USB + Bluetooth). Where possible,
 repeat on two Windows versions.

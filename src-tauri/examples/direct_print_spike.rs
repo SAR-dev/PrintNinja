@@ -1,4 +1,4 @@
-//! Phase 0 spike for `docs/DIRECT_PRINTING.md` — probes real hardware.
+//! Phase 0 spike for `docs/planned/DIRECT_PRINTING.md` — probes real hardware.
 //!
 //! Windows only. Run from the repo root with the printer attached:
 //!
