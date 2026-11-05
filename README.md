@@ -258,6 +258,7 @@ If you are stuck, export logs from **Settings → Diagnostics** and attach them 
 - [`docs/GLOSSARY.md`](docs/GLOSSARY.md): the plain meaning of every term the app uses
 - [`docs/architecture/RENDERING_AND_LAYOUT.md`](docs/architecture/RENDERING_AND_LAYOUT.md): how a design becomes pages and sheets
 - [`docs/architecture/PRINTERS_AND_TRANSPORTS.md`](docs/architecture/PRINTERS_AND_TRANSPORTS.md): transports, printer languages, per-OS notes
+- [`docs/MISSING_FEATURES.md`](docs/MISSING_FEATURES.md): printer support gaps by platform and connection type, with priorities and workarounds
 - [`docs/architecture/QUEUE_AND_HISTORY.md`](docs/architecture/QUEUE_AND_HISTORY.md): the queue, timings, metrics and callbacks
 - [`docs/architecture/PHONE_AND_PC_SHARING.md`](docs/architecture/PHONE_AND_PC_SHARING.md): pairing, tokens, guests and Print via PC, plus the recorded "why" behind the rules
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): developer quick start, project layout, commands, release
