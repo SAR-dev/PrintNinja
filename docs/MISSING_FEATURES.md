@@ -185,4 +185,4 @@ estimates, not measurements.
 | 1–2. BLE and scanning | Low | New plugin code, permissions and UI; only worth it if a printer needs it | Large |
 
 Item 7 (checking on a real print head) is High but is testing work, not code,
-so it is not in the table.
+so it is not included in the table.
