@@ -10,6 +10,10 @@ const base = {
   language: "pdf" as const,
   paper_width_mm: "80",
   dpi: "203",
+  label_gap_mm: "",
+  username: "",
+  password: "",
+  skip_tls_verification: false,
 };
 
 describe("validatePrinterForm", () => {
@@ -87,6 +91,37 @@ describe("validatePrinterForm", () => {
     expect(
       validatePrinterForm({ ...base, paper_width_mm: "110", dpi: "600" }).ok,
     ).toBe(true);
+  });
+
+  it("keeps the label gap blank or a fractional number in range", () => {
+    // Blank is the encoder default (2 mm); fractions are real gaps.
+    expect(
+      validatePrinterForm({ ...base, label_gap_mm: "" }).ok,
+    ).toBe(true);
+    const r = validatePrinterForm({ ...base, label_gap_mm: "1.5" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.req.label_gap_mm).toBe(1.5);
+    for (const gap of ["0", "0.05", "51", "abc"]) {
+      expect(
+        validatePrinterForm({ ...base, label_gap_mm: gap }).ok,
+        gap,
+      ).toBe(false);
+    }
+  });
+
+  it("passes the IPP sign-in fields through untouched", () => {
+    const r = validatePrinterForm({
+      ...base,
+      username: "ada",
+      password: "s3cret",
+      skip_tls_verification: true,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.req.username).toBe("ada");
+      expect(r.req.password).toBe("s3cret");
+      expect(r.req.skip_tls_verification).toBe(true);
+    }
   });
 });
 

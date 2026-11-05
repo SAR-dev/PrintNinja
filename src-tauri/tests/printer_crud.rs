@@ -28,6 +28,10 @@ fn req(name: &str) -> AddPrinterRequest {
         language: "pdf".to_string(),
         paper_width_mm: Some(80),
         dpi: Some(203),
+        label_gap_mm: None,
+        username: None,
+        password: None,
+        skip_tls_verification: None,
     }
 }
 
