@@ -258,6 +258,7 @@ const en = {
       "This is a saved copy from Community, so it can’t be changed.",
     reason_readonly_visibility:
       "Visibility can’t be changed on a saved copy from Community.",
+    reason_unsaved_visibility: "Save first to publish the current changes.",
     only_local: "Only on this computer",
     visibility_public: "Public",
     visibility_private: "Private",
@@ -507,6 +508,11 @@ const en = {
       "Template is {{tw}} × {{th}} mm; this printer uses {{pw}} mm paper.",
     paper_mismatch_paper:
       "Paper is {{pw2}} × {{ph2}} mm; this printer uses {{pw}} mm paper.",
+    paper_size_action: "Set paper size",
+    paper_size_title: "Paper width for {{name}}",
+    paper_size_hint:
+      "This print uses a {{w}} mm sheet; the printer is registered at {{cur}} mm. Enter the width of the paper the printer actually takes.",
+    toast_paper_saved: "Paper width set to {{w}} mm on {{name}}",
     test_hint: "Prints a built-in page to check the printer pipeline.",
     send_test: "Send test page",
     preview_sample: "sample data",

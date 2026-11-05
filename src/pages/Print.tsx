@@ -15,6 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Printer, Zap, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { TimingBreakdown } from "@/components/TimingBreakdown";
@@ -77,6 +85,10 @@ function PrintForm() {
   const [loading, setLoading] = useState(true);
   // Per-printer remembered choices (F3); persisted under PRINT_PREFS_KEY.
   const [printerPrefs, setPrinterPrefs] = useState<PrintPrefsMap>({});
+  // F3: the paper-width dialog, opened from the mismatch warning below.
+  const [paperDlg, setPaperDlg] = useState(false);
+  const [paperDlgValue, setPaperDlgValue] = useState("");
+  const [paperDlgBusy, setPaperDlgBusy] = useState(false);
 
   // One complete design document per record, laid out as in the Designer.
   // Paper, orientation, fit mode and margins are applied when drawing, so
@@ -724,6 +736,11 @@ function PrintForm() {
   const selectedPrinter = !viaPc
     ? printers.find((p) => p.name === store.printerId)
     : undefined;
+  // The saved printer's database id ("saved:<id>"). OS printers have no
+  // registered width — and so no width to correct from the warning.
+  const savedDbId = selectedPrinter?.id.startsWith("saved:")
+    ? Number(selectedPrinter.id.slice("saved:".length))
+    : null;
   // PDF is the one language the phone cannot render itself: with no
   // pair, a PDF printer is blocked here while thermal printers go
   // straight to the device. Rust `need_peer` repeats the rule as a
@@ -812,6 +829,112 @@ function PrintForm() {
         )
       : "";
 
+  // F3: the warning's "Set paper size" action corrects the width the saved
+  // printer is registered with. The row is read first and updated with only
+  // the width changed, so name, address and language stay untouched.
+  const openPaperSizeDialog = () => {
+    setPaperDlgValue(String(previewPaperW));
+    setPaperDlg(true);
+  };
+  const savePrinterPaperWidth = async () => {
+    const w = Number(paperDlgValue.trim());
+    if (!Number.isFinite(w)) {
+      notifyError(t("printers.err_paper_number"));
+      return;
+    }
+    if (!Number.isInteger(w)) {
+      notifyError(t("printers.err_paper_int"));
+      return;
+    }
+    if (w < 1) {
+      notifyError(t("printers.err_paper_min"));
+      return;
+    }
+    if (w > 1000) {
+      notifyError(t("printers.err_paper_max"));
+      return;
+    }
+    if (savedDbId == null) return;
+    setPaperDlgBusy(true);
+    try {
+      const row = await agent("get_printer", { id: savedDbId });
+      await agent("update_printer", {
+        id: savedDbId,
+        req: {
+          name: row.name,
+          printer_type: row.printer_type,
+          address: row.address,
+          language: row.language,
+          paper_width_mm: w,
+          dpi: row.dpi ?? undefined,
+        },
+      });
+      await refreshSystemPrinters();
+      setPaperDlg(false);
+      notifySuccess(t("print.toast_paper_saved", { name: row.name, w }));
+    } catch (e) {
+      notifyError(describeError(e));
+    } finally {
+      setPaperDlgBusy(false);
+    }
+  };
+
+  // The small dialog both layouts open from the mismatch warning: one
+  // number field, prefilled with the width the current print needs.
+  const paperSizeDialog = (
+    <Dialog open={paperDlg} onOpenChange={setPaperDlg}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {t("print.paper_size_title", {
+              name: selectedPrinter?.name ?? "",
+            })}
+          </DialogTitle>
+          <DialogDescription>
+            {t("print.paper_size_hint", {
+              w: previewPaperW,
+              cur: printerPaperWidth ?? 0,
+            })}
+          </DialogDescription>
+        </DialogHeader>
+        <div className={field}>
+          <Label htmlFor="printer-paper-width">
+            {t("printers.paper_width_mm")}
+          </Label>
+          <Input
+            id="printer-paper-width"
+            type="number"
+            min={1}
+            max={1000}
+            step={1}
+            value={paperDlgValue}
+            onChange={(e) => setPaperDlgValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void savePrinterPaperWidth();
+            }}
+            autoFocus
+          />
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setPaperDlg(false)}
+            disabled={paperDlgBusy}
+          >
+            {t("common.cancel")}
+          </Button>
+          <Button
+            onClick={() => void savePrinterPaperWidth()}
+            disabled={paperDlgBusy}
+            data-testid="save-paper-width"
+          >
+            {t("common.save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   // Design size comes from the template; the paper size below overrides it
   // per axis (null = template size). All controls live inline in this card.
   const dataFields = (
@@ -881,52 +1004,57 @@ function PrintForm() {
 
   if (isPhone) {
     return (
-      <PhonePrintFlow
-        viaPc={viaPc}
-        viaPcPair={viaPcPair}
-        pcUnpaired={pcUnpaired}
-        pairs={pairs}
-        pcPrinters={pcPrinters}
-        pcCached={pcCached}
-        pcFailed={pcFailed}
-        pcTemplates={pcTemplates}
-        pcTemplate={pcTemplate}
-        onPcTemplateChange={setPcTemplate}
-        pcTemplatesCached={pcTemplatesCached}
-        printedVia={printedVia}
-        remoteCode={remoteCode}
-        onPickViaPcDevice={pickViaPcDevice}
-        onExitViaPc={() => setViaPc(false)}
-        printers={printers}
-        templates={templates}
-        onPrinterChange={onPrinterChange}
-        onRefreshPrinters={() => void loadPrinters()}
-        refreshingPrinters={refreshingPrinters}
-        previewPages={previewPages}
-        previewError={previewError}
-        previewNotice={previewNotice}
-        previewTemplate={previewTemplate}
-        designW={designW}
-        designH={designH}
-        effPaperW={effPaperW}
-        effPaperH={effPaperH}
-        previewPaperW={previewPaperW}
-        previewPaperH={previewPaperH}
-        paperPreset={paperPreset}
-        paperMismatch={paperMismatch}
-        canPrint={canPrint}
-        blocker={blocker}
-        onPrint={() => void handlePrint(false)}
-        onRetry={() => void handlePrint(true)}
-        onSyncTemplates={handleSyncTemplates}
-        onSpikeTest={handleSpikeTest}
-      />
+      <>
+        <PhonePrintFlow
+          viaPc={viaPc}
+          viaPcPair={viaPcPair}
+          pcUnpaired={pcUnpaired}
+          pairs={pairs}
+          pcPrinters={pcPrinters}
+          pcCached={pcCached}
+          pcFailed={pcFailed}
+          pcTemplates={pcTemplates}
+          pcTemplate={pcTemplate}
+          onPcTemplateChange={setPcTemplate}
+          pcTemplatesCached={pcTemplatesCached}
+          printedVia={printedVia}
+          remoteCode={remoteCode}
+          onPickViaPcDevice={pickViaPcDevice}
+          onExitViaPc={() => setViaPc(false)}
+          printers={printers}
+          templates={templates}
+          onPrinterChange={onPrinterChange}
+          onRefreshPrinters={() => void loadPrinters()}
+          refreshingPrinters={refreshingPrinters}
+          previewPages={previewPages}
+          previewError={previewError}
+          previewNotice={previewNotice}
+          previewTemplate={previewTemplate}
+          designW={designW}
+          designH={designH}
+          effPaperW={effPaperW}
+          effPaperH={effPaperH}
+          previewPaperW={previewPaperW}
+          previewPaperH={previewPaperH}
+          paperPreset={paperPreset}
+          paperMismatch={paperMismatch}
+          canPrint={canPrint}
+          blocker={blocker}
+          onPrint={() => void handlePrint(false)}
+          onRetry={() => void handlePrint(true)}
+          onSyncTemplates={handleSyncTemplates}
+          onSpikeTest={handleSpikeTest}
+          onSetPaperWidth={savedDbId != null ? openPaperSizeDialog : undefined}
+        />
+        {paperSizeDialog}
+      </>
     );
   }
 
   return (
     <div className="space-y-4">
       <PageHeader title={t("print.title")} description={t("pages.print")} />
+      {paperSizeDialog}
 
       {/* Print via PC: the job runs on the paired PC's printers, never on
           this phone's transports. */}
@@ -1149,12 +1277,27 @@ function PrintForm() {
                   </SelectContent>
                 </Select>
                 {paperMismatch && (
-                  <p
-                    role="status"
-                    className="mt-1.5 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-xs text-warning"
-                  >
-                    {paperMismatch}
-                  </p>
+                  <div className="mt-1.5 flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2">
+                    <p
+                      role="status"
+                      className="min-w-0 flex-1 text-xs text-warning"
+                    >
+                      {paperMismatch}
+                    </p>
+                    {/* Only a saved printer has a registered width to
+                        correct; OS printers warn, but nothing is editable. */}
+                    {savedDbId != null && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 shrink-0 px-2 text-xs"
+                        onClick={openPaperSizeDialog}
+                        data-testid="set-paper-size"
+                      >
+                        {t("print.paper_size_action")}
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
               <div className={field}>
