@@ -136,8 +136,7 @@ impl IppPrinter {
         let user = self.username.as_deref().unwrap_or("PrintNinja");
         Some(format!(
             "Basic {}",
-            base64::engine::general_purpose::STANDARD
-                .encode(format!("{user}:{password}"))
+            base64::engine::general_purpose::STANDARD.encode(format!("{user}:{password}"))
         ))
     }
 
@@ -289,7 +288,12 @@ impl IppPrinter {
             } else {
                 crate::transport::shared_http_client()
             };
-            return match client.get(&self.endpoint.url).timeout(REACH_TIMEOUT).send().await {
+            return match client
+                .get(&self.endpoint.url)
+                .timeout(REACH_TIMEOUT)
+                .send()
+                .await
+            {
                 Ok(_) => Ok(()),
                 Err(e) => {
                     let text = e.to_string().to_lowercase();
@@ -494,9 +498,7 @@ impl IppPrinter {
                 ("job-id", 0x21) if value.len() == 4 => {
                     id = u32::from_be_bytes(value[..4].try_into().unwrap()).into()
                 }
-                ("job-uri", 0x45) => {
-                    uri = Some(String::from_utf8_lossy(&value).into_owned())
-                }
+                ("job-uri", 0x45) => uri = Some(String::from_utf8_lossy(&value).into_owned()),
                 _ => {}
             }
         }
@@ -1150,8 +1152,11 @@ mod tests {
     #[test]
     fn a_password_builds_a_basic_authorization_header() {
         use base64::Engine;
-        let p = IppPrinter::new("t".into(), "192.168.1.10".into())
-            .with_credentials(Some("admin".into()), Some("s3cret".into()), false);
+        let p = IppPrinter::new("t".into(), "192.168.1.10".into()).with_credentials(
+            Some("admin".into()),
+            Some("s3cret".into()),
+            false,
+        );
         let auth = p.auth_header().expect("a password means an auth header");
         assert!(auth.starts_with("Basic "), "{auth}");
         let decoded = base64::engine::general_purpose::STANDARD
@@ -1165,8 +1170,11 @@ mod tests {
         // A password without a configured user signs in as PrintNinja —
         // the same name the request already sends as requesting-user.
         use base64::Engine;
-        let p = IppPrinter::new("t".into(), "192.168.1.10".into())
-            .with_credentials(None, Some("pw".into()), false);
+        let p = IppPrinter::new("t".into(), "192.168.1.10".into()).with_credentials(
+            None,
+            Some("pw".into()),
+            false,
+        );
         let auth = p.auth_header().unwrap();
         let decoded = String::from_utf8(
             base64::engine::general_purpose::STANDARD
@@ -1179,8 +1187,11 @@ mod tests {
 
     #[test]
     fn no_password_means_no_http_authentication() {
-        let p = IppPrinter::new("t".into(), "192.168.1.10".into())
-            .with_credentials(Some("admin".into()), None, false);
+        let p = IppPrinter::new("t".into(), "192.168.1.10".into()).with_credentials(
+            Some("admin".into()),
+            None,
+            false,
+        );
         assert!(p.auth_header().is_none());
         assert!(IppPrinter::new("t".into(), "192.168.1.10".into())
             .auth_header()
@@ -1189,8 +1200,11 @@ mod tests {
 
     #[test]
     fn the_requesting_user_follows_the_signed_in_user() {
-        let p = IppPrinter::new("t".into(), "192.168.1.10".into())
-            .with_credentials(Some("ada".into()), None, false);
+        let p = IppPrinter::new("t".into(), "192.168.1.10".into()).with_credentials(
+            Some("ada".into()),
+            None,
+            false,
+        );
         let b = p.build_ipp_request_with_format(b"%PDF", 1, "application/pdf");
         let s = String::from_utf8_lossy(&b);
         assert!(s.contains("ada"), "{s}");
@@ -1233,8 +1247,8 @@ mod tests {
     /// The connections stay open, so the follow-up rides the pooled socket
     /// the way reqwest really does it.
     async fn ipp_mock_server(responses: Vec<Vec<u8>>) -> u16 {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
         use std::collections::VecDeque;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -1263,8 +1277,9 @@ mod tests {
                     }
                     let body = {
                         let mut q = queue.lock().unwrap();
-                        q.pop_front()
-                            .unwrap_or_else(|| vec![0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x03])
+                        q.pop_front().unwrap_or_else(|| {
+                            vec![0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x03]
+                        })
                     };
                     let head = format!(
                         "HTTP/1.1 200 OK\r\nContent-Type: application/ipp\r\nContent-Length: {}\r\n\r\n",
@@ -1338,7 +1353,10 @@ mod tests {
         b.extend_from_slice(&5i32.to_be_bytes());
         b.push(0x03);
         let p = IppPrinter::new("t".into(), "192.168.1.10".into());
-        assert_eq!(p.job_ref(&b).as_deref(), Some("ipp://192.168.1.10:631/jobs/42"));
+        assert_eq!(
+            p.job_ref(&b).as_deref(),
+            Some("ipp://192.168.1.10:631/jobs/42")
+        );
         // And a reply with neither is not pollable.
         let bare = job_group(Some(5), &[]);
         assert!(p.job_ref(&bare).is_none());
