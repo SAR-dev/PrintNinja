@@ -95,17 +95,14 @@ describe("validatePrinterForm", () => {
 
   it("keeps the label gap blank or a fractional number in range", () => {
     // Blank is the encoder default (2 mm); fractions are real gaps.
-    expect(
-      validatePrinterForm({ ...base, label_gap_mm: "" }).ok,
-    ).toBe(true);
+    expect(validatePrinterForm({ ...base, label_gap_mm: "" }).ok).toBe(true);
     const r = validatePrinterForm({ ...base, label_gap_mm: "1.5" });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.req.label_gap_mm).toBe(1.5);
     for (const gap of ["0", "0.05", "51", "abc"]) {
-      expect(
-        validatePrinterForm({ ...base, label_gap_mm: gap }).ok,
-        gap,
-      ).toBe(false);
+      expect(validatePrinterForm({ ...base, label_gap_mm: gap }).ok, gap).toBe(
+        false,
+      );
     }
   });
 
