@@ -68,6 +68,40 @@ pub(crate) fn shared_http_client() -> reqwest::Client {
         .clone()
 }
 
+/// A second client for endpoints whose operator has accepted the
+/// self-signed certificate (`printers.skip_tls_verification`). Kept
+/// separate so one printer's override never weakens the TLS checks of
+/// every other connection the app makes.
+pub(crate) fn insecure_http_client() -> reqwest::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .pool_idle_timeout(Duration::from_secs(60))
+                .danger_accept_invalid_certs(true)
+                .danger_accept_invalid_hostnames(true)
+                .build()
+                .expect("insecure HTTP client builds")
+        })
+        .clone()
+}
+
+/// Per-printer options a transport may carry on top of the stored address.
+///
+/// Only IPP reads them today (sign-in credentials, self-signed
+/// certificates); the other transports ignore them, which is why the
+/// defaults — no credentials, verified TLS — are safe to pass around
+/// without thinking.
+#[derive(Debug, Clone, Default)]
+pub struct TransportSettings {
+    /** IPP sign-in user; `None` keeps the built-in `PrintNinja`. */
+    pub username: Option<String>,
+    /** IPP password; `None` sends no HTTP authentication. */
+    pub password: Option<String>,
+    /** Accept a self-signed certificate on this printer's TLS endpoint. */
+    pub skip_tls_verification: bool,
+}
+
 /// Payloads larger than this cross the Rust→Kotlin bridge by file
 /// instead of base64 (A4). Receipts are kilobytes and stay on the fast
 /// base64 path; a 256 KiB raster would otherwise inflate by a third and
@@ -154,15 +188,17 @@ pub fn parse_printer_language(raw: &str) -> PrinterLanguage {
 /// Returns the bytes to send and their MIME type. `Pdf` is not a command
 /// language: the pipeline renders PDFs directly and never routes them
 /// through here.
+///
+/// `label_gap_mm` is the TSPL media gap taken from the printer row;
+/// `None` falls back to the built-in default (2 mm, the common label gap).
 pub fn encode_for_language(
     language: &PrinterLanguage,
     image: &crate::render::raster::RasterImage,
     label_w_mm: f64,
     label_h_mm: f64,
     dpi: u32,
+    label_gap_mm: Option<f64>,
 ) -> Result<(Vec<u8>, &'static str), String> {
-    // Default media gap for TSPL when the printer row carries none — the
-    // printers table has no gap column (2 mm is the common label gap).
     const DEFAULT_GAP_MM: f64 = 2.0;
 
     match language {
@@ -171,12 +207,27 @@ pub fn encode_for_language(
                 .to_string(),
         ),
         PrinterLanguage::Escpos => {
-            let mut data = escpos::EscPosEncoder::init();
-            data.extend_from_slice(&escpos::EscPosEncoder::print_raster(image));
-            Ok((data, "application/octet-stream"))
+            // The complete receipt frame, not just the image: init + raster
+            // + three feed lines + a cut. Without the feed the head stops at
+            // the image's last row — often short of the tear bar — and
+            // without the cut a cutter-equipped model never cuts. The cash-
+            // drawer kick is deliberately not sent: opening the drawer after
+            // every receipt job would be unwanted. Models without a cutter
+            // ignore the cut command, so the frame is safe to send
+            // unconditionally.
+            Ok((
+                escpos::EscPosEncoder::build_receipt(image, true, false),
+                "application/octet-stream",
+            ))
         }
         PrinterLanguage::Tspl => Ok((
-            label_langs::tspl::print_bitmap(image, label_w_mm, label_h_mm, DEFAULT_GAP_MM, dpi),
+            label_langs::tspl::print_bitmap(
+                image,
+                label_w_mm,
+                label_h_mm,
+                label_gap_mm.unwrap_or(DEFAULT_GAP_MM),
+                dpi,
+            ),
             "application/octet-stream",
         )),
         PrinterLanguage::Zpl => Ok((
@@ -277,12 +328,16 @@ pub fn create_transport(
     printer_type: &PrinterType,
     name: &str,
     address: &str,
+    settings: &TransportSettings,
 ) -> Option<Box<dyn PrinterTransport>> {
     match printer_type {
-        PrinterType::Ipp => Some(Box::new(ipp::IppPrinter::new(
-            name.to_string(),
-            address.to_string(),
-        ))),
+        PrinterType::Ipp => Some(Box::new(
+            ipp::IppPrinter::new(name.to_string(), address.to_string()).with_credentials(
+                settings.username.clone(),
+                settings.password.clone(),
+                settings.skip_tls_verification,
+            ),
+        )),
         PrinterType::RawTcp => Some(Box::new(raw_tcp::RawTcpPrinter::new(
             name.to_string(),
             address.to_string(),
@@ -350,7 +405,7 @@ impl TransportRegistry {
     pub async fn discover_all() -> Vec<PrinterInfo> {
         #[cfg(windows)]
         {
-            match create_transport(&PrinterType::System, "", "") {
+            match create_transport(&PrinterType::System, "", "", &TransportSettings::default()) {
                 Some(t) => t.discover().await,
                 None => Vec::new(),
             }
@@ -358,7 +413,7 @@ impl TransportRegistry {
         #[cfg(target_os = "linux")]
         {
             // CUPS queues are the system printers.
-            match create_transport(&PrinterType::System, "", "") {
+            match create_transport(&PrinterType::System, "", "", &TransportSettings::default()) {
                 Some(t) => t.discover().await,
                 None => Vec::new(),
             }
@@ -377,10 +432,11 @@ impl TransportRegistry {
         name: &str,
         address: &str,
         job: RenderedJob,
+        settings: &TransportSettings,
     ) -> Result<(), String> {
-        let transport = create_transport(printer_type, name, address).ok_or_else(|| {
-            format!("`{printer_type}` printers are not supported on this platform")
-        })?;
+        let transport = create_transport(printer_type, name, address, settings).ok_or_else(
+            || format!("`{printer_type}` printers are not supported on this platform"),
+        )?;
         transport.send(job).await
     }
 
@@ -389,10 +445,11 @@ impl TransportRegistry {
         printer_type: &PrinterType,
         name: &str,
         address: &str,
+        settings: &TransportSettings,
     ) -> Result<(), String> {
-        let transport = create_transport(printer_type, name, address).ok_or_else(|| {
-            format!("`{printer_type}` printers are not supported on this platform")
-        })?;
+        let transport = create_transport(printer_type, name, address, settings).ok_or_else(
+            || format!("`{printer_type}` printers are not supported on this platform"),
+        )?;
         transport.test().await
     }
 
@@ -414,12 +471,17 @@ impl TransportRegistry {
         printer_type: &PrinterType,
         name: &str,
         address: &str,
+        settings: &TransportSettings,
     ) -> Result<(), String> {
         match printer_type {
             PrinterType::Ipp => {
-                ipp::IppPrinter::new(name.to_string(), address.to_string())
-                    .reach()
-                    .await
+                ipp::IppPrinter::new(name.to_string(), address.to_string()).with_credentials(
+                    settings.username.clone(),
+                    settings.password.clone(),
+                    settings.skip_tls_verification,
+                )
+                .reach()
+                .await
             }
             PrinterType::RawTcp => {
                 raw_tcp::RawTcpPrinter::new(name.to_string(), address.to_string())
@@ -600,7 +662,7 @@ mod tests {
     #[test]
     fn encoding_a_pdf_from_a_raster_is_an_error() {
         let image = crate::render::raster::RasterImage::new(8, 1);
-        let err = encode_for_language(&PrinterLanguage::Pdf, &image, 40.0, 30.0, 203)
+        let err = encode_for_language(&PrinterLanguage::Pdf, &image, 40.0, 30.0, 203, None)
             .expect_err("pdf must not be encoded from a raster");
         assert!(err.contains("PDF"), "{err}");
     }
@@ -613,30 +675,37 @@ mod tests {
         image.set_bit(0, 0, true);
         image.set_bit(7, 1, true);
 
-        let (zpl, _) = encode_for_language(&PrinterLanguage::Zpl, &image, 40.0, 30.0, 203).unwrap();
+        let (zpl, _) =
+            encode_for_language(&PrinterLanguage::Zpl, &image, 40.0, 30.0, 203, None).unwrap();
         let zpl = String::from_utf8_lossy(&zpl);
         assert!(zpl.starts_with("^XA"), "{zpl}");
         assert!(zpl.contains("80"), "hex of the first row (0x80): {zpl}");
 
         let (tspl, _) =
-            encode_for_language(&PrinterLanguage::Tspl, &image, 40.0, 30.0, 203).unwrap();
+            encode_for_language(&PrinterLanguage::Tspl, &image, 40.0, 30.0, 203, None).unwrap();
         let tspl = String::from_utf8_lossy(&tspl);
         assert!(tspl.starts_with("SIZE 40 mm"), "{tspl}");
         assert!(tspl.contains("BITMAP 0,0,1,2,0"), "{tspl}");
 
         let (cpcl, _) =
-            encode_for_language(&PrinterLanguage::Cpcl, &image, 40.0, 30.0, 203).unwrap();
+            encode_for_language(&PrinterLanguage::Cpcl, &image, 40.0, 30.0, 203, None).unwrap();
         let cpcl = String::from_utf8_lossy(&cpcl);
         assert!(cpcl.starts_with("! 0 200 200"), "{cpcl}");
         assert!(cpcl.contains("PRINT"), "{cpcl}");
 
         let (escpos, _) =
-            encode_for_language(&PrinterLanguage::Escpos, &image, 40.0, 30.0, 203).unwrap();
+            encode_for_language(&PrinterLanguage::Escpos, &image, 40.0, 30.0, 203, None)
+                .unwrap();
         assert!(escpos.starts_with(&[0x1B, 0x40]));
         assert!(escpos.windows(4).any(|w| w == [0x1D, 0x76, 0x30, 0x00]));
+        // The frame ends with the feed lines (ESC d 3) and a full cut
+        // (GS V 0), so receipts no longer stop short of the tear bar.
+        assert!(escpos.windows(3).any(|w| w == [0x1B, 0x64, 0x03]));
+        assert!(escpos.ends_with(&[0x1D, 0x56, 0x00]));
 
         let (raster, _) =
-            encode_for_language(&PrinterLanguage::Raster, &image, 40.0, 30.0, 203).unwrap();
+            encode_for_language(&PrinterLanguage::Raster, &image, 40.0, 30.0, 203, None)
+                .unwrap();
         assert_eq!(raster, image.to_bytes(), "raster is the bare dots");
     }
 
@@ -681,17 +750,19 @@ mod tests {
         // Off Windows (and off Linux, which serves system printers
         // through CUPS) there is no spooler, so `system` must say so
         // rather than reporting a successful print.
-        let err = TransportRegistry::test_printer(&PrinterType::System, "p", "")
-            .await
-            .unwrap_err();
+        let err =
+            TransportRegistry::test_printer(&PrinterType::System, "p", "", &TransportSettings::default())
+                .await
+                .unwrap_err();
         assert!(err.contains("system"), "{err}");
         assert!(err.contains("not supported"), "{err}");
 
         // A probe against the same unsupported row fails the same way:
         // "nothing to dial" must never read as "reachable".
-        let err = TransportRegistry::probe(&PrinterType::System, "p", "")
-            .await
-            .unwrap_err();
+        let err =
+            TransportRegistry::probe(&PrinterType::System, "p", "", &TransportSettings::default())
+                .await
+                .unwrap_err();
         assert!(err.contains("not supported"), "{err}");
     }
 
@@ -707,13 +778,23 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
 
         // The raw TCP probe.
-        TransportRegistry::probe(&PrinterType::RawTcp, "p", &format!("127.0.0.1:{port}"))
-            .await
-            .expect("something is listening");
+        TransportRegistry::probe(
+            &PrinterType::RawTcp,
+            "p",
+            &format!("127.0.0.1:{port}"),
+            &TransportSettings::default(),
+        )
+        .await
+        .expect("something is listening");
         // The IPP probe, against the very same listener.
-        TransportRegistry::probe(&PrinterType::Ipp, "p", &format!("127.0.0.1:{port}"))
-            .await
-            .expect("something is listening");
+        TransportRegistry::probe(
+            &PrinterType::Ipp,
+            "p",
+            &format!("127.0.0.1:{port}"),
+            &TransportSettings::default(),
+        )
+        .await
+        .expect("something is listening");
 
         // Two connects, two silent connections: EOF on the first, EOF on
         // the second. A probe that wrote or printed would show bytes here.
@@ -742,9 +823,14 @@ mod tests {
         drop(listener); // nothing is listening on this port any more
 
         for kind in [PrinterType::Ipp, PrinterType::RawTcp] {
-            let err = TransportRegistry::probe(&kind, "p", &format!("127.0.0.1:{port}"))
-                .await
-                .unwrap_err();
+            let err = TransportRegistry::probe(
+                &kind,
+                "p",
+                &format!("127.0.0.1:{port}"),
+                &TransportSettings::default(),
+            )
+            .await
+            .unwrap_err();
             assert!(err.contains("Could not reach"), "{kind}: {err}");
         }
     }
@@ -755,9 +841,14 @@ mod tests {
         // Read-only probe: absent daemon and unknown queue both fail
         // without submitting anything.
         let err =
-            TransportRegistry::test_printer(&PrinterType::System, "no-such-queue-printninja", "")
-                .await
-                .unwrap_err();
+            TransportRegistry::test_printer(
+                &PrinterType::System,
+                "no-such-queue-printninja",
+                "",
+                &TransportSettings::default(),
+            )
+            .await
+            .unwrap_err();
         assert!(err.contains("CUPS"), "{err}");
     }
 
@@ -767,9 +858,10 @@ mod tests {
         // Linux does not drive USB/Bluetooth directly; the app reports the
         // supported route (CUPS raw queue) instead of silently succeeding.
         for kind in [PrinterType::Usb, PrinterType::Bluetooth] {
-            let err = TransportRegistry::probe(&kind, "MyThermal", "usb://dummy")
-                .await
-                .unwrap_err();
+            let err =
+                TransportRegistry::probe(&kind, "MyThermal", "usb://dummy", &TransportSettings::default())
+                    .await
+                    .unwrap_err();
             assert!(err.contains("CUPS raw queue"), "{kind}: {err}");
             assert!(err.contains("lpadmin"), "{kind}: {err}");
             assert!(err.contains("type 'system'"), "{kind}: {err}");
@@ -788,6 +880,7 @@ mod tests {
                     copies: 1,
                     language: PrinterLanguage::Escpos,
                 },
+                &TransportSettings::default(),
             )
             .await
             .unwrap_err();
@@ -809,7 +902,14 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn system_transport_exists_on_windows() {
-        assert!(create_transport(&PrinterType::System, "Printer", "").is_some());
-        assert!(create_transport(&PrinterType::Usb, "Thermal", "").is_some());
+        assert!(create_transport(
+            &PrinterType::System,
+            "Printer",
+            "",
+            &TransportSettings::default()
+        )
+        .is_some());
+        assert!(create_transport(&PrinterType::Usb, "Thermal", "", &TransportSettings::default())
+            .is_some());
     }
 }

@@ -576,6 +576,10 @@ async fn print_job(
                     "job_id": res.job_id,
                     "status": "success",
                     "duration_ms": res.duration_ms,
+                    // A job can succeed and still deserve a warning the
+                    // phone's dialog should show (PDF on a raw wire, a
+                    // GDI-only queue).
+                    "warnings": res.warnings,
                 })),
             ))
         }

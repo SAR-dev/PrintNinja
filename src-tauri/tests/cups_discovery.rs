@@ -172,6 +172,7 @@ fn cups_queue_prints_pdf_through_print_job() {
         &PrinterType::System,
         "MockLaser",
         &format!("{url}/printers/MockLaser"),
+        &printninja_lib::transport::TransportSettings::default(),
     );
     assert!(created.is_some(), "system resolves on Linux");
     let result = rt().block_on(created.unwrap().send(RenderedJob {
@@ -201,6 +202,7 @@ fn cups_test_probe_needs_no_print() {
         &PrinterType::System,
         "Ghost",
         "",
+        &printninja_lib::transport::TransportSettings::default(),
     ));
     std::env::remove_var("PRINTNINJA_CUPS_URL");
     let err = result.unwrap_err();
@@ -232,6 +234,7 @@ fn probe_queue(body: Vec<u8>) -> Result<(), String> {
         &PrinterType::System,
         "MockLaser",
         "",
+        &printninja_lib::transport::TransportSettings::default(),
     ));
     std::env::remove_var("PRINTNINJA_CUPS_URL");
     result

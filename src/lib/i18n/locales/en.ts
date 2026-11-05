@@ -457,6 +457,7 @@ const en = {
     rendered_on: "Rendered on {{peer}}",
     finished: "Finished in {{seconds}}.",
     failed_title: "Print failed",
+    warnings_title: "Warnings",
     unknown_error: "Unknown error",
     pair_again_to_print: "Pair again to print.",
     pdf_needs_pair:
@@ -565,6 +566,19 @@ const en = {
     test_print: "Test Print",
     paper_width_mm: "Paper width (mm)",
     dpi: "DPI",
+    label_gap_mm: "Label gap (mm)",
+    label_gap_hint:
+      "Only for TSPL labels. Blank keeps the built-in default (2 mm).",
+    ipp_signin: "Sign-in (optional)",
+    ipp_username: "Username",
+    ipp_password: "Password",
+    ipp_username_hint:
+      "IPP sign-in user. Blank uses the built-in PrintNinja identity.",
+    ipp_password_hint:
+      "Sent as HTTP Basic authentication on every request. Blank sends no authentication.",
+    ipp_skip_cert: "Skip certificate verification",
+    ipp_skip_cert_hint:
+      "https:// endpoints only. Lets a self-signed or otherwise unverifiable certificate through.",
     conn_ipp: "Wi-Fi / LAN (IPP)",
     conn_raw: "Wi-Fi / LAN (Raw TCP 9100)",
     conn_usb: "USB",
@@ -653,6 +667,9 @@ const en = {
     err_dpi_int: "DPI must be a whole number",
     err_dpi_min: "DPI must be at least 50",
     err_dpi_max: "DPI must be at most 2400",
+    err_gap_number: "Label gap must be a number",
+    err_gap_min: "Label gap must be at least 0.1",
+    err_gap_max: "Label gap must be at most 50",
     err_invalid: "Invalid printer",
     lang_pdf: "PDF",
     lang_escpos: "ESC/POS (receipt)",

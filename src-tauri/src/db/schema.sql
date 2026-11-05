@@ -8,6 +8,10 @@ CREATE TABLE IF NOT EXISTS printers (
     language TEXT NOT NULL DEFAULT 'pdf' CHECK(language IN ('pdf', 'escpos', 'tspl', 'zpl', 'cpcl', 'raster')),
     paper_width_mm INTEGER CHECK(paper_width_mm IS NULL OR paper_width_mm > 0),
     dpi INTEGER DEFAULT 203 CHECK(dpi IS NULL OR dpi > 0),
+    label_gap_mm REAL CHECK(label_gap_mm IS NULL OR label_gap_mm > 0),
+    username TEXT,
+    password TEXT,
+    skip_tls_verification INTEGER NOT NULL DEFAULT 0,
     default_settings_json TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))

@@ -23,7 +23,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Printer, Zap, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
+import {
+  Printer,
+  Zap,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  TriangleAlert,
+} from "lucide-react";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { TimingBreakdown } from "@/components/TimingBreakdown";
 import { formatSeconds } from "@/lib/timings";
@@ -580,6 +587,7 @@ function PrintForm() {
     store.setError("");
     store.setTimings(null);
     store.setRenderedBy(null);
+    store.setWarnings([]);
 
     try {
       const result = await agent("print_html", {
@@ -611,6 +619,7 @@ function PrintForm() {
       store.setDurationMs(result.duration_ms);
       store.setTimings(result.timings ?? null);
       store.setRenderedBy(result.rendered_by ?? null);
+      store.setWarnings(result.warnings ?? []);
       if (result.success) {
         store.setStatus("success");
       } else {
@@ -637,6 +646,7 @@ function PrintForm() {
     store.setError("");
     store.setTimings(null);
     store.setRenderedBy(null);
+    store.setWarnings([]);
     setRemoteCode(null);
     setPrintedVia(null);
     try {
@@ -684,6 +694,7 @@ function PrintForm() {
       store.setDurationMs(result.duration_ms);
       setPrintedVia(result.pc_name);
       setRemoteCode(result.code);
+      store.setWarnings(result.warnings ?? []);
       if (result.success) {
         store.setStatus("success");
       } else {
@@ -711,11 +722,13 @@ function PrintForm() {
     store.setError("");
     store.setTimings(null);
     store.setRenderedBy(null);
+    store.setWarnings([]);
     try {
       const result = await agent("spike_test_print", {});
       store.setDurationMs(result.duration_ms);
       store.setTimings(result.timings ?? null);
       store.setRenderedBy(result.rendered_by ?? null);
+      store.setWarnings(result.warnings ?? []);
       if (result.success) {
         store.setStatus("success");
       } else {
@@ -1208,6 +1221,27 @@ function PrintForm() {
           >
             {t("print.retry")}
           </Button>
+        </div>
+      )}
+      {/* Non-fatal warnings ride on both outcomes: the print went out,
+          but the output may be wrong (PDF on a raw wire, GDI-only
+          queue). The text comes from the backend, in the backend's
+          language, like the error lines. */}
+      {store.warnings.length > 0 && (
+        <div
+          role="alert"
+          data-testid="print-warnings"
+          className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning-soft px-4 py-3 text-warning"
+        >
+          <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          <div className="min-w-0 flex-1 space-y-1">
+            <p className="text-sm font-medium">{t("print.warnings_title")}</p>
+            {store.warnings.map((w) => (
+              <p key={w} className="break-words text-xs">
+                {w}
+              </p>
+            ))}
+          </div>
         </div>
       )}
       {/* While printing the buttons say so and disable: no separate

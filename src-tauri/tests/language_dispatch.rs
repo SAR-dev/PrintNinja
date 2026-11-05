@@ -245,9 +245,11 @@ async fn escpos_printers_receive_escpos() {
         bytes.windows(4).any(|w| w == [0x1D, 0x76, 0x30, 0x00]),
         "must carry the GS v 0 raster command: {bytes:?}"
     );
+    // Item 5: the job is the full receipt frame, so the stream now
+    // closes with the feed lines and a full cut, not the bare dots.
     assert!(
-        bytes.ends_with(&test_raster().dots),
-        "the raster's dots must close the stream"
+        bytes.ends_with(&[0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00]),
+        "the receipt must close with the feed lines and a full cut: {bytes:?}"
     );
 }
 

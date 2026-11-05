@@ -11,9 +11,19 @@ use crate::transport::{status, PrinterInfo, PrinterTransport, RenderedJob};
 use async_trait::async_trait;
 use std::time::{Duration, Instant};
 
-/// How long one USB round trip may take: permission dialog aside, the
-/// transfer itself is fast, but a wedged device must still fail loudly.
+/// How long a pure USB transfer may take: the connection is already open,
+/// so the transfer itself is fast, but a wedged device must still fail
+/// loudly. The open and probe paths use [`USB_OPEN_TIMEOUT`] instead.
 const USB_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How long an open or probe may take.
+///
+/// The plugin shows the system USB permission dialog on first use and
+/// waits up to 60 s for the user's answer, so this must outlast that
+/// wait: a dialog answered at second 55 used to end as a false
+/// "stopped responding" timeout on the Rust side. The margin over 60 s
+/// leaves room for the connect after the dialog closes.
+const USB_OPEN_TIMEOUT: Duration = Duration::from_secs(90);
 
 /// How long to wait for a status query's answer.
 ///
@@ -53,14 +63,17 @@ impl AndroidUsbPrinter {
         let what = self.what();
         // Phase 0 visibility: probe vs query vs write per print.
         let t = Instant::now();
-        let result = tokio::time::timeout(USB_TIMEOUT, tokio::task::spawn_blocking(move || {
-            app.android_print().probe_usb(&device)
-        }))
+        // The probe can show the permission dialog, so it gets the open
+        // timeout, not the transfer one.
+        let result = tokio::time::timeout(
+            USB_OPEN_TIMEOUT,
+            tokio::task::spawn_blocking(move || app.android_print().probe_usb(&device)),
+        )
         .await
         .map_err(|_| {
             format!(
                 "{what} stopped responding after {}s — check the cable and that the printer is powered on",
-                USB_TIMEOUT.as_secs()
+                USB_OPEN_TIMEOUT.as_secs()
             )
         })?
         .map_err(|e| format!("USB probe task failed: {e}"))?
@@ -122,8 +135,10 @@ impl AndroidUsbPrinter {
         let device = self.device.clone();
         let what = self.what();
         let t = Instant::now();
+        // Opening can show the permission dialog on first use, so it
+        // gets the open timeout, not the transfer one.
         let opened = tokio::time::timeout(
-            USB_TIMEOUT,
+            USB_OPEN_TIMEOUT,
             tokio::task::spawn_blocking(move || app.android_print().open_usb_connection(&device)),
         )
         .await
@@ -269,13 +284,20 @@ impl PrinterTransport for AndroidUsbPrinter {
             }
         };
         list.into_iter()
-            .map(|d| PrinterInfo {
-                id: d.id.clone(),
-                name: d.name,
-                address: d.id,
-                printer_type: crate::transport::PrinterType::Usb,
-                language: crate::transport::PrinterLanguage::Pdf,
-                status: "unknown".to_string(),
+            .map(|d| {
+                // The address is the vendor:product ID, not the bus path:
+                // it is what the user reads and what survives a port change,
+                // a hub or a reboot. The plugin matches the device by those
+                // IDs, falling back to the bus path for rows saved earlier.
+                let vid_pid = format!("{:04x}:{:04x}", d.vendor_id, d.product_id);
+                PrinterInfo {
+                    id: d.id.clone(),
+                    name: format!("USB printer {vid_pid}"),
+                    address: vid_pid,
+                    printer_type: crate::transport::PrinterType::Usb,
+                    language: crate::transport::PrinterLanguage::Pdf,
+                    status: "unknown".to_string(),
+                }
             })
             .collect()
     }
