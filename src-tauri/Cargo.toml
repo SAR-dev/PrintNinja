@@ -4,10 +4,6 @@ version = "4.0.1"
 description = "Cross-platform silent print app"
 authors = ["PrintNinja"]
 edition = "2021"
-# The Phase 0 spike (examples/direct_print_spike.rs + its `mod spike`
-# file) is declared explicitly below; auto-discovery would build
-# spike.rs as a standalone example and fail (it has no main).
-autoexamples = false
 
 [lib]
 name = "printninja_lib"
@@ -80,24 +76,4 @@ tauri = { version = "2", features = ["test"] }
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = [
-  "Win32_System_Threading", "Win32_Security", "Win32_System_Com",
-  # Direct printing (docs/planned/DIRECT_PRINTING.md): the Phase 0 spike tool
-  # (examples/direct_print_spike.rs) needs these; Phases 1-4 keep them.
-  "Win32_Foundation", "Win32_Storage_FileSystem",
-  "Win32_Devices_DeviceAndDriverInstallation", "Win32_Devices_Properties",
-  "Win32_Devices_Bluetooth", "Win32_Graphics_Gdi", "Win32_Graphics_Printing",
-  "Win32_Networking_WinSock", "Win32_System_IO",
-] }
-
-[target.'cfg(windows)'.dev-dependencies]
-# Phase 0 spike only (examples/direct_print_spike.rs): BLE scan/probe.
-# BLE is out of scope for the plan, so this stays a dev-dependency.
-btleplug = "0.11"
-
-# Declare the Phase 0 spike (with `autoexamples = false` above):
-# direct_print_spike.rs is the main, spike.rs its `mod spike`
-# internals (Windows-only). Without this, spike.rs is auto-discovered
-# as a standalone example with no main and fails `cargo test`.
-[[example]]
-name = "direct_print_spike"
+windows = { version = "0.58", features = ["Win32_System_Threading", "Win32_Security", "Win32_System_Com"] }
