@@ -70,7 +70,8 @@ import type { TemplateListRow } from "@/lib/templates/listTemplates";
 import { compileTemplateCss } from "@/lib/templates/compileTemplateCss";
 import { PrintPreview } from "@/components/PrintPreview";
 import { resolvePaper } from "@/lib/render/printLayout";
-import { PAPER_PRESETS } from "@/lib/paperPresets";
+import { derivePaperKey } from "@/lib/paperPresets";
+import { PaperSizeFields } from "@/components/print/PaperSizeFields";
 import { PhonePrintFlow } from "@/components/print/PhonePrintFlow";
 
 /**
@@ -184,6 +185,7 @@ function PrintForm() {
 
   // Choosing here resolves the block in place: no trip to Automation.
   const pickViaPcDevice = async (id: string) => {
+    resetOutcome();
     try {
       await setPrintViaPcDevice(id);
       setViaPcDevice(id);
@@ -280,8 +282,7 @@ function PrintForm() {
             rememberedTplOk ? remembered.template_id : String(tpl[0].id),
           );
         if (first && rememberedTplOk && !hadPaper) {
-          st.setPaperW(remembered.paper_w);
-          st.setPaperH(remembered.paper_h);
+          st.setPaper(remembered.paper_w, remembered.paper_h);
         }
       } catch (e) {
         console.error("Failed to load printers/templates:", e);
@@ -380,20 +381,30 @@ function PrintForm() {
     const id = window.setTimeout(() => setDebouncedDataUrl(dataUrl), 500);
     return () => window.clearTimeout(id);
   }, [dataUrl]);
+  // Pages rendered for one template must never be drawn with another
+  // template's geometry (or under its error/notice) while the new render is
+  // still running — a slow data URL can take up to 10 s.
+  const renderedPreviewKey = useRef<string | null>(null);
   useEffect(() => {
     const template = previewTemplate;
+    if (renderedPreviewKey.current !== previewTemplateKey) {
+      renderedPreviewKey.current = previewTemplateKey;
+      setPreviewPages([]);
+      setPreviewError("");
+      setPreviewNotice("");
+    }
     if (!template) {
       setPreviewPages([]);
       setPreviewError("");
       // A PC template with no local same-named copy has nothing to
       // render from — but it still prints; say so instead of blankness.
-      if (viaPc && pcTemplate) {
-        setPreviewNotice(
-          t("print.preview_pc_template", {
-            pc: viaPcPair?.name ?? t("print.via_pc_no_pair"),
-          }),
-        );
-      }
+      setPreviewNotice(
+        viaPc && pcTemplate
+          ? t("print.preview_pc_template", {
+              pc: viaPcPair?.name ?? t("print.via_pc_no_pair"),
+            })
+          : "",
+      );
       return;
     }
     let cancelled = false;
@@ -536,18 +547,60 @@ function PrintForm() {
     }
   };
 
+  // A print's outcome (banner, warnings, timings, the PC's reply) belongs to
+  // the printer + template it ran with. Once either changes it is stale, and
+  // a stale "failed" card would offer Retry, which reuses the old
+  // idempotency key for a different job. A running print is left alone.
+  const resetOutcome = () => {
+    const st = usePrintStore.getState();
+    if (st.status === "printing") return;
+    st.setStatus("idle");
+    st.setError("");
+    st.setDurationMs(0);
+    st.setTimings(null);
+    st.setRenderedBy(null);
+    st.setWarnings([]);
+    setRemoteCode(null);
+    setPrintedVia(null);
+    keyRef.current = "";
+  };
+
+  // A page range like "3-4" is meant for one document: a different template
+  // starts from all pages again instead of printing (or failing on) pages
+  // that were typed for the previous one.
+  const changeTemplate = (id: string) => {
+    if (id === usePrintStore.getState().templateId) return;
+    store.setTemplateId(id);
+    store.setPageRange("");
+    resetOutcome();
+  };
+  const changePcTemplate = (serverId: string) => {
+    if (serverId === pcTemplate) return;
+    setPcTemplate(serverId);
+    store.setPageRange("");
+    resetOutcome();
+  };
+
   // Picking a printer brings back its last local choices (F3): the
   // remembered template when it still exists, plus the remembered paper.
   // Via-PC choices are the PC's own ids and never remembered here.
   const onPrinterChange = (name: string) => {
     store.setPrinterId(name);
+    resetOutcome();
     if (viaPc) return;
     const remembered = printerPrefs[prefsKey(name)];
-    if (!remembered) return;
-    const tpl = templates.find((x) => String(x.id) === remembered.template_id);
-    if (tpl) store.setTemplateId(String(tpl.id));
-    store.setPaperW(remembered.paper_w);
-    store.setPaperH(remembered.paper_h);
+    const tpl = remembered
+      ? templates.find((x) => String(x.id) === remembered.template_id)
+      : undefined;
+    if (!remembered || !tpl) {
+      // Nothing usable remembered for this printer (never printed here, or
+      // its template is gone): drop the previous printer's paper rather
+      // than silently carrying it over.
+      store.selectPaper("auto");
+      return;
+    }
+    changeTemplate(String(tpl.id));
+    store.setPaper(remembered.paper_w, remembered.paper_h);
   };
 
   const handlePrint = async (retry = false) => {
@@ -800,8 +853,13 @@ function PrintForm() {
   const designH = previewTemplate?.page_h_mm ?? 200;
   // Explicit paper size wins per axis; null falls back to the design size.
   // The paper is per-print only — never written back to the template.
-  const effPaperW = store.paperW ?? designW;
-  const effPaperH = store.paperH ?? designH;
+  // Print via PC sends no paper size (the PC prints at the template's
+  // design size), so the explicit choice is ignored there and the preview
+  // shows what will really print.
+  const reqPaperW = viaPc ? null : store.paperW;
+  const reqPaperH = viaPc ? null : store.paperH;
+  const effPaperW = reqPaperW ?? designW;
+  const effPaperH = reqPaperH ?? designH;
   // The physical sheet the preview draws (and the PDF prints on): the same
   // mapping the backend applies, so orientation swaps the paper, never the
   // design.
@@ -809,14 +867,16 @@ function PrintForm() {
     designW,
     designH,
     store.orientation,
-    store.paperW,
-    store.paperH,
+    reqPaperW,
+    reqPaperH,
   );
-  const paperPreset =
-    store.paperW == null && store.paperH == null
-      ? "auto"
-      : (PAPER_PRESETS.find((x) => x.w === store.paperW && x.h === store.paperH)
-          ?.key ?? "custom");
+  // "Custom…" is a deliberate choice kept in the store; every other value
+  // is derived from the size so presets still show when restored.
+  const paperPreset = viaPc
+    ? "auto"
+    : store.paperCustom
+      ? "custom"
+      : derivePaperKey(store.paperW, store.paperH);
 
   // F3: warn when the sheet the print will use is wider than the chosen
   // printer's registered paper width (e.g. an A4 template aimed at an
@@ -829,14 +889,16 @@ function PrintForm() {
     (printerPaperWidth as number) > 0 &&
     previewPaperW > (printerPaperWidth as number) + 1
       ? t(
-          store.paperW == null && store.paperH == null
+          reqPaperW == null && reqPaperH == null
             ? "print.paper_mismatch_template"
             : "print.paper_mismatch_paper",
           {
             tw: designW,
             th: designH,
-            pw2: effPaperW,
-            ph2: effPaperH,
+            // The sheet that will print (orientation applied), the same
+            // one the warning compares against.
+            pw2: previewPaperW,
+            ph2: previewPaperH,
             pw: printerPaperWidth,
           },
         )
@@ -1028,7 +1090,8 @@ function PrintForm() {
           pcFailed={pcFailed}
           pcTemplates={pcTemplates}
           pcTemplate={pcTemplate}
-          onPcTemplateChange={setPcTemplate}
+          onPcTemplateChange={changePcTemplate}
+          onTemplateChange={changeTemplate}
           pcTemplatesCached={pcTemplatesCached}
           printedVia={printedVia}
           remoteCode={remoteCode}
@@ -1340,7 +1403,7 @@ function PrintForm() {
               <div className={field}>
                 <Label htmlFor="print-template">{t("print.template")}</Label>
                 {viaPc && viaPcPair ? (
-                  <Select value={pcTemplate} onValueChange={setPcTemplate}>
+                  <Select value={pcTemplate} onValueChange={changePcTemplate}>
                     <SelectTrigger
                       id="print-template"
                       aria-label={t("print.template")}
@@ -1365,7 +1428,7 @@ function PrintForm() {
                 ) : (
                   <Select
                     value={store.templateId}
-                    onValueChange={store.setTemplateId}
+                    onValueChange={changeTemplate}
                   >
                     <SelectTrigger
                       id="print-template"
@@ -1491,97 +1554,35 @@ function PrintForm() {
                   </Select>
                 </div>
               </div>
-              <div className={field}>
-                <Label htmlFor="print-paper">{t("print.paper_size")}</Label>
-                <Select
-                  value={paperPreset}
-                  onValueChange={(v) => {
-                    // "auto" (template size) is not a preset: clear the
-                    // explicit override so the design size applies again.
-                    if (v === "auto") {
-                      store.setPaperW(null);
-                      store.setPaperH(null);
-                      return;
-                    }
-                    const preset = PAPER_PRESETS.find((x) => x.key === v);
-                    if (!preset) {
-                      // Custom: start from the current effective size so
-                      // the inputs below are populated.
-                      store.setPaperW(effPaperW);
-                      store.setPaperH(effPaperH);
-                      return;
-                    }
-                    store.setPaperW(preset.w);
-                    store.setPaperH(preset.h);
-                  }}
-                >
-                  <SelectTrigger
-                    id="print-paper"
-                    aria-label={t("print.paper_size")}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">
-                      {t("print.paper_auto")}
-                    </SelectItem>
-                    {PAPER_PRESETS.map((x) => (
-                      <SelectItem key={x.key} value={x.key}>
-                        {t(x.labelKey)}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="custom">
-                      {t("print.paper_custom")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {paperPreset === "custom" && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className={field}>
-                    <Label htmlFor="paper-w">{t("print.paper_width")}</Label>
-                    <Input
-                      id="paper-w"
-                      type="number"
-                      min="1"
-                      value={store.paperW ?? ""}
-                      placeholder={String(designW)}
-                      onChange={(e) =>
-                        store.setPaperW(
-                          e.target.value === ""
-                            ? null
-                            : Math.max(1, Number(e.target.value) || 1),
-                        )
-                      }
-                    />
-                  </div>
-                  <div className={field}>
-                    <Label htmlFor="paper-h">{t("print.paper_height")}</Label>
-                    <Input
-                      id="paper-h"
-                      type="number"
-                      min="1"
-                      value={store.paperH ?? ""}
-                      placeholder={String(designH)}
-                      onChange={(e) =>
-                        store.setPaperH(
-                          e.target.value === ""
-                            ? null
-                            : Math.max(1, Number(e.target.value) || 1),
-                        )
-                      }
-                    />
-                  </div>
-                </div>
+              {viaPc ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("print.paper_via_pc")}
+                </p>
+              ) : (
+                <>
+                  <PaperSizeFields
+                    ids={{
+                      select: "print-paper",
+                      width: "paper-w",
+                      height: "paper-h",
+                    }}
+                    layout="grid"
+                    paperPreset={paperPreset}
+                    seedW={effPaperW}
+                    seedH={effPaperH}
+                    designW={designW}
+                    designH={designH}
+                  />
+                  <p className="-mt-2 text-xs text-muted-foreground">
+                    {t("print.paper_note", {
+                      dw: designW,
+                      dh: designH,
+                      pw: previewPaperW,
+                      ph: previewPaperH,
+                    })}
+                  </p>
+                </>
               )}
-              <p className="-mt-2 text-xs text-muted-foreground">
-                {t("print.paper_note", {
-                  dw: designW,
-                  dh: designH,
-                  pw: effPaperW,
-                  ph: effPaperH,
-                })}
-              </p>
               <div className={field}>
                 <Label htmlFor="page-range">{t("print.page_range")}</Label>
                 <Input
