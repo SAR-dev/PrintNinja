@@ -210,7 +210,12 @@ pub trait JobRenderer: Send + Sync {
                     .await
                     .and_then(|raster| {
                         crate::transport::encode_for_language(
-                            lang, &raster, paper_w_mm, paper_h_mm, dpi, label_gap_mm,
+                            lang,
+                            &raster,
+                            paper_w_mm,
+                            paper_h_mm,
+                            dpi,
+                            label_gap_mm,
                         )
                         .map_err(|e| anyhow::anyhow!(e))
                     })
@@ -1344,9 +1349,8 @@ async fn run_stages(
     let honors_copies = matches!(printer_type, crate::transport::PrinterType::Ipp)
         || (cfg!(target_os = "linux")
             && matches!(printer_type, crate::transport::PrinterType::System));
-    let pdf_per_copy = !honors_copies
-        && copies > 1
-        && matches!(language, crate::transport::PrinterLanguage::Pdf);
+    let pdf_per_copy =
+        !honors_copies && copies > 1 && matches!(language, crate::transport::PrinterLanguage::Pdf);
     let t_send = Instant::now();
     let result = queue
         .with_permit(&req.printer_name, async {

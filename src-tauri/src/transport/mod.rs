@@ -434,9 +434,10 @@ impl TransportRegistry {
         job: RenderedJob,
         settings: &TransportSettings,
     ) -> Result<(), String> {
-        let transport = create_transport(printer_type, name, address, settings).ok_or_else(
-            || format!("`{printer_type}` printers are not supported on this platform"),
-        )?;
+        let transport =
+            create_transport(printer_type, name, address, settings).ok_or_else(|| {
+                format!("`{printer_type}` printers are not supported on this platform")
+            })?;
         transport.send(job).await
     }
 
@@ -447,9 +448,10 @@ impl TransportRegistry {
         address: &str,
         settings: &TransportSettings,
     ) -> Result<(), String> {
-        let transport = create_transport(printer_type, name, address, settings).ok_or_else(
-            || format!("`{printer_type}` printers are not supported on this platform"),
-        )?;
+        let transport =
+            create_transport(printer_type, name, address, settings).ok_or_else(|| {
+                format!("`{printer_type}` printers are not supported on this platform")
+            })?;
         transport.test().await
     }
 
@@ -475,13 +477,14 @@ impl TransportRegistry {
     ) -> Result<(), String> {
         match printer_type {
             PrinterType::Ipp => {
-                ipp::IppPrinter::new(name.to_string(), address.to_string()).with_credentials(
-                    settings.username.clone(),
-                    settings.password.clone(),
-                    settings.skip_tls_verification,
-                )
-                .reach()
-                .await
+                ipp::IppPrinter::new(name.to_string(), address.to_string())
+                    .with_credentials(
+                        settings.username.clone(),
+                        settings.password.clone(),
+                        settings.skip_tls_verification,
+                    )
+                    .reach()
+                    .await
             }
             PrinterType::RawTcp => {
                 raw_tcp::RawTcpPrinter::new(name.to_string(), address.to_string())
@@ -694,8 +697,7 @@ mod tests {
         assert!(cpcl.contains("PRINT"), "{cpcl}");
 
         let (escpos, _) =
-            encode_for_language(&PrinterLanguage::Escpos, &image, 40.0, 30.0, 203, None)
-                .unwrap();
+            encode_for_language(&PrinterLanguage::Escpos, &image, 40.0, 30.0, 203, None).unwrap();
         assert!(escpos.starts_with(&[0x1B, 0x40]));
         assert!(escpos.windows(4).any(|w| w == [0x1D, 0x76, 0x30, 0x00]));
         // The frame ends with the feed lines (ESC d 3) and a full cut
@@ -704,8 +706,7 @@ mod tests {
         assert!(escpos.ends_with(&[0x1D, 0x56, 0x00]));
 
         let (raster, _) =
-            encode_for_language(&PrinterLanguage::Raster, &image, 40.0, 30.0, 203, None)
-                .unwrap();
+            encode_for_language(&PrinterLanguage::Raster, &image, 40.0, 30.0, 203, None).unwrap();
         assert_eq!(raster, image.to_bytes(), "raster is the bare dots");
     }
 
@@ -750,10 +751,14 @@ mod tests {
         // Off Windows (and off Linux, which serves system printers
         // through CUPS) there is no spooler, so `system` must say so
         // rather than reporting a successful print.
-        let err =
-            TransportRegistry::test_printer(&PrinterType::System, "p", "", &TransportSettings::default())
-                .await
-                .unwrap_err();
+        let err = TransportRegistry::test_printer(
+            &PrinterType::System,
+            "p",
+            "",
+            &TransportSettings::default(),
+        )
+        .await
+        .unwrap_err();
         assert!(err.contains("system"), "{err}");
         assert!(err.contains("not supported"), "{err}");
 
@@ -840,15 +845,14 @@ mod tests {
     async fn system_transport_probes_cups_without_printing() {
         // Read-only probe: absent daemon and unknown queue both fail
         // without submitting anything.
-        let err =
-            TransportRegistry::test_printer(
-                &PrinterType::System,
-                "no-such-queue-printninja",
-                "",
-                &TransportSettings::default(),
-            )
-            .await
-            .unwrap_err();
+        let err = TransportRegistry::test_printer(
+            &PrinterType::System,
+            "no-such-queue-printninja",
+            "",
+            &TransportSettings::default(),
+        )
+        .await
+        .unwrap_err();
         assert!(err.contains("CUPS"), "{err}");
     }
 
@@ -858,10 +862,14 @@ mod tests {
         // Linux does not drive USB/Bluetooth directly; the app reports the
         // supported route (CUPS raw queue) instead of silently succeeding.
         for kind in [PrinterType::Usb, PrinterType::Bluetooth] {
-            let err =
-                TransportRegistry::probe(&kind, "MyThermal", "usb://dummy", &TransportSettings::default())
-                    .await
-                    .unwrap_err();
+            let err = TransportRegistry::probe(
+                &kind,
+                "MyThermal",
+                "usb://dummy",
+                &TransportSettings::default(),
+            )
+            .await
+            .unwrap_err();
             assert!(err.contains("CUPS raw queue"), "{kind}: {err}");
             assert!(err.contains("lpadmin"), "{kind}: {err}");
             assert!(err.contains("type 'system'"), "{kind}: {err}");
@@ -909,7 +917,12 @@ mod tests {
             &TransportSettings::default()
         )
         .is_some());
-        assert!(create_transport(&PrinterType::Usb, "Thermal", "", &TransportSettings::default())
-            .is_some());
+        assert!(create_transport(
+            &PrinterType::Usb,
+            "Thermal",
+            "",
+            &TransportSettings::default()
+        )
+        .is_some());
     }
 }
