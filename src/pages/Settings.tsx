@@ -1240,9 +1240,7 @@ export function SettingsPage() {
                             </p>
                           )}
                           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                            <Label
-                              htmlFor="settings-diag-browser-choice"
-                            >
+                            <Label htmlFor="settings-diag-browser-choice">
                               {t("settings_page.diag_browser_title")}
                             </Label>
                             <Select
@@ -1277,9 +1275,7 @@ export function SettingsPage() {
                           </p>
                           {browserChoice === "custom" && (
                             <div className="mt-2 space-y-1">
-                              <Label
-                                htmlFor="settings-diag-browser-custom-path"
-                              >
+                              <Label htmlFor="settings-diag-browser-custom-path">
                                 {t("settings_page.diag_browser_custom_path")}
                               </Label>
                               <Input
@@ -1289,7 +1285,9 @@ export function SettingsPage() {
                                 disabled={browserBusy}
                               />
                               <p className="text-xs text-muted-foreground">
-                                {t("settings_page.diag_browser_custom_path_hint")}
+                                {t(
+                                  "settings_page.diag_browser_custom_path_hint",
+                                )}
                               </p>
                             </div>
                           )}
@@ -1465,8 +1463,7 @@ export function SettingsPage() {
                                             ? Math.max(
                                                 1,
                                                 Math.floor(
-                                                  shellProgress.total /
-                                                  1048576,
+                                                  shellProgress.total / 1048576,
                                                 ),
                                               )
                                             : 0,
