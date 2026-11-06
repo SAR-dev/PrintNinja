@@ -4,3 +4,7 @@
 Dockerfile text eol=lf
 *.yml      text eol=lf
 *.yaml     text eol=lf
+# Biome formats to LF; keep TypeScript LF in the working tree so
+# `pnpm lint` passes on Windows checkouts (core.autocrlf would CRLF them).
+*.ts       text eol=lf
+*.tsx      text eol=lf
