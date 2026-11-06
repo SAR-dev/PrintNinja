@@ -2,6 +2,8 @@ use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 
 pub mod barcode;
+/// Opt-in download of the headless-shell fallback browser (Windows).
+pub mod browser_download;
 // Launches headless Edge (Windows) or Chromium (Linux). Edge runs it for
 // real; the unit tests build it everywhere so the profile logic is tested
 // without Edge.
@@ -9,6 +11,10 @@ pub mod barcode;
 mod cdp;
 #[cfg(any(windows, test))]
 mod edge;
+/// Whether this process is running elevated (administrator). Headless Edge
+/// will not print from an elevated parent (docs/EDGE_FAILURE_REPORT.md), so
+/// the failure paths report it instead of guessing.
+mod elevation;
 /// One-click repair for the Windows print pipeline (Settings → Diagnostics).
 pub mod fix;
 pub mod handlebars;
@@ -141,7 +147,7 @@ impl PdfRenderer {
         // one-shot launcher below, so printing never depends on it.
         if cdp::enabled() {
             let started = std::time::Instant::now();
-            let cfg = cdp::Config::new(std::path::Path::new(edge_path), &self.cache_dir);
+            let cfg = cdp::Config::new(std::path::Path::new(&edge_path), &self.cache_dir);
             match cdp::shared().print_pdf(&cfg, &html_url).await {
                 Ok(bytes) => {
                     crate::metrics::count_browser_render(true);
@@ -178,6 +184,12 @@ impl PdfRenderer {
             "--no-default-browser-check",
             "--print-to-pdf-no-header",
             "--no-pdf-header-footer",
+            // Without this headless Edge writes nothing to stderr on
+            // failure (the report's empty-stderr symptom); with it, the
+            // failure branches below can quote Edge's real log lines.
+            // The launcher pipes stderr (`cmd.output()`), so nothing
+            // blocks.
+            "--enable-logging=stderr",
         ]
         .iter()
         .map(|a| a.to_string())
@@ -188,7 +200,7 @@ impl PdfRenderer {
         // The profile (reusable, or a throwaway) is the launcher's business.
         let run = match edge::shared()
             .run(
-                std::path::Path::new(edge_path),
+                std::path::Path::new(&edge_path),
                 &self.cache_dir,
                 &args,
                 &pdf_path,
@@ -226,10 +238,59 @@ impl PdfRenderer {
         // placeholder (P5).
         let stderr = String::from_utf8_lossy(&run.output.stderr);
         let _ = std::fs::remove_file(&pdf_path);
+
+        // The command line is the diagnostic anchor for every branch
+        // below: with `--enable-logging=stderr`, the flags plus the
+        // stderr excerpt tell the story the exit code alone cannot.
+        tracing::warn!(
+            edge = %edge_path.display(),
+            args = %args.join(" "),
+            status = %run.output.status,
+            "Edge print-to-pdf did not produce a PDF"
+        );
+
+        // Elevated parent: the report's A/B test showed Edge exits 0 in a
+        // few hundred milliseconds without printing whenever its parent
+        // is elevated, even on a fresh profile — the expected failure,
+        // not a handoff or a stale profile. Checked before the handoff
+        // signature below because msedge.exe is resident even on an
+        // elevated PC, so the handoff branch would misattribute the
+        // cause. (Only for msedge.exe: the elevation failure is a
+        // property of Edge, and the headless shell is unverified.)
+        if run.output.status.success()
+            && elevation::is_elevated()
+            && edge_path
+                .file_name()
+                .is_some_and(|n| n == "msedge.exe")
+        {
+            return Err(anyhow!("{}", elevation::ELEVATED_ERROR));
+        }
+
+        // The handoff signature, named for what it is: Edge exited 0,
+        // wrote no PDF, and msedge.exe is still running — the fresh
+        // launch handed its job to the resident Edge session instead of
+        // printing. The generic message below is not something an
+        // operator can act on; this one is. (Only for msedge.exe: the
+        // headless shell has no resident session to hand off to, so the
+        // same exit-0-no-PDF there is a different bug.)
+        if run.output.status.success()
+            && edge_path
+                .file_name()
+                .is_some_and(|n| n == "msedge.exe")
+            && fix::processes_running("msedge.exe")
+        {
+            return Err(anyhow!(
+                "Edge handed the print job to a running Edge session (exit 0, \
+                 no PDF) — close all Edge windows, or run Fix PC printing \
+                 (Settings > Diagnostics)"
+            ));
+        }
         Err(anyhow!(
-            "Edge print-to-pdf did not produce a PDF (status {}, stderr: {})",
+            "Edge print-to-pdf did not produce a PDF (status {}{})",
             run.output.status,
-            stderr.trim()
+            stderr_excerpt(&stderr)
+                .map(|s| format!(", Edge stderr: {s}"))
+                .unwrap_or_default()
         ))
     }
 
@@ -353,7 +414,7 @@ impl PdfRenderer {
         // Persistent Edge first, as in `webview2_print_to_pdf`.
         if cdp::enabled() {
             let started = std::time::Instant::now();
-            let cfg = cdp::Config::new(std::path::Path::new(edge_path), &self.cache_dir);
+            let cfg = cdp::Config::new(std::path::Path::new(&edge_path), &self.cache_dir);
             match cdp::shared()
                 .screenshot(&cfg, &html_url, w_px as u32, h_px as u32)
                 .await
@@ -397,7 +458,7 @@ impl PdfRenderer {
 
         let run = match edge::shared()
             .run(
-                std::path::Path::new(edge_path),
+                std::path::Path::new(&edge_path),
                 &self.cache_dir,
                 &args,
                 &png_path,
@@ -709,27 +770,79 @@ async fn run_chromium(chromium: &std::path::Path, args: &[String]) -> Result<std
     Ok(output)
 }
 
-/// Where Edge lives. Both Program Files locations are checked; `purpose`
-/// names the render in the error so the operator knows what failed.
+/// The first few non-empty lines of a browser's stderr, joined for an
+/// error message. `--enable-logging=stderr` is what makes headless Edge
+/// emit real log lines at all (before it wrote nothing on failure); the
+/// whole log would bury the message, so keep the first three lines.
 #[cfg(windows)]
-pub(crate) fn find_edge(purpose: &str) -> Result<&'static str> {
-    EDGE_PATHS
+fn stderr_excerpt(stderr: &str) -> Option<String> {
+    let joined = stderr
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .take(3)
+        .collect::<Vec<_>>()
+        .join(" | ");
+    (!joined.is_empty()).then_some(joined)
+}
+
+/// Browser resolution order: the `PRINTNINJA_EDGE_BIN` override (a
+/// set-but-missing override is a loud error, mirroring
+/// `PRINTNINJA_CHROMIUM_BIN` on Linux), then the opt-in downloaded
+/// headless shell when it is on disk, then the standard Edge install
+/// locations. `purpose` names the render in the error so the operator
+/// knows what failed. Pure over its inputs so it is testable off Windows.
+#[cfg(any(windows, test))]
+fn resolve_edge(
+    env_override: Option<std::ffi::OsString>,
+    shell: Option<PathBuf>,
+    candidates: &[&str],
+    purpose: &str,
+) -> Result<PathBuf> {
+    if let Some(bin) = env_override {
+        let path = PathBuf::from(&bin);
+        if path.is_file() {
+            return Ok(path);
+        }
+        return Err(anyhow!(
+            "PRINTNINJA_EDGE_BIN points at {} which is not a file — \
+             {purpose} cannot run without a browser",
+            path.display()
+        ));
+    }
+    if let Some(shell) = shell.filter(|p| p.is_file()) {
+        return Ok(shell);
+    }
+    candidates
         .iter()
         .copied()
-        .find(|p| std::path::Path::new(p).exists())
+        .find(|p| std::path::Path::new(p).is_file())
+        .map(PathBuf::from)
         .ok_or_else(|| {
             anyhow!(
                 "Microsoft Edge not found (looked in {}) — {purpose} needs \
-                 Edge/WebView2; the job cannot print without it",
-                EDGE_PATHS.join(", ")
+                 a browser; the job cannot print without it",
+                candidates.join(", ")
             )
         })
+}
+
+#[cfg(windows)]
+pub(crate) fn find_edge(purpose: &str) -> Result<PathBuf> {
+    resolve_edge(
+        std::env::var_os("PRINTNINJA_EDGE_BIN"),
+        browser_download::ready_path(),
+        &EDGE_PATHS,
+        purpose,
+    )
 }
 
 /// Whether this machine has the browser the renderer needs, for the UI.
 ///
 /// Windows prints through Edge (`msedge.exe`), Linux through a system
-/// Chromium-family browser; neither is bundled. When it is missing the UI
+/// Chromium-family browser; neither ships in the installer (Windows can
+/// opt into the downloaded headless shell — see `browser_download`). When
+/// it is missing the UI
 /// shows a modal with the exact steps to fix it, instead of the first print
 /// failing with a one-line error. Platforms that never render locally
 /// (Android buys every render from a paired PC) report `available: true`.
@@ -755,11 +868,22 @@ pub fn render_engine_status() -> RenderEngineStatus {
     #[cfg(windows)]
     {
         let found = find_edge("PDF rendering").ok();
+        // The whole resolution order, not just the install paths: the env
+        // override (when set) and the downloaded shell (when present) can
+        // be what actually prints, and the UI should show that.
+        let mut searched = Vec::new();
+        if std::env::var_os("PRINTNINJA_EDGE_BIN").is_some() {
+            searched.push("PRINTNINJA_EDGE_BIN (if set)".to_string());
+        }
+        if let Some(shell) = browser_download::ready_path() {
+            searched.push(shell.display().to_string());
+        }
+        searched.extend(EDGE_PATHS.iter().map(|p| p.to_string()));
         RenderEngineStatus {
             platform: "windows",
             available: found.is_some(),
-            path: found.map(str::to_string),
-            searched: EDGE_PATHS.iter().map(|p| p.to_string()).collect(),
+            path: found.map(|p| p.display().to_string()),
+            searched,
             distro: Vec::new(),
             distro_name: None,
             appimage: false,
@@ -862,7 +986,7 @@ pub fn warm_up_edge(cache_dir: PathBuf) {
         // it, which also warms its renderer, fonts and print pipeline. Then
         // the one-shot profile is not needed unless a render falls back.
         if cdp::enabled() {
-            let cfg = cdp::Config::new(std::path::Path::new(edge_path), &cache_dir);
+            let cfg = cdp::Config::new(std::path::Path::new(&edge_path), &cache_dir);
             let started = std::time::Instant::now();
             let primed = match cdp::shared().start(&cfg).await {
                 Ok(()) => cdp::shared().print_pdf(&cfg, &url).await.map(|_| ()),
@@ -892,6 +1016,7 @@ pub fn warm_up_edge(cache_dir: PathBuf) {
             "--no-default-browser-check",
             "--print-to-pdf-no-header",
             "--no-pdf-header-footer",
+            "--enable-logging=stderr",
         ]
         .iter()
         .map(|a| a.to_string())
@@ -899,7 +1024,7 @@ pub fn warm_up_edge(cache_dir: PathBuf) {
         args.push(format!("--print-to-pdf={}", pdf.to_string_lossy()));
         args.push(url);
         claim
-            .run(std::path::Path::new(edge_path), &cache_dir, &args, &pdf)
+            .run(std::path::Path::new(&edge_path), &cache_dir, &args, &pdf)
             .await;
         let _ = tokio::fs::remove_file(&html).await;
     });
@@ -1130,6 +1255,59 @@ mod tests {
         assert_eq!(ids, ["linuxmint", "ubuntu", "debian"]);
         assert_eq!(name.as_deref(), Some("Linux Mint 22"));
         assert_eq!(parse_os_release(""), (Vec::new(), None));
+    }
+
+    #[test]
+    fn resolve_edge_prefers_the_override_then_shell_then_candidates() {
+        let dir = std::env::temp_dir().join(format!(
+            "pn-resolve-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let override_bin = dir.join("override.exe");
+        let shell = dir.join("chrome-headless-shell.exe");
+        let candidate = dir.join("msedge.exe");
+        for p in [&override_bin, &shell, &candidate] {
+            std::fs::write(p, b"").unwrap();
+        }
+        let candidates = [candidate.to_str().unwrap()];
+
+        // A valid override wins over everything else.
+        assert_eq!(
+            resolve_edge(
+                Some(override_bin.as_os_str().to_os_string()),
+                Some(shell.clone()),
+                &candidates,
+                "test render"
+            )
+            .unwrap(),
+            override_bin
+        );
+        // A set-but-missing override is a loud error, not a silent fallback.
+        let err = resolve_edge(
+            Some(dir.join("nope.exe").as_os_str().to_os_string()),
+            Some(shell.clone()),
+            &candidates,
+            "test render",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("PRINTNINJA_EDGE_BIN"), "{err}");
+        assert!(err.contains("not a file"), "{err}");
+        // Without an override, a shell on disk beats the system Edge.
+        assert_eq!(
+            resolve_edge(None, Some(shell.clone()), &candidates, "test render").unwrap(),
+            shell
+        );
+        // A missing shell falls through to the candidates.
+        assert_eq!(
+            resolve_edge(None, Some(dir.join("absent.exe")), &candidates, "test render").unwrap(),
+            candidate
+        );
+        // Nothing anywhere: the error names every place that was searched.
+        let err = resolve_edge(None, None, &[], "test render").unwrap_err().to_string();
+        assert!(err.contains("Microsoft Edge not found"), "{err}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

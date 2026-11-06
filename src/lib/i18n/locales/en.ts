@@ -114,6 +114,15 @@ const en = {
       "PrintNinja looks for msedge.exe in exactly these places. A per-user install under AppData is not found.",
     win_webview_note:
       "The standalone WebView2 Runtime is not enough: PrintNinja starts msedge.exe itself.",
+    win_step_shell: "Or let PrintNinja download its own headless browser",
+    win_shell_hint:
+      "Downloads the official Chrome for Testing headless shell (~150 MB), verified by SHA-256. No installer. A running Edge session cannot take its launches, so printing works while your Edge windows stay open. You can remove it anytime.",
+    win_shell_download: "Download the headless browser (~150 MB)",
+    win_shell_downloading: "Downloading… {{done}} MB of {{total}} MB",
+    win_shell_remove: "Remove the downloaded browser",
+    win_shell_ready:
+      "Headless browser ready ({{version}}). Printing uses it; your Edge windows can stay open.",
+    win_shell_error: "The headless browser download failed: {{error}}",
     linux_step_install: "Install a Chromium-based browser",
     linux_detected: "Detected: {{name}}. Run this in a terminal:",
     linux_unknown_distro:
@@ -1123,8 +1132,20 @@ const en = {
     fix_cooldown: "Persistent browser cooldown reset",
     fix_test_ok: "Test render succeeded",
     fix_test_failed: "Test render failed",
+    fix_elevated:
+      "PrintNinja is running as administrator — printing cannot work, and the repair cannot succeed, until it is restarted normally.",
     toast_fix_ok: "Print pipeline fixed — test render succeeded",
     toast_fix_failed: "Repair ran, but the test render failed",
+    diag_fix_edge_still_running:
+      "Edge could not be stopped after the repair — close every Edge window yourself, then run the repair again.",
+    diag_fix_shell_offer:
+      "Option: let PrintNinja download its own headless browser (~150 MB, SHA-256 verified, no installer). A running Edge session cannot take its launches, so printing works while your Edge windows stay open. Nothing is downloaded unless you press the button; remove it anytime.",
+    diag_fix_shell_download: "Download the headless browser (opt-in)",
+    diag_fix_shell_downloading:
+      "Downloading the headless browser… {{done}} MB of {{total}} MB",
+    diag_fix_shell_ready:
+      "Headless browser ready — printing now uses it, and your Edge windows can stay open.",
+    diag_fix_shell_remove: "Remove the downloaded browser",
     allow_title: "Allow data from any domain?",
     allow_hint:
       "An empty list allows every domain. Live data URLs could then pull content from anywhere. Keep at least your own hosts listed unless you mean it.",
@@ -1509,6 +1530,12 @@ const en = {
       "Not allowed — this template belongs to a different account. Sign in with the account that owns it and try again.",
     unknown_printer_type: "Unknown printer type `{{type}}`",
     pdf_timeout: "PDF rendering timed out after {{seconds}} s",
+    edge_handoff:
+      "Edge handed the print job to a running Edge session — close all Edge windows, or run Fix PC printing in Settings → Diagnostics.",
+    edge_not_stopped:
+      "Edge could not be stopped after {{rounds}} rounds of taskkill — msedge.exe is still running. Close every Edge window, then run the repair again, or download the headless browser.",
+    edge_elevated:
+      "PrintNinja is running as administrator. Edge cannot print from an elevated process. Restart PrintNinja without 'Run as administrator' and try again.",
   },
 };
 

@@ -476,19 +476,25 @@ fn parse_active_port(text: &str) -> Option<(u16, String)> {
     (port != 0 && path.starts_with('/')).then(|| (port, path.to_string()))
 }
 
-/// The browser process ended before it published a DevTools port. On Windows
-/// that is what Edge does when another Edge process still owns the profile
-/// directory: it hands its command line to that process and exits with 0.
+/// The browser process ended before it published a DevTools port. On
+/// Windows the expected cause is an elevated parent (Edge exits 0 without
+/// printing when its parent is elevated — docs/EDGE_FAILURE_REPORT.md);
+/// next, a resident Edge session taking the launch (already named in the
+/// detail when `msedge.exe` is still running); only then the profile.
+/// `super::elevation::ELEVATED_ERROR` names the first cause.
 #[derive(Debug)]
 struct ExitedWhileStarting(String);
 
 impl std::fmt::Display for ExitedWhileStarting {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "the browser exited while starting ({}); the profile may be in use by another browser",
-            self.0
-        )
+        write!(f, "the browser exited while starting ({})", self.0)?;
+        // An elevated parent is the expected cause on Windows: name it
+        // before blaming a running session or the profile.
+        #[cfg(windows)]
+        if super::elevation::is_elevated() {
+            return write!(f, "; {}", super::elevation::ELEVATED_ERROR);
+        }
+        Ok(())
     }
 }
 
@@ -515,14 +521,25 @@ impl Browser {
                 "--disable-extensions",
                 "--disable-sync",
                 "--remote-debugging-port=0",
+                // The browser's own log, kept for the operator: without
+                // this flag a failing launch is silent.
+                "--enable-logging=stderr",
             ])
             .arg(format!("--user-data-dir={}", cfg.profile.to_string_lossy()))
             .args(&cfg.extra_args)
             .arg("about:blank")
-            // Piped output nobody reads would eventually block Edge.
+            // Piped output nobody reads would eventually block Edge, so
+            // stdout goes to null.
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            // …but stderr is a file in the profile dir: `--enable-logging
+            // =stderr` is what makes the failure above say anything, and
+            // a null pipe would swallow it.
+            .stderr(
+                std::fs::File::create(cfg.profile.join("browser-stderr.log"))
+                    .map(std::process::Stdio::from)
+                    .unwrap_or(std::process::Stdio::null()),
+            )
             .kill_on_drop(true);
         #[cfg(windows)]
         cmd.creation_flags(windows::Win32::System::Threading::CREATE_NO_WINDOW.0);
@@ -532,6 +549,17 @@ impl Browser {
         let deadline = Instant::now() + LAUNCH_TIMEOUT;
         let (port, path) = loop {
             if let Some(status) = child.try_wait()? {
+                // On Windows, an early exit with msedge.exe still running
+                // is the handoff signature — name it in the detail.
+                // (Display adds the elevation wording when the app
+                // itself is elevated, which is the expected cause.)
+                #[cfg(windows)]
+                if super::fix::processes_running("msedge.exe") {
+                    return Err(ExitedWhileStarting(format!(
+                        "{status} — a running Edge session likely took the launch"
+                    ))
+                    .into());
+                }
                 return Err(ExitedWhileStarting(status.to_string()).into());
             }
             if let Some(found) = tokio::fs::read_to_string(&active)

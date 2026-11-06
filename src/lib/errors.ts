@@ -100,6 +100,31 @@ const PATTERNS: Array<[RegExp, string, string[]]> = [
   ],
   [/^Unknown printer type `(.+)`$/, "errors.unknown_printer_type", ["type"]],
   [/^PDF render timed out after (\d+)s$/, "errors.pdf_timeout", ["seconds"]],
+  // Edge took the headless launch (exit 0, no PDF): the resident Edge
+  // session handed the print job off instead of printing. Keep the
+  // wording in sync with webview2_print_to_pdf and fix::run in
+  // src-tauri/src/render/.
+  [
+    /^Edge handed the print job to a running Edge session/,
+    "errors.edge_handoff",
+    [],
+  ],
+  // The repair's kill/verify loop could not stop Edge: the user has to
+  // close it by hand. Synced with fix::run in src-tauri/src/render/fix.rs.
+  [
+    /^Edge could not be stopped after (\d+) rounds of taskkill/,
+    "errors.edge_not_stopped",
+    ["rounds"],
+  ],
+  // Elevated parent: headless Edge exits 0 without printing when its
+  // parent is elevated (docs/EDGE_FAILURE_REPORT.md). Synced with
+  // ELEVATED_ERROR in src-tauri/src/render/elevation.rs — the match is on
+  // the opening only, because the repair appends its own suffix.
+  [
+    /^PrintNinja is running as administrator/,
+    "errors.edge_elevated",
+    [],
+  ],
   // The server's generic 403 body (ForbiddenError's default): a save that
   // PUTs to a template id owned by a different account. Name the cause so
   // it does not surface as raw English.

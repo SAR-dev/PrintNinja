@@ -602,6 +602,12 @@ const acknowledgedStubs: string[] = [
   // Windows-only and lives in Rust (render::fix); the fake engine reports
   // platform "other", so the button never appears in the browser.
   "fix_pc_print",
+  // Opt-in headless browser (Windows): the download and state machine
+  // live in Rust (render::browser_download); the fake engine reports
+  // platform "other", so the shell UI never appears in the browser.
+  "browser_shell_status",
+  "browser_shell_download",
+  "browser_shell_remove",
   "get_render_status",
   "set_render_sharing",
   // Render-sharing consumer: the Devices UI "test" button works in e2e

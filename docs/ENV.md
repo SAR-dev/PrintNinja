@@ -201,6 +201,18 @@ the app directly will not see your shell's exports — use the launcher's
 own env support, a wrapper script, or (for fleet installs) bake the
 behaviour into `VITE_DEFAULT_SHARE_URL`-style build config instead.
 
+### `PRINTNINJA_EDGE_BIN`
+Windows only. Full path to a Chromium-family executable that PrintNinja
+starts for printing instead of the two standard `msedge.exe` install
+locations — for example the opt-in headless shell the app can download
+(Settings → Diagnostics offers it), or a manually placed Chromium build.
+Resolution order: this variable, then the downloaded headless shell
+(when present), then the standard Edge locations. If the variable is set
+but the file does not exist, PrintNinja fails loudly naming the path —
+it never silently falls back. Set it in the environment the app
+launches with (same launcher caveat as `PRINTNINJA_PAIRING_TTL_SECS`).
+The Linux equivalent is `PRINTNINJA_CHROMIUM_BIN`.
+
 ### Webhooks (print callbacks)
 
 `POST /v1/print` accepts an optional `callback_url`; the app posts the

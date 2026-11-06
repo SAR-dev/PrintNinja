@@ -29,7 +29,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 async-trait = "0.1"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 base64 = "0.22"
 handlebars = "6"
 # `{{barcode}}` / `{{qrcode}}` template helpers. Encoders only: the SVG is
@@ -56,6 +56,10 @@ futures-util = { version = "0.3", default-features = false, features = ["std", "
 # cfg(windows) code — Edge's PNG output is decoded there; Linux/CI compile
 # it but the call site lives behind the Windows cfg.
 png = "0.17"
+# Extraction of the opt-in chrome-headless-shell download (render/
+# browser_download.rs). Like `png`, only referenced from cfg(windows)
+# code; `deflate` is the only compression the Chrome for Testing zips use.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 tauri-plugin-opener = "2"
 mdns-sd = "0.13"
 # euid check for the persistent Chromium launch: running as root without
@@ -77,3 +81,8 @@ tauri = { version = "2", features = ["test"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = ["Win32_System_Threading", "Win32_Security", "Win32_System_Com"] }
+# Elevation check (render/elevation.rs): GetCurrentProcess /
+# OpenProcessToken / GetTokenInformation only — kernel32 + advapi32, so the
+# module stays safe in the manifest-less test executables that the
+# `windows` crate's comctl32-v6-linked dependencies would not be.
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }

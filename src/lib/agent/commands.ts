@@ -3,6 +3,7 @@ import type {
   AddPrinterReq,
   ApiHttpResponse,
   ApiStatus,
+  BrowserShellStatus,
   ApplyReport,
   ConflictedRow,
   DeeplinkResult,
@@ -225,6 +226,11 @@ export interface AgentCommands {
   // close a running Edge, clear stale render profiles, reset the persistent
   // browser cooldown, then prove the pipeline with a test render.
   fix_pc_print: [{ close_edge: boolean }, FixReport];
+  // Opt-in headless browser (chrome-headless-shell): immune to the Edge
+  // handoff failure, SHA-256 verified, preferred by the renderer when ready.
+  browser_shell_status: [{}, BrowserShellStatus];
+  browser_shell_download: [{}, null];
+  browser_shell_remove: [{}, null];
   // The Explorer's HTTP client. Requests go through Rust, not the WebView:
   // the page's fetch to 127.0.0.1 is cross-origin (no ACAO on a loopback
   // bind) and mixed content (Android refuses cleartext from https).

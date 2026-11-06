@@ -240,6 +240,8 @@ Each badge links to the place where you can turn that switch off.
 
 **Printing from Linux fails.** Install CUPS and Chromium or Chrome. For USB and Bluetooth thermal printers, use a CUPS raw queue; PrintNinja cannot talk to them directly on Linux.
 
+**Printing on Windows fails and says Edge produced no PDF.** A running Edge session can take headless print launches for itself (exit code 0, no PDF). Run **Fix PC printing** in Settings → Diagnostics: it closes Edge (verifying that it is really gone), clears stale render profiles and runs a test render. If Edge keeps respawning, use the headless browser the repair offers to download (~150 MB, SHA-256 verified, no installer) — it prints while your Edge windows stay open. Advanced: point `PRINTNINJA_EDGE_BIN` at a browser of your choice (see `docs/ENV.md`).
+
 **A USB or Bluetooth receipt or label printer prints pages of random characters.** The printer's language is set to PDF, so the raw PDF file is being sent to a head that only understands a command language. Open **Printers**, edit the printer and set **Language** to the one it speaks (ESC/POS for most receipt printers; ZPL, TSPL or CPCL for label printers). If it was already ESC/POS, check that the printer itself is in that mode; many label printers ship in a different one.
 
 **My USB or Bluetooth printer is not listed on Windows.** Install it as a Windows printer first. PrintNinja uses the Windows spooler for both.

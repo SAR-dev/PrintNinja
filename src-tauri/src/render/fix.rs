@@ -43,6 +43,13 @@ pub struct FixReport {
     pub edge_was_running: bool,
     /// The repair closed the running Edge processes (`close_edge` was set).
     pub edge_closed: bool,
+    /// The kill was verified against the process table. When false, at
+    /// least one `msedge.exe` survived the repair's kill rounds — the UI
+    /// must say so, because a new headless launch will hand off to it.
+    pub edge_verified_dead: bool,
+    /// How many taskkill rounds the verification loop used (0 = no kill
+    /// was attempted).
+    pub edge_kill_rounds: u32,
     /// Render profiles removed from the cache dir.
     pub profiles_removed: Vec<String>,
     /// The persistent-browser connection and failure cooldown were reset.
@@ -50,6 +57,11 @@ pub struct FixReport {
     /// The test render produced a real PDF.
     pub test_render_ok: bool,
     pub test_render_error: Option<String>,
+    /// PrintNinja itself is running elevated (administrator). While this
+    /// is true Edge will not print at all, so the repair cannot succeed
+    /// — the UI must say so and point at a normal restart instead of
+    /// implying a broken pipeline.
+    pub elevated: bool,
 }
 
 /// The document the test render prints: one page, the size the pipeline
@@ -71,13 +83,62 @@ pub fn tasklist_says_running(stdout: &str) -> bool {
     stdout.to_ascii_lowercase().contains("msedge.exe")
 }
 
+/// Locale-proof process-table check for any image name: `tasklist` prints
+/// a line per matching process naming the image, and its "no tasks" line
+/// (in any locale) never does.
+pub fn tasklist_names(stdout: &str, image: &str) -> bool {
+    stdout.to_ascii_lowercase().contains(&image.to_ascii_lowercase())
+}
+
 #[cfg(windows)]
-fn edge_processes_running() -> bool {
+pub(crate) fn processes_running(image: &str) -> bool {
     std::process::Command::new("tasklist")
-        .args(["/FI", r"IMAGENAME eq msedge.exe"])
+        .args(["/FI", &format!("IMAGENAME eq {image}")])
         .output()
-        .map(|o| tasklist_says_running(&String::from_utf8_lossy(&o.stdout)))
+        .map(|o| tasklist_names(&String::from_utf8_lossy(&o.stdout), image))
         .unwrap_or(false)
+}
+
+#[cfg(windows)]
+pub(crate) fn edge_processes_running() -> bool {
+    processes_running("msedge.exe")
+}
+
+/// Kill the image and verify by re-reading the process table, tolerating
+/// respawns (Edge's startup boost can relaunch `msedge.exe` right after
+/// a kill). `kill` and `is_dead` are injected so the loop is testable off
+/// Windows. Returns `(verified_dead, rounds_used)`; the final check runs
+/// even after the last round, so a kill that landed late still counts.
+async fn kill_until_dead(
+    kill: impl Fn() + Send,
+    is_dead: impl Fn() -> bool + Send,
+    pause: std::time::Duration,
+    max_rounds: u32,
+) -> (bool, u32) {
+    for round in 1..=max_rounds {
+        kill();
+        tokio::time::sleep(pause).await;
+        if is_dead() {
+            return (true, round);
+        }
+    }
+    (is_dead(), max_rounds)
+}
+
+#[cfg(windows)]
+async fn kill_edge_verified() -> (bool, u32) {
+    // ~7.5 s worst case: 15 rounds of (kill, 500 ms, verify).
+    kill_until_dead(
+        || {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/IM", "msedge.exe"])
+                .status();
+        },
+        || !processes_running("msedge.exe"),
+        std::time::Duration::from_millis(500),
+        15,
+    )
+    .await
 }
 
 #[cfg(windows)]
@@ -86,13 +147,16 @@ pub async fn run(cache_dir: &Path, close_edge: bool) -> anyhow::Result<FixReport
     let edge_path = super::find_edge("the print repair").ok();
     let mut report = FixReport {
         edge_found: edge_path.is_some(),
-        edge_path: edge_path.map(str::to_owned),
+        edge_path: edge_path.as_ref().map(|p| p.display().to_string()),
         edge_was_running: false,
         edge_closed: false,
+        edge_verified_dead: true,
+        edge_kill_rounds: 0,
         profiles_removed: Vec::new(),
         cooldown_reset: false,
         test_render_ok: false,
         test_render_error: None,
+        elevated: super::elevation::is_elevated(),
     };
     if edge_path.is_none() {
         // Nothing to repair: the install notice already names the fix
@@ -107,13 +171,30 @@ pub async fn run(cache_dir: &Path, close_edge: bool) -> anyhow::Result<FixReport
     // in the next step and the next render starts a fresh one.
     report.edge_was_running = edge_processes_running();
     if report.edge_was_running && close_edge {
-        let status = std::process::Command::new("taskkill")
-            .args(["/F", "/IM", "msedge.exe"])
-            .status();
-        tracing::info!(?status, "closed running Edge for the print repair");
-        // Give the killed processes a moment to release their profile locks.
-        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
         report.edge_closed = true;
+        // A single taskkill loses to respawns (Edge startup boost can
+        // relaunch msedge.exe mid-repair), so kill in rounds and verify
+        // each against the process table before trusting the result.
+        let (verified, rounds) = kill_edge_verified().await;
+        report.edge_verified_dead = verified;
+        report.edge_kill_rounds = rounds;
+        tracing::info!(
+            verified,
+            rounds,
+            "closed running Edge for the print repair (verified)"
+        );
+        if !verified {
+            // Be honest up front: while msedge.exe survives, a new
+            // headless launch will hand off to it and the test render
+            // below would only re-prove the failure.
+            report.test_render_error = Some(format!(
+                "Edge could not be stopped after {rounds} rounds of \
+                 taskkill — msedge.exe is still running. Close every Edge \
+                 window (including background tasks), then run the repair \
+                 again. Or download the headless browser, which prints \
+                 fine while Edge stays open."
+            ));
+        }
     }
 
     // 4. Drop the app's persistent-browser handle (closing it politely if
@@ -147,6 +228,20 @@ pub async fn run(cache_dir: &Path, close_edge: bool) -> anyhow::Result<FixReport
     // document that starts with a PDF header, not just an exit code —
     // the exit-0-with-no-PDF handoff is exactly what this repair exists
     // for.
+    //
+    // Skip the proof when it cannot succeed: Edge survived the kill
+    // rounds and the render would use msedge.exe, which hands off to the
+    // surviving session. (A downloaded headless shell is unaffected, so
+    // when the resolved browser is not msedge.exe the proof still runs.)
+    if report.edge_closed
+        && !report.edge_verified_dead
+        && edge_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .is_some_and(|n| n == "msedge.exe")
+    {
+        return Ok(report);
+    }
     let renderer = super::PdfRenderer::new(cache_dir.to_path_buf());
     match renderer
         .html_to_pdf(TEST_HTML, 100.0, 150.0, "portrait")
@@ -155,14 +250,33 @@ pub async fn run(cache_dir: &Path, close_edge: bool) -> anyhow::Result<FixReport
         Ok(bytes) if bytes.len() >= 4 && bytes[0..4] == *b"%PDF" => {
             report.test_render_ok = true;
         }
-        Ok(_) => {
-            report.test_render_error = Some(
-                "Edge exited but did not return a PDF (the handoff symptom) — \
-             close every Edge window and try again"
-                    .into(),
-            )
+        // The render came back without a real PDF.
+        other => {
+            report.test_render_error = Some(if report.elevated {
+                // Edge will not print from an elevated parent, so the test
+                // render failing is the expected outcome — name that, and
+                // that the repair cannot succeed until the app is
+                // restarted normally. The kill, verification and profile
+                // removal above still ran; the report says so field by
+                // field.
+                format!(
+                    "{} The repair cannot succeed while PrintNinja is \
+                     elevated — restart it normally, then run the repair \
+                     again.",
+                    super::elevation::ELEVATED_ERROR
+                )
+            } else {
+                match other {
+                    Err(e) => e.to_string(),
+                    Ok(_) => {
+                        "Edge handed the print job to a running Edge session \
+                         (exit 0, no PDF) — close all Edge windows and run \
+                         the repair again"
+                            .to_string()
+                    }
+                }
+            });
         }
-        Err(e) => report.test_render_error = Some(e.to_string()),
     }
     Ok(report)
 }
@@ -210,5 +324,68 @@ mod tests {
             "INFO: No tasks are running which match the specified criteria.\n"
         ));
         assert!(!tasklist_says_running(""));
+    }
+
+    #[test]
+    fn tasklist_match_is_generic_over_the_image_name() {
+        assert!(tasklist_names(
+            "Image Name                     PID SESSION\nchrome-headless-shell.exe 999 Console\n",
+            "chrome-headless-shell.exe"
+        ));
+        assert!(!tasklist_names(
+            "INFO: No tasks are running which match the specified criteria.\n",
+            "chrome-headless-shell.exe"
+        ));
+    }
+
+    /// Kill rounds stop the moment the process table agrees.
+    #[tokio::test]
+    async fn kill_loop_stops_as_soon_as_the_image_is_gone() {
+        let kills = std::sync::atomic::AtomicU32::new(0);
+        let (verified, rounds) = kill_until_dead(
+            || {
+                let _ = kills.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            },
+            || kills.load(std::sync::atomic::Ordering::SeqCst) >= 2,
+            std::time::Duration::from_millis(1),
+            15,
+        )
+        .await;
+        assert!(verified);
+        assert_eq!(rounds, 2);
+    }
+
+    /// A respawn-proofed kill loop must report honestly when the image
+    /// never dies: (false, MAX_ROUNDS), not a silent success.
+    #[tokio::test]
+    async fn kill_loop_reports_failure_when_the_image_never_dies() {
+        let (verified, rounds) = kill_until_dead(
+            || {},
+            || false,
+            std::time::Duration::from_millis(1),
+            15,
+        )
+        .await;
+        assert!(!verified);
+        assert_eq!(rounds, 15);
+    }
+
+    /// A kill that lands just after the last round still counts — the
+    /// final verification runs once more before giving up.
+    #[tokio::test]
+    async fn kill_loop_counts_a_late_kill_on_the_final_check() {
+        let checks = std::sync::atomic::AtomicU32::new(0);
+        let (verified, rounds) = kill_until_dead(
+            || {},
+            || {
+                checks.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
+                    == 16 // 15 in-loop checks, then the final one
+            },
+            std::time::Duration::from_millis(1),
+            15,
+        )
+        .await;
+        assert!(verified);
+        assert_eq!(rounds, 15);
     }
 }

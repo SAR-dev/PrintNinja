@@ -116,6 +116,34 @@ to a single shared table of expected results, so a change to one that isn't
 mirrored in the other fails a test instead of silently making the preview
 lie.
 
+## The Windows Edge handoff failure
+
+On some Windows 11 machines with a recent Edge (observed on Edge 156), a
+headless `msedge.exe` launch exits **0** immediately, produces **no PDF**
+and prints **nothing to stderr** while many `msedge.exe` processes sit
+resident. The launcher-level session handoff forwards the command line to
+the already-running Edge session instead of printing, regardless of
+`--user-data-dir`. Every render path (persistent CDP, fresh-profile CDP,
+one-shot warm, one-shot throwaway) hits the same wall.
+
+The app deals with it in three layers, all in `src-tauri/src/render/`:
+
+- **Detect and name it.** When a print exits 0 with no PDF and
+  `msedge.exe` is still running, the error says so plainly (translated in
+  the UI): "Edge handed the print job to a running Edge session".
+- **Repair that verifies.** **Fix PC printing** (Settings → Diagnostics)
+  kills `msedge.exe` in a bounded kill/verify loop (re-checking `tasklist`
+  after each round, up to 15 rounds) instead of one taskkill plus a fixed
+  sleep. When the process table still shows Edge afterwards, the report
+  says the kill could not be verified instead of claiming success — and
+  skips a test render that could not possibly pass.
+- **A browser Edge cannot take.** The opt-in headless download
+  (`chrome-headless-shell`, pinned version + SHA-256 in
+  `browser_download.rs`) has no resident-session behaviour, so its
+  launches always print. `find_edge` prefers it when installed;
+  `PRINTNINJA_EDGE_BIN` (see `../ENV.md`) overrides everything for
+  manual setups.
+
 See also: [printers and transports](./PRINTERS_AND_TRANSPORTS.md) (what the
 produced bytes become), [queue and history](./QUEUE_AND_HISTORY.md) (what
 happens to the job), and the [glossary](../GLOSSARY.md) for the plain words.
