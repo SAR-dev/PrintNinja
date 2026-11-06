@@ -1084,13 +1084,13 @@ const en = {
     retention_days: "Keep history for (days)",
     max_records: "Max records",
     number_error: "{{label}} must be a whole number of at least {{min}}.",
-    reset_title: "Reset this PC",
+    reset_title: "Reset this device",
     reset_desc:
-      "Erases everything the app owns on this PC: templates and versions, print history, printers, fonts and their files, datasets, profiles, the sync state and every setting — including the sign-in, so the app returns to the welcome screen.",
-    reset_action: "Reset this PC…",
-    reset_confirm_title: "Erase everything on this PC?",
+      "Erases everything the app owns on this device: templates and versions, print history, printers, fonts and their files, datasets, profiles, the sync state and every setting — including the sign-in, so the app returns to the welcome screen. The server keeps the account; signing back in pulls it down again.",
+    reset_action: "Reset this device…",
+    reset_confirm_title: "Erase everything on this device?",
     reset_confirm_body:
-      "Templates, print history, printers, fonts, datasets, profiles and all settings will be permanently deleted from this PC. The server keeps the account — sign back in to pull it down again.",
+      "Templates, print history, printers, fonts, datasets, profiles and all settings will be permanently deleted from this device. The server keeps the account — sign back in to pull it down again.",
     reset_confirm: "Erase everything",
     reset_erasing: "Erasing…",
     toast_reset_done:
