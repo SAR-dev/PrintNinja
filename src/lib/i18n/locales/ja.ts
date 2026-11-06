@@ -116,7 +116,8 @@ const ja: Translation = {
       "PrintNinja は次の場所にある msedge.exe だけを探します。AppData 配下のユーザー単位のインストールは検出されません。",
     win_webview_note:
       "WebView2 ランタイム単体では不十分です。PrintNinja は msedge.exe を自分で起動します。",
-    win_step_shell: "または、PrintNinja にヘッドレスブラウザーをダウンロードさせる",
+    win_step_shell:
+      "または、PrintNinja にヘッドレスブラウザーをダウンロードさせる",
     win_shell_hint:
       "公式の Chrome for Testing ヘッドレスシェル（約 150 MB）をダウンロードし、SHA-256 で検証します。インストーラーは不要です。実行中の Edge セッションはこれを奪えないため、Edge ウィンドウを開いたまま印刷できます。いつでも削除できます。",
     win_shell_download: "ヘッドレスブラウザーをダウンロード（約 150 MB）",
@@ -124,7 +125,8 @@ const ja: Translation = {
     win_shell_remove: "ダウンロードしたブラウザーを削除",
     win_shell_ready:
       "ヘッドレスブラウザーの準備ができました（{{version}}）。印刷はこれを使い、Edge ウィンドウは開いたままで大丈夫です。",
-    win_shell_error: "ヘッドレスブラウザーのダウンロードに失敗しました: {{error}}",
+    win_shell_error:
+      "ヘッドレスブラウザーのダウンロードに失敗しました: {{error}}",
     linux_step_install: "Chromium 系ブラウザーをインストールする",
     linux_detected: "検出: {{name}}。ターミナルで次を実行してください:",
     linux_unknown_distro:

@@ -1206,7 +1206,9 @@ export function SettingsPage() {
                                   id="settings-diag-fix-edge-survived"
                                   className="text-destructive"
                                 >
-                                  {t("settings_page.diag_fix_edge_still_running")}
+                                  {t(
+                                    "settings_page.diag_fix_edge_still_running",
+                                  )}
                                 </li>
                               )}
                             {fixReport.elevated && (
@@ -1272,20 +1274,28 @@ export function SettingsPage() {
                                     </Button>
                                   </>
                                 ) : shellBusy ? (
-                                  <p id="settings-diag-shell-downloading" className="text-xs">
-                                    {t("settings_page.diag_fix_shell_downloading", {
-                                      done: shellProgress
-                                        ? Math.floor(shellProgress.done / 1048576)
-                                        : 0,
-                                      total: shellProgress
-                                        ? Math.max(
-                                            1,
-                                            Math.floor(
-                                              shellProgress.total / 1048576,
-                                            ),
-                                          )
-                                        : 0,
-                                    })}
+                                  <p
+                                    id="settings-diag-shell-downloading"
+                                    className="text-xs"
+                                  >
+                                    {t(
+                                      "settings_page.diag_fix_shell_downloading",
+                                      {
+                                        done: shellProgress
+                                          ? Math.floor(
+                                              shellProgress.done / 1048576,
+                                            )
+                                          : 0,
+                                        total: shellProgress
+                                          ? Math.max(
+                                              1,
+                                              Math.floor(
+                                                shellProgress.total / 1048576,
+                                              ),
+                                            )
+                                          : 0,
+                                      },
+                                    )}
                                   </p>
                                 ) : (
                                   <Button

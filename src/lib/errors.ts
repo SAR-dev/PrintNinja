@@ -120,11 +120,7 @@ const PATTERNS: Array<[RegExp, string, string[]]> = [
   // parent is elevated (docs/EDGE_FAILURE_REPORT.md). Synced with
   // ELEVATED_ERROR in src-tauri/src/render/elevation.rs — the match is on
   // the opening only, because the repair appends its own suffix.
-  [
-    /^PrintNinja is running as administrator/,
-    "errors.edge_elevated",
-    [],
-  ],
+  [/^PrintNinja is running as administrator/, "errors.edge_elevated", []],
   // The server's generic 403 body (ForbiddenError's default): a save that
   // PUTs to a template id owned by a different account. Name the cause so
   // it does not surface as raw English.
