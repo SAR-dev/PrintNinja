@@ -111,6 +111,11 @@ pub(crate) fn edge_processes_running() -> bool {
 /// a kill). `kill` and `is_dead` are injected so the loop is testable off
 /// Windows. Returns `(verified_dead, rounds_used)`; the final check runs
 /// even after the last round, so a kill that landed late still counts.
+///
+/// Production calls it only from `kill_edge_verified` (Windows); the
+/// `test` keeps it alive for the kill-loop tests below, which run
+/// everywhere.
+#[cfg(any(windows, test))]
 async fn kill_until_dead(
     kill: impl Fn() + Send,
     is_dead: impl Fn() -> bool + Send,
