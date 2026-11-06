@@ -137,6 +137,11 @@ pub fn run() {
             #[cfg(target_os = "android")]
             render::register_android_app(app.handle().clone());
 
+            // Windows: the opt-in headless-shell download needs the app
+            // data dir from render contexts that only carry a cache dir.
+            #[cfg(windows)]
+            render::browser_download::register_app(app.handle());
+
             let db_path = app.path().app_data_dir()?.join("printninja.db");
             if let Some(parent) = db_path.parent() {
                 std::fs::create_dir_all(parent)?;
@@ -261,6 +266,13 @@ pub fn run() {
                 &cache_dir,
                 std::time::Duration::from_secs(60 * 30),
             );
+            // A headless-shell download interrupted by a crash/restart
+            // would otherwise show "downloading" forever — heal it.
+            #[cfg(windows)]
+            if let Ok(guard) = db_state.lock() {
+                commands::browser::heal_stale_download(app.handle(), guard.connection());
+            }
+
             // Start the persistent browser now, in the background, so the
             // first print is as fast as the rest. Before the worker so the
             // profile is claimed before any job can ask.
@@ -369,6 +381,9 @@ pub fn run() {
             commands::datasets::cache_list_synced_datasets,
             commands::datasets::cache_forget_dataset,
             commands::fix::fix_pc_print,
+            commands::browser::browser_shell_status,
+            commands::browser::browser_shell_download,
+            commands::browser::browser_shell_remove,
             commands::print::print_html,
             commands::print::enumerate_system_printers,
             commands::print::list_bluetooth_devices,

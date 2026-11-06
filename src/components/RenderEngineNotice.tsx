@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, ExternalLink, RefreshCw } from "lucide-react";
+import { Copy, Download, ExternalLink, RefreshCw, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +22,8 @@ import {
   needsBrowserHelp,
 } from "@/lib/render/engineHelp";
 import { useRenderEngine } from "@/lib/render/useRenderEngine";
-import type { RenderEngineStatus } from "@/lib/agent/types";
+import { agent } from "@/lib/agent/commands";
+import type { BrowserShellStatus, RenderEngineStatus } from "@/lib/agent/types";
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -109,7 +110,124 @@ function LinkButton({ url, label }: { url: string; label: string }) {
   );
 }
 
-function WindowsSteps({ status }: { status: RenderEngineStatus }) {
+/** The opt-in headless browser (step 3 on Windows): status, download with
+ * live progress, and removal. Nothing is downloaded without a press. */
+function ShellStep({ open }: { open: boolean }) {
+  const { t } = useTranslation();
+  const [shell, setShell] = useState<BrowserShellStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      setShell((await agent("browser_shell_status", {})) ?? null);
+    } catch {
+      setShell(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) void refresh();
+  }, [open, refresh]);
+
+  const download = useCallback(async () => {
+    setBusy(true);
+    setProgress(null);
+    let unlisten: (() => void) | null = null;
+    try {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<{ done: number; total: number }>(
+          "browser-shell-progress",
+          (e) => setProgress(e.payload),
+        );
+      } catch {
+        /* no Tauri event bridge (web preview / tests): no live progress */
+      }
+      await agent("browser_shell_download", {});
+    } catch {
+      /* the state row carries the error; the refresh below shows it */
+    } finally {
+      unlisten?.();
+      setBusy(false);
+      setProgress(null);
+      await refresh();
+    }
+  }, [refresh]);
+
+  const remove = useCallback(async () => {
+    setBusy(true);
+    try {
+      await agent("browser_shell_remove", {});
+    } catch {
+      /* status below reflects what the backend reports */
+    } finally {
+      setBusy(false);
+      await refresh();
+    }
+  }, [refresh]);
+
+  return (
+    <Step n={3} title={t("engine.win_step_shell")}>
+      <p className="text-sm text-muted-foreground">{t("engine.win_shell_hint")}</p>
+      {shell?.state === "ready" ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <p
+            data-testid="engine-shell-ready"
+            className="text-sm text-success"
+          >
+            {t("engine.win_shell_ready", { version: shell.version })}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="engine-shell-remove"
+            disabled={busy}
+            onClick={() => void remove()}
+          >
+            <Trash2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            {t("engine.win_shell_remove")}
+          </Button>
+        </div>
+      ) : busy ? (
+        <p data-testid="engine-shell-downloading" className="text-sm">
+          {t("engine.win_shell_downloading", {
+            done: progress ? Math.floor(progress.done / 1048576) : 0,
+            total: progress ? Math.max(1, Math.floor(progress.total / 1048576)) : 0,
+          })}
+        </p>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          data-testid="engine-shell-download"
+          onClick={() => void download()}
+        >
+          <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          {t("engine.win_shell_download")}
+        </Button>
+      )}
+      {shell?.state === "error" && shell.error && (
+        <p data-testid="engine-shell-error" className="break-words text-xs text-destructive">
+          {t("engine.win_shell_error", { error: shell.error })}
+        </p>
+      )}
+    </Step>
+  );
+}
+
+function WindowsSteps({
+  status,
+  open,
+}: {
+  status: RenderEngineStatus;
+  open: boolean;
+}) {
   const { t } = useTranslation();
   return (
     <ol className="space-y-4">
@@ -138,7 +256,8 @@ function WindowsSteps({ status }: { status: RenderEngineStatus }) {
           {t("engine.win_webview_note")}
         </p>
       </Step>
-      <Step n={3} title={t("engine.step_recheck")}>
+      <ShellStep open={open} />
+      <Step n={4} title={t("engine.step_recheck")}>
         <p className="text-sm text-muted-foreground">
           {t("engine.step_recheck_hint")}
         </p>
@@ -271,7 +390,7 @@ export function RenderEngineNotice() {
             <DialogDescription>{t("engine.description")}</DialogDescription>
           </DialogHeader>
           {status.platform === "windows" ? (
-            <WindowsSteps status={status} />
+            <WindowsSteps status={status} open={open} />
           ) : (
             <LinuxSteps status={status} />
           )}

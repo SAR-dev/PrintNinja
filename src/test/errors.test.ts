@@ -65,6 +65,54 @@ describe("describeError", () => {
     await setLanguage("ja");
     expect(describeError(new Error("Not allowed"))).toContain("別のアカウント");
   });
+  it("names the Edge handoff failure and an unkillable Edge", async () => {
+    expect(
+      describeError(
+        "Edge handed the print job to a running Edge session (exit 0, no PDF) — close all Edge windows, or run Fix PC printing (Settings > Diagnostics)",
+      ),
+    ).toContain("running Edge session");
+    expect(
+      describeError(
+        "Edge could not be stopped after 15 rounds of taskkill — msedge.exe is still running. Close every Edge window, then run the repair again.",
+      ),
+    ).toContain("15 rounds of taskkill");
+    await setLanguage("ja");
+    expect(
+      describeError(
+        "Edge handed the print job to a running Edge session (exit 0, no PDF)",
+      ),
+    ).toContain("Edge セッション");
+    expect(
+      describeError(
+        "Edge could not be stopped after 15 rounds of taskkill — msedge.exe is still running.",
+      ),
+    ).toContain("15 回");
+  });
+
+  it("names the elevated-parent failure and how to fix it", async () => {
+    expect(
+      describeError(
+        "PrintNinja is running as administrator — Edge will not print from an elevated process. Restart PrintNinja normally (without 'Run as administrator'), then try again.",
+      ),
+    ).toBe(
+      "PrintNinja is running as administrator. Edge cannot print from an elevated process. Restart PrintNinja without 'Run as administrator' and try again.",
+    );
+    // The repair appends its own suffix; the pattern matches the opening.
+    expect(
+      describeError(
+        "PrintNinja is running as administrator — Edge will not print from an elevated process. Restart PrintNinja normally (without 'Run as administrator'), then try again. The repair cannot succeed while PrintNinja is elevated — restart it normally, then run the repair again.",
+      ),
+    ).toBe(
+      "PrintNinja is running as administrator. Edge cannot print from an elevated process. Restart PrintNinja without 'Run as administrator' and try again.",
+    );
+    await setLanguage("ja");
+    expect(
+      describeError(
+        "PrintNinja is running as administrator — Edge will not print from an elevated process.",
+      ),
+    ).toContain("管理者");
+  });
+
   it("labels an unmapped variant and keeps the raw detail", async () => {
     await setLanguage("ja");
     expect(describeError({ Internal: "disk exploded" })).toBe(

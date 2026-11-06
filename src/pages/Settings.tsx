@@ -13,7 +13,7 @@ import { parseSection, type SettingsSection } from "@/lib/setup/checklist";
 import { agent } from "@/lib/agent/commands";
 import { useFlashField } from "@/lib/hooks/useFlashField";
 import { readSetting, writeSetting } from "@/lib/settings";
-import type { FixReport, FontRow } from "@/lib/agent/types";
+import type { BrowserShellStatus, FixReport, FontRow } from "@/lib/agent/types";
 import { useRenderEngine } from "@/lib/render/useRenderEngine";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -196,6 +196,64 @@ export function SettingsPage() {
       setFixing(false);
     }
   }, [t]);
+
+  // Opt-in headless browser (the repair's fallback): its status, download
+  // progress and removal. Nothing is downloaded without an explicit press.
+  const [shellStatus, setShellStatus] = useState<BrowserShellStatus | null>(
+    null,
+  );
+  const [shellBusy, setShellBusy] = useState(false);
+  const [shellProgress, setShellProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+  const refreshShellStatus = useCallback(async () => {
+    try {
+      const status = await agent("browser_shell_status", {});
+      setShellStatus(status ?? null);
+    } catch {
+      setShellStatus(null);
+    }
+  }, []);
+  useEffect(() => {
+    if (fixReport && isWindows) void refreshShellStatus();
+  }, [fixReport, isWindows, refreshShellStatus]);
+  const downloadShell = useCallback(async () => {
+    setShellBusy(true);
+    setShellProgress(null);
+    let unlisten: (() => void) | null = null;
+    try {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<{ done: number; total: number }>(
+          "browser-shell-progress",
+          (e) => setShellProgress(e.payload),
+        );
+      } catch {
+        /* no Tauri event bridge (web preview / tests): no live progress */
+      }
+      await agent("browser_shell_download", {});
+      notifySuccess(t("settings_page.diag_fix_shell_ready"));
+    } catch (e) {
+      notifyError(describeError(e));
+    } finally {
+      unlisten?.();
+      setShellBusy(false);
+      setShellProgress(null);
+      await refreshShellStatus();
+    }
+  }, [refreshShellStatus, t]);
+  const removeShell = useCallback(async () => {
+    setShellBusy(true);
+    try {
+      await agent("browser_shell_remove", {});
+      await refreshShellStatus();
+    } catch (e) {
+      notifyError(describeError(e));
+    } finally {
+      setShellBusy(false);
+    }
+  }, [refreshShellStatus]);
 
   const [shareUrl, setShareUrl] = useState("");
   const [shareHandle, setShareHandle] = useState("");
@@ -1142,6 +1200,23 @@ export function SettingsPage() {
                                   : t("settings_page.fix_edge_running")}
                               </li>
                             )}
+                            {fixReport.edge_closed &&
+                              !fixReport.edge_verified_dead && (
+                                <li
+                                  id="settings-diag-fix-edge-survived"
+                                  className="text-destructive"
+                                >
+                                  {t("settings_page.diag_fix_edge_still_running")}
+                                </li>
+                              )}
+                            {fixReport.elevated && (
+                              <li
+                                id="settings-diag-fix-elevated"
+                                className="text-destructive"
+                              >
+                                {t("settings_page.fix_elevated")}
+                              </li>
+                            )}
                             <li>
                               {fixReport.profiles_removed.length > 0
                                 ? t("settings_page.fix_profiles_removed", {
@@ -1166,8 +1241,75 @@ export function SettingsPage() {
                           </ul>
                           {fixReport.test_render_error && (
                             <p className="mt-2 break-words text-xs text-muted-foreground">
-                              {fixReport.test_render_error}
+                              {describeError(fixReport.test_render_error)}
                             </p>
+                          )}
+                          {!fixReport.test_render_ok && (
+                            <div
+                              id="settings-diag-shell-offer"
+                              className="mt-3 border-t pt-3"
+                            >
+                              <p className="text-xs text-muted-foreground">
+                                {t("settings_page.diag_fix_shell_offer")}
+                              </p>
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                {shellStatus?.state === "ready" ? (
+                                  <>
+                                    <p
+                                      id="settings-diag-shell-ready"
+                                      className="text-xs text-success"
+                                    >
+                                      {t("settings_page.diag_fix_shell_ready")}
+                                    </p>
+                                    <Button
+                                      variant="outline"
+                                      id="settings-diag-shell-remove"
+                                      disabled={shellBusy}
+                                      onClick={() => void removeShell()}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      {t("settings_page.diag_fix_shell_remove")}
+                                    </Button>
+                                  </>
+                                ) : shellBusy ? (
+                                  <p id="settings-diag-shell-downloading" className="text-xs">
+                                    {t("settings_page.diag_fix_shell_downloading", {
+                                      done: shellProgress
+                                        ? Math.floor(shellProgress.done / 1048576)
+                                        : 0,
+                                      total: shellProgress
+                                        ? Math.max(
+                                            1,
+                                            Math.floor(
+                                              shellProgress.total / 1048576,
+                                            ),
+                                          )
+                                        : 0,
+                                    })}
+                                  </p>
+                                ) : (
+                                  <Button
+                                    variant="outline"
+                                    id="settings-diag-shell-download"
+                                    onClick={() => void downloadShell()}
+                                  >
+                                    <Download className="h-4 w-4 mr-2" />
+                                    {t("settings_page.diag_fix_shell_download")}
+                                  </Button>
+                                )}
+                              </div>
+                              {shellStatus?.state === "error" &&
+                                shellStatus.error && (
+                                  <p
+                                    id="settings-diag-shell-error"
+                                    className="mt-2 break-words text-xs text-destructive"
+                                  >
+                                    {describeError(
+                                      new Error(shellStatus.error),
+                                    )}
+                                  </p>
+                                )}
+                            </div>
                           )}
                         </div>
                       )}
