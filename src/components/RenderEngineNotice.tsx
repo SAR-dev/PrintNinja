@@ -172,13 +172,12 @@ function ShellStep({ open }: { open: boolean }) {
 
   return (
     <Step n={3} title={t("engine.win_step_shell")}>
-      <p className="text-sm text-muted-foreground">{t("engine.win_shell_hint")}</p>
+      <p className="text-sm text-muted-foreground">
+        {t("engine.win_shell_hint")}
+      </p>
       {shell?.state === "ready" ? (
         <div className="flex flex-wrap items-center gap-2">
-          <p
-            data-testid="engine-shell-ready"
-            className="text-sm text-success"
-          >
+          <p data-testid="engine-shell-ready" className="text-sm text-success">
             {t("engine.win_shell_ready", { version: shell.version })}
           </p>
           <Button
@@ -197,7 +196,9 @@ function ShellStep({ open }: { open: boolean }) {
         <p data-testid="engine-shell-downloading" className="text-sm">
           {t("engine.win_shell_downloading", {
             done: progress ? Math.floor(progress.done / 1048576) : 0,
-            total: progress ? Math.max(1, Math.floor(progress.total / 1048576)) : 0,
+            total: progress
+              ? Math.max(1, Math.floor(progress.total / 1048576))
+              : 0,
           })}
         </p>
       ) : (
@@ -213,7 +214,10 @@ function ShellStep({ open }: { open: boolean }) {
         </Button>
       )}
       {shell?.state === "error" && shell.error && (
-        <p data-testid="engine-shell-error" className="break-words text-xs text-destructive">
+        <p
+          data-testid="engine-shell-error"
+          className="break-words text-xs text-destructive"
+        >
           {t("engine.win_shell_error", { error: shell.error })}
         </p>
       )}
