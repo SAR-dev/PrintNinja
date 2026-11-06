@@ -1176,6 +1176,28 @@ const ja: Translation = {
     diag_fix_shell_ready:
       "ヘッドレスブラウザーの準備ができました — 印刷はこれを使い、Edge ウィンドウは開いたままで大丈夫です。",
     diag_fix_shell_remove: "ダウンロードしたブラウザーを削除",
+    diag_shell_cancel: "ダウンロードをキャンセル",
+    // アクティブな印刷エンジン（item 6）：レンダリングが実際に使うもの。
+    diag_rendering_with: "現在 {{engine}} でレンダリング",
+    diag_rendering_missing:
+      "印刷用ブラウザーが見つかりません — インストールするか、カスタムパスを設定するまでレンダリングは失敗します。",
+    diag_engine_env: "環境変数による上書き",
+    diag_engine_shell: "ダウンロードしたヘッドレスブラウザー",
+    diag_engine_system_windows: "Microsoft Edge",
+    diag_engine_system_linux: "システムの Chromium 系ブラウザー",
+    diag_engine_custom: "カスタムブラウザーパス",
+    // ブラウザー選択（items 1 + 2）：レンダラーが使うブラウザー。
+    diag_browser_title: "印刷用ブラウザー",
+    diag_browser_hint:
+      "PDF とスクリーンショットのレンダリングに使うブラウザーです。自動では、インストール済みのヘッドレスブラウザーを優先し、見つからなければシステムのブラウザーを使います。環境変数 PRINTNINJA_EDGE_BIN / PRINTNINJA_CHROMIUM_BIN は常にこの選択を上書きします。",
+    diag_browser_auto: "自動",
+    diag_browser_system: "システムのブラウザーのみ",
+    diag_browser_shell: "ダウンロードしたヘッドレスブラウザー",
+    diag_browser_custom: "カスタムパス",
+    diag_browser_custom_path: "カスタムブラウザーの実行ファイル",
+    diag_browser_custom_path_hint:
+      "Chromium 系実行ファイルへの完全なパス（例：msedge.exe、chrome、chromium）。",
+    toast_browser_saved: "ブラウザーの選択を保存しました",
     allow_title: "すべてのドメインからのデータを許可しますか？",
     allow_hint:
       "リストが空の場合、すべてのドメインが許可されます。ライブデータURLから、どこからでもコンテンツを取得できるようになります。意図的でない限り、少なくとも自分のホストは登録しておいてください。",

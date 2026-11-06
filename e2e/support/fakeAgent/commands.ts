@@ -376,6 +376,7 @@ const implemented: Record<string, Handler> = {
     platform: "other",
     available: true,
     path: null,
+    source: null,
     searched: [],
     distro: [],
     distro_name: null,
@@ -608,6 +609,7 @@ const acknowledgedStubs: string[] = [
   "browser_shell_status",
   "browser_shell_download",
   "browser_shell_remove",
+  "browser_shell_cancel",
   "get_render_status",
   "set_render_sharing",
   // Render-sharing consumer: the Devices UI "test" button works in e2e

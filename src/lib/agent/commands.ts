@@ -231,6 +231,9 @@ export interface AgentCommands {
   browser_shell_status: [{}, BrowserShellStatus];
   browser_shell_download: [{}, null];
   browser_shell_remove: [{}, null];
+  // Ask the in-flight shell download to stop. Returns false (not an error)
+  // when nothing is downloading.
+  browser_shell_cancel: [{}, boolean];
   // The Explorer's HTTP client. Requests go through Rust, not the WebView:
   // the page's fetch to 127.0.0.1 is cross-origin (no ACAO on a loopback
   // bind) and mixed content (Android refuses cleartext from https).

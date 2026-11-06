@@ -121,18 +121,39 @@ pub async fn browser_shell_download(app: AppHandle, db: State<'_, DbState>) -> A
                 clear_error(conn);
             }
             Err(e) => {
-                set_state(conn, "error");
-                set_error(conn, &e.to_string());
+                let message = e.to_string();
+                if message == browser_download::CANCELLED_MESSAGE {
+                    // A cancel is not a failure: nothing was installed,
+                    // so the status goes back to `absent` without an
+                    // error the user did not cause.
+                    set_state(conn, "absent");
+                    clear_error(conn);
+                } else {
+                    set_state(conn, "error");
+                    set_error(conn, &message);
+                }
             }
         }
     }
     result.map_err(|e| AppError::Internal(e.to_string()))
 }
 
+/// Ask the in-flight download to stop. No-op (and a false report, not an
+/// error) when nothing is downloading.
+#[tauri::command(rename_all = "snake_case")]
+pub fn browser_shell_cancel() -> AppResult<bool> {
+    Ok(browser_download::cancel_download())
+}
+
 /// Remove the installed shell (all version directories) and its state
-/// rows: the opt-out. Printing returns to `msedge.exe`.
+/// rows: the opt-out. Printing returns to the system browser.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn browser_shell_remove(app: AppHandle, db: State<'_, DbState>) -> AppResult<()> {
+    // A download in flight is writing inside the directory we are about
+    // to delete: ask it to stop and wait for it to release the files
+    // before touching the disk.
+    browser_download::cancel_download();
+    browser_download::wait_for_active_download().await;
     // The whole root, not one version dir, so bumped versions do not
     // linger.
     let root = app
@@ -160,7 +181,6 @@ pub async fn browser_shell_remove(app: AppHandle, db: State<'_, DbState>) -> App
 /// honestly instead of leaving an in-progress bar behind. A `ready` row
 /// whose file survived heals itself in [`browser_shell_status`]; this
 /// covers the rest.
-#[cfg(windows)]
 pub fn heal_stale_download(app: &AppHandle, conn: &Connection) {
     let Some(state) = read_state(conn) else {
         return;

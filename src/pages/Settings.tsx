@@ -28,6 +28,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -174,8 +181,31 @@ export function SettingsPage() {
   // One-click repair of the Windows print pipeline (Settings → Diagnostics).
   // `engineStatus` doubles as the platform check: the repair only exists
   // where the Edge handoff failure can (Windows).
-  const { status: engineStatus } = useRenderEngine();
+  const { status: engineStatus, recheck: recheckEngine } = useRenderEngine();
   const isWindows = engineStatus?.platform === "windows";
+  // The engine line and the browser choice only make sense where the app
+  // renders locally (Windows or Linux); "other" platforms delegate.
+  const isLocalRender =
+    engineStatus?.platform === "windows" || engineStatus?.platform === "linux";
+  // Human label for the active engine (item 6), from its source.
+  const engineLabel = (() => {
+    const src = engineStatus?.source;
+    if (!src) return null;
+    switch (src) {
+      case "env":
+        return t("settings_page.diag_engine_env");
+      case "shell":
+        return t("settings_page.diag_engine_shell");
+      case "custom":
+        return t("settings_page.diag_engine_custom");
+      case "system":
+        return engineStatus.platform === "linux"
+          ? t("settings_page.diag_engine_system_linux")
+          : t("settings_page.diag_engine_system_windows");
+      default:
+        return null;
+    }
+  })();
   const [fixOpen, setFixOpen] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [fixReport, setFixReport] = useState<FixReport | null>(null);
@@ -254,6 +284,48 @@ export function SettingsPage() {
       setShellBusy(false);
     }
   }, [refreshShellStatus]);
+  const cancelShell = useCallback(async () => {
+    try {
+      await agent("browser_shell_cancel", {});
+    } catch (e) {
+      notifyError(describeError(e));
+    }
+    // The in-flight download notices the flag on its next chunk and bails;
+    // `downloadShell`'s finally then refreshes the status.
+    void refreshShellStatus();
+  }, [refreshShellStatus]);
+
+  // Browser choice (items 1 + 2): which browser the renderer uses. Two
+  // device-local settings; the Rust layer re-reads them on every set, so
+  // the change takes effect without a restart (env vars still override).
+  const [browserChoice, setBrowserChoice] = useState("auto");
+  const [customPath, setCustomPath] = useState("");
+  const [browserBusy, setBrowserBusy] = useState(false);
+  // The last-persisted pair, so the Save button knows when there is
+  // something to save. The path only means anything for the custom choice.
+  const savedChoiceRef = useRef("auto");
+  const savedPathRef = useRef("");
+  const browserDirty =
+    browserChoice !== savedChoiceRef.current ||
+    (browserChoice === "custom" ? customPath : "") !== savedPathRef.current;
+  const saveBrowserChoice = useCallback(async () => {
+    const choice = browserChoice;
+    const path = choice === "custom" ? customPath : "";
+    setBrowserBusy(true);
+    try {
+      // Choice first, then the path: the final apply_from sees both.
+      await writeSetting("browser-choice", choice);
+      await writeSetting("browser-custom-path", path);
+      savedChoiceRef.current = choice;
+      savedPathRef.current = path;
+      notifySuccess(t("settings_page.toast_browser_saved"));
+      await recheckEngine();
+    } catch (e) {
+      notifyError(describeError(e));
+    } finally {
+      setBrowserBusy(false);
+    }
+  }, [browserChoice, customPath, recheckEngine, t]);
 
   const [shareUrl, setShareUrl] = useState("");
   const [shareHandle, setShareHandle] = useState("");
@@ -281,6 +353,8 @@ export function SettingsPage() {
         minimized,
         minTray,
         closeTray,
+        bChoice,
+        bPath,
       ] = await Promise.all([
         readSetting("retention_days"),
         readSetting("max_records"),
@@ -290,6 +364,8 @@ export function SettingsPage() {
         readSetting("start_minimized"),
         readSetting("minimize_to_tray"),
         readSetting("close_to_tray"),
+        readSetting("browser-choice"),
+        readSetting("browser-custom-path"),
       ]);
       if (days) setRetentionDays(days);
       if (max) setMaxRecords(max);
@@ -304,6 +380,16 @@ export function SettingsPage() {
         setMinimizeToTray(minTray === "true" || minTray === "1");
       if (closeTray !== null)
         setCloseToTray(closeTray === "true" || closeTray === "1");
+      // Unknown/legacy choice values fall back to the safe default in
+      // Rust; mirror that here so the select always shows a valid option.
+      if (bChoice && ["auto", "system", "shell", "custom"].includes(bChoice))
+        setBrowserChoice(bChoice);
+      savedChoiceRef.current =
+        bChoice && ["auto", "system", "shell", "custom"].includes(bChoice)
+          ? bChoice
+          : "auto";
+      if (bPath) setCustomPath(bPath);
+      savedPathRef.current = bChoice === "custom" ? (bPath ?? "") : "";
 
       // Share service
       try {
@@ -1133,6 +1219,94 @@ export function SettingsPage() {
                       <p className="text-sm text-muted-foreground">
                         {t("settings_page.diag_hint")}
                       </p>
+                      {isLocalRender && (
+                        <div
+                          id="settings-diag-engine"
+                          className="rounded-md border p-3 text-sm"
+                        >
+                          <p className="font-medium">
+                            {engineLabel && engineStatus?.available
+                              ? t("settings_page.diag_rendering_with", {
+                                  engine: engineLabel,
+                                })
+                              : t("settings_page.diag_rendering_missing")}
+                          </p>
+                          {engineStatus?.path && (
+                            <p
+                              id="settings-diag-engine-path"
+                              className="mt-1 break-all font-mono text-xs text-muted-foreground"
+                            >
+                              {engineStatus.path}
+                            </p>
+                          )}
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                            <Label
+                              htmlFor="settings-diag-browser-choice"
+                            >
+                              {t("settings_page.diag_browser_title")}
+                            </Label>
+                            <Select
+                              value={browserChoice}
+                              onValueChange={setBrowserChoice}
+                              disabled={browserBusy}
+                            >
+                              <SelectTrigger
+                                id="settings-diag-browser-choice"
+                                className="w-56"
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="auto">
+                                  {t("settings_page.diag_browser_auto")}
+                                </SelectItem>
+                                <SelectItem value="system">
+                                  {t("settings_page.diag_browser_system")}
+                                </SelectItem>
+                                <SelectItem value="shell">
+                                  {t("settings_page.diag_browser_shell")}
+                                </SelectItem>
+                                <SelectItem value="custom">
+                                  {t("settings_page.diag_browser_custom")}
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            {t("settings_page.diag_browser_hint")}
+                          </p>
+                          {browserChoice === "custom" && (
+                            <div className="mt-2 space-y-1">
+                              <Label
+                                htmlFor="settings-diag-browser-custom-path"
+                              >
+                                {t("settings_page.diag_browser_custom_path")}
+                              </Label>
+                              <Input
+                                id="settings-diag-browser-custom-path"
+                                value={customPath}
+                                onChange={(e) => setCustomPath(e.target.value)}
+                                disabled={browserBusy}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                {t("settings_page.diag_browser_custom_path_hint")}
+                              </p>
+                            </div>
+                          )}
+                          {browserDirty && (
+                            <div className="mt-3">
+                              <Button
+                                size="sm"
+                                id="settings-diag-browser-save"
+                                disabled={browserBusy}
+                                onClick={() => void saveBrowserChoice()}
+                              >
+                                {t("common.save")}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <Button
                         variant="outline"
                         id="settings-diag-export"
@@ -1274,29 +1448,40 @@ export function SettingsPage() {
                                     </Button>
                                   </>
                                 ) : shellBusy ? (
-                                  <p
-                                    id="settings-diag-shell-downloading"
-                                    className="text-xs"
-                                  >
-                                    {t(
-                                      "settings_page.diag_fix_shell_downloading",
-                                      {
-                                        done: shellProgress
-                                          ? Math.floor(
-                                              shellProgress.done / 1048576,
-                                            )
-                                          : 0,
-                                        total: shellProgress
-                                          ? Math.max(
-                                              1,
-                                              Math.floor(
-                                                shellProgress.total / 1048576,
-                                              ),
-                                            )
-                                          : 0,
-                                      },
-                                    )}
-                                  </p>
+                                  <div className="flex items-center gap-2">
+                                    <p
+                                      id="settings-diag-shell-downloading"
+                                      className="text-xs"
+                                    >
+                                      {t(
+                                        "settings_page.diag_fix_shell_downloading",
+                                        {
+                                          done: shellProgress
+                                            ? Math.floor(
+                                                shellProgress.done / 1048576,
+                                              )
+                                            : 0,
+                                          total: shellProgress
+                                            ? Math.max(
+                                                1,
+                                                Math.floor(
+                                                  shellProgress.total /
+                                                  1048576,
+                                                ),
+                                              )
+                                            : 0,
+                                        },
+                                      )}
+                                    </p>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      id="settings-diag-shell-cancel"
+                                      onClick={() => void cancelShell()}
+                                    >
+                                      {t("settings_page.diag_shell_cancel")}
+                                    </Button>
+                                  </div>
                                 ) : (
                                   <Button
                                     variant="outline"

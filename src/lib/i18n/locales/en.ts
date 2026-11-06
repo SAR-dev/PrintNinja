@@ -1147,6 +1147,28 @@ const en = {
     diag_fix_shell_ready:
       "Headless browser ready — printing now uses it, and your Edge windows can stay open.",
     diag_fix_shell_remove: "Remove the downloaded browser",
+    diag_shell_cancel: "Cancel download",
+    // The active print engine (item 6): what a render will actually use.
+    diag_rendering_with: "Rendering with {{engine}}",
+    diag_rendering_missing:
+      "No print browser found — rendering will fail until one is installed or a custom path is set.",
+    diag_engine_env: "an environment override",
+    diag_engine_shell: "the downloaded headless browser",
+    diag_engine_system_windows: "Microsoft Edge",
+    diag_engine_system_linux: "a system Chromium browser",
+    diag_engine_custom: "a custom browser path",
+    // The browser choice (items 1 + 2): which browser the renderer uses.
+    diag_browser_title: "Print browser",
+    diag_browser_hint:
+      "Which browser renders PDFs and screenshots. Automatic prefers the downloaded headless browser when it is installed, then the system browser. The environment variables PRINTNINJA_EDGE_BIN / PRINTNINJA_CHROMIUM_BIN always override this choice.",
+    diag_browser_auto: "Automatic",
+    diag_browser_system: "System browser only",
+    diag_browser_shell: "Downloaded headless browser",
+    diag_browser_custom: "Custom path",
+    diag_browser_custom_path: "Custom browser executable",
+    diag_browser_custom_path_hint:
+      "Full path to a Chromium-family executable (for example msedge.exe, chrome, chromium).",
+    toast_browser_saved: "Browser choice saved",
     allow_title: "Allow data from any domain?",
     allow_hint:
       "An empty list allows every domain. Live data URLs could then pull content from anywhere. Keep at least your own hosts listed unless you mean it.",
