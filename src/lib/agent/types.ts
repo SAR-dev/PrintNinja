@@ -445,6 +445,14 @@ export interface FixReport {
   edge_was_running: boolean;
   /** The repair closed the running Edge processes. */
   edge_closed: boolean;
+  /**
+   * The kill was verified against the process table. When false, at least
+   * one msedge.exe survived the repair — the UI must say so, because a new
+   * headless launch will hand off to it.
+   */
+  edge_verified_dead: boolean;
+  /** How many taskkill rounds the verification loop used (0 = no kill). */
+  edge_kill_rounds: number;
   /** Render profiles removed from the cache dir. */
   profiles_removed: string[];
   /** The persistent-browser connection and failure cooldown were reset. */
@@ -452,6 +460,28 @@ export interface FixReport {
   /** The test render produced a real PDF. */
   test_render_ok: boolean;
   test_render_error: string | null;
+  /**
+   * PrintNinja itself is running elevated (administrator). While true,
+   * Edge cannot print at all, so the repair cannot succeed — the UI must
+   * point at a normal restart instead of implying a broken pipeline.
+   */
+  elevated: boolean;
+}
+
+/**
+ * Device-local status of the opt-in headless browser (Chrome for Testing's
+ * `chrome-headless-shell`, the Windows fallback when a running Edge session
+ * takes headless launches). Mirrors `BrowserShellStatus` in
+ * src-tauri/src/render/browser_download.rs.
+ */
+export interface BrowserShellStatus {
+  /** `absent` (never downloaded) | `downloading` | `ready` | `error`. */
+  state: "absent" | "downloading" | "ready" | "error";
+  version: string;
+  /** The installed executable, when ready. */
+  path: string | null;
+  /** The last failure, when state is `error`. */
+  error: string | null;
 }
 
 export interface ApiStatus {
