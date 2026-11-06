@@ -336,10 +336,7 @@ fn smoke_test(exe: &Path) -> std::io::Result<()> {
             .unwrap_or("no stderr")
             .trim()
             .to_string();
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("exited {}; {detail}", out.status),
-        ));
+        return Err(std::io::Error::other(format!("exited {}; {detail}", out.status)));
     }
     Ok(())
 }
@@ -419,7 +416,7 @@ mod tests {
     #[test]
     fn the_cancelled_message_is_a_stable_sentinel() {
         // commands::browser maps this exact message back to `absent`;
-        // keep the constant referenced so a rename fails a test.
-        assert!(!CANCELLED_MESSAGE.is_empty());
+        // pin the value so a rename fails a test.
+        assert_eq!(CANCELLED_MESSAGE, "download cancelled");
     }
 }
