@@ -79,7 +79,14 @@ pub fn set_setting(db: State<DbState>, key: String, value: String) -> AppResult<
     let guard = db
         .lock()
         .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
-    write_setting(guard.connection(), &key, &value)
+    let conn = guard.connection();
+    let result = write_setting(conn, &key, &value);
+    if result.is_ok() && crate::render::browser_choice::is_browser_setting_key(&key) {
+        // The render layer reads a cached copy of the browser preference,
+        // so a changed choice takes effect without a restart.
+        crate::render::browser_choice::apply_from(conn);
+    }
+    result
 }
 
 // ── Account preferences (Phase 4) ───────────────────────────────

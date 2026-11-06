@@ -80,5 +80,10 @@ pub fn reset_database(app: AppHandle, db: State<DbState>) -> AppResult<ResetRepo
     let mut guard = db
         .lock()
         .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
-    recreate_database(&mut guard, &fonts_dir)
+    let report = recreate_database(&mut guard, &fonts_dir)?;
+    // The browser preference rows were wiped with the settings table:
+    // re-read the (now empty) table so the render layer's cached copy
+    // falls back to Automatic instead of keeping a deleted choice.
+    crate::render::browser_choice::apply_from(guard.connection());
+    Ok(report)
 }

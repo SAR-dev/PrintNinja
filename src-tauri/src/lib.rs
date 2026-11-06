@@ -137,9 +137,8 @@ pub fn run() {
             #[cfg(target_os = "android")]
             render::register_android_app(app.handle().clone());
 
-            // Windows: the opt-in headless-shell download needs the app
-            // data dir from render contexts that only carry a cache dir.
-            #[cfg(windows)]
+            // The opt-in headless-shell download needs the app data dir
+            // from render contexts that only carry a cache dir.
             render::browser_download::register_app(app.handle());
 
             let db_path = app.path().app_data_dir()?.join("printninja.db");
@@ -155,6 +154,13 @@ pub fn run() {
             let database = db::Database::open(&db_url)?;
             let db_state: DbState = Arc::new(Mutex::new(database));
             app.manage(db_state.clone());
+
+            // Seed the render layer's cached browser preference from the
+            // settings table before anything (warm-up, worker) resolves a
+            // browser.
+            if let Ok(guard) = db_state.lock() {
+                render::browser_choice::apply_from(guard.connection());
+            }
 
             // Orphaned font files (crashed deletes, failed overwrites) go
             // now: nothing is in flight yet, so unreferenced bytes are safe
@@ -268,7 +274,6 @@ pub fn run() {
             );
             // A headless-shell download interrupted by a crash/restart
             // would otherwise show "downloading" forever — heal it.
-            #[cfg(windows)]
             if let Ok(guard) = db_state.lock() {
                 commands::browser::heal_stale_download(app.handle(), guard.connection());
             }
@@ -384,6 +389,7 @@ pub fn run() {
             commands::browser::browser_shell_status,
             commands::browser::browser_shell_download,
             commands::browser::browser_shell_remove,
+            commands::browser::browser_shell_cancel,
             commands::print::print_html,
             commands::print::enumerate_system_printers,
             commands::print::list_bluetooth_devices,

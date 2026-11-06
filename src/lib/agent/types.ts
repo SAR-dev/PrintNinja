@@ -424,6 +424,12 @@ export interface RenderEngineStatus {
   available: boolean;
   /** The browser that will be used, when one was found. */
   path: string | null;
+  /**
+   * How it was chosen: `env` (operator override) | `shell` (downloaded
+   * headless shell) | `system` (installed browser) | `custom` (user path).
+   * `null` when no browser was found.
+   */
+  source: string | null;
   /** Locations (Windows) or executable names (Linux) that were tried. */
   searched: string[];
   /** Linux: `ID` then `ID_LIKE` from /etc/os-release, lowercase. */

@@ -2,6 +2,10 @@ use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 
 pub mod barcode;
+/// The user's browser preference (Settings → Diagnostics): automatic,
+/// system browser, downloaded shell, or a custom path. The render layer
+/// reads a cached copy; it never touches the DB itself.
+pub mod browser_choice;
 /// Opt-in download of the headless-shell fallback browser (Windows).
 pub mod browser_download;
 // Launches headless Edge (Windows) or Chromium (Linux). Edge runs it for
@@ -505,6 +509,20 @@ const CHROMIUM_CANDIDATES: &[&str] = &[
     "microsoft-edge-stable",
 ];
 
+/// Fixed absolute locations tried after the `PATH` scan: some layouts put
+/// a Chromium browser outside `PATH` (the `.deb` binaries live in
+/// `/opt` and `/usr/lib` with only a launcher symlink; snap installs to
+/// `/snap/bin`, which minimal desktops may not carry in a service's PATH).
+#[cfg(target_os = "linux")]
+const CHROMIUM_ABSOLUTE_PATHS: &[&str] = &[
+    "/opt/google/chrome/chrome",
+    "/opt/google/chrome/google-chrome",
+    "/usr/lib/chromium-browser/chromium.bin",
+    "/usr/lib/chromium/chromium",
+    "/usr/lib/microsoft-edge/msedge",
+    "/snap/bin/chromium",
+];
+
 /// Where Edge is looked for on Windows.
 #[cfg(windows)]
 const EDGE_PATHS: [&str; 2] = [
@@ -512,36 +530,58 @@ const EDGE_PATHS: [&str; 2] = [
     r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
 ];
 
-/// Where the system Chromium lives on Linux, in PATH order.
-/// `PRINTNINJA_CHROMIUM_BIN` overrides everything (tests, containers
-/// with a non-PATH browser). Missing everywhere is a loud error naming
-/// every name that was tried, not a placeholder render.
+/// Which Chromium-family browser prints on Linux: the
+/// `PRINTNINJA_CHROMIUM_BIN` override (tests, containers with a
+/// non-PATH browser), the user's choice (see `browser_choice`), then a
+/// PATH scan over the known names. Missing everywhere is a loud error
+/// naming what was tried, not a placeholder render.
 #[cfg(target_os = "linux")]
 fn find_chromium() -> Result<std::path::PathBuf> {
-    const CANDIDATES: &[&str] = CHROMIUM_CANDIDATES;
-    if let Some(bin) = std::env::var_os("PRINTNINJA_CHROMIUM_BIN") {
-        let path = std::path::PathBuf::from(&bin);
-        if path.is_file() {
-            return Ok(path);
-        }
-        return Err(anyhow!(
-            "PRINTNINJA_CHROMIUM_BIN points at {} which is not a file",
-            path.display()
-        ));
-    }
+    let (choice, custom) = browser_choice::current_choice();
+    resolve_browser(
+        "PRINTNINJA_CHROMIUM_BIN",
+        std::env::var_os("PRINTNINJA_CHROMIUM_BIN"),
+        choice,
+        custom.as_deref(),
+        browser_download::ready_path(),
+        &chromium_candidates(),
+        "system Chromium",
+        "printing",
+    )
+    .map(|r| r.path)
+}
+
+/// The known browser names expanded over `PATH` in PATH order, then the
+/// fixed absolute locations: the Linux equivalent of Windows' fixed
+/// `EDGE_PATHS`.
+#[cfg(target_os = "linux")]
+fn chromium_candidates() -> Vec<PathBuf> {
     let path_var = std::env::var_os("PATH").unwrap_or_default();
+    let mut out: Vec<PathBuf> = Vec::new();
     for dir in std::env::split_paths(&path_var) {
-        for name in CANDIDATES {
+        for name in CHROMIUM_CANDIDATES {
             let path = dir.join(name);
             if path.is_file() {
-                return Ok(path);
+                out.push(path);
             }
         }
     }
-    Err(anyhow!(
-        "no system Chromium found (tried {} on PATH; set PRINTNINJA_CHROMIUM_BIN to its path)",
-        CANDIDATES.join(", ")
-    ))
+    for name in CHROMIUM_ABSOLUTE_PATHS {
+        let path = PathBuf::from(name);
+        if path.is_file() {
+            out.push(path);
+        }
+    }
+    // The PATH scan and the fixed list can point at the same binary
+    // (launcher symlink plus real file); keep the first hit per resolved
+    // location so duplicates do not skew the resolution order.
+    let mut seen = std::collections::HashSet::new();
+    out.into_iter()
+        .filter(|p| {
+            let key = p.canonicalize().unwrap_or_else(|_| p.clone());
+            seen.insert(key)
+        })
+        .collect()
 }
 
 /// Whether a system Chromium is available on Linux, for the startup health
@@ -783,55 +823,140 @@ fn stderr_excerpt(stderr: &str) -> Option<String> {
     (!joined.is_empty()).then_some(joined)
 }
 
-/// Browser resolution order: the `PRINTNINJA_EDGE_BIN` override (a
-/// set-but-missing override is a loud error, mirroring
-/// `PRINTNINJA_CHROMIUM_BIN` on Linux), then the opt-in downloaded
-/// headless shell when it is on disk, then the standard Edge install
-/// locations. `purpose` names the render in the error so the operator
-/// knows what failed. Pure over its inputs so it is testable off Windows.
-#[cfg(any(windows, test))]
-fn resolve_edge(
+/// The result of browser resolution: the executable plus where it came
+/// from, so the UI can say which browser will print (`"env"`, `"shell"`,
+/// `"system"` or `"custom"`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedBrowser {
+    pub path: PathBuf,
+    pub source: &'static str,
+}
+
+/// Browser resolution order, shared by Windows (`find_edge`) and Linux
+/// (`find_chromium`):
+/// 1. the environment override (`PRINTNINJA_EDGE_BIN` /
+///    `PRINTNINJA_CHROMIUM_BIN`) — an operator lever that always wins; a
+///    set-but-missing override is a loud error, never a silent fall-back.
+/// 2. the user's choice (see `browser_choice`): `Custom` uses the stored
+///    path (missing = loud error), `System` skips the downloaded shell,
+///    `Shell` requires it (missing = loud error), `Auto` prefers the
+///    shell when it is on disk and falls through to the system browser.
+///
+/// `purpose` names the render in the error so the operator knows what
+/// failed. Pure over its inputs so it is testable on any platform.
+#[cfg(any(windows, target_os = "linux", test))]
+fn resolve_browser(
+    env_name: &'static str,
     env_override: Option<std::ffi::OsString>,
+    choice: browser_choice::BrowserChoice,
+    custom_path: Option<&str>,
     shell: Option<PathBuf>,
-    candidates: &[&str],
+    candidates: &[PathBuf],
+    system_name: &str,
     purpose: &str,
-) -> Result<PathBuf> {
+) -> Result<ResolvedBrowser> {
     if let Some(bin) = env_override {
         let path = PathBuf::from(&bin);
         if path.is_file() {
-            return Ok(path);
+            return Ok(ResolvedBrowser {
+                path,
+                source: "env",
+            });
         }
         return Err(anyhow!(
-            "PRINTNINJA_EDGE_BIN points at {} which is not a file — \
+            "{env_name} points at {} which is not a file — \
              {purpose} cannot run without a browser",
             path.display()
         ));
     }
-    if let Some(shell) = shell.filter(|p| p.is_file()) {
-        return Ok(shell);
+    match choice {
+        browser_choice::BrowserChoice::Custom => {
+            let raw = custom_path.filter(|p| !p.trim().is_empty()).ok_or_else(|| {
+                anyhow!(
+                    "the browser choice is set to a custom path, but no path is \
+                     stored — {purpose} cannot guess; set the path in Settings or \
+                     choose Automatic"
+                )
+            })?;
+            let path = PathBuf::from(raw.trim());
+            if !path.is_file() {
+                return Err(anyhow!(
+                    "the custom browser path {} is not a file — {purpose} cannot \
+                     run without a browser; fix the path in Settings or choose Automatic",
+                    path.display()
+                ));
+            }
+            Ok(ResolvedBrowser {
+                path,
+                source: "custom",
+            })
+        }
+        browser_choice::BrowserChoice::System => {
+            first_candidate(candidates, system_name, purpose)
+        }
+        browser_choice::BrowserChoice::Shell => match shell.filter(|p| p.is_file()) {
+            Some(path) => Ok(ResolvedBrowser {
+                path,
+                source: "shell",
+            }),
+            None => Err(anyhow!(
+                "the downloaded headless browser is not installed, but the browser \
+                 choice requires it — {purpose} cannot run without it; download it in \
+                 Settings → Diagnostics or choose Automatic"
+            )),
+        },
+        browser_choice::BrowserChoice::Auto => match shell.filter(|p| p.is_file()) {
+            Some(path) => Ok(ResolvedBrowser {
+                path,
+                source: "shell",
+            }),
+            None => first_candidate(candidates, system_name, purpose),
+        },
     }
+}
+
+#[cfg(any(windows, target_os = "linux", test))]
+fn first_candidate(
+    candidates: &[PathBuf],
+    system_name: &str,
+    purpose: &str,
+) -> Result<ResolvedBrowser> {
     candidates
         .iter()
-        .copied()
-        .find(|p| std::path::Path::new(p).is_file())
-        .map(PathBuf::from)
+        .find(|p| p.is_file())
+        .cloned()
+        .map(|path| ResolvedBrowser {
+            path,
+            source: "system",
+        })
         .ok_or_else(|| {
             anyhow!(
-                "Microsoft Edge not found (looked in {}) — {purpose} needs \
+                "{system_name} not found (looked in {}) — {purpose} needs \
                  a browser; the job cannot print without it",
-                candidates.join(", ")
+                candidates
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )
         })
 }
 
 #[cfg(windows)]
 pub(crate) fn find_edge(purpose: &str) -> Result<PathBuf> {
-    resolve_edge(
+    let (choice, custom) = browser_choice::current_choice();
+    let candidates: Vec<PathBuf> = EDGE_PATHS.iter().map(PathBuf::from).collect();
+    resolve_browser(
+        "PRINTNINJA_EDGE_BIN",
         std::env::var_os("PRINTNINJA_EDGE_BIN"),
+        choice,
+        custom.as_deref(),
         browser_download::ready_path(),
-        &EDGE_PATHS,
+        &candidates,
+        "Microsoft Edge",
         purpose,
     )
+    .map(|r| r.path)
 }
 
 /// Whether this machine has the browser the renderer needs, for the UI.
@@ -850,6 +975,10 @@ pub struct RenderEngineStatus {
     pub available: bool,
     /// The browser that will be used, when one was found.
     pub path: Option<String>,
+    /// Where it came from: `"env"` (override variable), `"shell"`
+    /// (downloaded headless browser), `"system"` (Edge / system
+    /// Chromium) or `"custom"` (user-stored path).
+    pub source: Option<&'static str>,
     /// Every place or name that was tried, for the "what was checked" list.
     pub searched: Vec<String>,
     /// Linux only: `ID` and `ID_LIKE` from `/etc/os-release`, lowercase, so
@@ -864,7 +993,21 @@ pub struct RenderEngineStatus {
 pub fn render_engine_status() -> RenderEngineStatus {
     #[cfg(windows)]
     {
-        let found = find_edge("PDF rendering").ok();
+        let (choice, custom) = browser_choice::current_choice();
+        let candidates: Vec<PathBuf> = EDGE_PATHS.iter().map(PathBuf::from).collect();
+        // The same resolution a real render would run, so the "what will
+        // print" the UI shows is what a print will actually use.
+        let resolved = resolve_browser(
+            "PRINTNINJA_EDGE_BIN",
+            std::env::var_os("PRINTNINJA_EDGE_BIN"),
+            choice,
+            custom.as_deref(),
+            browser_download::ready_path(),
+            &candidates,
+            "Microsoft Edge",
+            "PDF rendering",
+        )
+        .ok();
         // The whole resolution order, not just the install paths: the env
         // override (when set) and the downloaded shell (when present) can
         // be what actually prints, and the UI should show that.
@@ -872,14 +1015,21 @@ pub fn render_engine_status() -> RenderEngineStatus {
         if std::env::var_os("PRINTNINJA_EDGE_BIN").is_some() {
             searched.push("PRINTNINJA_EDGE_BIN (if set)".to_string());
         }
-        if let Some(shell) = browser_download::ready_path() {
-            searched.push(shell.display().to_string());
+        if choice == browser_choice::BrowserChoice::Custom {
+            if let Some(p) = custom.as_deref().filter(|p| !p.trim().is_empty()) {
+                searched.push(p.trim().to_string());
+            }
+        } else {
+            if let Some(shell) = browser_download::ready_path() {
+                searched.push(shell.display().to_string());
+            }
+            searched.extend(EDGE_PATHS.iter().map(|p| p.to_string()));
         }
-        searched.extend(EDGE_PATHS.iter().map(|p| p.to_string()));
         RenderEngineStatus {
             platform: "windows",
-            available: found.is_some(),
-            path: found.map(|p| p.display().to_string()),
+            available: resolved.is_some(),
+            path: resolved.as_ref().map(|r| r.path.display().to_string()),
+            source: resolved.as_ref().map(|r| r.source),
             searched,
             distro: Vec::new(),
             distro_name: None,
@@ -888,13 +1038,39 @@ pub fn render_engine_status() -> RenderEngineStatus {
     }
     #[cfg(target_os = "linux")]
     {
-        let found = find_chromium().ok();
+        let (choice, custom) = browser_choice::current_choice();
+        let resolved = resolve_browser(
+            "PRINTNINJA_CHROMIUM_BIN",
+            std::env::var_os("PRINTNINJA_CHROMIUM_BIN"),
+            choice,
+            custom.as_deref(),
+            browser_download::ready_path(),
+            &chromium_candidates(),
+            "system Chromium",
+            "PDF rendering",
+        )
+        .ok();
+        let mut searched = Vec::new();
+        if std::env::var_os("PRINTNINJA_CHROMIUM_BIN").is_some() {
+            searched.push("PRINTNINJA_CHROMIUM_BIN (if set)".to_string());
+        }
+        if choice == browser_choice::BrowserChoice::Custom {
+            if let Some(p) = custom.as_deref().filter(|p| !p.trim().is_empty()) {
+                searched.push(p.trim().to_string());
+            }
+        } else {
+            if let Some(shell) = browser_download::ready_path() {
+                searched.push(shell.display().to_string());
+            }
+            searched.extend(CHROMIUM_CANDIDATES.iter().map(|n| n.to_string()));
+        }
         let (distro, distro_name) = linux_distro();
         RenderEngineStatus {
             platform: "linux",
-            available: found.is_some(),
-            path: found.map(|p| p.display().to_string()),
-            searched: CHROMIUM_CANDIDATES.iter().map(|n| n.to_string()).collect(),
+            available: resolved.is_some(),
+            path: resolved.as_ref().map(|r| r.path.display().to_string()),
+            source: resolved.as_ref().map(|r| r.source),
+            searched,
             distro,
             distro_name,
             appimage: std::env::var_os("APPIMAGE").is_some(),
@@ -906,6 +1082,7 @@ pub fn render_engine_status() -> RenderEngineStatus {
             platform: "other",
             available: true,
             path: None,
+            source: None,
             searched: Vec::new(),
             distro: Vec::new(),
             distro_name: None,
@@ -1255,7 +1432,8 @@ mod tests {
     }
 
     #[test]
-    fn resolve_edge_prefers_the_override_then_shell_then_candidates() {
+    fn resolve_browser_respects_the_choice_order() {
+        use browser_choice::BrowserChoice as C;
         let dir = std::env::temp_dir().join(format!("pn-resolve-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let override_bin = dir.join("override.exe");
@@ -1264,50 +1442,186 @@ mod tests {
         for p in [&override_bin, &shell, &candidate] {
             std::fs::write(p, b"").unwrap();
         }
-        let candidates = [candidate.to_str().unwrap()];
+        let candidates = vec![candidate.clone()];
 
-        // A valid override wins over everything else.
-        assert_eq!(
-            resolve_edge(
+        // A valid override wins over every choice.
+        for choice in [C::Auto, C::System, C::Shell, C::Custom] {
+            let r = resolve_browser(
+                "PRINTNINJA_EDGE_BIN",
                 Some(override_bin.as_os_str().to_os_string()),
+                choice,
+                Some("/custom/path"),
                 Some(shell.clone()),
                 &candidates,
-                "test render"
+                "Microsoft Edge",
+                "test render",
             )
-            .unwrap(),
-            override_bin
-        );
+            .unwrap();
+            assert_eq!(
+                r,
+                ResolvedBrowser {
+                    path: override_bin.clone(),
+                    source: "env"
+                }
+            );
+        }
         // A set-but-missing override is a loud error, not a silent fallback.
-        let err = resolve_edge(
+        let err = resolve_browser(
+            "PRINTNINJA_EDGE_BIN",
             Some(dir.join("nope.exe").as_os_str().to_os_string()),
+            C::Auto,
+            None,
             Some(shell.clone()),
             &candidates,
+            "Microsoft Edge",
             "test render",
         )
         .unwrap_err()
         .to_string();
         assert!(err.contains("PRINTNINJA_EDGE_BIN"), "{err}");
         assert!(err.contains("not a file"), "{err}");
-        // Without an override, a shell on disk beats the system Edge.
+        // Auto: a shell on disk beats the system browser; a missing shell
+        // falls through to it.
         assert_eq!(
-            resolve_edge(None, Some(shell.clone()), &candidates, "test render").unwrap(),
-            shell
-        );
-        // A missing shell falls through to the candidates.
-        assert_eq!(
-            resolve_edge(
+            resolve_browser(
+                "PRINTNINJA_EDGE_BIN",
                 None,
-                Some(dir.join("absent.exe")),
+                C::Auto,
+                None,
+                Some(shell.clone()),
                 &candidates,
+                "Microsoft Edge",
                 "test render"
             )
             .unwrap(),
-            candidate
+            ResolvedBrowser {
+                path: shell.clone(),
+                source: "shell"
+            }
         );
+        assert_eq!(
+            resolve_browser(
+                "PRINTNINJA_EDGE_BIN",
+                None,
+                C::Auto,
+                None,
+                Some(dir.join("absent.exe")),
+                &candidates,
+                "Microsoft Edge",
+                "test render"
+            )
+            .unwrap(),
+            ResolvedBrowser {
+                path: candidate.clone(),
+                source: "system"
+            }
+        );
+        // System: the downloaded shell is skipped even when it is on disk.
+        assert_eq!(
+            resolve_browser(
+                "PRINTNINJA_EDGE_BIN",
+                None,
+                C::System,
+                None,
+                Some(shell.clone()),
+                &candidates,
+                "Microsoft Edge",
+                "test render"
+            )
+            .unwrap(),
+            ResolvedBrowser {
+                path: candidate.clone(),
+                source: "system"
+            }
+        );
+        // Shell: requires the download; a missing one is a loud error.
+        assert_eq!(
+            resolve_browser(
+                "PRINTNINJA_EDGE_BIN",
+                None,
+                C::Shell,
+                None,
+                Some(shell.clone()),
+                &candidates,
+                "Microsoft Edge",
+                "test render"
+            )
+            .unwrap(),
+            ResolvedBrowser {
+                path: shell.clone(),
+                source: "shell"
+            }
+        );
+        let err = resolve_browser(
+            "PRINTNINJA_EDGE_BIN",
+            None,
+            C::Shell,
+            None,
+            None,
+            &candidates,
+            "Microsoft Edge",
+            "test render",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("not installed"), "{err}");
+        // Custom: the stored path wins; missing or unset are loud errors.
+        assert_eq!(
+            resolve_browser(
+                "PRINTNINJA_EDGE_BIN",
+                None,
+                C::Custom,
+                Some(candidate.to_str().unwrap()),
+                None,
+                &candidates,
+                "Microsoft Edge",
+                "test render"
+            )
+            .unwrap(),
+            ResolvedBrowser {
+                path: candidate.clone(),
+                source: "custom"
+            }
+        );
+        let err = resolve_browser(
+            "PRINTNINJA_EDGE_BIN",
+            None,
+            C::Custom,
+            Some(dir.join("nope.exe").to_str().unwrap()),
+            None,
+            &candidates,
+            "Microsoft Edge",
+            "test render",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("not a file"), "{err}");
+        let err = resolve_browser(
+            "PRINTNINJA_EDGE_BIN",
+            None,
+            C::Custom,
+            None,
+            None,
+            &candidates,
+            "Microsoft Edge",
+            "test render",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("no path is stored"), "{err}");
         // Nothing anywhere: the error names every place that was searched.
-        let err = resolve_edge(None, None, &[], "test render")
-            .unwrap_err()
-            .to_string();
+        let err = resolve_browser(
+            "PRINTNINJA_EDGE_BIN",
+            None,
+            C::Auto,
+            None,
+            None,
+            &[],
+            "Microsoft Edge",
+            "test render",
+        )
+        .unwrap_err()
+        .to_string();
         assert!(err.contains("Microsoft Edge not found"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }
