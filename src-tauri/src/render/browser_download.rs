@@ -336,7 +336,10 @@ fn smoke_test(exe: &Path) -> std::io::Result<()> {
             .unwrap_or("no stderr")
             .trim()
             .to_string();
-        return Err(std::io::Error::other(format!("exited {}; {detail}", out.status)));
+        return Err(std::io::Error::other(format!(
+            "exited {}; {detail}",
+            out.status
+        )));
     }
     Ok(())
 }
