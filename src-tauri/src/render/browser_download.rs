@@ -36,8 +36,7 @@ use tauri::{Emitter, Manager};
 pub const SHELL_VERSION: &str = "157.0.8103.38";
 /// SHA-256 of the pinned `chrome-headless-shell-win64.zip`, computed at
 /// pin time and committed; a mismatched download is rejected.
-pub const SHELL_SHA256: &str =
-    "1ff4540855478ba0848e03f1ef8d455f77d058b38285df91bc34273788a73446";
+pub const SHELL_SHA256: &str = "1ff4540855478ba0848e03f1ef8d455f77d058b38285df91bc34273788a73446";
 /// Refuse downloads larger than this (the pinned zip is ~121 MiB; this
 /// allows for growth across pinned versions while still catching a
 /// hijacked response).
@@ -137,6 +136,17 @@ pub fn ready_path() -> Option<PathBuf> {
 /// Windows only: the rest of the platform set has package managers and
 /// the `PRINTNINJA_*_BIN` overrides, and the handoff failure that makes
 /// the shell worth downloading is an Edge-on-Windows symptom.
+/// Non-Windows stub: the command in `commands/browser.rs` exists on every
+/// platform, so the function must too — it just reports that the feature
+/// is a Windows one.
+#[cfg(not(windows))]
+pub async fn download_and_install(_app: &tauri::AppHandle) -> anyhow::Result<()> {
+    anyhow::bail!(
+        "the headless shell download is a Windows feature — printing here \
+         uses the system browser"
+    );
+}
+
 #[cfg(windows)]
 pub async fn download_and_install(app: &tauri::AppHandle) -> anyhow::Result<()> {
     let app_data = app
@@ -219,9 +229,8 @@ fn extract_zip(zip_path: &Path, dest: &Path) -> std::io::Result<()> {
         std::fs::remove_dir_all(&inner)?;
     }
     let file = std::fs::File::open(zip_path)?;
-    let mut archive = zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
-    })?;
+    let mut archive = zip::ZipArchive::new(std::io::BufReader::new(file))
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
     archive
         .extract(dest)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))

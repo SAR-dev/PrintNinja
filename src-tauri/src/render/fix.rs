@@ -87,7 +87,9 @@ pub fn tasklist_says_running(stdout: &str) -> bool {
 /// a line per matching process naming the image, and its "no tasks" line
 /// (in any locale) never does.
 pub fn tasklist_names(stdout: &str, image: &str) -> bool {
-    stdout.to_ascii_lowercase().contains(&image.to_ascii_lowercase())
+    stdout
+        .to_ascii_lowercase()
+        .contains(&image.to_ascii_lowercase())
 }
 
 #[cfg(windows)]
@@ -268,12 +270,10 @@ pub async fn run(cache_dir: &Path, close_edge: bool) -> anyhow::Result<FixReport
             } else {
                 match other {
                     Err(e) => e.to_string(),
-                    Ok(_) => {
-                        "Edge handed the print job to a running Edge session \
+                    Ok(_) => "Edge handed the print job to a running Edge session \
                          (exit 0, no PDF) — close all Edge windows and run \
                          the repair again"
-                            .to_string()
-                    }
+                        .to_string(),
                 }
             });
         }
@@ -359,13 +359,8 @@ mod tests {
     /// never dies: (false, MAX_ROUNDS), not a silent success.
     #[tokio::test]
     async fn kill_loop_reports_failure_when_the_image_never_dies() {
-        let (verified, rounds) = kill_until_dead(
-            || {},
-            || false,
-            std::time::Duration::from_millis(1),
-            15,
-        )
-        .await;
+        let (verified, rounds) =
+            kill_until_dead(|| {}, || false, std::time::Duration::from_millis(1), 15).await;
         assert!(!verified);
         assert_eq!(rounds, 15);
     }
@@ -378,8 +373,8 @@ mod tests {
         let (verified, rounds) = kill_until_dead(
             || {},
             || {
-                checks.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
-                    == 16 // 15 in-loop checks, then the final one
+                checks.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1 == 16
+                // 15 in-loop checks, then the final one
             },
             std::time::Duration::from_millis(1),
             15,

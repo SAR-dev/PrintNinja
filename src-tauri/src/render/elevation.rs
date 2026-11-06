@@ -2,7 +2,8 @@
 //!
 //! An elevated parent changes how headless Edge behaves: it exits 0 in a
 //! few hundred milliseconds without printing, even on a fresh profile
-//! (docs/EDGE_FAILURE_REPORT.md). The render path and the repair need to
+//! (docs/architecture/RENDERING_AND_LAYOUT.md). The render path and the
+//! repair need to
 //! know that happened instead of guessing at "profile in use" or "a
 //! running session took the launch".
 //!
@@ -17,13 +18,14 @@
 //! (the wry/tao stack) into the manifest-less test executables.
 //!
 //! This module detects and explains; it deliberately does *not* make
-//! printing work while elevated. Launching Edge de-elevated (the
-//! report's Fix 2) and `--no-sandbox` when elevated (Fix 4) are not
-//! built: the owner decided PrintNinja does not need to run elevated,
+//! printing work while elevated. Launching Edge de-elevated and
+//! `--no-sandbox` when elevated were both considered and not built: the
+//! owner decided PrintNinja does not need to run elevated,
 //! so the right behavior is an actionable "restart normally" message.
-//! WebView2 printing (Fix 3) remains a longer-term option. See
-//! docs/EDGE_FAILURE_REPORT.md §6.
+//! WebView2 printing remains a longer-term option. See
+//! docs/architecture/RENDERING_AND_LAYOUT.md.
 
+#[cfg(windows)]
 use std::sync::OnceLock;
 
 /// The operator-facing wording for an elevated render failure, shared by

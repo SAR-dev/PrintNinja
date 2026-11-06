@@ -117,7 +117,7 @@ const PATTERNS: Array<[RegExp, string, string[]]> = [
     ["rounds"],
   ],
   // Elevated parent: headless Edge exits 0 without printing when its
-  // parent is elevated (docs/EDGE_FAILURE_REPORT.md). Synced with
+  // parent is elevated (RENDERING_AND_LAYOUT.md). Synced with
   // ELEVATED_ERROR in src-tauri/src/render/elevation.rs — the match is on
   // the opening only, because the repair appends its own suffix.
   [/^PrintNinja is running as administrator/, "errors.edge_elevated", []],

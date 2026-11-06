@@ -171,6 +171,15 @@ These are not planned. They were looked at and accepted.
   were removed. A side effect: the Windows USB and Bluetooth transports send
   every job as `RAW` and ignore the job's type, so a PDF reaches such a
   printer only if the printer reads PDF itself.
+- **Windows printing while elevated is not supported.** Headless Edge
+  exits 0 without printing when its parent process is elevated, so an
+  app started "as administrator" cannot print at all. The app detects
+  the elevation and says so instead of guessing (`render/elevation.rs`),
+  but deliberately does not launch Edge de-elevated — the owner decided
+  PrintNinja does not need to run elevated, so the behaviour is an
+  actionable "restart normally" message. *Workaround:* launch without
+  "Run as administrator" (and remove any Compatibility setting that
+  forces it).
 - **Linux has no direct USB or Bluetooth.** Use a CUPS raw queue and add it as
   a `system` printer.
 - **iOS and macOS are not print targets.** There is no code for iOS, and on

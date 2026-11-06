@@ -12,7 +12,8 @@ mod cdp;
 #[cfg(any(windows, test))]
 mod edge;
 /// Whether this process is running elevated (administrator). Headless Edge
-/// will not print from an elevated parent (docs/EDGE_FAILURE_REPORT.md), so
+/// will not print from an elevated parent (see
+/// docs/architecture/RENDERING_AND_LAYOUT.md), so
 /// the failure paths report it instead of guessing.
 mod elevation;
 /// One-click repair for the Windows print pipeline (Settings → Diagnostics).
@@ -259,9 +260,7 @@ impl PdfRenderer {
         // property of Edge, and the headless shell is unverified.)
         if run.output.status.success()
             && elevation::is_elevated()
-            && edge_path
-                .file_name()
-                .is_some_and(|n| n == "msedge.exe")
+            && edge_path.file_name().is_some_and(|n| n == "msedge.exe")
         {
             return Err(anyhow!("{}", elevation::ELEVATED_ERROR));
         }
@@ -274,9 +273,7 @@ impl PdfRenderer {
         // headless shell has no resident session to hand off to, so the
         // same exit-0-no-PDF there is a different bug.)
         if run.output.status.success()
-            && edge_path
-                .file_name()
-                .is_some_and(|n| n == "msedge.exe")
+            && edge_path.file_name().is_some_and(|n| n == "msedge.exe")
             && fix::processes_running("msedge.exe")
         {
             return Err(anyhow!(
@@ -1259,10 +1256,7 @@ mod tests {
 
     #[test]
     fn resolve_edge_prefers_the_override_then_shell_then_candidates() {
-        let dir = std::env::temp_dir().join(format!(
-            "pn-resolve-{}",
-            uuid::Uuid::new_v4()
-        ));
+        let dir = std::env::temp_dir().join(format!("pn-resolve-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let override_bin = dir.join("override.exe");
         let shell = dir.join("chrome-headless-shell.exe");
@@ -1301,11 +1295,19 @@ mod tests {
         );
         // A missing shell falls through to the candidates.
         assert_eq!(
-            resolve_edge(None, Some(dir.join("absent.exe")), &candidates, "test render").unwrap(),
+            resolve_edge(
+                None,
+                Some(dir.join("absent.exe")),
+                &candidates,
+                "test render"
+            )
+            .unwrap(),
             candidate
         );
         // Nothing anywhere: the error names every place that was searched.
-        let err = resolve_edge(None, None, &[], "test render").unwrap_err().to_string();
+        let err = resolve_edge(None, None, &[], "test render")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("Microsoft Edge not found"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }
