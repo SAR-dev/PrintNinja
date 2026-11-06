@@ -40,7 +40,9 @@ pub const ELEVATED_ERROR: &str = "PrintNinja is running as administrator — Edg
 ///
 /// Windows only in practice: the failure this explains is an
 /// Edge-on-Windows symptom. Every other platform reports `false` without
-/// any token machinery.
+/// any token machinery. Production call sites are all `#[cfg(windows)]`;
+/// the `test` keeps it alive for the cross-platform tests below.
+#[cfg(any(windows, test))]
 pub fn is_elevated() -> bool {
     #[cfg(windows)]
     {
