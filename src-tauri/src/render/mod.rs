@@ -871,13 +871,15 @@ fn resolve_browser(
     }
     match choice {
         browser_choice::BrowserChoice::Custom => {
-            let raw = custom_path.filter(|p| !p.trim().is_empty()).ok_or_else(|| {
-                anyhow!(
-                    "the browser choice is set to a custom path, but no path is \
+            let raw = custom_path
+                .filter(|p| !p.trim().is_empty())
+                .ok_or_else(|| {
+                    anyhow!(
+                        "the browser choice is set to a custom path, but no path is \
                      stored — {purpose} cannot guess; set the path in Settings or \
                      choose Automatic"
-                )
-            })?;
+                    )
+                })?;
             let path = PathBuf::from(raw.trim());
             if !path.is_file() {
                 return Err(anyhow!(
@@ -891,9 +893,7 @@ fn resolve_browser(
                 source: "custom",
             })
         }
-        browser_choice::BrowserChoice::System => {
-            first_candidate(candidates, system_name, purpose)
-        }
+        browser_choice::BrowserChoice::System => first_candidate(candidates, system_name, purpose),
         browser_choice::BrowserChoice::Shell => match shell.filter(|p| p.is_file()) {
             Some(path) => Ok(ResolvedBrowser {
                 path,
