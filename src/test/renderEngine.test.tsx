@@ -19,6 +19,7 @@ const ok: RenderEngineStatus = {
   distro: ["debian"],
   distro_name: "Debian GNU/Linux 12",
   appimage: false,
+  source: "system",
 };
 const linuxMissing: RenderEngineStatus = {
   ...ok,
@@ -37,6 +38,7 @@ const windowsMissing: RenderEngineStatus = {
   distro: [],
   distro_name: null,
   appimage: false,
+  source: null,
 };
 
 let current: RenderEngineStatus | Error;
