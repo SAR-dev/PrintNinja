@@ -478,7 +478,8 @@ fn parse_active_port(text: &str) -> Option<(u16, String)> {
 
 /// The browser process ended before it published a DevTools port. On
 /// Windows the expected cause is an elevated parent (Edge exits 0 without
-/// printing when its parent is elevated — docs/EDGE_FAILURE_REPORT.md);
+/// printing when its parent is elevated —
+/// docs/architecture/RENDERING_AND_LAYOUT.md);
 /// next, a resident Edge session taking the launch (already named in the
 /// detail when `msedge.exe` is still running); only then the profile.
 /// `super::elevation::ELEVATED_ERROR` names the first cause.

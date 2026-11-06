@@ -94,9 +94,7 @@ pub async fn browser_shell_status(
         clear_error(conn);
     }
     Ok(BrowserShellStatus {
-        path: exe
-            .filter(|p| p.is_file())
-            .map(|p| p.display().to_string()),
+        path: exe.filter(|p| p.is_file()).map(|p| p.display().to_string()),
         error: (state == "error").then(|| read_error(conn)).flatten(),
         state,
         version: browser_download::SHELL_VERSION.to_string(),
@@ -107,10 +105,7 @@ pub async fn browser_shell_status(
 /// arrives as `"browser-shell-progress"` events; the state row is set to
 /// `ready` only when everything succeeded.
 #[tauri::command(rename_all = "snake_case")]
-pub async fn browser_shell_download(
-    app: AppHandle,
-    db: State<'_, DbState>,
-) -> AppResult<()> {
+pub async fn browser_shell_download(app: AppHandle, db: State<'_, DbState>) -> AppResult<()> {
     {
         let guard = lock_db(&db)?;
         set_state(guard.connection(), "downloading");
@@ -137,10 +132,7 @@ pub async fn browser_shell_download(
 /// Remove the installed shell (all version directories) and its state
 /// rows: the opt-out. Printing returns to `msedge.exe`.
 #[tauri::command(rename_all = "snake_case")]
-pub async fn browser_shell_remove(
-    app: AppHandle,
-    db: State<'_, DbState>,
-) -> AppResult<()> {
+pub async fn browser_shell_remove(app: AppHandle, db: State<'_, DbState>) -> AppResult<()> {
     // The whole root, not one version dir, so bumped versions do not
     // linger.
     let root = app
@@ -155,7 +147,10 @@ pub async fn browser_shell_remove(
     }
     let guard = lock_db(&db)?;
     let conn = guard.connection();
-    let _ = conn.execute("DELETE FROM settings WHERE key = ?", [browser_download::STATE_KEY]);
+    let _ = conn.execute(
+        "DELETE FROM settings WHERE key = ?",
+        [browser_download::STATE_KEY],
+    );
     clear_error(conn);
     Ok(())
 }
@@ -178,6 +173,9 @@ pub fn heal_stale_download(app: &AppHandle, conn: &Connection) {
         clear_error(conn);
     } else {
         set_state(conn, "error");
-        set_error(conn, "the download was interrupted by an app restart — download again");
+        set_error(
+            conn,
+            "the download was interrupted by an app restart — download again",
+        );
     }
 }
