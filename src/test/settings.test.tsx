@@ -305,7 +305,7 @@ describe("Settings database reset", () => {
       open("Retention");
       fireEvent.click(await screen.findByTestId("settings-reset-database"));
       expect(
-        await screen.findByText("Erase everything on this PC?"),
+        await screen.findByText("Erase everything on this device?"),
       ).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Erase everything" }));
       await waitFor(() =>
@@ -322,11 +322,11 @@ describe("Settings database reset", () => {
     open("Retention");
     fireEvent.click(await screen.findByTestId("settings-reset-database"));
     expect(
-      await screen.findByText("Erase everything on this PC?"),
+      await screen.findByText("Erase everything on this device?"),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
-      expect(screen.queryByText("Erase everything on this PC?")).toBeNull(),
+      expect(screen.queryByText("Erase everything on this device?")).toBeNull(),
     );
     expect(invoke.mock.calls.some((c) => c[0] === "reset_database")).toBe(
       false,

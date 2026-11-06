@@ -70,14 +70,14 @@ test("reset wipes the PC, keeps the server copy, and re-pulls on sign-in", async
     ).toHaveLength(1);
   }).toPass({ timeout: 30_000 });
 
-  // Retention tab → Reset this PC → confirm.
+  // Retention tab → Reset this device → confirm.
   await page.goto("/settings");
   await expect(page.getByTestId(testids.shellApp)).toBeVisible({
     timeout: 15_000,
   });
   await page.getByRole("tab", { name: "Retention" }).click();
   await page.getByTestId(testids.settingsResetDatabase).click();
-  await expect(page.getByText("Erase everything on this PC?")).toBeVisible({
+  await expect(page.getByText("Erase everything on this device?")).toBeVisible({
     timeout: 15_000,
   });
   await page.getByRole("button", { name: "Erase everything" }).click();

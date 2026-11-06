@@ -1049,12 +1049,7 @@ export function SettingsPage() {
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <p className="text-sm text-muted-foreground">
-                        Erases everything the app owns on this PC: templates and
-                        versions, print history, printers, fonts and their
-                        files, datasets, profiles, the sync state and every
-                        setting — including the sign-in, so the app returns to
-                        the welcome screen. The server keeps the account;
-                        signing back in pulls it down again.
+                        {t("settings_page.reset_desc")}
                       </p>
                       <Button
                         variant="destructive"
@@ -1063,7 +1058,7 @@ export function SettingsPage() {
                         onClick={() => setShowResetDialog(true)}
                       >
                         <Trash2 className="h-3 w-3 mr-2" />
-                        Reset this PC…
+                        {t("settings_page.reset_action")}
                       </Button>
                     </CardContent>
                   </Card>
