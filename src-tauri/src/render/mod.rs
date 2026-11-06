@@ -845,6 +845,9 @@ pub struct ResolvedBrowser {
 /// `purpose` names the render in the error so the operator knows what
 /// failed. Pure over its inputs so it is testable on any platform.
 #[cfg(any(windows, target_os = "linux", test))]
+// Eight arguments are the eight distinct inputs; bundling them into a
+// struct would add ceremony at the ~ten call sites without hiding state.
+#[allow(clippy::too_many_arguments)]
 fn resolve_browser(
     env_name: &'static str,
     env_override: Option<std::ffi::OsString>,
