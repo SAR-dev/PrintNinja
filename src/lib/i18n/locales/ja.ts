@@ -116,6 +116,17 @@ const ja: Translation = {
       "PrintNinja は次の場所にある msedge.exe だけを探します。AppData 配下のユーザー単位のインストールは検出されません。",
     win_webview_note:
       "WebView2 ランタイム単体では不十分です。PrintNinja は msedge.exe を自分で起動します。",
+    win_step_shell:
+      "または、PrintNinja にヘッドレスブラウザーをダウンロードさせる",
+    win_shell_hint:
+      "公式の Chrome for Testing ヘッドレスシェル（約 150 MB）をダウンロードし、SHA-256 で検証します。インストーラーは不要です。実行中の Edge セッションはこれを奪えないため、Edge ウィンドウを開いたまま印刷できます。いつでも削除できます。",
+    win_shell_download: "ヘッドレスブラウザーをダウンロード（約 150 MB）",
+    win_shell_downloading: "ダウンロード中… {{done}} MB / {{total}} MB",
+    win_shell_remove: "ダウンロードしたブラウザーを削除",
+    win_shell_ready:
+      "ヘッドレスブラウザーの準備ができました（{{version}}）。印刷はこれを使い、Edge ウィンドウは開いたままで大丈夫です。",
+    win_shell_error:
+      "ヘッドレスブラウザーのダウンロードに失敗しました: {{error}}",
     linux_step_install: "Chromium 系ブラウザーをインストールする",
     linux_detected: "検出: {{name}}。ターミナルで次を実行してください:",
     linux_unknown_distro:
@@ -1110,13 +1121,13 @@ const ja: Translation = {
     retention_days: "履歴の保持期間（日）",
     max_records: "最大レコード数",
     number_error: "{{label}}は{{min}}以上の整数にしてください。",
-    reset_title: "このPCをリセット",
+    reset_title: "この端末をリセット",
     reset_desc:
-      "このPC上でアプリが保持しているすべてを消去します。テンプレートとバージョン、印刷履歴、プリンター、フォントとそのファイル、データセット、プロファイル、同期状態、サインインを含むすべての設定が対象で、アプリはウェルカム画面に戻ります。",
-    reset_action: "このPCをリセット…",
-    reset_confirm_title: "このPC上のすべてを消去しますか？",
+      "この端末上でアプリが保持しているすべてを消去します。テンプレートとバージョン、印刷履歴、プリンター、フォントとそのファイル、データセット、プロファイル、同期状態、サインインを含むすべての設定が対象で、アプリはウェルカム画面に戻ります。サーバーにはアカウントが残るため、再度サインインすると復元できます。",
+    reset_action: "この端末をリセット…",
+    reset_confirm_title: "この端末上のすべてを消去しますか？",
     reset_confirm_body:
-      "テンプレート、印刷履歴、プリンター、フォント、データセット、プロファイル、すべての設定がこのPCから完全に削除されます。アカウントはサーバーに残るため、再度サインインすると復元できます。",
+      "テンプレート、印刷履歴、プリンター、フォント、データセット、プロファイル、すべての設定がこの端末から完全に削除されます。アカウントはサーバーに残るため、再度サインインすると復元できます。",
     reset_confirm: "すべて消去",
     reset_erasing: "消去しています…",
     toast_reset_done:
@@ -1151,8 +1162,20 @@ const ja: Translation = {
     fix_cooldown: "永続ブラウザのクールダウンをリセットしました",
     fix_test_ok: "テスト印刷に成功しました",
     fix_test_failed: "テスト印刷に失敗しました",
+    fix_elevated:
+      "PrintNinja が管理者として実行されています — 通常に再起動するまで、印刷も修復も成功しません。",
     toast_fix_ok: "印刷パイプラインを修復しました — テスト印刷に成功しました",
     toast_fix_failed: "リペアは実行されましたが、テスト印刷に失敗しました",
+    diag_fix_edge_still_running:
+      "リペア後も Edge を停止できませんでした — すべての Edge ウィンドウを自分で閉じてから、リペアをもう一度実行してください。",
+    diag_fix_shell_offer:
+      "代替案: PrintNinja が独自のヘッドレスブラウザー（約 150 MB、SHA-256 で検証済み、インストーラー不要）をダウンロードできます。実行中の Edge セッションはこれを奪えないため、Edge ウィンドウを開いたまま印刷できます。ボタンを押さなければ何もダウンロードされず、いつでも削除できます。",
+    diag_fix_shell_download: "ヘッドレスブラウザーをダウンロード（任意）",
+    diag_fix_shell_downloading:
+      "ヘッドレスブラウザーをダウンロード中… {{done}} MB / {{total}} MB",
+    diag_fix_shell_ready:
+      "ヘッドレスブラウザーの準備ができました — 印刷はこれを使い、Edge ウィンドウは開いたままで大丈夫です。",
+    diag_fix_shell_remove: "ダウンロードしたブラウザーを削除",
     allow_title: "すべてのドメインからのデータを許可しますか？",
     allow_hint:
       "リストが空の場合、すべてのドメインが許可されます。ライブデータURLから、どこからでもコンテンツを取得できるようになります。意図的でない限り、少なくとも自分のホストは登録しておいてください。",
@@ -1549,6 +1572,12 @@ const ja: Translation = {
       "許可されていません。このテンプレートは別のアカウントのものです。所有するアカウントでサインインしてからもう一度お試しください。",
     unknown_printer_type: "不明なプリンターの種類です: `{{type}}`",
     pdf_timeout: "PDFのレンダリングが {{seconds}} 秒でタイムアウトしました",
+    edge_handoff:
+      "Edge が印刷ジョブを実行中の Edge セッションに渡しました — すべての Edge ウィンドウを閉じるか、設定 → 診断 の「PC 印刷を修復」を実行してください。",
+    edge_not_stopped:
+      "taskkill を {{rounds}} 回実行しましたが Edge を停止できませんでした — msedge.exe がまだ実行中です。すべての Edge ウィンドウを閉じてからリペアを再実行するか、ヘッドレスブラウザーをダウンロードしてください。",
+    edge_elevated:
+      "PrintNinja が管理者として実行されています。elevated プロセスからの印刷は Edge でできません。「管理者として実行」をせずに PrintNinja を再起動してから、もう一度お試しください。",
   },
 };
 

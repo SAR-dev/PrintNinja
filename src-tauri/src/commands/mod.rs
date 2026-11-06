@@ -1,5 +1,7 @@
 pub mod api;
 pub mod background;
+/// Opt-in headless browser (chrome-headless-shell) status/download/remove.
+pub mod browser;
 pub mod cache;
 pub mod datasets;
 pub mod deeplink_cmd;

@@ -116,6 +116,72 @@ to a single shared table of expected results, so a change to one that isn't
 mirrored in the other fails a test instead of silently making the preview
 lie.
 
+## The Windows Edge handoff failure
+
+On some Windows 11 machines with a recent Edge (observed on Edge 156), a
+headless `msedge.exe` launch exits **0** immediately, produces **no PDF**
+and prints **nothing to stderr** while many `msedge.exe` processes sit
+resident. The launcher-level session handoff forwards the command line to
+the already-running Edge session instead of printing, regardless of
+`--user-data-dir`. Every render path (persistent CDP, fresh-profile CDP,
+one-shot warm, one-shot throwaway) hits the same wall.
+
+The app deals with it in three layers, all in `src-tauri/src/render/`:
+
+- **Detect and name it.** When a print exits 0 with no PDF and
+  `msedge.exe` is still running, the error says so plainly (translated in
+  the UI): "Edge handed the print job to a running Edge session".
+- **Repair that verifies.** **Fix PC printing** (Settings → Diagnostics)
+  kills `msedge.exe` in a bounded kill/verify loop (re-checking `tasklist`
+  after each round, up to 15 rounds) instead of one taskkill plus a fixed
+  sleep. When the process table still shows Edge afterwards, the report
+  says the kill could not be verified instead of claiming success — and
+  skips a test render that could not possibly pass.
+- **A browser Edge cannot take.** The opt-in headless download
+  (`chrome-headless-shell`, pinned version + SHA-256 in
+  `browser_download.rs`) has no resident-session behaviour, so its
+  launches always print. `find_edge` prefers it when installed;
+  `PRINTNINJA_EDGE_BIN` (see `../ENV.md`) overrides everything for
+  manual setups.
+
+### A second cause: an elevated parent
+
+The same symptom — exit 0, no PDF, nothing on stderr, even on a fresh
+profile — has a second cause: the app itself is elevated (started with
+"Run as administrator" or a Compatibility setting that forces it). It
+was proven by an A/B test on an affected PC (Edge 156): the identical
+launch wrote a PDF from a normal shell and failed in about 180 ms from
+an elevated one, with policy, other Edge processes, stale profiles and
+the flag set all ruled out on the way.
+
+The app deals with it the same way, in `elevation.rs`:
+
+- **Detect.** `is_elevated()` reads the process token
+  (`OpenProcessToken` + `GetTokenInformation(TokenElevation)`) once and
+  caches the result — elevation cannot change during a run. Windows
+  only; other platforms report `false`.
+- **Name it before guessing.** When a print exits 0 with no PDF and the
+  process is elevated, the error names that instead of the session
+  handoff — checked first, because `msedge.exe` is resident even on an
+  elevated PC, so the handoff signature would misattribute the cause.
+  It is restricted to `msedge.exe` launches: the headless shell's
+  elevated behaviour is unverified. The CDP `ExitedWhileStarting`
+  message appends the same wording, and the repair's report carries
+  `elevated`, so its test-render failure points at a normal restart
+  instead of a broken pipeline (Settings → Diagnostics shows the
+  warning).
+- **Capture the real stderr.** Both Edge launchers run with
+  `--enable-logging=stderr`: without it headless Edge writes nothing to
+  stderr on failure. One-shot failures quote the first few stderr lines
+  in the error; the persistent CDP browser writes `browser-stderr.log`
+  in its profile dir.
+
+Making printing *work* while elevated is deliberately not built: the
+owner decided PrintNinja does not need to run elevated, so the
+behaviour is the actionable "restart normally" message — not a
+de-elevated Edge launch or `--no-sandbox` (both considered and
+rejected), and WebView2 printing remains a longer-term option.
+
 See also: [printers and transports](./PRINTERS_AND_TRANSPORTS.md) (what the
 produced bytes become), [queue and history](./QUEUE_AND_HISTORY.md) (what
 happens to the job), and the [glossary](../GLOSSARY.md) for the plain words.

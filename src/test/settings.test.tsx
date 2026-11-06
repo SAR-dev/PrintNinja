@@ -305,7 +305,7 @@ describe("Settings database reset", () => {
       open("Retention");
       fireEvent.click(await screen.findByTestId("settings-reset-database"));
       expect(
-        await screen.findByText("Erase everything on this PC?"),
+        await screen.findByText("Erase everything on this device?"),
       ).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Erase everything" }));
       await waitFor(() =>
@@ -322,11 +322,11 @@ describe("Settings database reset", () => {
     open("Retention");
     fireEvent.click(await screen.findByTestId("settings-reset-database"));
     expect(
-      await screen.findByText("Erase everything on this PC?"),
+      await screen.findByText("Erase everything on this device?"),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
-      expect(screen.queryByText("Erase everything on this PC?")).toBeNull(),
+      expect(screen.queryByText("Erase everything on this device?")).toBeNull(),
     );
     expect(invoke.mock.calls.some((c) => c[0] === "reset_database")).toBe(
       false,
@@ -367,10 +367,13 @@ describe("Settings print repair (Windows)", () => {
           edge_path: windowsEngine.path,
           edge_was_running: true,
           edge_closed: true,
+          edge_verified_dead: true,
+          edge_kill_rounds: 1,
           profiles_removed: ["edge-warm-profile"],
           cooldown_reset: true,
           test_render_ok: true,
           test_render_error: null,
+          elevated: false,
         };
       return null;
     });
@@ -404,10 +407,13 @@ describe("Settings print repair (Windows)", () => {
           edge_path: windowsEngine.path,
           edge_was_running: true,
           edge_closed: true,
+          edge_verified_dead: true,
+          edge_kill_rounds: 1,
           profiles_removed: [],
           cooldown_reset: true,
           test_render_ok: false,
           test_render_error: "Edge exited but did not return a PDF",
+          elevated: false,
         };
       return null;
     });
@@ -429,6 +435,103 @@ describe("Settings print repair (Windows)", () => {
     expect(result).toHaveTextContent("Test render failed");
     expect(result).toHaveTextContent("Edge exited but did not return a PDF");
     expect(result).toHaveTextContent("No stale render profiles to remove");
+  });
+
+  it("says when Edge survived the kill, and offers the headless browser", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_render_engine_status") return windowsEngine;
+      if (cmd === "fix_pc_print")
+        return {
+          edge_found: true,
+          edge_path: windowsEngine.path,
+          edge_was_running: true,
+          edge_closed: true,
+          edge_verified_dead: false,
+          edge_kill_rounds: 15,
+          profiles_removed: [],
+          cooldown_reset: true,
+          test_render_ok: false,
+          test_render_error:
+            "Edge could not be stopped after 15 rounds of taskkill — msedge.exe is still running. Close every Edge window, then run the repair again. Or download the headless browser, which prints fine while Edge stays open.",
+          elevated: false,
+        };
+      return null;
+    });
+    renderPage();
+    open("Diagnostics");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Fix PC printing" }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Fix it",
+      }),
+    );
+    const result = await waitFor(() => {
+      const el = document.getElementById("settings-diag-fix-result");
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    // The honest line: the kill was attempted but not verified.
+    expect(
+      document.getElementById("settings-diag-fix-edge-survived"),
+    ).toHaveTextContent("Edge could not be stopped after the repair");
+    // The raw Rust message is translated through its pattern.
+    expect(result).toHaveTextContent(
+      "Edge could not be stopped after 15 rounds of taskkill",
+    );
+    expect(result).toHaveTextContent("msedge.exe is still running");
+    // And the opt-in cure is offered in the same panel.
+    expect(
+      await screen.findByRole("button", {
+        name: "Download the headless browser (opt-in)",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("warns when the repair itself ran elevated", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_render_engine_status") return windowsEngine;
+      if (cmd === "fix_pc_print")
+        return {
+          edge_found: true,
+          edge_path: windowsEngine.path,
+          edge_was_running: true,
+          edge_closed: true,
+          edge_verified_dead: true,
+          edge_kill_rounds: 1,
+          profiles_removed: [],
+          cooldown_reset: true,
+          elevated: true,
+          test_render_ok: false,
+          test_render_error:
+            "PrintNinja is running as administrator — Edge will not print from an elevated process. Restart PrintNinja normally (without 'Run as administrator'), then try again. The repair cannot succeed while PrintNinja is elevated — restart it normally, then run the repair again.",
+        };
+      return null;
+    });
+    renderPage();
+    open("Diagnostics");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Fix PC printing" }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Fix it",
+      }),
+    );
+    const result = await waitFor(() => {
+      const el = document.getElementById("settings-diag-fix-result");
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    // The one-line warning names the real cause.
+    expect(
+      document.getElementById("settings-diag-fix-elevated"),
+    ).toHaveTextContent("running as administrator");
+    // The raw Rust message is translated through its pattern, not leaked.
+    expect(result).toHaveTextContent(
+      "Edge cannot print from an elevated process",
+    );
   });
 
   it("is hidden where the repair does not exist (non-Windows)", async () => {
