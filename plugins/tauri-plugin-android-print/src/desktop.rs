@@ -38,6 +38,11 @@ impl<R: Runtime> AndroidPrint<R> {
         self.unavailable("stopBackgroundService")
     }
 
+    /// Desktop has no Android crash reports: always empty.
+    pub fn drain_crash_reports(&self) -> crate::Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
     pub fn is_background_service_running(&self) -> crate::Result<bool> {
         self.unavailable("isBackgroundServiceRunning")
     }

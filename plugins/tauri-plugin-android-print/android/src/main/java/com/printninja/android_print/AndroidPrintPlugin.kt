@@ -37,6 +37,7 @@ import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
+import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import java.io.File
@@ -1731,6 +1732,22 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     /**
+     * Android-side crashes and process-exit reasons not yet reported.
+     * Rust calls this once at startup and writes each entry to the
+     * app log, so Diagnostics shows what `adb logcat` would have.
+     */
+    @Command
+    fun drainCrashReports(invoke: Invoke) {
+        try {
+            val arr = JSArray()
+            CrashReporter.drain(activity.applicationContext).forEach { arr.put(it) }
+            invoke.resolve(JSObject().put("reports", arr))
+        } catch (e: Exception) {
+            invoke.reject(e.message ?: "could not read crash reports")
+        }
+    }
+
+    /**
      * Starts the foreground print service when the plugin loads at app
      * startup, so the queue survives before any command runs, and asks
      * for the notification permission so its notification is visible.
@@ -1739,6 +1756,7 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
      */
     override fun load(webView: WebView) {
         super.load(webView)
+        CrashReporter.install(activity.applicationContext)
         PrintNinjaService.attachActivity(activity)
         try {
             PrintNinjaService.start(activity)

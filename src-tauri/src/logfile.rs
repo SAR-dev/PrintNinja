@@ -231,6 +231,78 @@ fn install_panic_hook(dir: &Path) {
     });
 }
 
+/// Marker file kept while a session runs. If it is still there at the
+/// next start, the previous run never reached a clean exit: a crash the
+/// panic hook could not see (native fault, OS kill, power loss, the
+/// Android notification's Close action) — worth one line in the log.
+const SESSION_MARKER: &str = "session.lock";
+
+/// Record that a session started. Returns the previous session's start
+/// time (unix seconds, as text) when that session did not exit cleanly.
+fn begin_session_in(dir: &Path) -> Option<String> {
+    let _ = std::fs::create_dir_all(dir);
+    let marker = dir.join(SESSION_MARKER);
+    let previous = std::fs::read_to_string(&marker)
+        .ok()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let _ = std::fs::write(&marker, now.to_string());
+    previous
+}
+
+fn end_session_in(dir: &Path) {
+    let _ = std::fs::remove_file(dir.join(SESSION_MARKER));
+}
+
+/// Call once right after [`init_logging`]. Logs a warning when the
+/// previous session ended without a clean exit.
+pub fn begin_session(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    let Ok(dir) = app.path().app_log_dir() else {
+        return;
+    };
+    if let Some(started) = begin_session_in(&dir) {
+        tracing::warn!(
+            previous_session_started_unix = %started,
+            "previous session did not exit cleanly (crash, killed by the system, or closed from the notification)"
+        );
+    }
+}
+
+/// Call on the app's exit event: removes the marker so the next start
+/// does not report a crash.
+pub fn end_session(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    if let Ok(dir) = app.path().app_log_dir() {
+        end_session_in(&dir);
+    }
+}
+
+/// Android only: copy Kotlin-side crashes and the system's process-exit
+/// records into the log file. They never reach the Rust log otherwise,
+/// which is why a Java crash used to leave Diagnostics empty.
+#[cfg(target_os = "android")]
+pub fn spawn_android_crash_drain(app: tauri::AppHandle) {
+    // Plugin commands are answered on the Android main thread and setup
+    // runs on it, so asking from here would deadlock: ask from a worker.
+    std::thread::spawn(move || {
+        use tauri_plugin_android_print::AndroidPrintExt;
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        match app.android_print().drain_crash_reports() {
+            Ok(reports) => {
+                for report in reports {
+                    tracing::error!(target: "android_crash", "\n{report}");
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "could not read Android crash reports"),
+        }
+    });
+}
+
 /// Read up to `max_bytes` of recent logs for the viewer/export, oldest
 /// first so the text reads chronologically. Newest files fill the budget
 /// first; a cut chunk drops its leading partial line. Anything unreadable
@@ -360,6 +432,18 @@ mod tests {
         // Zero budget never touches the disk.
         assert_eq!(read_recent_logs(&dir, 0), "");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn session_marker_reports_only_an_unclean_previous_run() {
+        let dir = tempdir("session");
+        // First ever start: nothing to report.
+        assert_eq!(begin_session_in(&dir), None);
+        // Started again without a clean exit: the previous start is reported.
+        assert!(begin_session_in(&dir).is_some());
+        // Clean exit removes the marker: the next start reports nothing.
+        end_session_in(&dir);
+        assert_eq!(begin_session_in(&dir), None);
     }
 
     #[test]

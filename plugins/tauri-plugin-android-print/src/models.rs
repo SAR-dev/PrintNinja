@@ -363,6 +363,16 @@ pub struct RunningResponse {
     pub running: bool,
 }
 
+/// What the Kotlin `drainCrashReports` command resolves with:
+/// `{"reports": ["...", ...]}`. Each entry is one Android crash stack
+/// trace or process-exit record, ready to write to the app log.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrashReports {
+    #[serde(default)]
+    pub reports: Vec<String>,
+}
+
 /// What `requestBatteryExemption` / `isBatteryExemptionGranted` resolve
 /// with on the Kotlin side: `{"granted": bool}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -530,6 +540,15 @@ mod tests {
         let json = r#"{"name":"p","host":"1.2.3.4","port":631,"kind":"ipp"}"#;
         let p: DiscoveredPrinter = serde_json::from_str(json).unwrap();
         assert!(p.resource_path.is_none());
+    }
+
+    #[test]
+    fn crash_reports_parse_the_object_kotlin_sends() {
+        let r: CrashReports =
+            serde_json::from_str(r#"{"reports":["a","b"]}"#).unwrap();
+        assert_eq!(r.reports, vec!["a", "b"]);
+        let empty: CrashReports = serde_json::from_str("{}").unwrap();
+        assert!(empty.reports.is_empty());
     }
 
     #[test]

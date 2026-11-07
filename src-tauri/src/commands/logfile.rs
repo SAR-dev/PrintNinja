@@ -22,3 +22,22 @@ pub async fn read_app_logs(app: AppHandle, max_kb: Option<u64>) -> AppResult<Str
         .map_err(|e| AppError::Internal(format!("no log directory: {e}")))?;
     Ok(crate::logfile::read_recent_logs(&dir, budget))
 }
+
+/// Errors raised inside the webview (uncaught exceptions, unhandled
+/// promise rejections) never reach the Rust log by themselves. The
+/// frontend forwards them here so Diagnostics shows them too.
+/// Bounded: text is truncated and the count capped per run, so a loop
+/// of errors cannot flood the log.
+#[tauri::command(rename_all = "snake_case")]
+pub fn log_frontend_error(source: String, message: String) {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static COUNT: AtomicU32 = AtomicU32::new(0);
+    const MAX_PER_RUN: u32 = 200;
+
+    if COUNT.fetch_add(1, Ordering::Relaxed) >= MAX_PER_RUN {
+        return;
+    }
+    let source: String = source.chars().take(64).collect();
+    let message: String = message.chars().take(4000).collect();
+    tracing::error!(target: "frontend", source = %source, "{message}");
+}

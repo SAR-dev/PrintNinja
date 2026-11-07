@@ -44,6 +44,9 @@ class PrintNinjaService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // The service can be restarted in a fresh process with no
+        // Activity (and so no plugin load()): record crashes there too.
+        CrashReporter.install(applicationContext)
         isRunning = true
     }
 
@@ -95,18 +98,48 @@ class PrintNinjaService : Service() {
     }
 
     private fun startForegroundWithNotification() {
-        ensureChannel(this)
-        val notification = buildNotification(this)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            ensureChannel(this)
+            val notification = buildNotification(this)
+            when {
+                // Android 14+: specialUse has no timeout. dataSync is cut
+                // off after ~6h on Android 15 and crashes the app if the
+                // service does not stop in time.
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+                    startForeground(
+                        NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                    )
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
+                    startForeground(
+                        NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                    )
+                else -> {
+                    @Suppress("DEPRECATION")
+                    startForeground(NOTIFICATION_ID, notification)
+                }
+            }
+        } catch (e: Exception) {
+            // Background-start restrictions, a missing permission or a
+            // revoked notification must degrade to "no background
+            // service", never to a crash. The queue resumes next launch.
+            android.util.Log.w("PrintNinjaService", "could not enter foreground: ${e.message}")
+            isRunning = false
+            stopSelf()
         }
+    }
+
+    /**
+     * Safety net: if the system ever times this service out (Android 15+
+     * dataSync/mediaProcessing), stop it ourselves. Not stopping within a
+     * few seconds is what makes Android crash the whole app.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     companion object {
@@ -144,10 +177,16 @@ class PrintNinjaService : Service() {
 
         /** Idempotent: starting twice keeps one service. */
         fun start(context: Context) {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context.applicationContext, PrintNinjaService::class.java),
-            )
+            try {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context.applicationContext, PrintNinjaService::class.java),
+                )
+            } catch (e: Exception) {
+                // e.g. ForegroundServiceStartNotAllowedException when the
+                // app is in the background on Android 12+.
+                android.util.Log.w("PrintNinjaService", "could not start service: ${e.message}")
+            }
         }
 
         fun stop(context: Context) {
