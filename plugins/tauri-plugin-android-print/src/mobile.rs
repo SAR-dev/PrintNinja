@@ -254,6 +254,16 @@ impl<R: Runtime> AndroidPrint<R> {
             .map_err(Into::into)
     }
 
+    /// Android crash stack traces and process-exit records not yet
+    /// reported (each is cleared once read). Called once at startup.
+    pub fn drain_crash_reports(&self) -> crate::Result<Vec<String>> {
+        let res: CrashReports = self
+            .0
+            .run_mobile_plugin("drainCrashReports", ())
+            .map_err(crate::Error::from)?;
+        Ok(res.reports)
+    }
+
     pub fn is_background_service_running(&self) -> crate::Result<bool> {
         let res: RunningResponse = self
             .0

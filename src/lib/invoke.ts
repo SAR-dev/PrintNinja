@@ -77,11 +77,34 @@ export async function invoke<T = unknown>(
   }
 }
 
+/**
+ * Forward a webview error to the backend log (Diagnostics export).
+ * Uses the raw invoke so a failure here cannot recurse into the error
+ * listeners, and is capped and de-duplicated so an error loop cannot
+ * flood the log.
+ */
+const reportedErrors = new Set<string>();
+function reportToBackendLog(source: string, err: unknown): void {
+  try {
+    if (reportedErrors.size >= 20) return;
+    const message =
+      err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
+    const key = `${source}:${message.slice(0, 200)}`;
+    if (reportedErrors.has(key)) return;
+    reportedErrors.add(key);
+    void tauriInvoke("log_frontend_error", { source, message }).catch(() => {});
+  } catch {
+    // Reporting is best-effort; never raise from an error handler.
+  }
+}
+
 if (typeof window !== "undefined") {
-  window.addEventListener("unhandledrejection", (e) =>
-    console.error("[unhandled]", e.reason),
-  );
-  window.addEventListener("error", (e) =>
-    console.error("[error]", e.error ?? e.message),
-  );
+  window.addEventListener("unhandledrejection", (e) => {
+    console.error("[unhandled]", e.reason);
+    reportToBackendLog("unhandledrejection", e.reason);
+  });
+  window.addEventListener("error", (e) => {
+    console.error("[error]", e.error ?? e.message);
+    reportToBackendLog("error", e.error ?? e.message);
+  });
 }

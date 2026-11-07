@@ -131,6 +131,11 @@ pub fn run() {
             // and the file layer needs the app log directory, which only
             // exists once the app handle does.
             crate::logfile::init_logging(app.handle());
+            // Flag a previous run that never exited cleanly, and (Android)
+            // pull Kotlin crashes and system exit reasons into the log.
+            crate::logfile::begin_session(app.handle());
+            #[cfg(target_os = "android")]
+            crate::logfile::spawn_android_crash_drain(app.handle().clone());
 
             // Android renders PDFs through the Kotlin plugin's WebView, which
             // the renderer reaches through this handle.
@@ -446,10 +451,16 @@ pub fn run() {
             commands::api::peer_render_request,
             commands::deeplink_cmd::parse_deeplink,
             commands::logfile::read_app_logs,
+            commands::logfile::log_frontend_error,
         ]))
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
+            // A clean exit clears the session marker; anything else
+            // leaves it, and the next start logs the unclean end.
+            if matches!(event, tauri::RunEvent::Exit) {
+                crate::logfile::end_session(app);
+            }
             // The persistent browser must not outlive the app.
             #[cfg(any(windows, target_os = "linux"))]
             if matches!(event, tauri::RunEvent::Exit) {

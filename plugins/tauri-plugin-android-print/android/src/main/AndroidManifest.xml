@@ -4,6 +4,10 @@
          covers the persistent notification on Android 13+. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Android 14+: the print queue must run for as long as the app is
+         installed, so it uses specialUse (no timeout). dataSync services
+         are killed by Android 15 after ~6 hours, crashing the app. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Bluetooth printing: bonded-device reads + RFCOMM sockets.
          BLUETOOTH_CONNECT is the runtime permission on Android 12+
@@ -22,6 +26,10 @@
             android:name="com.printninja.android_print.PrintNinjaService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the local print queue and print API available while the app is in the background" />
+        </service>
     </application>
 </manifest>
