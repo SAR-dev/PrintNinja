@@ -298,6 +298,8 @@ export interface AgentCommands {
   /** Recent backend log text (size-rotated file), oldest first. Empty
    * when file logging never started. */
   read_app_logs: [{ max_kb?: number }, string];
+  /** Forward a webview error to the backend log (Diagnostics export). */
+  log_frontend_error: [{ source: string; message: string }, null];
 }
 
 type Args<K extends keyof AgentCommands> = AgentCommands[K][0];

@@ -141,6 +141,10 @@ const implemented: Record<string, Handler> = {
   // plumbing without touching the disk.
   read_app_logs: () =>
     "2026-01-01T00:00:00Z  INFO printninja_lib: fake agent log line one\n2026-01-01T00:00:00Z  INFO printninja_lib: fake agent log line two\n",
+  // Webview errors forwarded to the backend log. The real agent writes
+  // them to the log file; the fake has no log to write, so it accepts
+  // and drops them.
+  log_frontend_error: () => null,
   // Phone side of pairing: the 8-character code flow. The fake agent
   // accepts the well-known e2e code and mints a canned pair; anything
   // else is a wrong code. The subnet probe is Rust-only.

@@ -611,10 +611,14 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title={t("settings_page.title")}
-        description={t("pages.settings")}
-      />
+      {/* A phone inside a section shows the section's own title bar
+          below instead: the page title would only push content down. */}
+      {!(isPhone && hasSection) && (
+        <PageHeader
+          title={t("settings_page.title")}
+          description={t("pages.settings")}
+        />
+      )}
 
       {isPhone && !hasSection ? (
         /* Phone section list: tapping one opens it with a back arrow. */
@@ -656,19 +660,19 @@ export function SettingsPage() {
           className="flex flex-col gap-4 md:flex-row md:items-start md:gap-8"
         >
           {isPhone ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 border-b pb-3">
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
+                className="-ml-2 shrink-0"
                 onClick={closeSection}
                 aria-label={t("common.back")}
               >
-                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-                {t("common.back")}
+                <ArrowLeft className="h-5 w-5" aria-hidden="true" />
               </Button>
-              <span className="truncate text-sm font-medium">
+              <h1 className="truncate text-xl font-semibold leading-tight tracking-tight">
                 {t(`settings_page.section_${section}`, section)}
-              </span>
+              </h1>
             </div>
           ) : (
             // Desktop/tablet only (phones take the back-button branch
