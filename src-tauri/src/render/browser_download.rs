@@ -27,6 +27,15 @@
 //! publishes no arm64 headless shell, and a non-running install would
 //! poison the automatic choice (which trusts the disk).
 
+// Windows and Linux are the only platforms with a pinned download (see
+// below). Android, macOS and iOS still compile this module — the render
+// code asks it for `ready_path()` — but never run the downloader, so its
+// helpers are legitimately unused there.
+#![cfg_attr(
+    not(any(windows, target_os = "linux")),
+    allow(dead_code, unused_imports)
+)]
+
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use tauri::{Emitter, Manager};
@@ -45,23 +54,34 @@ pub const SHELL_SHA256: &str = "1ff4540855478ba0848e03f1ef8d455f77d058b38285df91
 /// SHA-256 of the pinned `chrome-headless-shell-linux64.zip`.
 #[cfg(target_os = "linux")]
 pub const SHELL_SHA256: &str = "deafffa74660b34853a4119c361fd427ac8c9fcb62db51ddb8a797cd83a4ba2d";
+/// No pinned shell exists for other platforms (Android renders through
+/// its WebView; Chrome for Testing publishes no mobile shell). Empty on
+/// purpose: [`download_and_install`] refuses before any hash is checked.
+#[cfg(not(any(windows, target_os = "linux")))]
+pub const SHELL_SHA256: &str = "";
 
 /// Platform segment of the Chrome for Testing bucket path.
 #[cfg(windows)]
 const PLATFORM: &str = "win64";
 #[cfg(target_os = "linux")]
 const PLATFORM: &str = "linux64";
+#[cfg(not(any(windows, target_os = "linux")))]
+const PLATFORM: &str = "unsupported";
 
 /// Top-level directory inside the platform zip.
 #[cfg(windows)]
 pub const ZIP_DIR_NAME: &str = "chrome-headless-shell-win64";
 #[cfg(target_os = "linux")]
 pub const ZIP_DIR_NAME: &str = "chrome-headless-shell-linux64";
+#[cfg(not(any(windows, target_os = "linux")))]
+pub const ZIP_DIR_NAME: &str = "unsupported";
 /// The executable inside that directory.
 #[cfg(windows)]
 pub const EXE_NAME: &str = "chrome-headless-shell.exe";
 #[cfg(target_os = "linux")]
 pub const EXE_NAME: &str = "chrome-headless-shell";
+#[cfg(not(any(windows, target_os = "linux")))]
+pub const EXE_NAME: &str = "unsupported";
 /// The app-data root that holds one directory per pinned version.
 pub const SHELL_ROOT_DIR: &str = "chrome-headless-shell";
 
@@ -200,6 +220,15 @@ pub async fn wait_for_active_download() {
 /// exists on disk but never runs, and the automatic choice trusts the
 /// disk.
 pub async fn download_and_install(app: &tauri::AppHandle) -> anyhow::Result<()> {
+    // Only Windows and Linux have a pinned download. Anywhere else (the
+    // UI never offers it) refuse clearly instead of fetching a bogus URL.
+    if !cfg!(any(windows, target_os = "linux")) {
+        anyhow::bail!(
+            "the headless shell download is not available on this platform; \
+             printing uses the system renderer"
+        );
+    }
+
     #[cfg(target_os = "linux")]
     if std::env::consts::ARCH != "x86_64" {
         anyhow::bail!(
@@ -404,6 +433,7 @@ mod tests {
         );
     }
 
+    #[cfg(any(windows, target_os = "linux"))]
     #[test]
     fn the_pinned_sha256_is_well_formed() {
         assert_eq!(SHELL_SHA256.len(), 64);
