@@ -11,9 +11,14 @@
  * Raw mode (--raw), a fake thermal head for PLAN §4:
  *   Listens like a JetDirect printer (default port 9100). Every job the app
  *   sends is written to ./output/ named by detected framing (.escpos,
- *   .zpl, .tspl, .bin), and status queries are answered "healthy" so the
+ *   .zpl, .tspl, .cpcl, .bin), and status queries are answered "healthy" so the
  *   app's precheck behaves like it would against a real head.
  *   Add it in the app as:  connection "Raw TCP", address 127.0.0.1:9100.
+ *   --fault, --delay and --silent-after make the head misbehave: see
+ *   RAW_FAULTS below. Each saved job also gets a one-line summary in the
+ *   console and, for every bitmap in it (ESC/POS GS v 0, TSPL BITMAP, ZPL
+ *   ^GFA, CPCL CG), a .png preview next to the job file, so the printed
+ *   result can be looked at without a printer.
  *
  * Usage:  node dev-printer/server.cjs [options]
  *   --raw            fake raw (JetDirect) head instead of the IPP printer
@@ -23,8 +28,11 @@
  *   --host <addr>    bind address (default 127.0.0.1)
  *   --name <text>    printer name (default "PrintNinja Dev Printer")
  *   --out <dir>      where jobs are saved (default ./output)
- *   --fault <kind>   simulate a broken printer, see FAULTS below (IPP mode)
- *   --delay <ms>     wait this long before answering every request (IPP mode)
+ *   --fault <kind>   simulate a broken printer: FAULTS (IPP) or RAW_FAULTS (--raw)
+ *   --delay <ms>     wait this long before answering every request (IPP), or
+ *                    every status query (--raw)
+ *   --silent-after <n>  --raw only: answer the first n status queries, then
+ *                    go silent, like a Zebra that stopped (needs no --fault)
  *   --mdns           advertise over Bonjour/mDNS (off by default so a dev
  *                    box does not show up as a printer for the whole LAN)
  */
@@ -33,6 +41,7 @@ const fs = require("node:fs");
 const http = require("node:http");
 const net = require("node:net");
 const os = require("node:os");
+const zlib = require("node:zlib");
 const path = require("node:path");
 const Printer = require("ipp-printer");
 
@@ -79,6 +88,62 @@ const FAULTS = {
   aborted: { jobState: JOB_ABORTED, reason: "none" }, // job-state 8, no reason
 };
 
+// --raw --fault <kind>: what the fake head answers to status queries. These
+// bytes are the inverse of the decoders in src-tauri/src/transport/status.rs
+// (escpos / zpl / tspl), so each kind trips the matching "did not print"
+// message. SILENT = send no reply at all: a real Zebra does that when the
+// media or ribbon is out or the head is open, and the app reads silence after
+// an earlier answer as a stopped printer. A language missing from an entry
+// cannot express that fault, so the head answers healthy for it and says so.
+const SILENT = Symbol("silent");
+const zplStatus = (paperOut, paused) =>
+  Buffer.from(
+    `\x02030,${paperOut},${paused},1,2,3,4,5,6,7,8,9\x03\r\n\x02000,0\x03\r\n\x020000,0\x03\r\n`,
+  );
+const RAW_FAULTS = {
+  // DLE EOT 4 = 0x72 (paper end), DLE EOT 2 = 0x32 (paper end).
+  "paper-out": {
+    escpos: Buffer.from([0x12, 0x32, 0x12, 0x72]),
+    zpl: zplStatus(1, 0),
+    tspl: Buffer.from([0x04]),
+  },
+  "cover-open": {
+    escpos: Buffer.from([0x12, 0x16, 0x12, 0x12]), // DLE EOT 2 bit 2
+    zpl: SILENT,
+    tspl: Buffer.from([0x40]),
+  },
+  "head-open": {
+    escpos: Buffer.from([0x12, 0x16, 0x12, 0x12]),
+    zpl: SILENT,
+    tspl: Buffer.from([0x01]),
+  },
+  offline: {
+    escpos: Buffer.from([0x1a, 0x12, 0x12, 0x12]), // DLE EOT 1 bit 3
+    zpl: SILENT,
+    tspl: Buffer.from([0x80]), // TSPL has no offline bit: generic error
+  },
+  "cutter-jam": {
+    escpos: Buffer.from([0x12, 0x12, 0x1a, 0x12]), // DLE EOT 3 bit 3
+    zpl: SILENT,
+    tspl: Buffer.from([0x02]),
+  },
+  error: {
+    escpos: Buffer.from([0x12, 0x52, 0x12, 0x12]), // DLE EOT 2 bit 6
+    zpl: SILENT,
+    tspl: Buffer.from([0x80]),
+  },
+  paused: {
+    escpos: Buffer.from([0x1a, 0x12, 0x12, 0x12]), // no pause bit: offline
+    zpl: zplStatus(0, 1),
+    tspl: Buffer.from([0x10]),
+  },
+  "ribbon-out": {
+    zpl: SILENT,
+    tspl: Buffer.from([0x08]), // ESC/POS has no ribbon
+  },
+  silent: { escpos: SILENT, zpl: SILENT, tspl: SILENT },
+};
+
 const USAGE = `Usage: node dev-printer/server.cjs [options]
 
   --raw            fake raw (JetDirect-style) thermal head instead of the
@@ -88,10 +153,13 @@ const USAGE = `Usage: node dev-printer/server.cjs [options]
   --host <addr>    bind address (default 127.0.0.1; --lan = 0.0.0.0)
   --name <text>    printer name (default "PrintNinja Dev Printer")
   --out <dir>      where jobs are saved (default ./output)
-  --fault <kind>   ${Object.keys(FAULTS).join(" | ")}   (IPP mode)
+  --fault <kind>   IPP:  ${Object.keys(FAULTS).join(" | ")}
+                   --raw: ${Object.keys(RAW_FAULTS).join(" | ")}
   --delay <ms>     wait this long before answering every request
-                   (use more than 30000 to hit the app's response timeout)
-                   (IPP mode)
+                   (use more than 30000 to hit the app's response timeout);
+                   with --raw, delays every status-query reply
+  --silent-after <n>  --raw only: answer the first n status queries, then
+                   stop answering (a Zebra that has stopped)
   --mdns           advertise over Bonjour/mDNS (off by default, IPP mode)`;
 
 function parseArgs(argv) {
@@ -103,6 +171,7 @@ function parseArgs(argv) {
     out: path.join(__dirname, "output"),
     fault: null,
     delay: 0,
+    silentAfter: null,
     mdns: false,
     raw: false,
   };
@@ -132,14 +201,17 @@ function parseArgs(argv) {
         opts.out = path.resolve(value());
         break;
       case "--fault":
-        opts.fault = value();
-        if (!(opts.fault in FAULTS))
-          fail(`--fault must be one of: ${Object.keys(FAULTS).join(", ")}`);
+        opts.fault = value(); // checked after the loop: --raw changes the list
         break;
       case "--delay":
         opts.delay = Number(value());
         if (!Number.isFinite(opts.delay) || opts.delay < 0)
           fail("--delay must be a number of milliseconds");
+        break;
+      case "--silent-after":
+        opts.silentAfter = Number(value());
+        if (!Number.isInteger(opts.silentAfter) || opts.silentAfter < 0)
+          fail("--silent-after must be a whole number of status queries");
         break;
       case "--mdns":
         opts.mdns = true;
@@ -159,9 +231,12 @@ function parseArgs(argv) {
   if (opts.raw) {
     if (!opts.portGiven) opts.port = 9100;
     if (opts.mdns) fail("--mdns is not supported with --raw (a raw head has no mDNS)");
-    if (opts.fault)
-      fail("--fault is not supported with --raw (status queries always answer healthy)");
-    if (opts.delay) fail("--delay is not supported with --raw");
+    if (opts.fault && !(opts.fault in RAW_FAULTS))
+      fail(`--fault with --raw must be one of: ${Object.keys(RAW_FAULTS).join(", ")}`);
+  } else {
+    if (opts.fault && !(opts.fault in FAULTS))
+      fail(`--fault must be one of: ${Object.keys(FAULTS).join(", ")}`);
+    if (opts.silentAfter !== null) fail("--silent-after only works with --raw");
   }
   return opts;
 }
@@ -208,9 +283,144 @@ function sniffFraming(buf) {
   if (buf.length >= 2 && buf[0] === 0x1b && buf[1] === 0x40) return "escpos";
   if (buf.length >= 4 && buf[0] === 0x1d && buf[1] === 0x76 && buf[2] === 0x30 && buf[3] === 0x00)
     return "escpos";
-  // TSPL jobs open with `SIZE w,h`.
-  if (/^SIZE \d+,\d+/.test(buf.toString("latin1", 0, Math.min(buf.length, 16)))) return "tspl";
+  // TSPL jobs open with `SIZE w,h`; the app writes `SIZE 40 mm,30 mm`.
+  if (/^SIZE\s+\d+(\.\d+)?\s*(mm|inch|")?\s*,/.test(buf.toString("latin1", 0, Math.min(buf.length, 32))))
+    return "tspl";
+  // CPCL jobs open with `! offset hres vres height qty`.
+  if (/^! \d+ \d+ \d+ \d+ \d+/.test(buf.toString("latin1", 0, Math.min(buf.length, 32)))) return "cpcl";
   return "bin";
+}
+
+/**
+ * Find the bitmaps in a raw job, the way the app's encoders write them
+ * (src-tauri/src/transport/escpos.rs and label_langs.rs). Each is
+ * `{ widthBytes, height, data }` with 1 = black, 8 pixels per byte, MSB
+ * first, the packing of `RasterImage`. Also counts ESC/POS cuts.
+ *
+ * Handles: ESC/POS `GS v 0`, TSPL `BITMAP`, ZPL `^GFA` with plain hex data,
+ * CPCL `CG`. Compressed ZPL graphics (`^GFA` with `:Z64:` data) are skipped.
+ */
+function extractBitmaps(lang, buf) {
+  const out = [];
+  let cuts = 0;
+  const src = buf.toString("latin1"); // 1 char = 1 byte, so offsets line up
+  const push = (widthBytes, height, data) => {
+    if (widthBytes > 0 && height > 0 && data.length >= widthBytes * height)
+      out.push({ widthBytes, height, data: data.subarray(0, widthBytes * height) });
+  };
+  if (lang === "escpos") {
+    for (let i = 0; i < buf.length; ) {
+      if (buf[i] === 0x1b) {
+        i += buf[i + 1] === 0x40 ? 2 : 3; // ESC @ has no parameter; most others have one
+      } else if (buf[i] === 0x1d) {
+        if (buf[i + 1] === 0x76 && buf[i + 2] === 0x30) {
+          // GS v 0 m xL xH yL yH <data>
+          const w = buf[i + 4] + buf[i + 5] * 256;
+          const h = buf[i + 6] + buf[i + 7] * 256;
+          push(w, h, buf.subarray(i + 8, i + 8 + w * h));
+          i += 8 + w * h;
+        } else if (buf[i + 1] === 0x56) {
+          cuts += 1;
+          i += buf[i + 2] === 0x41 || buf[i + 2] === 0x42 ? 4 : 3;
+        } else {
+          i += 3;
+        }
+      } else {
+        i += 1;
+      }
+    }
+  } else if (lang === "tspl") {
+    for (const m of src.matchAll(/BITMAP\s+\d+,\d+,(\d+),(\d+),\d+,/g)) {
+      const start = m.index + m[0].length;
+      push(Number(m[1]), Number(m[2]), buf.subarray(start, start + Number(m[1]) * Number(m[2])));
+    }
+  } else if (lang === "zpl") {
+    for (const m of src.matchAll(/\^GFA,(\d+),(\d+),(\d+),([0-9A-Fa-f]+)/g)) {
+      if (m[4].length === Number(m[2]) * 2)
+        push(Number(m[3]), Number(m[2]) / Number(m[3]), Buffer.from(m[4], "hex"));
+    }
+  } else if (lang === "cpcl") {
+    for (const m of src.matchAll(/CG\s+\d+\s+(\d+)\s+\d+\s+\d+\r?\n((?:[0-9A-Fa-f]+\r?\n)+)/g)) {
+      const rows = m[2].trim().split(/\r?\n/);
+      push(Number(m[1]), rows.length, Buffer.from(rows.join(""), "hex"));
+    }
+  }
+  return { bitmaps: out, cuts };
+}
+
+/** A 1-bit grayscale PNG of a bitmap (black dots on white), no dependencies. */
+function bitmapToPng({ widthBytes, height, data }) {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc32 = (b) => {
+    let c = 0xffffffff;
+    for (const x of b) c = crcTable[(c ^ x) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type, body) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(body.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(Buffer.concat([Buffer.from(type), body])));
+    return Buffer.concat([len, Buffer.from(type), body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(widthBytes * 8, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 1; // bit depth
+  ihdr[9] = 0; // grayscale
+  const raw = Buffer.alloc((widthBytes + 1) * height); // each row starts with filter 0
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < widthBytes; x++) raw[y * (widthBytes + 1) + 1 + x] = ~data[y * widthBytes + x] & 0xff;
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", zlib.deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+/**
+ * A short, approximate description of a raw job, so a saved print can be
+ * eyeballed without a printer. Not a renderer: it lists the text it can find
+ * and counts bitmaps and cuts (the bitmaps themselves are written as PNGs).
+ */
+function summarize(lang, buf, found) {
+  const clip = (t) => (t.length > 120 ? `${t.slice(0, 117)}...` : t);
+  const src = buf.toString("latin1");
+  const bitmaps = `${found.bitmaps.length} bitmap(s)`;
+  if (lang === "zpl") {
+    const labels = (src.match(/\^XA/g) || []).length;
+    const text = [...src.matchAll(/\^FD([\s\S]*?)\^FS/g)].map((m) => m[1]);
+    return `${labels} label(s), ${bitmaps}, fields: ${clip(text.join(" | ")) || "none"}`;
+  }
+  if (lang === "tspl") {
+    const text = [...src.matchAll(/^TEXT\s+[^"\r\n]*"([^"]*)"/gm)].map((m) => m[1]);
+    const print = src.match(/^PRINT\s+(\d+)/m);
+    return `print ${print ? print[1] : "?"}, ${bitmaps}, text: ${clip(text.join(" | ")) || "none"}`;
+  }
+  if (lang === "cpcl") return `${bitmaps}, print ${/^PRINT/m.test(src) ? "sent" : "missing"}`;
+  if (lang === "escpos") {
+    // Text is whatever printable bytes sit outside commands and bitmap data.
+    let text = "";
+    for (let i = 0; i < buf.length; ) {
+      const b = buf[i];
+      if (b === 0x1b) i += buf[i + 1] === 0x40 ? 2 : 3;
+      else if (b === 0x1d && buf[i + 1] === 0x76 && buf[i + 2] === 0x30)
+        i += 8 + (buf[i + 4] + buf[i + 5] * 256) * (buf[i + 6] + buf[i + 7] * 256);
+      else if (b === 0x1d) i += buf[i + 1] === 0x56 && (buf[i + 2] === 0x41 || buf[i + 2] === 0x42) ? 4 : 3;
+      else {
+        if (b === 0x0a) text += " / ";
+        else if (b >= 0x20 && b < 0x7f) text += String.fromCharCode(b);
+        i += 1;
+      }
+    }
+    return `${bitmaps}, ${found.cuts} cut(s), text: ${clip(text.replace(/( \/ )+/g, " / ").trim()) || "none"}`;
+  }
+  return "unrecognised framing";
 }
 
 /**
@@ -221,6 +431,32 @@ function sniffFraming(buf) {
  */
 function startRaw(opts) {
   let jobs = 0;
+  let queries = 0; // status connections answered or deliberately ignored
+  const fault = opts.fault ? RAW_FAULTS[opts.fault] : null;
+
+  /** The reply to a status query, or null to stay silent. */
+  const reply = (match) => {
+    queries += 1;
+    if (opts.silentAfter !== null && queries > opts.silentAfter) {
+      console.log(`[status] ${match.name} query #${queries}: silent (--silent-after ${opts.silentAfter})`);
+      return null;
+    }
+    if (!fault) return match.answer;
+    const entry = fault[match.name];
+    if (entry === SILENT) {
+      console.log(`[status] ${match.name} query #${queries}: silent (fault "${opts.fault}")`);
+      return null;
+    }
+    if (!entry) {
+      console.log(
+        `[status] ${match.name} query #${queries}: fault "${opts.fault}" has no ${match.name} form, answering healthy`,
+      );
+      return match.answer;
+    }
+    console.log(`[status] ${match.name} query #${queries}: fault "${opts.fault}"`);
+    return entry;
+  };
+
   const server = net.createServer((socket) => {
     let buf = Buffer.alloc(0);
     let status = null;
@@ -237,8 +473,14 @@ function startRaw(opts) {
       );
       if (match) {
         status = match;
-        console.log(`[status] ${match.name} query answered healthy from ${socket.remoteAddress}`);
-        socket.write(match.answer);
+        const answer = reply(match);
+        if (answer) {
+          const send = () => {
+            if (!socket.destroyed) socket.write(answer);
+          };
+          if (opts.delay > 0) setTimeout(send, opts.delay);
+          else send();
+        }
         return;
       }
       if (buf.length >= QUERY_HEAD_BYTES) {
@@ -272,6 +514,13 @@ function startRaw(opts) {
       console.log(
         `[job ${jobs}] ${lang}, ${job.length} bytes from ${socket.remoteAddress} -> ${path.relative(process.cwd(), file)}`,
       );
+      const found = extractBitmaps(lang, job);
+      console.log(`        ${summarize(lang, job, found)}`);
+      found.bitmaps.forEach((bm, n) => {
+        const png = file.replace(/\.[^.]+$/, found.bitmaps.length > 1 ? `-${n + 1}.png` : ".png");
+        fs.writeFileSync(png, bitmapToPng(bm));
+        console.log(`        preview: ${path.relative(process.cwd(), png)} (${bm.widthBytes * 8}x${bm.height})`);
+      });
       socket.end();
     });
     socket.on("error", () => {
@@ -301,6 +550,9 @@ function startRaw(opts) {
       console.log(`  add in PrintNinja:  Raw TCP ${opts.host}:${port}`);
     }
     console.log(`  jobs saved to:      ${opts.out}`);
+    if (opts.fault) console.log(`  fault mode:         ${opts.fault}`);
+    if (opts.delay) console.log(`  status reply delay: ${opts.delay} ms`);
+    if (opts.silentAfter !== null) console.log(`  silent after:       ${opts.silentAfter} status queries`);
   });
 
   const shutdown = () => {
