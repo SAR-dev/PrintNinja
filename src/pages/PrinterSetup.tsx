@@ -507,7 +507,7 @@ export function PrinterSetupPage() {
     () => [
       {
         id: "name",
-        header: "Printer",
+        header: t("printers.col_printer"),
         accessorFn: (p) => p.name.toLowerCase(),
         enableSorting: true,
         cell: (c) => {
@@ -534,7 +534,7 @@ export function PrinterSetupPage() {
       },
       {
         id: "status",
-        header: "Status",
+        header: t("common.status"),
         cell: (c) => {
           const st = c.row.original.status;
           // Icon + word in both cases; unknown states
@@ -787,7 +787,7 @@ export function PrinterSetupPage() {
 
         <TabsContent value={tab} className="mt-4">
           <DataTable
-            caption="Printers"
+            caption={t("nav.printers")}
             columns={columns}
             data={filtered}
             getRowId={(p) => String(p.id)}

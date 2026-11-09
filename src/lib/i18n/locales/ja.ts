@@ -298,6 +298,9 @@ const ja: Translation = {
     sample_empty:
       "データセットはまだありません。追加すると、テンプレートのプレビューと検証ができます。",
     sample_default_note: "{{name}} がデフォルトに設定されています",
+    // 組み込みのデフォルトデータセットの表示名。保存名は
+    // 「Sample Order」のままなので、表示のみ翻訳する (P38)。
+    sample_order_name: "サンプル受注",
     sample_use: "データセット {{name}} を使用",
     sample_delete: "データセット {{name}} を削除",
     sample_fields: "フィールド:",
@@ -382,6 +385,10 @@ const ja: Translation = {
     toast_add_failed: "追加に失敗しました: {{error}}",
     toast_dataset_updated:
       "データセットを更新しました（テンプレートを保存すると確定します）",
+    toast_saved: "サーバーに保存しました",
+    toast_saved_published: "保存しました — 公開版も更新されました",
+    save_offline_title:
+      "オフラインです。サーバーに保存するには接続してください",
     toast_save_failed: "保存に失敗しました: {{error}}",
     toast_barcode_inserted: "{{type}}バーコードを挿入しました",
     controls_expanded: "デザイナーのコントロール",
@@ -620,6 +627,7 @@ const ja: Translation = {
     conn_usb: "USB",
     conn_bluetooth: "Bluetooth",
     conn_system: "システム",
+    col_printer: "プリンター",
     col_connection: "接続",
     col_language: "言語",
     col_paper: "用紙",
@@ -1501,7 +1509,9 @@ const ja: Translation = {
       "エンドポイントを閲覧して試すには、「APIサーバー」タブでローカルAPIサーバーを起動してください。",
     open_server: "APIサーバーを開く",
     endpoints: "エンドポイント",
+    endpoints_live: "稼働中: {{url}}",
     raw_link: "openapi.json（生データ）を表示",
+    empty_response: "（空のレスポンス — 例: 204 キャンセル）",
     print_warning:
       "実際に印刷されます（用紙とトナーを消費します）。送信前にテンプレートとプリンターを再確認してください。",
     mutate_warning:

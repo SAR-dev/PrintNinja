@@ -11840,7 +11840,7 @@
     },
     "/v2/internal/cleanup": {
       "get": {
-        "description": "Scheduled cleanup: purge expired sessions and tombstones older than the retention window. Bearer CRON_SECRET; 404 when unconfigured.",
+        "description": "Scheduled cleanup: purge expired sessions and tombstones older than the retention window. Bearer CRON_SECRET; 503 when CRON_SECRET is unset.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -11942,7 +11942,7 @@
               }
             }
           },
-          "404": {
+          "503": {
             "description": "Default Response",
             "content": {
               "application/json": {

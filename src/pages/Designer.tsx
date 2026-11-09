@@ -28,6 +28,7 @@ import { ReadmePanel } from "@/components/designer/ReadmePanel";
 import { README_MAX_BYTES } from "@/components/ReadmeEditor";
 import {
   SampleDataPanel,
+  SAMPLE_ORDER_NAME,
   type Dataset,
   DATASET_NAME_MAX,
 } from "@/components/designer/SampleDataPanel";
@@ -340,7 +341,7 @@ export function DesignerPage() {
   > | null>(null);
 
   const fallbackDataset: Dataset & { id?: number | null } = {
-    name: "Sample Order",
+    name: SAMPLE_ORDER_NAME,
     json: JSON.stringify(DEFAULT_MOCK_DATA, null, 2),
     isDefault: true,
   };
@@ -576,8 +577,8 @@ export function DesignerPage() {
       window.dispatchEvent(new Event("sync:pulled"));
       notifySuccess(
         result.published
-          ? "Saved — the published copy is updated"
-          : "Saved to the server",
+          ? t("designer.toast_saved_published")
+          : t("designer.toast_saved"),
       );
     } catch (e) {
       if (e instanceof TemplateConflictError) {
@@ -827,7 +828,7 @@ export function DesignerPage() {
     }
   };
   const [selectedDatasetName, setSelectedDatasetName] =
-    useState("Sample Order");
+    useState(SAMPLE_ORDER_NAME);
   const [showDatasetDialog, setShowDatasetDialog] = useState(false);
   const [datasetName, setDatasetName] = useState("");
   const [datasetJson, setDatasetJson] = useState("{\n  \n}");
@@ -1136,7 +1137,7 @@ export function DesignerPage() {
             onSave={() => void handleSave()}
             saveDisabled={offline || isReadOnly({ origin }) || !!nameError}
             saveTitle={
-              offline ? "Offline — connect to save to the server" : undefined
+              offline ? t("designer.save_offline_title") : undefined
             }
             templateName={templateName}
             onTemplateNameChange={setTemplateName}
@@ -1646,7 +1647,12 @@ export function DesignerPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {t("designer.sample_edit_title", { name: editingDataset })}
+              {t("designer.sample_edit_title", {
+                name:
+                  editingDataset === SAMPLE_ORDER_NAME
+                    ? t("designer.sample_order_name")
+                    : editingDataset,
+              })}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
