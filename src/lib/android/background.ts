@@ -1,12 +1,13 @@
 import { invoke } from "@/lib/invoke";
+import { isAndroid } from "./platform";
 
 const PLUGIN = "plugin:android-print";
 
-/** True inside the Android app (WebView user agent). Desktop and web
- * builds return false; every function below no-ops or reports
- * unsupported there instead of throwing at import time. */
-export const isAndroid = (): boolean =>
-  typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+/** Re-exported for existing import sites. The implementation lives in
+ * ./platform so a platform check alone never pulls this module (and its
+ * invoke wrapper) into a chunk; every function below no-ops or reports
+ * unsupported off-Android instead of throwing at import time. */
+export { isAndroid };
 
 function plugin<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   return invoke<T>(`${PLUGIN}|${cmd}`, args);

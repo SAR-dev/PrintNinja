@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { isAndroid } from "@/lib/android/background";
+import { isAndroid } from "@/lib/android/platform";
 
 /** Android-only background controls. Desktop uses tray settings
  * instead (rendered beside this, never together). */

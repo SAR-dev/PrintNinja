@@ -58,6 +58,8 @@ import {
 } from "@/components/ui/select";
 import { notifySuccess, notifyError } from "@/lib/notify";
 import * as share from "@/lib/share/client";
+import { renderTemplate } from "@/lib/render/renderTemplate";
+import { compileTemplateCss } from "@/lib/templates/compileTemplateCss";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { downloadToLocal } from "@/lib/share/sync";
 import {
@@ -394,10 +396,6 @@ export function TemplatesPage() {
     setPreviewError("");
     try {
       const detail = await share.fetchRemoteTemplate(tpl.id);
-      const { renderTemplate } = await import("@/lib/render/renderTemplate");
-      const { compileTemplateCss } = await import(
-        "@/lib/templates/compileTemplateCss"
-      );
       const { css: compiled } = await compileTemplateCss(detail.body ?? "");
       setPreviewHtml(
         renderTemplate(
