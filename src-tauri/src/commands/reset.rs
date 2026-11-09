@@ -85,5 +85,8 @@ pub fn reset_database(app: AppHandle, db: State<DbState>) -> AppResult<ResetRepo
     // re-read the (now empty) table so the render layer's cached copy
     // falls back to Automatic instead of keeping a deleted choice.
     crate::render::browser_choice::apply_from(guard.connection());
+    // The CUPS URL row was wiped too: the cache falls back to the
+    // environment variable / localhost default.
+    crate::transport::cups::apply_from(guard.connection());
     Ok(report)
 }

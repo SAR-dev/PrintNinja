@@ -42,7 +42,7 @@ Every item has its **problem** and its **possible solutions** together. **Recomm
 
 **1. \[Low\] No Bluetooth Low Energy (BLE).** *Problem:* the app only supports classic Bluetooth (the older "serial port" kind). A BLE-only printer cannot connect. *Solutions:* (a) **Recommended for now:** say "classic Bluetooth only" in the Add dialog and README, and tell buyers to look for "Bluetooth 2.1 / 3.0 / EDR". (b) Add a BLE path in the Android plugin (GATT writes, chunked to the MTU) as a new transport type. (c) Support only known BLE printer families that use a fixed service UUID.
 
-**2. \[Low\] Cannot search for new Bluetooth devices.** *Problem:* the Add dialog lists only printers already paired in Android settings, and the app never asks for the scan permission. Users must leave the app to pair. *Solutions:* (a) **Recommended:** add an "Open Bluetooth settings" button and a short hint in the Add dialog. (b) Add the `BLUETOOTH_SCAN` permission and a discovery list in the plugin. (c) Do (a) now and (b) only if users ask.
+**✅ 2. \[Low\] Cannot search for new Bluetooth devices.** *Problem:* the Add dialog lists only printers already paired in Android settings, and the app never asks for the scan permission. Users must leave the app to pair. *Solutions:* (a) **Recommended:** add an "Open Bluetooth settings" button and a short hint in the Add dialog. (b) Add the `BLUETOOTH_SCAN` permission and a discovery list in the plugin. (c) Do (a) now and (b) only if users ask.
 
 **3. \[Low\] No pacing when sending data.** *Problem:* the whole job goes out in one write. A printer with a tiny buffer might drop or garble a big image. This is a risk seen in the code, not in testing. *Solutions:* (a) Send in chunks (for example 512–4096 bytes) with a short flush between them. (b) **Recommended:** make chunk size and delay a per-printer setting with a safe default, so only affected printers slow down. (c) Reduce the data, for example dither or downscale images before sending.
 
@@ -62,27 +62,27 @@ Printers "speak" different command languages: ESC/POS (receipts), ZPL and TSPL (
 
 **✅ 8. \[High\] USB permission is asked on every connect.** *Problem:* the app does not register for USB-attached events, so Android cannot remember "always allow". The dialog appears every time, which also breaks background printing. *Solutions:* (a) **Recommended:** add a `USB_DEVICE_ATTACHED` intent filter with a `device_filter.xml` that lists printer-class devices, so Android can remember the grant. (b) Reuse the existing device grant without asking again while Android still honors it. (c) Show a one-line explanation before the dialog so it is not a surprise.
 
-**9. \[Low\] The wrong USB interface might get the job.** *Problem:* the app takes the first "output" channel it finds. A device with several functions (for example a printer plus a card reader) may receive the job on the wrong one. This is a risk seen in the code. *Solutions:* (a) **Recommended:** prefer an interface with class 7 (printer) and fall back to the old behavior only if none exists. (b) Let the user pick the interface in advanced settings. (c) Log the chosen interface so problems are easy to diagnose.
+**✅ 9. \[Low\] The wrong USB interface might get the job.** *Problem:* the app takes the first "output" channel it finds. A device with several functions (for example a printer plus a card reader) may receive the job on the wrong one. This is a risk seen in the code. *Solutions:* (a) **Recommended:** prefer an interface with class 7 (printer) and fall back to the old behavior only if none exists. (b) Let the user pick the interface in advanced settings. (c) Log the chosen interface so problems are easy to diagnose.
 
 ## Network printers (IPP, raw TCP, CUPS)
 
-**10. \[Low\] IPP always labels the job as PDF.** *Problem:* if an IPP printer is set to a command language like ZPL, those bytes are still sent labeled "PDF". In practice IPP is for PDF printers only. Workaround today: use raw TCP on port 9100, or a CUPS raw queue added as a `system` printer. *Solutions:* (a) **Recommended:** reject or warn when an IPP printer is set to a non-PDF language, with a message pointing to raw TCP. (b) Send the correct MIME type (for example `application/octet-stream`) when the language is a command language. (c) Hide non-PDF languages for IPP printers in the form.
+**✅ 10. \[Low\] IPP always labels the job as PDF.** *Problem:* if an IPP printer is set to a command language like ZPL, those bytes are still sent labeled "PDF". In practice IPP is for PDF printers only. Workaround today: use raw TCP on port 9100, or a CUPS raw queue added as a `system` printer. *Solutions:* (a) **Recommended:** reject or warn when an IPP printer is set to a non-PDF language, with a message pointing to raw TCP. (b) Send the correct MIME type (for example `application/octet-stream`) when the language is a command language. (c) Hide non-PDF languages for IPP printers in the form.
 
 **11. \[Low\] Almost no IPP job options.** *Problem:* only the number of copies is sent. Paper size, tray, two-sided, colour and quality come from the printer's defaults and the PDF's page size, so a printer may use the wrong tray. Workaround today: set the defaults on the printer's panel or web page. *Solutions:* (a) Add optional attributes (`media`, `sides`, `print-quality`, `print-color-mode`) to the job. (b) Read what the printer supports (see item 12) and show only those choices. (c) **Recommended:** (b) then (a), so the form never offers options the printer rejects.
 
 **12. \[Low\] The app never asks an IPP printer what it supports.** *Problem:* it only asks after something fails, so the form cannot warn that a printer does not accept PDF. *Solutions:* (a) **Recommended:** call Get-Printer-Attributes when the printer is added or tested, and store `document-format-supported` and `media-supported`. (b) Cache the answer and refresh it on demand. (c) Show a clear warning in the form when PDF is missing.
 
-**13. \[Low\] Raw TCP has no encryption and no sign-in.** *Problem:* that is how port 9100 works. Anyone on the network can send to the printer and jobs travel unprotected, so do not use it for private data. The connection test also always sends an ESC/POS "initialize", whatever language the printer is set to. *Solutions:* (a) **Recommended:** show a visible "not encrypted" note on raw TCP printers. (b) Make the test use the printer's own language, or just open the socket and send nothing. (c) Offer IPP over TLS (IPPS) for printers that support it.
+**✅ 13. \[Low\] Raw TCP has no encryption and no sign-in.** *Problem:* that is how port 9100 works. Anyone on the network can send to the printer and jobs travel unprotected, so do not use it for private data. The connection test also always sends an ESC/POS "initialize", whatever language the printer is set to. *Solutions:* (a) **Recommended:** show a visible "not encrypted" note on raw TCP printers. (b) Make the test use the printer's own language, or just open the socket and send nothing. (c) Offer IPP over TLS (IPPS) for printers that support it.
 
-**14. \[Low\] Desktop CUPS only talks to the local computer.** *Problem:* the address is `http://localhost:631`. There is no setting in the app and no sign-in for a CUPS server that needs one. Workaround today: set the `PRINTNINJA_CUPS_URL` environment variable before launching, or add the remote queue as an `ipp` printer. *Solutions:* (a) **Recommended:** add a CUPS URL field in Settings that overrides the environment variable. (b) Add optional username and password, stored securely. (c) Keep telling users to add remote queues as `ipp` printers.
+**✅ 14. \[Low\] Desktop CUPS only talks to the local computer.** *Problem:* the address is `http://localhost:631`. There is no setting in the app and no sign-in for a CUPS server that needs one. Workaround today: set the `PRINTNINJA_CUPS_URL` environment variable before launching, or add the remote queue as an `ipp` printer. *Solutions:* (a) **Recommended:** add a CUPS URL field in Settings that overrides the environment variable. (b) Add optional username and password, stored securely. (c) Keep telling users to add remote queues as `ipp` printers.
 
 ## Platforms
 
 **✅ 15. \[High\] Windows printers with GDI-only drivers cannot print the PDF.** *Problem:* such drivers cannot turn a PDF into a picture, and the app cannot fix that. Workaround today: add the printer by network address as `ipp` or raw TCP if it reads PDF, or choose a queue whose driver lists PDF. *Solutions:* (a) **Recommended:** detect the driver type and warn when a queue looks GDI-only. (b) Render the page to a bitmap in the app and print it through the GDI path for those queues. (c) Keep the `ipp` or raw TCP workaround in the docs.
 
-**16. \[Low\] Android has no system printer type.** *Problem:* `system` printers exist only on Windows and Linux. A printer reached through an Android print service is not available, and a `system` row on Android says it is not supported. *Solutions:* (a) **Recommended:** show a clear message in the form and suggest adding the printer by address as `ipp` or raw TCP. (b) Integrate Android's `PrintManager` through the plugin (large, with limited control over the output). (c) Only build (b) if many users have no other path.
+**✅ 16. \[Low\] Android has no system printer type.** *Problem:* `system` printers exist only on Windows and Linux. A printer reached through an Android print service is not available, and a `system` row on Android says it is not supported. *Solutions:* (a) **Recommended:** show a clear message in the form and suggest adding the printer by address as `ipp` or raw TCP. (b) Integrate Android's `PrintManager` through the plugin (large, with limited control over the output). (c) Only build (b) if many users have no other path.
 
-**17. \[Low\] Direct USB and Bluetooth only work on Android.** *Problem:* Windows and Linux do not scan for USB or Bluetooth devices. The Add dialog shows installed spooler or CUPS queues only. This follows from the deliberate limits below. Here is what works where:
+**✅ 17. \[Low\] Direct USB and Bluetooth only work on Android.** *Problem:* Windows and Linux do not scan for USB or Bluetooth devices. The Add dialog shows installed spooler or CUPS queues only. This follows from the deliberate limits below. Here is what works where:
 
 | Connection | Windows | Linux | Android | macOS and iOS |
 | --- | --- | --- | --- | --- |
@@ -111,23 +111,23 @@ These are **not planned**. They were looked at and accepted.
 
 | Order | Item | Priority | Size | Why |
 | --- | --- | --- | --- | --- |
-| 1 | 7. Test on real printers | High | Testing, no code | Nothing else matters if real printers do not work |
+| 1 | 7. Test on real printers | High | Testing, no code | Nothing else matters if real printers do not work; the checklist is in docs/TEST_CHECKLIST.md, not yet run on hardware |
 | 2 | 4. TSPL density, speed, gapless media | Medium | Medium | Common label printers print too light or fail on gapless rolls |
-| 3 | 10. IPP always labeled PDF | Low | Small | Warn or refuse when the language is not PDF |
-| 4 | 16. No system printer on Android | Low | Small | Clear message and a pointer to `ipp` or raw TCP |
-| 5 | 2. Cannot scan for unpaired Bluetooth | Low | Small | Add an "Open Bluetooth settings" button |
-| 6 | 13. Raw TCP unencrypted, test command | Low | Small | Add a note and fix the test command |
-| 7 | 14. CUPS URL only by environment variable | Low | Small | Add a setting in the app |
-| 8 | 17. USB and Bluetooth on desktop | Low | Small | A short how-to guide is enough |
-| 9 | 9. Wrong USB interface | Low | Small | Prefer the printer class (7) interface |
-| 10 | 6. CPCL, raster, PDF need a PC | Low | Small to medium | Message is small; a CPCL encoder is medium |
-| 11 | 12. IPP capabilities never read | Low | Medium | Needed before item 11 |
-| 12 | 11. Few IPP job options | Low | Medium | Do after item 12 so options match the printer |
-| 13 | 5. Status checks for more languages | Low | Medium | Needs each language's documented status reply |
-| 14 | 3. No write pacing | Low | Small to medium | Only if a printer is seen dropping data; needs hardware |
-| 15 | 1. No BLE | Low | Large | New plugin code, permissions and screens; only if a printer needs it |
-| 16 | ✅ 8. USB permission on every connect | High | Small | Solved: USB_DEVICE_ATTACHED receiver + device_filter.xml, so Android remembers the grant |
-| 17 | ✅ 15. Windows GDI-only drivers | High | Small to medium | Solved: warning when the queue's datatype list offers no PDF (the same signal the RAW fallback uses); rendering through GDI (option b) stays open |
+| 3 | 6. CPCL, raster, PDF need a PC | Low | Small to medium | Message is small; a CPCL encoder is medium |
+| 4 | 12. IPP capabilities never read | Low | Medium | Needed before item 11 |
+| 5 | 11. Few IPP job options | Low | Medium | Do after item 12 so options match the printer |
+| 6 | 5. Status checks for more languages | Low | Medium | Needs each language's documented status reply |
+| 7 | 3. No write pacing | Low | Small to medium | Only if a printer is seen dropping data; needs hardware |
+| 8 | 1. No BLE | Low | Large | New plugin code, permissions and screens; only if a printer needs it |
+| 9 | ✅ 8. USB permission on every connect | High | Small | Solved: USB_DEVICE_ATTACHED receiver + device_filter.xml, so Android remembers the grant |
+| 10 | ✅ 15. Windows GDI-only drivers | High | Small to medium | Solved: warning when the queue's datatype list offers no PDF (the same signal the RAW fallback uses); rendering through GDI (option b) stays open |
+| 11 | ✅ 2. Cannot scan for unpaired Bluetooth | Low | Small | Solved: "Open Bluetooth settings" button + hint in the Add dialog (pairing stays an OS flow) |
+| 12 | ✅ 9. Wrong USB interface | Low | Small | Solved: printer-class (7) interfaces visited first; the chosen interface is logged |
+| 13 | ✅ 10. IPP always labeled PDF | Low | Small | Solved: warning when an IPP printer is set to a non-PDF language, pointing to raw TCP |
+| 14 | ✅ 13. Raw TCP unencrypted, test command | Low | Small | Solved: visible "not encrypted" note; the test now only opens the socket |
+| 15 | ✅ 14. CUPS URL only by environment variable | Low | Small | Solved: CUPS URL field in Settings (Linux) overrides PRINTNINJA_CUPS_URL |
+| 16 | ✅ 16. No system printer on Android | Low | Small | Solved: clear warning on a system row on Android, pointing to ipp or raw TCP |
+| 17 | ✅ 17. USB and Bluetooth on desktop | Low | Small | Solved: "how to add a USB or Bluetooth printer" guide in the README |
 
 The order goes by priority first (High, Medium, Low), then by how cheap the fix is. Sizes are estimates, not measurements.
 

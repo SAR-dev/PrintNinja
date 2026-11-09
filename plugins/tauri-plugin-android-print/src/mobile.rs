@@ -142,6 +142,15 @@ impl<R: Runtime> AndroidPrint<R> {
         Ok(res.devices)
     }
 
+    /// Open the system Bluetooth settings screen (pairing a printer is an
+    /// OS flow the app cannot perform itself). Success means the intent
+    /// was accepted; the user may still cancel the system screen.
+    pub fn open_bluetooth_settings(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin("openBluetoothSettings", ())
+            .map_err(Into::into)
+    }
+
     /// Open an RFCOMM socket and close it again: the reachability probe.
     ///
     /// Kotlin answers `{"reachable": true}`; the bool is returned.

@@ -678,6 +678,15 @@ const ja: Translation = {
     gdi_warning_title: "ドライバがGDI専用の可能性があります(PDFデータ型なし)",
     gdi_warning:
       "{{name}} のプリンターキューは PDF データ型を提供していません。ドライバが GDI 専用の可能性があり、送られた PDF ジョブが印刷されない場合があります。その場合は、このシステムキューの代わりに、同じ物理プリンターをネットワークアドレス（Wi-Fi / LAN の IPP、またはデバイス自体が PDF を読める場合は Raw TCP 9100）で追加してください。",
+    raw_not_encrypted:
+      "Raw TCP はレンダリングされたバイトをそのまま送るため、通信は暗号化されません。信頼できるローカルネットワークでのみ使用してください。",
+    ipp_non_pdf_warning:
+      "IPPプリンターは PDF を前提としています。非 PDF の言語を設定すると、PrintNinja は IPP 経由で生データを送出することになり、多くの IPP 端末はこれを拒否します。テスト印刷が失敗する場合は、同じプリンターを Raw TCP（ホスト:ポート）として追加してください。",
+    system_android_warning:
+      "Android ではシステム（OSプリントキュー）プリンターはサポートされていません。このプリンターを使い続けるには、このスマートフォンでアドレスを指定して IPP または Raw TCP として再度追加してください。",
+    bluetooth_settings_button: "Bluetooth設定を開く",
+    bluetooth_settings_hint:
+      "ペアリングはAndroid本体で行います。ボタンでシステムのBluetooth画面が開くので、そこでプリンターをペアリングしてから戻って再スキャンしてください。",
     edit_printer: "{{name}}を編集",
     test_action: "{{name}}でテスト印刷",
     testing: "テストしています…",
@@ -991,6 +1000,10 @@ const ja: Translation = {
     api_autostart_hint: "ポートと共有の設定を使用します。",
     api_background_hint:
       "バックグラウンドでも実行され続けます。サーバー稼働中は、固定通知にこのアドレスが表示されます。",
+    cups_title: "CUPS（Linux）",
+    cups_url: "CUPSサーバーのURL",
+    cups_url_hint:
+      "システムプリンター用のCUPSデーモンのアドレス。PRINTNINJA_CUPS_URL環境変数を上書きします。空欄の場合は http://localhost:631 が使われます。",
     api_curl_title: "curlの例",
     devices_title: "共有レンダリング",
     devices_hint:
