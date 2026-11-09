@@ -7,6 +7,8 @@
     "dev": "vite",
     "dev:printer": "node dev-printer/server.cjs",
     "dev:printer:smoke": "node dev-printer/smoke.cjs",
+    "dev:printer:raw": "node dev-printer/server.cjs --raw",
+    "dev:printer:raw:smoke": "node dev-printer/smoke-raw.cjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "biome check",
