@@ -544,7 +544,10 @@ mod tests {
             resolve_cups_base_url(Some("   "), Some("http://env:631")),
             "http://env:631"
         );
-        assert_eq!(resolve_cups_base_url(Some(""), None), "http://localhost:631");
+        assert_eq!(
+            resolve_cups_base_url(Some(""), None),
+            "http://localhost:631"
+        );
     }
 
     #[test]
