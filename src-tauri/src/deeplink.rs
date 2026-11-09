@@ -3,7 +3,12 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DeepLinkAction {
-    Print(DeepLinkPrint),
+    // `Box`ed: `DeepLinkPrint` grew (page_range, grayscale, four margins)
+    // past `clippy::large_enum_variant`'s threshold, so heap-allocating it
+    // keeps the small `Open`/`Template` variants from paying for the large
+    // one. Serde serialises `Box<T>` transparently as `T`, so the Tauri
+    // command boundary and every match site are unaffected.
+    Print(Box<DeepLinkPrint>),
     Open(String),
     Template(String),
 }
@@ -17,6 +22,21 @@ pub struct DeepLinkPrint {
     pub copies: Option<u32>,
     pub orientation: Option<String>,
     pub fit: Option<String>,
+    /// Pages, raw like `orientation`/`fit` — the pipeline's
+    /// `validate_page_range` is the gate once a consumer applies the link.
+    pub page_range: Option<String>,
+    /// `true`/`false` from `1`/`true` and `0`/`false`; garbage or an
+    /// absent key stays `None`, the deep-link convention for typed
+    /// values (`copies` drops too).
+    pub grayscale: Option<bool>,
+    /// One per side, millimetres. Parsed through the shared margin
+    /// rulebook (`validate_margins`): garbage, negative, non-finite and
+    /// over-cap values drop to `None` — a deep link is a typed URL, not
+    /// a form, so a bad margin means "no margin", like a bad `copies`.
+    pub margin_top: Option<f64>,
+    pub margin_right: Option<f64>,
+    pub margin_bottom: Option<f64>,
+    pub margin_left: Option<f64>,
     pub test: bool,
     pub confirm: bool,
     pub callback: Option<String>,
@@ -44,6 +64,16 @@ pub fn parse_deep_link(url: &str) -> Result<DeepLinkAction, String> {
                 copies: params.get("copies").and_then(|s| s.parse().ok()),
                 orientation: params.get("orientation").map(|s| s.to_string()),
                 fit: params.get("fit").map(|s| s.to_string()),
+                page_range: params.get("page_range").map(|s| s.to_string()),
+                grayscale: params.get("grayscale").and_then(|s| match s.as_str() {
+                    "1" | "true" => Some(true),
+                    "0" | "false" => Some(false),
+                    _ => None,
+                }),
+                margin_top: params.get("margin_top").and_then(|s| parse_margin(s)),
+                margin_right: params.get("margin_right").and_then(|s| parse_margin(s)),
+                margin_bottom: params.get("margin_bottom").and_then(|s| parse_margin(s)),
+                margin_left: params.get("margin_left").and_then(|s| parse_margin(s)),
                 test: params
                     .get("test")
                     .map(|s| s == "1" || s == "true")
@@ -54,7 +84,7 @@ pub fn parse_deep_link(url: &str) -> Result<DeepLinkAction, String> {
                     .unwrap_or(true),
                 callback: params.get("callback").map(|s| s.to_string()),
             };
-            Ok(DeepLinkAction::Print(print))
+            Ok(DeepLinkAction::Print(Box::new(print)))
         }
         _ if path.starts_with("open/") => {
             let destination = path.strip_prefix("open/").unwrap_or("");
@@ -66,6 +96,19 @@ pub fn parse_deep_link(url: &str) -> Result<DeepLinkAction, String> {
         }
         _ => Err(format!("Unknown deep link action: {}", path)),
     }
+}
+
+/// One margin from a deep link: the value must parse as a finite number
+/// of millimetres the shared rulebook
+/// ([`crate::commands::print::validate_margins`]) accepts. `f64` parsing
+/// alone is not enough — Rust happily parses `NaN` and overflows to
+/// `inf` — so the range check runs through the same validator the API
+/// and via-PC paths use, and anything it rejects drops to `None`.
+fn parse_margin(s: &str) -> Option<f64> {
+    let v = s.parse::<f64>().ok()?;
+    crate::commands::print::validate_margins(Some(v), None, None, None)
+        .ok()?
+        .0
 }
 
 fn parse_query_params(query: &str) -> HashMap<String, String> {
@@ -162,6 +205,75 @@ mod tests {
                 assert_eq!(p.orientation.as_deref(), Some("landscape"));
             }
             _ => panic!("expected Print"),
+        }
+    }
+
+    /// The new print options, one test per param: valid, garbage,
+    /// absent. The garbage convention is the deep-link one — drop to
+    /// the "unset" value (like `copies`), never an error.
+    #[test]
+    fn parse_deep_link_new_print_options() {
+        let print = |url: &str| match parse_deep_link(url).unwrap() {
+            DeepLinkAction::Print(p) => p,
+            other => panic!("expected Print for {url}, got {other:?}"),
+        };
+
+        // page_range: a raw string, validated later by the pipeline.
+        assert_eq!(
+            print("printninja://print?page_range=1-3")
+                .page_range
+                .as_deref(),
+            Some("1-3")
+        );
+        assert_eq!(
+            print("printninja://print?page_range=1%2C3%2C5-7")
+                .page_range
+                .as_deref(),
+            Some("1,3,5-7"),
+            "encoded commas decode like every other param"
+        );
+        assert_eq!(print("printninja://print?template=Label").page_range, None);
+
+        // grayscale: 1/true on, 0/false off, garbage and absent stay None.
+        assert_eq!(
+            print("printninja://print?grayscale=1").grayscale,
+            Some(true)
+        );
+        assert_eq!(
+            print("printninja://print?grayscale=true").grayscale,
+            Some(true)
+        );
+        assert_eq!(
+            print("printninja://print?grayscale=0").grayscale,
+            Some(false)
+        );
+        assert_eq!(
+            print("printninja://print?grayscale=false").grayscale,
+            Some(false)
+        );
+        assert_eq!(print("printninja://print?grayscale=bogus").grayscale, None);
+        assert_eq!(print("printninja://print?template=Label").grayscale, None);
+
+        // margins: a finite mm value the shared rulebook accepts.
+        assert_eq!(
+            print("printninja://print?margin_top=5&margin_left=7.5").margin_top,
+            Some(5.0)
+        );
+        assert_eq!(
+            print("printninja://print?margin_top=5&margin_left=7.5").margin_left,
+            Some(7.5)
+        );
+        assert_eq!(
+            print("printninja://print?margin_top=5&margin_left=7.5").margin_right,
+            None,
+            "an unset side stays unset"
+        );
+        assert_eq!(print("printninja://print?template=Label").margin_top, None);
+
+        // margins: every kind of garbage drops to None, one per kind.
+        for raw in ["-1", "abc", "NaN", "inf", "1e400", "300.5"] {
+            let p = print(&format!("printninja://print?margin_top={raw}"));
+            assert_eq!(p.margin_top, None, "margin_top={raw} must drop");
         }
     }
 

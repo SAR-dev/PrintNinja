@@ -408,7 +408,13 @@ mod tests {
     }
 
     #[test]
-    fn unknown_fit_mode_behaves_like_fit_width() {
+    fn unknown_fit_mode_keeps_a_defensive_fallback_only() {
+        // Print jobs can no longer reach the layout with an unknown mode:
+        // intake (`validate_orientation_and_fit`) rejects them first, and
+        // the pipeline only ever passes `VALID_FITS`. The fallback stays
+        // so a non-pipeline caller (and the TS preview mirror, which is
+        // pinned to the same behavior in tests/fixtures/layout_cases.json)
+        // cannot crash — but it is no longer a contract prints rely on.
         let a = compute("bogus", 102.0, 102.0, 210.0, 297.0, M5);
         let b = compute("fit-width", 102.0, 102.0, 210.0, 297.0, M5);
         assert_eq!(a, b);

@@ -51,7 +51,10 @@ function variantBlock(variant) {
 /** Pure and idempotent: returns the patched build.gradle.kts. */
 export function patchBuildGradle(kts, keyAlias = "printninja") {
   void keyAlias;
-  let out = kts;
+  // `tauri android init` on Windows writes CRLF; the anchors below are
+  // LF-shaped, so normalize and restore the input's endings on return.
+  const crlf = kts.includes("\r\n");
+  let out = crlf ? kts.replace(/\r\n/g, "\n") : kts;
   // Normalize: the first version of the release support wrongly used
   // getByName inside signingConfigs, but AGP only pre-creates debug —
   // release must be create()d. The buildType wiring keeps getByName
@@ -124,7 +127,7 @@ ${variantBlock("release")}
       out = `${out.slice(0, insertAt)}\n${cleartextLine}${out.slice(insertAt)}`;
     }
   }
-  return out;
+  return crlf ? out.replace(/\n/g, "\r\n") : out;
 }
 
 /** Pure: the key.properties content pointing at the shared keystore. */

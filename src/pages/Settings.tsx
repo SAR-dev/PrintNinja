@@ -56,7 +56,7 @@ import {
 } from "lucide-react";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { ProfileCard } from "@/components/ProfileCard";
-import { notifySuccess, notifyError } from "@/lib/notify";
+import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
 import { diagnostics } from "@/lib/diagnostics";
 import * as share from "@/lib/share/client";
 import { defaultServiceUrl, normalizeServiceUrl } from "@/lib/share/session";
@@ -171,6 +171,33 @@ export function SettingsPage() {
   );
   const [batteryExempt, setBatteryExempt] = useState<boolean | null>(null);
   const [bgBusy, setBgBusy] = useState(false);
+  // The exemption dialog opens on top of the app, so the real answer
+  // only exists once the user comes back: re-read the state on
+  // visibilitychange instead of trusting the moment the invoke
+  // resolved (the state read there is always stale — the dialog is
+  // still on screen).
+  const pendingBatteryRecheck = useRef(false);
+
+  useEffect(() => {
+    if (!isAndroidBackground()) return;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!pendingBatteryRecheck.current) return;
+      pendingBatteryRecheck.current = false;
+      void (async () => {
+        const bg = await import("@/lib/android/background");
+        const exempt = await bg.isBatteryExemptionGranted();
+        setBatteryExempt(exempt);
+        if (exempt) {
+          notifySuccess(t("settings_page.background_toast_granted"));
+        } else {
+          notifyInfo(t("settings_page.background_toast_not_granted"));
+        }
+      })();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [t]);
 
   const [fonts, setFonts] = useState<FontRow[]>([]);
   const [fontUploadError, setFontUploadError] = useState("");
@@ -850,13 +877,25 @@ export function SettingsPage() {
                           const bg = await import("@/lib/android/background");
                           setBgBusy(true);
                           try {
-                            await bg.requestBatteryExemption();
-                            setBatteryExempt(
-                              await bg.isBatteryExemptionGranted(),
-                            );
-                            notifySuccess(
-                              t("settings_page.background_toast_updated"),
-                            );
+                            const shown = await bg.requestBatteryExemption();
+                            if (shown) {
+                              // The system dialog is on top of the app:
+                              // the real state arrives when the user
+                              // returns (visibilitychange effect), so
+                              // don't read or toast it yet.
+                              pendingBatteryRecheck.current = true;
+                            } else {
+                              // Already exempt (or the OS cannot show
+                              // the screen): the state is final now.
+                              setBatteryExempt(
+                                await bg.isBatteryExemptionGranted(),
+                              );
+                              notifySuccess(
+                                t("settings_page.background_toast_updated"),
+                              );
+                            }
+                          } catch (e) {
+                            notifyError(describeError(e));
                           } finally {
                             setBgBusy(false);
                           }

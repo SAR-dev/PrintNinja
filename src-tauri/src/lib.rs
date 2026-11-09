@@ -1,3 +1,8 @@
+// The OpenAPI spec is one big `serde_json::json!` tree
+// (api/openapi.rs); adding properties to it eventually crosses the
+// default macro-expansion recursion limit, so the crate raises it.
+#![recursion_limit = "512"]
+
 pub mod api;
 pub mod commands;
 mod data;

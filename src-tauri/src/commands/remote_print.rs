@@ -13,7 +13,9 @@
 //! `server_id`/`server_revision` from the phone's own template row.
 
 use crate::api::peer_consume::{describe_no_answer_for, pair_base, RenderPair};
-use crate::commands::print::{check_copies, MAX_API_DATA_BYTES, MAX_RECORDS};
+use crate::commands::print::{
+    check_copies, validate_margins, validate_orientation_and_fit, MAX_API_DATA_BYTES, MAX_RECORDS,
+};
 use crate::db::DbState;
 use crate::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
@@ -51,13 +53,23 @@ pub struct RemotePrintArgs {
     pub data_url: Option<String>,
     pub http_method: Option<String>,
     pub copies: Option<u32>,
-    /// Pages per print (see `PrintRequest.records`): expanded into an
-    /// array client-side, since the API has no records parameter.
+    /// Pages per print (see `PrintRequest.records`). Still expanded into
+    /// an array client-side — the API gained `settings.records` later,
+    /// and the expanded shape keeps working against older PCs too.
     pub records: Option<u32>,
     pub orientation: Option<String>,
     pub fit_mode: Option<String>,
     pub page_range: Option<String>,
     pub grayscale: Option<bool>,
+    /// Page margins in millimetres (MISSING_FEATURES #25), one field per
+    /// side like the local `PrintRequest`. Absent stays absent — the PC
+    /// keeps the template default for that side — so a caller that sets
+    /// one side changes only that side, and an old phone sending no
+    /// margins at all sends exactly the body it always sent.
+    pub margin_top: Option<f64>,
+    pub margin_right: Option<f64>,
+    pub margin_bottom: Option<f64>,
+    pub margin_left: Option<f64>,
     pub test: Option<bool>,
     /// Caller-generated de-duplication key. Retries of one attempt reuse
     /// it, so a timeout never prints twice; absent, one is minted.
@@ -490,6 +502,48 @@ fn warnings_from_reply(reply: &serde_json::Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The `settings` object the phone sends to the PC's `POST /v1/print`.
+///
+/// Extracted as a pure function so the parity test can pin what a phone
+/// job carries against what the local pipeline stores in `settings_json`
+/// (MISSING_FEATURES #25: a phone job and a local job with the same
+/// options must give the same page). Absent options stay absent, exactly
+/// like the local path — the PC then keeps its own defaults for them.
+/// `margins` is included only when at least one side is set: a phone that
+/// never touched the margins sends the body it always sent, and the PC
+/// (new or old) applies the template defaults.
+fn remote_settings(
+    copies: u32,
+    orientation: Option<&str>,
+    fit_mode: Option<&str>,
+    page_range: Option<&str>,
+    grayscale: Option<bool>,
+    http_method: Option<&str>,
+    margins: (Option<f64>, Option<f64>, Option<f64>, Option<f64>),
+) -> serde_json::Value {
+    let mut settings = serde_json::json!({ "copies": copies });
+    for (k, v) in [
+        ("orientation", orientation.map(serde_json::Value::from)),
+        ("fit", fit_mode.map(serde_json::Value::from)),
+        ("page_range", page_range.map(serde_json::Value::from)),
+        ("grayscale", grayscale.map(serde_json::Value::from)),
+        ("http_method", http_method.map(serde_json::Value::from)),
+    ] {
+        if let Some(v) = v {
+            settings[k] = v;
+        }
+    }
+    if margins.0.is_some() || margins.1.is_some() || margins.2.is_some() || margins.3.is_some() {
+        settings["margins"] = serde_json::json!({
+            "top": margins.0,
+            "right": margins.1,
+            "bottom": margins.2,
+            "left": margins.3,
+        });
+    }
+    settings
+}
+
 /// Print through the paired PC and record the outcome locally.
 /// See the module docs for the no-fallback contract.
 pub async fn remote_print_inner(
@@ -566,6 +620,20 @@ pub async fn remote_print_inner(
     };
 
     let copies = check_copies(args.copies.unwrap_or(1))?;
+    // The PC's pipeline re-checks these (run_print_with is the
+    // authoritative gate); rejecting here means the phone learns before
+    // any round trip, with the same message.
+    let (orientation, fit_mode) =
+        validate_orientation_and_fit(args.orientation.as_deref(), args.fit_mode.as_deref())?;
+    // The same shared rulebook the API route runs (MISSING_FEATURES #25):
+    // the phone refuses a bad margin before any round trip, with the same
+    // message the PC would have sent back.
+    let margins = validate_margins(
+        args.margin_top,
+        args.margin_right,
+        args.margin_bottom,
+        args.margin_left,
+    )?;
     if args.records.is_some_and(|n| n > MAX_RECORDS) {
         return Err(AppError::Validation(format!(
             "Too many pages requested: {} (max {MAX_RECORDS})",
@@ -587,30 +655,15 @@ pub async fn remote_print_inner(
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let is_test = args.test.unwrap_or(false);
 
-    let mut settings = serde_json::json!({ "copies": copies });
-    for (k, v) in [
-        (
-            "orientation",
-            args.orientation.as_deref().map(|s| serde_json::json!(s)),
-        ),
-        (
-            "fit",
-            args.fit_mode.as_deref().map(|s| serde_json::json!(s)),
-        ),
-        (
-            "page_range",
-            args.page_range.as_deref().map(|s| serde_json::json!(s)),
-        ),
-        ("grayscale", args.grayscale.map(|b| serde_json::json!(b))),
-        (
-            "http_method",
-            args.http_method.as_deref().map(|s| serde_json::json!(s)),
-        ),
-    ] {
-        if let Some(v) = v {
-            settings[k] = v;
-        }
-    }
+    let settings = remote_settings(
+        copies,
+        orientation.as_deref(),
+        fit_mode.as_deref(),
+        args.page_range.as_deref(),
+        args.grayscale,
+        args.http_method.as_deref(),
+        margins,
+    );
     let mut body = serde_json::json!({
         "template": template_name,
         "printer": args.printer_name,
@@ -1131,5 +1184,56 @@ mod tests {
             Some(arr),
             "arrays ignore records"
         );
+    }
+
+    /// MISSING_FEATURES #25: a phone job and a local job with the same
+    /// options must give the same page. The phone's `settings` object is
+    /// therefore key-for-key the object the local pipeline serializes
+    /// into the job row's `settings_json` (see `begin_job`): same keys,
+    /// same normalized values.
+    #[test]
+    fn phone_and_local_settings_are_identical_for_the_same_options() {
+        let phone = remote_settings(
+            2,
+            Some("landscape"),
+            Some("fit-page"),
+            Some("1-3"),
+            Some(true),
+            Some("POST"),
+            (Some(5.0), Some(6.0), Some(7.0), Some(8.0)),
+        );
+        let local = serde_json::json!({
+            "copies": 2,
+            "orientation": "landscape",
+            "fit": "fit-page",
+            "page_range": "1-3",
+            "grayscale": true,
+            "http_method": "POST",
+            "margins": {"top": 5.0, "right": 6.0, "bottom": 7.0, "left": 8.0},
+        });
+        assert_eq!(phone, local);
+
+        // One side set, the rest absent: the phone sends `null` for the
+        // absent sides — the same stored shape a local job with one side
+        // set carries, so both apply the template default to the others.
+        let phone = remote_settings(
+            1,
+            None,
+            None,
+            None,
+            None,
+            None,
+            (Some(12.5), None, None, None),
+        );
+        assert_eq!(
+            phone["margins"],
+            serde_json::json!({"top": 12.5, "right": null, "bottom": null, "left": null})
+        );
+
+        // No margin touched at all: no `margins` key — the PC keeps the
+        // template defaults exactly as a local job with all-`null`
+        // margins does.
+        let phone = remote_settings(1, None, None, None, None, None, (None, None, None, None));
+        assert_eq!(phone, serde_json::json!({ "copies": 1 }));
     }
 }
