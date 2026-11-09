@@ -510,6 +510,43 @@ pub fn validate_orientation_and_fit(
     ))
 }
 
+/// The largest margin one print may carry (mm): bigger than the widest
+/// paper the app knows, so a real margin always fits and a typo (or a
+/// hostile API payload) cannot push the content off the page.
+pub const MAX_MARGIN_MM: f64 = 300.0;
+
+/// The one margin rulebook every print path that accepts explicit
+/// margins runs them through (API, remote-via-PC, deep link): a present
+/// value must be finite, at least 0 and at most [`MAX_MARGIN_MM`].
+/// Absent stays absent — the layout keeps the template default, exactly
+/// as today — so a caller that sets one side changes only that side.
+/// Rejected, never clamped, so a caller that sent `-5` or `1e9` learns
+/// what happened instead of discovering it from the paper.
+pub fn validate_margins(
+    top: Option<f64>,
+    right: Option<f64>,
+    bottom: Option<f64>,
+    left: Option<f64>,
+) -> AppResult<(Option<f64>, Option<f64>, Option<f64>, Option<f64>)> {
+    let check = |raw: Option<f64>, what: &str| -> AppResult<Option<f64>> {
+        let Some(v) = raw else {
+            return Ok(None);
+        };
+        if !v.is_finite() || v < 0.0 || v > MAX_MARGIN_MM {
+            return Err(AppError::Validation(format!(
+                "Invalid {what} margin {v}: expected a number of millimetres between 0 and {MAX_MARGIN_MM}"
+            )));
+        }
+        Ok(Some(v))
+    };
+    Ok((
+        check(top, "top")?,
+        check(right, "right")?,
+        check(bottom, "bottom")?,
+        check(left, "left")?,
+    ))
+}
+
 /// Tauri command wrapper around [`run_print`].
 #[tauri::command]
 pub async fn print_html(
@@ -2347,6 +2384,50 @@ mod tests {
             validate_orientation_and_fit(Some("   "), Some("")).unwrap(),
             (None, None)
         );
+    }
+
+    #[test]
+    fn margins_absent_or_in_range_pass_through() {
+        assert_eq!(validate_margins(None, None, None, None).unwrap(), (None, None, None, None));
+        assert_eq!(
+            validate_margins(Some(0.0), Some(10.0), Some(297.0), Some(MAX_MARGIN_MM)).unwrap(),
+            (Some(0.0), Some(10.0), Some(297.0), Some(MAX_MARGIN_MM))
+        );
+    }
+
+    #[test]
+    fn margins_reject_negative_non_finite_and_over_cap() {
+        for bad in [
+            Some(-0.1),
+            Some(f64::NAN),
+            Some(f64::INFINITY),
+            Some(f64::NEG_INFINITY),
+            Some(MAX_MARGIN_MM + 1.0),
+        ] {
+            let err = validate_margins(bad, None, None, None)
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("top margin"), "{err}");
+            assert!(err.contains("300"), "cap is in the message: {err}");
+        }
+        // The error names the offending side, so a caller fixing one margin
+        // knows which one to fix.
+        for (top, right, bottom, left) in [
+            (None, Some(-1.0), None, None),
+            (None, None, Some(-1.0), None),
+            (None, None, None, Some(-1.0)),
+        ] {
+            let what = match (right, bottom, left) {
+                (Some(_), _, _) => "right",
+                (_, Some(_), _) => "bottom",
+                (_, _, Some(_)) => "left",
+                _ => unreachable!(),
+            };
+            let err = validate_margins(top, right, bottom, left)
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains(what), "{what} named in: {err}");
+        }
     }
 
     /// Pull the `srcdoc` of every design frame back out of the final HTML.

@@ -147,11 +147,11 @@ These are small or medium jobs that can be picked up without a big project. The 
 
 **21. \[Small\] `POST /v1/print` is weaker than the app's own screens.** *Problem:* it cannot set margins or print per-record runs (label runs), and it does not check values for orientation, fit, page range or grayscale, even though the API docs list allowed values. *Solutions:* (a) **Recommended:** add the four margins and `records` to the request and pass them into the same `PrintRequest` the UI uses. (b) Validate the setting values and return a clear 400 error. (c) Share one validation function with items 23 and 24.
 
-**22. \[Small\] A wrong `json_path` prints blank fields.** *Problem:* if the path in a dataset has a typo or an out-of-range index, the job still "succeeds" and prints a page with every field empty, with no hint why. *Solutions:* (a) **Recommended:** make an unresolved path an error ("path `x.y` not found") that fails the job with a clear message. (b) Let a template mark a field optional and allow blanks only for those. (c) Add a "test path" check in the dataset form that shows the value found.
+**✅ 22. \[Small\] A wrong `json_path` prints blank fields.** *Problem:* if the path in a dataset has a typo or an out-of-range index, the job still "succeeds" and prints a page with every field empty, with no hint why. *Solutions:* (a) **Recommended:** make an unresolved path an error ("path `x.y` not found") that fails the job with a clear message. (b) Let a template mark a field optional and allow blanks only for those. (c) Add a "test path" check in the dataset form that shows the value found.
 
 **23. \[Small\] Deep links cannot carry several print options.** *Problem:* a `printninja://print` link supports preset, template, printer, url, copies, orientation, fit, test, confirm and callback, but not page range, grayscale, margins or inline data. Links must rely on a preset or template default for anything else. *Solutions:* (a) **Recommended:** add `page_range`, `grayscale` and the four margins to `DeepLinkPrint`, validated with the shared validator. (b) Allow inline data only as a small, size-limited encoded parameter, or through `url` (already supported). (c) Keep the trusted-sources check unchanged.
 
-**24. \[Small\] Bad `orientation` or `fit` values are accepted silently.** *Problem:* anything other than exactly `"landscape"` becomes portrait, and an unknown `fit` acts like `fit-width`. So `"LandScape"` or `fit: "actual"` gives a wrong-looking result with no warning, while creating a template does validate these. *Solutions:* (a) **Recommended:** reuse `VALID_ORIENTATIONS`, add `VALID_FITS`, and reject unknown values on every print path. (b) If friendliness matters, compare case-insensitively and then normalize. (c) Update the test that locks in the old fallback.
+**✅ 24. \[Small\] Bad `orientation` or `fit` values are accepted silently.** *Problem:* anything other than exactly `"landscape"` becomes portrait, and an unknown `fit` acts like `fit-width`. So `"LandScape"` or `fit: "actual"` gives a wrong-looking result with no warning, while creating a template does validate these. *Solutions:* (a) **Recommended:** reuse `VALID_ORIENTATIONS`, add `VALID_FITS`, and reject unknown values on every print path. (b) If friendliness matters, compare case-insensitively and then normalize. (c) Update the test that locks in the old fallback.
 
 **25. \[Small\] "Print via PC" cannot set margins.** *Problem:* `RemotePrintArgs` has every print option except the four margins, so a phone printing through a paired PC always gets the PC's default margins. That is weaker than a local job. *Solutions:* (a) **Recommended:** add the four margins to `RemotePrintArgs` and include them in the settings JSON. (b) Do this together with item 21, since the PC endpoint must accept them. (c) Add a test that a phone job and a local job give the same page.
 
@@ -195,7 +195,7 @@ These are small or medium jobs that can be picked up without a big project. The 
 
 **42. \[Small\] Deep links do not work on Android.** *Problem:* the link format, trusted-sources screen and README all exist, but the Android app is not registered to open `printninja://` links, so tapping one in a phone browser does nothing. Desktop deep links work. *Solutions:* (a) **Recommended:** add the Tauri deep-link plugin config for the `printninja` scheme and the matching intent filter, and handle the opened URL at start-up and when the app is already running. As with item 39, put manifest changes in the patch scripts or the plugin manifest. (b) Add `https` app links later for a more reliable handoff from browsers. (c) Add an end-to-end test using `adb shell am start -d printninja://...`.
 
-**43. \[Medium\] After Android kills the app, the queue stops draining.** *Problem:* the service uses `START_STICKY`, so Android restarts only the service, not the part of the app that prints. The notification comes back saying the queue stays available, but queued jobs just sit there. Workaround today: reopen the app. *Solutions:* (a) **Recommended:** start the Rust queue worker from the service's `onStartCommand`, not only from the Tauri `setup()`, so a restarted process resumes work. (b) If that is not possible, stop claiming the queue resumes, and change the notification text when the worker is not running. (c) Use WorkManager to relaunch the worker when jobs are waiting.
+**✅ 43. \[Medium\] After Android kills the app, the queue stops draining.** *Problem:* the service uses `START_STICKY`, so Android restarts only the service, not the part of the app that prints. The notification comes back saying the queue stays available, but queued jobs just sit there. Workaround today: reopen the app. *Solutions:* (a) **Recommended:** start the Rust queue worker from the service's `onStartCommand`, not only from the Tauri `setup()`, so a restarted process resumes work. (b) If that is not possible, stop claiming the queue resumes, and change the notification text when the worker is not running. (c) Use WorkManager to relaunch the worker when jobs are waiting.
 
 **44. \[Small\] The notification permission is only asked once.** *Problem:* if you decline the Android 13+ prompt, the service notification becomes invisible, its Open/Close buttons are unreachable, and no screen in Settings offers the permission again. *Solutions:* (a) **Recommended:** add a row in Settings → Background showing the permission state with a button that asks again, or opens the app's notification settings if Android will not prompt again. (b) Ask again when the user turns the background service on. (c) Replace the per-process flag with a check of the real permission state.
 
@@ -207,34 +207,34 @@ Cheapest and most visible first.
 
 | Order | Item | Effort | Why |
 | --- | --- | --- | --- |
-| 1 | 22. Bad `json_path` prints blanks | Small | "Successful" prints of empty fields |
-| 2 | 24. Invalid orientation and fit accepted | Small | Wrong-looking output with no warning |
-| 3 | 21. `/v1/print` margins, records, validation | Small | The API used by POS systems is weaker than the app |
-| 4 | 25. Print via PC has no margins | Small | Same fix area as item 21 |
-| 5 | 23. Deep links miss options | Small | Reuses the validator from items 21 and 24 |
-| 6 | 30. docker-compose ignores env vars | Small | Self-hosters' settings silently do nothing |
-| 7 | 31. `CRON_SECRET` missing from `env.example` | Small | Cleanup never runs on Vercel |
-| 8 | 42. Deep links on Android | Small | Documented feature that cannot work on the phone |
-| 9 | 44. Notification permission asked once | Small | Declining hides the service notification forever |
-| 10 | 45. Update badge without an Android file | Small | Misleading badge |
-| 11 | 38. English text in the Japanese UI | Small | Visible polish issue |
-| 12 | 36. History cannot filter by template | Small | README promises it |
-| 13 | 29. Own template list has no search or sort | Small | Server side of item 35 |
-| 14 | 35. Mine and Saved tabs have no search or sort | Small | Do after item 29 |
-| 15 | 19. Job list has no paging or filters | Small | Older jobs are unreachable through the API |
-| 16 | 20. Job replies omit printer and template | Small | The data is already in the database |
-| 17 | 32. Sessions cannot be revoked one by one | Small | Lost device means logging out everywhere |
-| 18 | 33. No limits on templates, datasets, profiles | Small | Protects self-hosted servers from unbounded growth |
-| 19 | 43. Queue stops after Android kills the app | Medium | Jobs sit unprinted while the app says they will run |
-| 20 | 41. No background job notification | Medium | Failures are invisible |
-| 21 | 26. Account export and backup | Medium | Basic account lifecycle, mostly cheap to build |
-| 22 | 27. Account deletion | Medium | Basic account lifecycle, mostly cheap to build |
-| 23 | 28. No read or list endpoints | Medium | Integrations need a full sync cache without it |
-| 24 | 18. Batch printing entry point | Medium | Worker, metrics and History column already exist |
-| 25 | 34. Version history screen | Medium | Promised in the README, and the API is ready |
-| 26 | ✅ 37. Preview-only barcodes print blank | Small | Solved: "preview only" badge, design-time hint, print-time confirm |
-| 27 | ✅ 39. Plain HTTP blocked in release builds | Small | Solved: cleartext patching already existed; the real bug was the patch script failing on CRLF build files (Windows) |
-| 28 | ✅ 40. Battery toggle shows false success | Small | Solved: permission declared, rejections surfaced, real state shown after the dialog |
+| 1 | 21. `/v1/print` margins, records, validation | Small | The API used by POS systems is weaker than the app |
+| 2 | 25. Print via PC has no margins | Small | Same fix area as item 21 |
+| 3 | 23. Deep links miss options | Small | Reuses the validator from items 21 and 24 |
+| 4 | 30. docker-compose ignores env vars | Small | Self-hosters' settings silently do nothing |
+| 5 | 31. `CRON_SECRET` missing from `env.example` | Small | Cleanup never runs on Vercel |
+| 6 | 42. Deep links on Android | Small | Documented feature that cannot work on the phone |
+| 7 | 44. Notification permission asked once | Small | Declining hides the service notification forever |
+| 8 | 45. Update badge without an Android file | Small | Misleading badge |
+| 9 | 38. English text in the Japanese UI | Small | Visible polish issue |
+| 10 | 36. History cannot filter by template | Small | README promises it |
+| 11 | 29. Own template list has no search or sort | Small | Server side of item 35 |
+| 12 | 35. Mine and Saved tabs have no search or sort | Small | Do after item 29 |
+| 13 | 19. Job list has no paging or filters | Small | Older jobs are unreachable through the API |
+| 14 | 20. Job replies omit printer and template | Small | The data is already in the database |
+| 15 | 32. Sessions cannot be revoked one by one | Small | Lost device means logging out everywhere |
+| 16 | 33. No limits on templates, datasets, profiles | Small | Protects self-hosted servers from unbounded growth |
+| 17 | 41. No background job notification | Medium | Failures are invisible |
+| 18 | 26. Account export and backup | Medium | Basic account lifecycle, mostly cheap to build |
+| 19 | 27. Account deletion | Medium | Basic account lifecycle, mostly cheap to build |
+| 20 | 28. No read or list endpoints | Medium | Integrations need a full sync cache without it |
+| 21 | 18. Batch printing entry point | Medium | Worker, metrics and History column already exist |
+| 22 | 34. Version history screen | Medium | Promised in the README, and the API is ready |
+| 23 | ✅ 22. Bad `json_path` prints blanks | Small | Solved: an unresolvable path now fails the job with a clear message; an explicit `null` still resolves |
+| 24 | ✅ 24. Invalid orientation and fit accepted | Small | Solved: one shared validator normalizes case and rejects unknown values on every print path |
+| 25 | ✅ 37. Preview-only barcodes print blank | Small | Solved: "preview only" badge, design-time hint, print-time confirm |
+| 26 | ✅ 39. Plain HTTP blocked in release builds | Small | Solved: cleartext patching already existed; the real bug was the patch script failing on CRLF build files (Windows) |
+| 27 | ✅ 40. Battery toggle shows false success | Small | Solved: permission declared, rejections surfaced, real state shown after the dialog |
+| 28 | ✅ 43. Queue stops after Android kills the app | Medium | Solved (option b): a restarted service has no Tauri core, so the worker can't run there — the notification now honestly says the queue is paused, and reopening the app resumes it with a visible toast |
 
 ---
 

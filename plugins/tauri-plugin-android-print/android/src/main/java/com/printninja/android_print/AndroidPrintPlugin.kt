@@ -1763,6 +1763,11 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
         } catch (e: Exception) {
             Log.w(tag, "could not start background service: ${e.message}")
         }
+        // load() only runs when the Tauri app booted, and the Rust queue
+        // worker is spawned in setup() before the webview exists — so
+        // from here on the queue is live again. This clears the "paused"
+        // wording the notification shows after a service-only restart.
+        PrintNinjaService.setQueueWorkerState(activity, true)
         // Android 13+ hides the service's notification until the user
         // allows notifications. Ask at launch, not only when the API
         // server starts, so the background notification is there by

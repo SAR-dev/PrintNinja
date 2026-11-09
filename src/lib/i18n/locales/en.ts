@@ -176,6 +176,7 @@ const en = {
     reprint_none: "There are no jobs to reprint yet.",
     reprint_failed: "Could not reprint the last job.",
     reprint_done: "Queued reprint of job #{{id}}",
+    resuming_queued: "Resuming {{count}} queued print job(s)…",
     shortcuts: "Keyboard shortcuts",
     shortcuts_hint: "Letter shortcuts are off while you type in a field.",
     then: "then",

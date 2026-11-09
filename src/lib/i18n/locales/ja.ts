@@ -179,6 +179,7 @@ const ja: Translation = {
     reprint_none: "再印刷できるジョブはまだありません。",
     reprint_failed: "直前のジョブを再印刷できませんでした。",
     reprint_done: "ジョブ #{{id}} の再印刷をキューに追加しました",
+    resuming_queued: "キューに入れた印刷ジョブ {{count}} 件を再開しています…",
     shortcuts: "キーボードショートカット",
     shortcuts_hint: "入力欄に入力中は、文字キーのショートカットは無効です。",
     then: "のあと",
