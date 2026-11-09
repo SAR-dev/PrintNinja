@@ -401,6 +401,26 @@ jobs:
         run: node scripts/patch-android-orientation.mjs
       - name: Make gradlew executable
         run: chmod +x src-tauri/gen/android/gradlew || true
+      # The Gradle wrapper downloads its distribution with a 10s read
+      # timeout and a single attempt, so one flaky services.gradle.org
+      # response (504s and timeouts have both happened) kills the whole
+      # build. Pre-fetch it with retries — the Gradle cache step above
+      # persists it across runs — so the real build never pays the
+      # download cost. `--version` only needs the distribution, not the
+      # SDK.
+      - name: Pre-fetch Gradle distribution
+        run: |
+          cd src-tauri/gen/android
+          for attempt in 1 2 3 4 5; do
+            if ./gradlew --version > /dev/null 2>&1; then
+              echo "Gradle distribution ready on attempt $attempt"
+              exit 0
+            fi
+            echo "::warning::Gradle distribution fetch failed (attempt $attempt/5)"
+            sleep 15
+          done
+          echo "::error::Gradle distribution still unreachable after 5 attempts"
+          exit 1
       # Debug variant: compiles the Rust crate for aarch64 and every Kotlin
       # source (including the plugin) without needing the release keystore.
       - run: pnpm exec tauri android build --debug --target aarch64 --apk
@@ -651,6 +671,26 @@ jobs:
         run: node scripts/patch-android-orientation.mjs
       - name: Make gradlew executable
         run: chmod +x src-tauri/gen/android/gradlew || true
+      # The Gradle wrapper downloads its distribution with a 10s read
+      # timeout and a single attempt, so one flaky services.gradle.org
+      # response (504s and timeouts have both happened) kills the whole
+      # build. Pre-fetch it with retries — the Gradle cache step above
+      # persists it across runs — so the real build never pays the
+      # download cost. `--version` only needs the distribution, not the
+      # SDK.
+      - name: Pre-fetch Gradle distribution
+        run: |
+          cd src-tauri/gen/android
+          for attempt in 1 2 3 4 5; do
+            if ./gradlew --version > /dev/null 2>&1; then
+              echo "Gradle distribution ready on attempt $attempt"
+              exit 0
+            fi
+            echo "::warning::Gradle distribution fetch failed (attempt $attempt/5)"
+            sleep 15
+          done
+          echo "::error::Gradle distribution still unreachable after 5 attempts"
+          exit 1
       # Pin both variants to the shared keystore so every release APK
       # carries the same signer and installs as an upgrade. Fails the job
       # when the secrets are missing rather than shipping a throwaway key.
