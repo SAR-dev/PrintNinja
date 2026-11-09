@@ -227,7 +227,12 @@ export function DesignerToolbar({
         ))}
       {!noTemplate || (layout && onLayoutChange) ? <Divider /> : null}
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={onNew}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onNew}
+          data-testid="designer-new-template"
+        >
           <Plus className="h-4 w-4" aria-hidden="true" />
           {t("designer.newTemplate")}
         </Button>
