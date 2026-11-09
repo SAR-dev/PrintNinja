@@ -413,12 +413,16 @@ describe("GDI-only system queue warning", () => {
 
   it("warns in the form when a GDI-risk queue is picked, and clears it otherwise", async () => {
     await openAddDialog();
-    fireEvent.click(await screen.findByRole("button", { name: /HP LaserJet 1020/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /HP LaserJet 1020/ }),
+    );
     const warning = await screen.findByTestId("printer-gdi-warning");
     expect(warning).toHaveAttribute("role", "alert");
     expect(warning).toHaveTextContent(/GDI-only/);
     // A PDF-offering queue: no warning.
-    fireEvent.click(screen.getByRole("button", { name: /Microsoft Print to PDF/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Microsoft Print to PDF/ }),
+    );
     await waitFor(() =>
       expect(screen.queryByTestId("printer-gdi-warning")).toBeNull(),
     );
