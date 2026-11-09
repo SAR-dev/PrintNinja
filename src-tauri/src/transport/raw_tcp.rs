@@ -87,10 +87,12 @@ impl RawTcpPrinter {
 
     /// Is the printer's port open?
     ///
-    /// Connect and drop — nothing is written, so unlike
-    /// [`PrinterTransport::test`] (which sends an init sequence and can
-    /// print a blank line) this cannot put anything on paper. Used to fail
-    /// fast *before* a document is rendered for a test print.
+    /// Connect and drop — nothing is written, so this cannot put anything
+    /// on paper. [`PrinterTransport::test`] uses this too: a test is a
+    /// connectivity check, and sending an init sequence would print a blank
+    /// line on an ESC/POS printer and nothing on every other language.
+    /// Also used to fail fast *before* a document is rendered for a test
+    /// print.
     pub async fn reach(&self) -> Result<(), String> {
         let _stream = self.connect().await?;
         Ok(())
@@ -221,8 +223,10 @@ impl PrinterTransport for RawTcpPrinter {
 
     async fn test(&self) -> Result<(), String> {
         // Connectivity only: the status probe needs the printer's language,
-        // which this check does not receive.
-        self.send_raw(&[0x1B, 0x40]).await // ESC/POS init
+        // which this check does not receive — so no bytes go out at all.
+        // Sending an init sequence would print a blank line on an ESC/POS
+        // printer and nothing on every other language.
+        self.reach().await
     }
 
     async fn send(&self, job: RenderedJob) -> Result<(), String> {

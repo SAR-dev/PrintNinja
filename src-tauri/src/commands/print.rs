@@ -2109,6 +2109,29 @@ pub async fn list_bluetooth_devices(
     }
 }
 
+/// Open the system Bluetooth settings screen (Android only), so the Add
+/// printer dialog can hand a user with no bonded printers to the OS
+/// pairing flow instead of a hand-typed MAC.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn open_bluetooth_settings(app: tauri::AppHandle) -> AppResult<()> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri_plugin_android_print::AndroidPrintExt;
+
+        tokio::task::spawn_blocking(move || app.android_print().open_bluetooth_settings())
+            .await
+            .map_err(|e| AppError::Internal(format!("bluetooth settings task failed: {e}")))?
+            .map_err(|e| AppError::Internal(format!("opening Bluetooth settings failed: {e}")))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = &app;
+        Err(AppError::Validation(
+            "Bluetooth settings only exist on Android".into(),
+        ))
+    }
+}
+
 /// Discover network printers over mDNS (`_ipp._tcp` and JetDirect
 /// `_pdl-datastream._tcp`), resolved to IP and port.
 ///

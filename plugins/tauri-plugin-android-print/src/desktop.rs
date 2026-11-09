@@ -53,6 +53,10 @@ impl<R: Runtime> AndroidPrint<R> {
         Ok(())
     }
 
+    pub fn open_bluetooth_settings(&self) -> crate::Result<()> {
+        self.unavailable("openBluetoothSettings")
+    }
+
     pub fn request_battery_exemption(&self) -> crate::Result<bool> {
         self.unavailable("requestBatteryExemption")
     }
