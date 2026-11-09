@@ -15,7 +15,7 @@ afterEach(async () => {
 // in-process timer. Fakes stand in for the repositories — the purge
 // functions themselves are pinned by unit tests.
 describe("GET /v2/internal/cleanup", () => {
-  it("answers 404 when CRON_SECRET is unset", async () => {
+  it("answers 503 when CRON_SECRET is unset", async () => {
     app = await buildApp({ config: testConfig(), deps: fakeDeps() });
     const response = await app.inject({
       method: "GET",
@@ -23,9 +23,12 @@ describe("GET /v2/internal/cleanup", () => {
       headers: { authorization: "Bearer anything" },
     });
 
-    expect(response.statusCode).toBe(404);
+    // 503, not 404: the path exists but the feature is disabled, and
+    // the message names the cause so a misconfigured deployment cannot
+    // read this as "wrong URL".
+    expect(response.statusCode).toBe(503);
     expect((response.json() as { error: { code: string } }).error.code).toBe(
-      "not_found",
+      "service_unavailable",
     );
   });
 

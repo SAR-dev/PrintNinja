@@ -777,8 +777,8 @@ export function SettingsPage() {
                                 {f.state === "ready"
                                   ? t("settings_page.font_ready")
                                   : f.state === "error"
-                                    ? "Download failed — will retry"
-                                    : "Downloading…"}
+                                    ? t("settings_page.font_error")
+                                    : t("settings_page.font_downloading")}
                               </p>
                             </div>
                             <Button

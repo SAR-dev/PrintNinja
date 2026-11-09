@@ -295,6 +295,9 @@ const en = {
     sample_add: "Add Dataset",
     sample_empty: "No datasets yet. Add one to preview and validate templates.",
     sample_default_note: "{{name}} is set as default",
+    // Display name of the built-in fallback dataset. Its stored name
+    // stays "Sample Order" — only the display is translated (P38).
+    sample_order_name: "Sample Order",
     sample_use: "Use dataset {{name}}",
     sample_delete: "Delete dataset {{name}}",
     sample_fields: "Fields:",
@@ -371,6 +374,9 @@ const en = {
       'Dataset "{{name}}" added — save the template to keep it',
     toast_add_failed: "Add failed: {{error}}",
     toast_dataset_updated: "Dataset updated — save the template to keep it",
+    toast_saved: "Saved to the server",
+    toast_saved_published: "Saved — the published copy is updated",
+    save_offline_title: "Offline — connect to save to the server",
     toast_save_failed: "Save failed: {{error}}",
     toast_barcode_inserted: "{{type}} barcode inserted",
     controls_expanded: "Designer controls",
@@ -606,6 +612,7 @@ const en = {
     conn_usb: "USB",
     conn_bluetooth: "Bluetooth",
     conn_system: "System",
+    col_printer: "Printer",
     col_connection: "Connection",
     col_language: "Language",
     col_paper: "Paper",
@@ -1465,7 +1472,9 @@ const en = {
       "Start the local API server on the API server tab to browse and try its endpoints.",
     open_server: "Go to API server",
     endpoints: "Endpoints",
+    endpoints_live: "live: {{url}}",
     raw_link: "View raw openapi.json",
+    empty_response: "(empty body — e.g. a 204 cancel)",
     print_warning:
       "This prints for real — paper and toner. Double-check the template and printer before sending.",
     mutate_warning: "This changes server state (re-queue or cancel a job).",

@@ -1137,6 +1137,16 @@ async fn the_openapi_document_matches_the_router() {
             "get must document {want}: {get:?}"
         );
     }
+
+    // The list answers 200 for a page and 400 for a filter the table
+    // cannot hold (P19).
+    let list = codes("/v1/jobs", "get");
+    for want in ["200", "400"] {
+        assert!(
+            list.contains(&want.to_string()),
+            "list must document {want}: {list:?}"
+        );
+    }
     let retry = codes("/v1/jobs/{id}/retry", "post");
     for want in ["200", "400", "404"] {
         assert!(
@@ -2743,5 +2753,413 @@ async fn expired_guest_is_401() {
         )
         .await,
         StatusCode::UNAUTHORIZED
+    );
+}
+
+// ───────────────────────────────────────────────────────────────
+// Job listing: paging, filters, details (P19, P20)
+// ───────────────────────────────────────────────────────────────
+
+/// Inserts a job row with explicit attributes so paging, filters and
+/// details are deterministic. `created_at` is given explicitly — the
+/// default `datetime('now')` would make date bounds flaky.
+fn seed_job(
+    db: &Db,
+    status: &str,
+    source: &str,
+    printer: Option<&str>,
+    template: Option<&str>,
+    settings: Option<&str>,
+    created_at: &str,
+) {
+    db.lock()
+        .unwrap()
+        .connection()
+        .execute(
+            "INSERT INTO print_jobs (status, source, printer_id, template_id, settings_json,
+                                     copies, is_test, created_at)
+             VALUES (?1, ?2,
+                     (SELECT id FROM printers WHERE name = ?3),
+                     (SELECT id FROM templates WHERE name = ?4),
+                     ?5, 1, 0, ?6)",
+            rusqlite::params![status, source, printer, template, settings, created_at],
+        )
+        .unwrap();
+}
+
+/// All job ids, newest first — the order the list must keep.
+fn job_ids_newest_first(db: &Db) -> Vec<i64> {
+    db.lock()
+        .unwrap()
+        .connection()
+        .prepare("SELECT id FROM print_jobs ORDER BY id DESC")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
+}
+
+/// `limit`/`offset` page through the list newest-first (P19) and the
+/// response echoes the parameters it answered. The old 200-row cap stays
+/// the default, and an offset past the end is an empty page, not an
+/// error.
+#[tokio::test]
+async fn list_jobs_pages_newest_first_and_echoes_its_parameters() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    for day in 1..=5u32 {
+        seed_job(
+            &db,
+            "success",
+            "api",
+            Some("Desk"),
+            Some("Receipt"),
+            None,
+            &format!("2026-01-{day:02} 10:00:00"),
+        );
+    }
+    let all = job_ids_newest_first(&db);
+
+    let (status, body) = get_body(router(&db), "/v1/jobs?limit=2&offset=0").await;
+    assert_eq!(status, StatusCode::OK);
+    let ids: Vec<i64> = body["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|j| j["id"].as_i64().unwrap())
+        .collect();
+    assert_eq!(ids, &all[..2], "newest first");
+    assert_eq!(body["count"], 2);
+    assert_eq!(body["limit"], 2);
+    assert_eq!(body["offset"], 0);
+
+    let (status, body) = get_body(router(&db), "/v1/jobs?limit=2&offset=2").await;
+    assert_eq!(status, StatusCode::OK);
+    let ids: Vec<i64> = body["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|j| j["id"].as_i64().unwrap())
+        .collect();
+    assert_eq!(ids, &all[2..4], "the next page");
+
+    let (status, body) = get_body(router(&db), "/v1/jobs?offset=100").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["jobs"].as_array().unwrap().len(), 0);
+}
+
+/// Each filter narrows the list, and they compose (P19).
+#[tokio::test]
+async fn list_jobs_filters_by_status_source_printer_template() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    {
+        let guard = db.lock().unwrap();
+        guard
+            .connection()
+            .execute(
+                "INSERT INTO printers (name, type, address, language)
+                 VALUES ('Kiosk','ipp','5.6.7.8','pdf')",
+                [],
+            )
+            .unwrap();
+        guard
+            .connection()
+            .execute(
+                "INSERT INTO templates (name, page_w_mm, page_h_mm, orientation, html, css)
+                 VALUES ('Tag',60,40,'portrait','<p>t</p>','')",
+                [],
+            )
+            .unwrap();
+    }
+    let desk_id: i64 = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row("SELECT id FROM printers WHERE name='Desk'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    let tag_id: i64 = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row("SELECT id FROM templates WHERE name='Tag'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+
+    seed_job(
+        &db,
+        "success",
+        "ui",
+        Some("Desk"),
+        Some("Receipt"),
+        None,
+        "2026-01-01 10:00:00",
+    );
+    seed_job(
+        &db,
+        "failed",
+        "api",
+        Some("Desk"),
+        Some("Receipt"),
+        None,
+        "2026-01-02 10:00:00",
+    );
+    seed_job(
+        &db,
+        "success",
+        "api",
+        Some("Kiosk"),
+        Some("Tag"),
+        None,
+        "2026-01-03 10:00:00",
+    );
+
+    let (status, body) = get_body(router(&db), "/v1/jobs?status=failed").await;
+    assert_eq!(status, StatusCode::OK);
+    let jobs = body["jobs"].as_array().unwrap();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0]["status"], "failed");
+    assert_eq!(jobs[0]["created_at"], "2026-01-02 10:00:00");
+
+    let (status, body) = get_body(router(&db), "/v1/jobs?source=ui").await;
+    assert_eq!(status, StatusCode::OK);
+    let jobs = body["jobs"].as_array().unwrap();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0]["source"], "ui");
+
+    let (status, body) = get_body(router(&db), &format!("/v1/jobs?printer_id={desk_id}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let jobs = body["jobs"].as_array().unwrap();
+    assert_eq!(jobs.len(), 2);
+
+    let (status, body) = get_body(router(&db), &format!("/v1/jobs?template_id={tag_id}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let jobs = body["jobs"].as_array().unwrap();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0]["created_at"], "2026-01-03 10:00:00");
+
+    // Filters compose.
+    let (status, body) = get_body(
+        router(&db),
+        &format!("/v1/jobs?status=success&printer_id={desk_id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let jobs = body["jobs"].as_array().unwrap();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0]["created_at"], "2026-01-01 10:00:00");
+}
+
+/// Date bounds are inclusive; a bare `YYYY-MM-DD` selects the whole day
+/// (P19).
+#[tokio::test]
+async fn list_jobs_filters_by_created_at_bounds() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_job(
+        &db,
+        "success",
+        "api",
+        None,
+        None,
+        None,
+        "2026-01-01 10:00:00",
+    );
+    seed_job(
+        &db,
+        "success",
+        "api",
+        None,
+        None,
+        None,
+        "2026-01-02 10:00:00",
+    );
+    seed_job(
+        &db,
+        "success",
+        "api",
+        None,
+        None,
+        None,
+        "2026-01-03 10:00:00",
+    );
+
+    let (status, body) = get_body(
+        router(&db),
+        "/v1/jobs?from=2026-01-02T00:00:00Z&to=2026-01-02T23:59:59Z",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let jobs = body["jobs"].as_array().unwrap();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0]["created_at"], "2026-01-02 10:00:00");
+
+    // A bare date covers the whole day, start to end.
+    let (status, body) = get_body(router(&db), "/v1/jobs?from=2026-01-02&to=2026-01-02").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["jobs"].as_array().unwrap().len(), 1);
+
+    let (status, body) = get_body(router(&db), "/v1/jobs?from=2026-01-02").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["jobs"].as_array().unwrap().len(),
+        2,
+        "from is inclusive: 2026-01-02 and 2026-01-03"
+    );
+
+    let (status, body) = get_body(router(&db), "/v1/jobs?to=2026-01-02").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["jobs"].as_array().unwrap().len(),
+        2,
+        "to covers its whole day: 2026-01-01 and 2026-01-02"
+    );
+}
+
+/// Filter values the table cannot hold are refused with a 400 that
+/// names the cause (P19) — the old endpoint answered every shape.
+#[tokio::test]
+async fn list_jobs_rejects_filters_the_table_cannot_hold() {
+    let db = setup();
+    for query in [
+        "status=exploded",
+        "source=teleport",
+        "from=2026-13-45",
+        "limit=0",
+        "limit=1001",
+        // Axum's own Query rejection (a non-integer page size): also 400.
+        "limit=many",
+    ] {
+        let (status, _) = get_body(router(&db), &format!("/v1/jobs?{query}")).await;
+        assert_eq!(StatusCode::BAD_REQUEST, status, "{query}");
+    }
+
+    // The handler-side refusals say why.
+    let (status, body) = get_body(router(&db), "/v1/jobs?status=exploded").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body["error"].as_str().is_some_and(|m| m.contains("status")),
+        "{body}"
+    );
+}
+
+/// Both job endpoints append `details`: the printer/template names and
+/// the stored settings (P20) — the same names the `print.succeeded`
+/// callback carries. A job whose printer was deleted reports null for
+/// both the id and the name (the FK is ON DELETE SET NULL).
+#[tokio::test]
+async fn job_endpoints_report_details() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_job(
+        &db,
+        "success",
+        "api",
+        Some("Desk"),
+        Some("Receipt"),
+        Some(r#"{"margins":{"top_mm":5}}"#),
+        "2026-01-01 10:00:00",
+    );
+    let full_id = job_ids_newest_first(&db)[0];
+
+    let ghost_job_id: i64 = {
+        let guard = db.lock().unwrap();
+        let c = guard.connection();
+        c.execute(
+            "INSERT INTO printers (name, type, address, language)
+             VALUES ('Ghost','ipp','9.9.9.9','pdf')",
+            [],
+        )
+        .unwrap();
+        let ghost_id: i64 = c
+            .query_row("SELECT id FROM printers WHERE name='Ghost'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        c.execute(
+            "INSERT INTO print_jobs (status, source, printer_id, copies, is_test, created_at)
+             VALUES ('success','ui', ?1, 1, 0, '2026-01-02 10:00:00')",
+            [ghost_id],
+        )
+        .unwrap();
+        let job_id: i64 = c
+            .query_row(
+                "SELECT id FROM print_jobs WHERE created_at='2026-01-02 10:00:00'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        c.execute("DELETE FROM printers WHERE id = ?1", [ghost_id])
+            .unwrap();
+        job_id
+    };
+
+    let (status, body) = get_body(router(&db), &format!("/v1/jobs/{full_id}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let d = &body["details"];
+    assert_eq!(d["printer"], "Desk");
+    assert_eq!(d["template"], "Receipt");
+    assert!(d["printer_id"].is_i64());
+    assert!(d["template_id"].is_i64());
+    assert_eq!(d["settings"]["margins"]["top_mm"], 5);
+
+    let (status, body) = get_body(router(&db), &format!("/v1/jobs/{ghost_job_id}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let d = &body["details"];
+    assert_eq!(d["printer"], serde_json::Value::Null);
+    assert_eq!(
+        d["printer_id"],
+        serde_json::Value::Null,
+        "ON DELETE SET NULL clears the id along with the name"
+    );
+    assert_eq!(d["template"], serde_json::Value::Null);
+    assert_eq!(
+        d["settings"],
+        serde_json::Value::Null,
+        "a row without settings reports null"
+    );
+
+    // The list endpoint carries the same details for the same job.
+    let (status, body) = get_body(router(&db), "/v1/jobs").await;
+    assert_eq!(status, StatusCode::OK);
+    let listed = body["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|j| j["id"] == full_id)
+        .expect("the job is listed");
+    assert_eq!(listed["details"]["printer"], "Desk");
+    assert_eq!(listed["details"]["template"], "Receipt");
+    assert_eq!(listed["details"]["settings"]["margins"]["top_mm"], 5);
+}
+
+/// The job list sits behind the same LAN pairing gate as the rest of
+/// the API (it is customer job history, after all); loopback is
+/// unaffected.
+#[tokio::test]
+async fn job_listing_is_lan_gated_like_the_rest_of_the_api() {
+    let db = setup();
+    seed_sharing(&db, "list-gate");
+
+    let (status, _) = get_body(router(&db), "/v1/jobs").await;
+    assert_eq!(status, StatusCode::OK, "loopback is unaffected");
+
+    assert_eq!(
+        lan_get(router(&db), "/v1/jobs", lan_ip(40), None).await,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        lan_get(
+            router(&db),
+            "/v1/jobs?limit=5",
+            lan_ip(40),
+            Some("list-gate")
+        )
+        .await,
+        StatusCode::OK
     );
 }

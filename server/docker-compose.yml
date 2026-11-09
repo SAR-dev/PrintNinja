@@ -16,6 +16,11 @@ services:
       context: ..
       dockerfile: server/Dockerfile
     restart: unless-stopped
+    # Every variable env.example documents is passed through, default
+    # included, so the stack cannot ignore a setting the docs promise
+    # (TRUST_PROXY behind a proxy is the one that bit first: with 0,
+    # every client behind the proxy shares one rate-limit bucket).
+    # Keep in sync with server/env.example and docs/ENV.md.
     environment:
       DATABASE_URL: ${DATABASE_URL:-file:/data/printninja.db}
       DATABASE_AUTH_TOKEN: ${DATABASE_AUTH_TOKEN:-}
@@ -24,9 +29,25 @@ services:
       PORT: 3001
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DOCS_ENABLED: ${DOCS_ENABLED:-true}
+      # Reverse-proxy hops to trust for the client IP (0 = none).
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+      # Sessions and sync retention.
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
+      SESSION_CLEANUP_MINUTES: ${SESSION_CLEANUP_MINUTES:-60}
+      SYNC_TOMBSTONE_DAYS: ${SYNC_TOMBSTONE_DAYS:-90}
+      SYNC_PAGE_BYTES: ${SYNC_PAGE_BYTES:-8388608}
+      # Rate limits.
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-120}
       RATE_LIMIT_AUTH_MAX: ${RATE_LIMIT_AUTH_MAX:-10}
       RATE_LIMIT_AUTH_WINDOW_SECONDS: ${RATE_LIMIT_AUTH_WINDOW_SECONDS:-300}
+      # Password hashing cost (argon2id).
+      ARGON2_MEMORY_KIB: ${ARGON2_MEMORY_KIB:-19456}
+      ARGON2_TIME_COST: ${ARGON2_TIME_COST:-2}
+      ARGON2_PARALLELISM: ${ARGON2_PARALLELISM:-1}
+      # Scheduled cleanup endpoint secret: empty (the default) keeps
+      # /v2/internal/cleanup disabled — Docker runs the in-process
+      # timer instead, so leave it empty unless a scheduler calls in.
+      CRON_SECRET: ${CRON_SECRET:-}
     # Least privilege: the service binds an unprivileged port and needs
     # no Linux capabilities or privilege escalation.
     cap_drop: [ALL]

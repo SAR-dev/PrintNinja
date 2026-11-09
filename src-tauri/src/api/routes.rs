@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Extension, Path, State},
+    extract::{Extension, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::Response,
     routing::{get, post},
@@ -681,6 +681,184 @@ async fn print_job(
     }
 }
 
+/// Query parameters for `GET /v1/jobs` (P19). Every field is optional:
+/// a bare `GET /v1/jobs` means "the 200 newest, no filters" — the exact
+/// answer the endpoint used to give, so old clients are unaffected.
+#[derive(Debug, Default, Deserialize)]
+struct JobsQuery {
+    /// Page size. Default 200 (the old hard cap), at most 1000.
+    limit: Option<u32>,
+    /// Rows to skip. Default 0.
+    offset: Option<u64>,
+    /// One of the `status` CHECK set: queued, printing, success, failed, cancelled.
+    status: Option<String>,
+    /// One of the `source` CHECK set: ui, api, deeplink, batch, test.
+    source: Option<String>,
+    printer_id: Option<i64>,
+    template_id: Option<i64>,
+    /// Inclusive lower bound on `created_at` (UTC): RFC 3339, or a bare
+    /// `YYYY-MM-DD` date meaning the start of that day.
+    from: Option<String>,
+    /// Inclusive upper bound on `created_at` (UTC): RFC 3339, or a bare
+    /// `YYYY-MM-DD` date meaning the end of that day.
+    to: Option<String>,
+}
+
+/// The default page size: the old hard cap, so an unfiltered
+/// `GET /v1/jobs` answers exactly what it used to.
+const DEFAULT_JOB_PAGE: u32 = 200;
+/// A job row is small, so a page this large already covers a whole
+/// desktop history view — and a hard cap keeps one request from pulling
+/// the entire table.
+const MAX_JOB_PAGE: u32 = 1000;
+
+const JOB_STATUSES: [&str; 5] = ["queued", "printing", "success", "failed", "cancelled"];
+const JOB_SOURCES: [&str; 5] = ["ui", "api", "deeplink", "batch", "test"];
+
+/// The validated, normalized form of [`JobsQuery`]: `from`/`to` rewritten
+/// into the `created_at` storage format so they compare correctly.
+struct JobsFilter {
+    limit: u32,
+    offset: i64,
+    status: Option<String>,
+    source: Option<String>,
+    printer_id: Option<i64>,
+    template_id: Option<i64>,
+    from: Option<String>,
+    to: Option<String>,
+}
+
+fn validate_jobs_query(q: &JobsQuery) -> Result<JobsFilter, ApiRejection> {
+    let limit = q.limit.unwrap_or(DEFAULT_JOB_PAGE);
+    if !(1..=MAX_JOB_PAGE).contains(&limit) {
+        return Err(ApiRejection::BadRequest(format!(
+            "limit must be between 1 and {MAX_JOB_PAGE}"
+        )));
+    }
+    // Clamp, don't refuse: an offset past the end of the table is a
+    // legal (if pointless) answer — an empty page.
+    let offset = q.offset.unwrap_or(0).min(i64::MAX as u64) as i64;
+    let status = match q.status.as_deref() {
+        None => None,
+        Some(s) => {
+            if !JOB_STATUSES.contains(&s) {
+                return Err(ApiRejection::BadRequest(format!(
+                    "status must be one of: {}",
+                    JOB_STATUSES.join(", ")
+                )));
+            }
+            Some(s.to_string())
+        }
+    };
+    let source = match q.source.as_deref() {
+        None => None,
+        Some(s) => {
+            if !JOB_SOURCES.contains(&s) {
+                return Err(ApiRejection::BadRequest(format!(
+                    "source must be one of: {}",
+                    JOB_SOURCES.join(", ")
+                )));
+            }
+            Some(s.to_string())
+        }
+    };
+    Ok(JobsFilter {
+        limit,
+        offset,
+        status,
+        source,
+        printer_id: q.printer_id,
+        template_id: q.template_id,
+        from: q
+            .from
+            .as_deref()
+            .map(job_time_bound)
+            .transpose()?
+            .map(|b| b.0),
+        to: q
+            .to
+            .as_deref()
+            .map(job_time_bound)
+            .transpose()?
+            .map(|b| b.1),
+    })
+}
+
+/// Normalize a `from`/`to` bound to the `created_at` storage format —
+/// UTC `YYYY-MM-DD HH:MM:SS`, the shape of `datetime('now')` — so a
+/// plain string comparison orders it the way SQLite stores it.
+///
+/// RFC 3339 wins (any offset, normalized to UTC); a bare `YYYY-MM-DD`
+/// date means the start of that day for `from` and the end of it for
+/// `to`, so `from=2026-01-02&to=2026-01-02` selects the whole day.
+fn job_time_bound(raw: &str) -> Result<(String, String), ApiRejection> {
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(raw) {
+        let instant = dt
+            .with_timezone(&chrono::Utc)
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        return Ok((instant.clone(), instant));
+    }
+    if let Ok(day) = chrono::NaiveDate::parse_from_str(raw, "%Y-%m-%d") {
+        let day0 = day
+            .and_hms_opt(0, 0, 0)
+            .ok_or_else(|| ApiRejection::BadRequest(format!("invalid date: {raw}")))?;
+        let day1 = day
+            .and_hms_opt(23, 59, 59)
+            .ok_or_else(|| ApiRejection::BadRequest(format!("invalid date: {raw}")))?;
+        return Ok((
+            day0.format("%Y-%m-%d %H:%M:%S").to_string(),
+            day1.format("%Y-%m-%d %H:%M:%S").to_string(),
+        ));
+    }
+    Err(ApiRejection::BadRequest(format!(
+        "expected RFC 3339 (2026-01-02T10:00:00Z) or YYYY-MM-DD, got: {raw}"
+    )))
+}
+
+/// The five `details` columns read from a job row, in SELECT order: the
+/// job's own `printer_id`, the joined printer name, the job's own
+/// `template_id`, the joined template name, and `settings_json`. The ids
+/// are read from the job's own FK columns, not the joined `p.id`/`t.id`;
+/// with the FKs ON DELETE SET NULL, a deleted reference reads null for
+/// both the id and the name.
+type JobDetailCols = (
+    Option<i64>,
+    Option<String>,
+    Option<i64>,
+    Option<String>,
+    Option<String>,
+);
+
+/// The `details` object both job endpoints append (P20): the names the
+/// job points at, not only the ids. `printer`/`template` are the same
+/// name strings the `print.succeeded` callback carries (see
+/// [`crate::api::callback::CallbackPayload`]) and come from the same
+/// `printers`/`templates` rows, so the webhook and the API cannot drift
+/// apart. `settings` is the job's stored `settings_json` — margins,
+/// page range, … — or null when the row carries none.
+fn job_details(
+    printer_id: Option<i64>,
+    printer_name: Option<String>,
+    template_id: Option<i64>,
+    template_name: Option<String>,
+    settings_json: Option<&str>,
+) -> Value {
+    // The pipeline normalizes settings before storing (print.rs), so a
+    // parse failure means a hand-edited row; echo an empty object the
+    // way the reprint path does instead of dropping the whole details.
+    let settings = settings_json
+        .map(|s| serde_json::from_str::<Value>(s).unwrap_or(Value::Object(serde_json::Map::new())))
+        .unwrap_or(Value::Null);
+    json!({
+        "printer_id": printer_id,
+        "printer": printer_name,
+        "template_id": template_id,
+        "template": template_name,
+        "settings": settings,
+    })
+}
+
 async fn get_job(
     State(state): State<ApiState>,
     Path(id): Path<i64>,
@@ -691,9 +869,13 @@ async fn get_job(
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, status, error, duration_ms, copies, source, created_at,
-                    requested_by_device_id, template_revision
-             FROM print_jobs WHERE id = ?1",
+            "SELECT j.id, j.status, j.error, j.duration_ms, j.copies, j.source, j.created_at,
+                    j.requested_by_device_id, j.template_revision,
+                    j.printer_id, p.name, j.template_id, t.name, j.settings_json
+             FROM print_jobs j
+             LEFT JOIN printers p ON p.id = j.printer_id
+             LEFT JOIN templates t ON t.id = j.template_id
+             WHERE j.id = ?1",
         )
         .map_err(ApiRejection::from)?;
 
@@ -702,6 +884,14 @@ async fn get_job(
         .next()
         .map_err(ApiRejection::from)?
         .ok_or_else(|| ApiRejection::NotFound(format!("Job {} not found", id)))?;
+
+    let (printer_id, printer_name, template_id, template_name, settings_json): JobDetailCols = (
+        row.get(9)?,
+        row.get(10)?,
+        row.get(11)?,
+        row.get(12)?,
+        row.get(13)?,
+    );
 
     Ok(Json(json!({
         "id": row.get::<_, i64>(0)?,
@@ -713,24 +903,71 @@ async fn get_job(
         "created_at": row.get::<_, String>(6)?,
         "requested_by_device_id": row.get::<_, Option<String>>(7)?,
         "template_revision": row.get::<_, Option<i64>>(8)?,
+        "details": job_details(printer_id, printer_name, template_id, template_name, settings_json.as_deref()),
     })))
 }
 
-async fn list_jobs(State(state): State<ApiState>) -> Result<Json<Value>, ApiRejection> {
+async fn list_jobs(
+    State(state): State<ApiState>,
+    Query(query): Query<JobsQuery>,
+) -> Result<Json<Value>, ApiRejection> {
+    let f = validate_jobs_query(&query)?;
     let db = state.db;
     let guard = db.lock().map_err(ApiRejection::from)?;
     let conn = guard.connection();
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, status, source, copies, created_at, requested_by_device_id,
-                    template_revision
-             FROM print_jobs ORDER BY id DESC LIMIT 200",
-        )
-        .map_err(ApiRejection::from)?;
+    // The LEFT JOINs (not INNER) keep jobs whose printer or template was
+    // deleted; with the FKs ON DELETE SET NULL both the id and the
+    // joined name read null for such a job.
+    let mut sql = String::from(
+        "SELECT j.id, j.status, j.source, j.copies, j.created_at,
+                j.requested_by_device_id, j.template_revision,
+                j.printer_id, p.name, j.template_id, t.name, j.settings_json
+         FROM print_jobs j
+         LEFT JOIN printers p ON p.id = j.printer_id
+         LEFT JOIN templates t ON t.id = j.template_id",
+    );
+    let mut where_parts: Vec<String> = Vec::new();
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+    if let Some(status) = &f.status {
+        where_parts.push("j.status = ?".to_string());
+        params.push(Box::new(status.clone()));
+    }
+    if let Some(source) = &f.source {
+        where_parts.push("j.source = ?".to_string());
+        params.push(Box::new(source.clone()));
+    }
+    if let Some(printer_id) = f.printer_id {
+        where_parts.push("j.printer_id = ?".to_string());
+        params.push(Box::new(printer_id));
+    }
+    if let Some(template_id) = f.template_id {
+        where_parts.push("j.template_id = ?".to_string());
+        params.push(Box::new(template_id));
+    }
+    if let Some(from) = &f.from {
+        where_parts.push("j.created_at >= ?".to_string());
+        params.push(Box::new(from.clone()));
+    }
+    if let Some(to) = &f.to {
+        where_parts.push("j.created_at <= ?".to_string());
+        params.push(Box::new(to.clone()));
+    }
+    if !where_parts.is_empty() {
+        sql.push_str(" WHERE ");
+        sql.push_str(&where_parts.join(" AND "));
+    }
+    sql.push_str(" ORDER BY j.id DESC LIMIT ? OFFSET ?");
+    params.push(Box::new(f.limit as i64));
+    params.push(Box::new(f.offset));
+
+    let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|b| b.as_ref()).collect();
+    let mut stmt = conn.prepare(&sql).map_err(ApiRejection::from)?;
 
     let jobs: Vec<Value> = stmt
-        .query_map([], |row| {
+        .query_map(refs.as_slice(), |row| {
+            let (printer_id, printer_name, template_id, template_name, settings_json): JobDetailCols =
+                (row.get(7)?, row.get(8)?, row.get(9)?, row.get(10)?, row.get(11)?);
             Ok(json!({
                 "id": row.get::<_, i64>(0)?,
                 "status": row.get::<_, String>(1)?,
@@ -739,14 +976,23 @@ async fn list_jobs(State(state): State<ApiState>) -> Result<Json<Value>, ApiReje
                 "created_at": row.get::<_, String>(4)?,
                 "requested_by_device_id": row.get::<_, Option<String>>(5)?,
                 "template_revision": row.get::<_, Option<i64>>(6)?,
+                "details": job_details(printer_id, printer_name, template_id, template_name, settings_json.as_deref()),
             }))
         })
         .map_err(ApiRejection::from)?
         .filter_map(Result::ok)
         .collect();
 
+    // `count` stays the size of the page answered (old clients read it
+    // that way); `limit`/`offset` echo the parameters so a client can
+    // page without remembering what it asked for.
     let count = jobs.len();
-    Ok(Json(json!({ "jobs": jobs, "count": count })))
+    Ok(Json(json!({
+        "jobs": jobs,
+        "count": count,
+        "limit": f.limit,
+        "offset": f.offset,
+    })))
 }
 
 async fn retry_job(

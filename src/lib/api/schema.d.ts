@@ -4111,7 +4111,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Scheduled cleanup: purge expired sessions and tombstones older than the retention window. Bearer CRON_SECRET; 404 when unconfigured. */
+        /** @description Scheduled cleanup: purge expired sessions and tombstones older than the retention window. Bearer CRON_SECRET; 503 when CRON_SECRET is unset. */
         get: {
             parameters: {
                 query?: never;
@@ -4154,7 +4154,7 @@ export interface paths {
                     };
                 };
                 /** @description Default Response */
-                404: {
+                503: {
                     headers: {
                         [name: string]: unknown;
                     };

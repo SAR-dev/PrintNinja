@@ -24,6 +24,13 @@ export interface Variable {
 /** Longest dataset name the Designer accepts. */
 export const DATASET_NAME_MAX = 15;
 
+/**
+ * The built-in fallback dataset's stored name. It is sync data, so it
+ * stays this exact string everywhere it is saved or compared; only its
+ * display is translated (P38).
+ */
+export const SAMPLE_ORDER_NAME = "Sample Order";
+
 /** Variables the engine provides even when the dataset has no such key. */
 const EXTRA_VARIABLES = ["barcode", "qr"];
 
@@ -120,6 +127,11 @@ export function SampleDataPanel({
   const [query, setQuery] = useState("");
   const [showJson, setShowJson] = useState(false);
 
+  // The built-in dataset keeps its stable stored name; only the display
+  // is translated (P38).
+  const displayName = (name: string) =>
+    name === SAMPLE_ORDER_NAME ? t("designer.sample_order_name") : name;
+
   const selected =
     datasets.find((d) => d.name === selectedName) ?? datasets[0] ?? null;
 
@@ -192,15 +204,17 @@ export function SampleDataPanel({
                     <input
                       type="radio"
                       name="dataset"
-                      aria-label={t("designer.sample_use", { name: ds.name })}
+                      aria-label={t("designer.sample_use", {
+                        name: displayName(ds.name),
+                      })}
                       checked={active}
                       onChange={() => onSelect(ds.name)}
                     />
                     <span
                       className="min-w-0 flex-1 truncate text-sm font-medium"
-                      title={ds.name}
+                      title={displayName(ds.name)}
                     >
-                      {ds.name}
+                      {displayName(ds.name)}
                     </span>
                   </label>
                   <div className="flex shrink-0 gap-0.5">
@@ -219,7 +233,7 @@ export function SampleDataPanel({
                       size="icon"
                       className="h-6 w-6"
                       aria-label={t("designer.sample_delete", {
-                        name: ds.name,
+                        name: displayName(ds.name),
                       })}
                       title={t("common.delete")}
                       onClick={() => onDelete(ds)}
@@ -245,7 +259,7 @@ export function SampleDataPanel({
         {datasets.some((ds) => ds.isDefault) && (
           <p className="text-xs text-muted-foreground">
             {t("designer.sample_default_note", {
-              name: datasets.find((ds) => ds.isDefault)!.name,
+              name: displayName(datasets.find((ds) => ds.isDefault)!.name),
             })}
           </p>
         )}

@@ -449,6 +449,10 @@ impl PdfRenderer {
             // 1 CSS px = 1 printer dot: the PNG comes out exactly the
             // label in dots — no HiDPI scaling, no scrollbar gutters.
             "--force-device-scale-factor=1",
+            // As in the PDF path: without it headless Edge writes nothing
+            // to stderr on failure, which is why this error used to end in
+            // an empty "stderr: ".
+            "--enable-logging=stderr",
         ]
         .iter()
         .map(|a| a.to_string())
@@ -476,10 +480,36 @@ impl PdfRenderer {
         if !(run.output.status.success() && png_path.exists()) {
             let stderr = String::from_utf8_lossy(&run.output.stderr);
             let _ = tokio::fs::remove_file(&png_path).await;
+            tracing::warn!(
+                edge = %edge_path.display(),
+                args = %args.join(" "),
+                status = %run.output.status,
+                "Edge screenshot did not produce a PNG"
+            );
+            let is_msedge = std::path::Path::new(&edge_path)
+                .file_name()
+                .is_some_and(|n| n == "msedge.exe");
+            // Same two named causes as the PDF path (exit 0, nothing
+            // written): an elevated parent, or a resident Edge session that
+            // took the launch. Only for msedge.exe.
+            if run.output.status.success() && is_msedge {
+                if elevation::is_elevated() {
+                    return Err(anyhow!("{}", elevation::ELEVATED_ERROR));
+                }
+                if fix::processes_running("msedge.exe") {
+                    return Err(anyhow!(
+                        "Edge handed the screenshot job to a running Edge session \
+                         (exit 0, no PNG) — close all Edge windows, or run Fix PC \
+                         printing (Settings > Diagnostics)"
+                    ));
+                }
+            }
             return Err(anyhow!(
-                "Edge screenshot did not produce a PNG (status {}, stderr: {})",
+                "Edge screenshot did not produce a PNG (status {}{})",
                 run.output.status,
-                stderr.trim()
+                stderr_excerpt(&stderr)
+                    .map(|s| format!(", Edge stderr: {s}"))
+                    .unwrap_or_default()
             ));
         }
         tracing::info!(
