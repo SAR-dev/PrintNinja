@@ -55,6 +55,19 @@ describe("loadConfig", () => {
     expect(config.databaseAuthToken).toBe("secret");
   });
 
+  it("treats an empty CRON_SECRET as unset (compose and .env both produce one)", () => {
+    expect(loadConfig(required).cronSecret).toBeUndefined();
+    // `${CRON_SECRET:-}` in docker-compose and a bare `CRON_SECRET=` in
+    // .env both land here as an empty string — it must mean "disabled",
+    // not a startup failure.
+    expect(
+      loadConfig({ ...required, CRON_SECRET: "" }).cronSecret,
+    ).toBeUndefined();
+    expect(loadConfig({ ...required, CRON_SECRET: "s3cret" }).cronSecret).toBe(
+      "s3cret",
+    );
+  });
+
   it("coerces numeric strings and rejects out-of-range values", () => {
     const config = loadConfig({ ...required, PORT: "4000", TRUST_PROXY: "2" });
     expect(config.port).toBe(4000);

@@ -1,5 +1,5 @@
 import type { RenderPair } from "@/lib/agent/types";
-import { isAndroid } from "@/lib/android/background";
+import { isAndroid } from "@/lib/android/platform";
 import { readSetting } from "@/lib/settings";
 
 /** Settings keys backing shared rendering (see Automation → Phones). */

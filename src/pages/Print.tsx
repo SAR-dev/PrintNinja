@@ -71,6 +71,7 @@ import { listTemplates } from "@/lib/templates/listTemplates";
 import type { TemplateListRow } from "@/lib/templates/listTemplates";
 import { compileTemplateCss } from "@/lib/templates/compileTemplateCss";
 import { PrintPreview } from "@/components/PrintPreview";
+import { renderDesignPages } from "@/lib/render/renderTemplate";
 import { resolvePaper } from "@/lib/render/printLayout";
 import { derivePaperKey } from "@/lib/paperPresets";
 import { PaperSizeFields } from "@/components/print/PaperSizeFields";
@@ -438,10 +439,6 @@ function PrintForm() {
           }
           return;
         }
-        const { renderDesignPages } = await import(
-          "@/lib/render/renderTemplate"
-        );
-
         // Templates saved before per-template compilation have no stored
         // Tailwind CSS. Compile on the fly so the preview matches.
         let compiledCss = template.compiled_css ?? "";

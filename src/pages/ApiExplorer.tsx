@@ -360,7 +360,7 @@ export function ApiExplorerPanel({
               <CardTitle className="text-base">
                 {t("explorer.endpoints")}
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  live: {baseUrl(status)}
+                  {t("explorer.endpoints_live", { url: baseUrl(status) })}
                 </span>
               </CardTitle>
             </CardHeader>
@@ -583,7 +583,10 @@ export function ApiExplorerPanel({
                     className="max-h-96 overflow-auto rounded-md bg-muted p-3 font-mono text-xs"
                     tabIndex={0}
                   >
-                    {formatResponse(response.text)}
+                    {formatResponse(
+                      response.text,
+                      t("explorer.empty_response"),
+                    )}
                   </pre>
                 </div>
               )}
@@ -596,8 +599,8 @@ export function ApiExplorerPanel({
 }
 
 /** Pretty-print JSON bodies; pass anything else through untouched. */
-function formatResponse(text: string): string {
-  if (!text) return "(empty body — e.g. a 204 cancel)";
+function formatResponse(text: string, empty: string): string {
+  if (!text) return empty;
   try {
     return JSON.stringify(JSON.parse(text), null, 2);
   } catch {

@@ -69,8 +69,10 @@ const configSchema = z
     DATABASE_URL: z.string().min(1),
     DATABASE_AUTH_TOKEN: z.string().optional(),
     // Shared secret for the scheduled cleanup endpoint
-    // (`GET /v2/internal/cleanup`). Unset disables the endpoint (404).
-    CRON_SECRET: z.string().min(1).optional(),
+    // (`GET /v2/internal/cleanup`). Unset disables the endpoint (503).
+    // An empty value counts as unset: `${CRON_SECRET:-}` in compose
+    // and a bare `CRON_SECRET=` in `.env` both produce one.
+    CRON_SECRET: z.union([z.string().min(1), z.literal("")]).optional(),
     LOG_LEVEL: z
       .enum(["trace", "debug", "info", "warn", "error", "fatal"])
       .default("info"),
@@ -157,7 +159,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: parsed.PORT,
     databaseUrl: parsed.DATABASE_URL,
     databaseAuthToken: parsed.DATABASE_AUTH_TOKEN,
-    cronSecret: parsed.CRON_SECRET,
+    cronSecret: parsed.CRON_SECRET || undefined,
     logLevel: parsed.LOG_LEVEL,
     corsOrigins: parsed.CORS_ORIGINS,
     trustProxy: parsed.TRUST_PROXY,

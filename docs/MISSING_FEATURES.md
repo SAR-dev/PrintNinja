@@ -141,9 +141,9 @@ These are small or medium jobs that can be picked up without a big project. The 
 
 **18. \[Medium\] Batch printing is half-built.** *Problem:* the database table, the worker, the metrics and the History screen (a "batch" column and filter) all exist, but **nothing ever creates a batch**. The column is always empty, the filter matches nothing, and the metric always reads 0. *Solutions:* (a) **Recommended:** add `POST /v1/batches` (and a matching app command) that takes a list of print requests, inserts one `batches` row and queues each job with its `batch_id`. (b) Add a "Print selected" button in History or on a template's data list that calls it. (c) If batches are not wanted soon, hide the column, filter and metric until they are.
 
-**19. \[Small\] The job list has no paging or filters.** *Problem:* `GET /v1/jobs` returns at most 200 jobs with no way to ask for older ones and no filters for status, source, printer, template or date. Older jobs are unreachable through the API. *Solutions:* (a) **Recommended:** add `limit`, `offset` (or a `before_id` cursor) and filters `status`, `source`, `printer_id`, `template_id`, `from`, `to`. (b) Keep the default of 200 so old clients still work. (c) Update the OpenAPI spec and tests together.
+**✅ 19. \[Small\] The job list has no paging or filters.** *Problem:* `GET /v1/jobs` returns at most 200 jobs with no way to ask for older ones and no filters for status, source, printer, template or date. Older jobs are unreachable through the API. *Solutions:* (a) **Recommended:** add `limit`, `offset` (or a `before_id` cursor) and filters `status`, `source`, `printer_id`, `template_id`, `from`, `to`. (b) Keep the default of 200 so old clients still work. (c) Update the OpenAPI spec and tests together.
 
-**20. \[Small\] Job API replies leave out useful details.** *Problem:* they return only IDs and status, not the printer name, template name, settings or data. Yet the `print.succeeded` webhook for the same job does include names, and the data is already in the database. *Solutions:* (a) **Recommended:** join the printer and template tables and return names, ids and settings. (b) Return a small `details` object so existing fields do not change. (c) Reuse the webhook's serializer so both stay in sync.
+**✅ 20. \[Small\] Job API replies leave out useful details.** *Problem:* they return only IDs and status, not the printer name, template name, settings or data. Yet the `print.succeeded` webhook for the same job does include names, and the data is already in the database. *Solutions:* (a) **Recommended:** join the printer and template tables and return names, ids and settings. (b) Return a small `details` object so existing fields do not change. (c) Reuse the webhook's serializer so both stay in sync.
 
 **✅ 21. \[Small\] `POST /v1/print` is weaker than the app's own screens.** *Problem:* it cannot set margins or print per-record runs (label runs), and it does not check values for orientation, fit, page range or grayscale, even though the API docs list allowed values. *Solutions:* (a) **Recommended:** add the four margins and `records` to the request and pass them into the same `PrintRequest` the UI uses. (b) Validate the setting values and return a clear 400 error. (c) Share one validation function with items 23 and 24.
 
@@ -165,9 +165,9 @@ These are small or medium jobs that can be picked up without a big project. The 
 
 **29. \[Small\] Your own template list has no search or sort.** *Problem:* the community list accepts `q` and `sort=updated|used|name`; `GET /v2/templates/mine` only pages, newest first, so a large library can only be paged. *Solutions:* (a) **Recommended:** accept `q` and `sort` and reuse the `LIKE` search from `listPublished`. (b) Add an index on the name column if it gets slow. (c) Use it for the screen fix in item 35.
 
-**30. \[Small\] docker-compose ignores most documented settings.** *Problem:* it passes along only a few (such as `DATABASE_URL`, `CORS_ORIGINS`, `LOG_LEVEL` and the rate limit settings). `TRUST_PROXY`, `SESSION_TTL_DAYS`, `CRON_SECRET` and `ARGON2_*` do nothing in Docker. Behind a reverse proxy every client looks like one IP, so one busy client can get everyone rate-limited. *Solutions:* (a) **Recommended:** list every variable from `env.example` in compose with defaults, for example `TRUST_PROXY: ${TRUST_PROXY:-0}`. (b) Use `env_file: .env` so new variables are never missed. (c) Add a check script that fails when `env.example` and compose differ.
+**✅ 30. \[Small\] docker-compose ignores most documented settings.** *Problem:* it passes along only a few (such as `DATABASE_URL`, `CORS_ORIGINS`, `LOG_LEVEL` and the rate limit settings). `TRUST_PROXY`, `SESSION_TTL_DAYS`, `CRON_SECRET` and `ARGON2_*` do nothing in Docker. Behind a reverse proxy every client looks like one IP, so one busy client can get everyone rate-limited. *Solutions:* (a) **Recommended:** list every variable from `env.example` in compose with defaults, for example `TRUST_PROXY: ${TRUST_PROXY:-0}`. (b) Use `env_file: .env` so new variables are never missed. (c) Add a check script that fails when `env.example` and compose differ.
 
-**31. \[Small\] `CRON_SECRET` is missing from `env.example`.** *Problem:* on Vercel the daily cleanup is the only way old data is purged, and it returns 404 when `CRON_SECRET` is not set. Expired sessions and sync tombstones pile up forever, which slows syncing over time. *Solutions:* (a) **Recommended:** add `CRON_SECRET` to `env.example` with a note on how to generate it. (b) Log a loud warning at start-up on Vercel when it is missing. (c) Return 401 or 503 (not 404) so the cause is obvious.
+**✅ 31. \[Small\] `CRON_SECRET` is missing from `env.example`.** *Problem:* on Vercel the daily cleanup is the only way old data is purged, and it returns 404 when `CRON_SECRET` is not set. Expired sessions and sync tombstones pile up forever, which slows syncing over time. *Solutions:* (a) **Recommended:** add `CRON_SECRET` to `env.example` with a note on how to generate it. (b) Log a loud warning at start-up on Vercel when it is missing. (c) Return 401 or 503 (not 404) so the cause is obvious.
 
 **32. \[Small\] Sessions cannot be listed or revoked one by one.** *Problem:* the only option is "log out everywhere". Someone who lost a laptop cannot see which devices are signed in and has to sign out every good device too. *Solutions:* (a) **Recommended:** store a device label and last-used time per session, then add `GET /v2/auth/sessions` and `DELETE /v2/auth/sessions/{id}`. (b) Mark the current session in the list. (c) Add a "Signed-in devices" section in Settings.
 
@@ -183,7 +183,7 @@ These are small or medium jobs that can be picked up without a big project. The 
 
 **✅ 37. \[Small\] Three barcode types preview fine but print blank.** *Problem:* `datamatrix`, `pdf417` and `aztec` show in the preview, but the printing code does not support them. The page prints an empty space and nothing warns you. *Solutions:* (a) **Recommended short term:** hide these types or mark them "preview only" in the Helpers panel, and warn at design and print time. (b) Add Rust support through a barcode library that covers them. (c) Render these types in the JS preview engine and send the image into the print pipeline.
 
-**38. \[Small\] English text in the Japanese UI.** *Problem:* several strings are hardcoded: designer save messages, printer setup table headings and dialogs, Settings font messages, the default "Cancel" on confirm dialogs, two API Explorer messages and the sample dataset name "Sample Order". Workaround today: switch the app to English. *Solutions:* (a) **Recommended:** move each string into `en.ts` and `ja.ts` and call the translation function. (b) Change the `ConfirmDialog` default `cancelLabel` to the translated "Cancel", which fixes every call site at once. (c) Add a lint or test that fails on obvious hardcoded UI text. (d) Translate only the display of the sample dataset name; keep the stored name stable.
+**✅ 38. \[Small\] English text in the Japanese UI.** *Problem:* several strings are hardcoded: designer save messages, printer setup table headings and dialogs, Settings font messages, the default "Cancel" on confirm dialogs, two API Explorer messages and the sample dataset name "Sample Order". Workaround today: switch the app to English. *Solutions:* (a) **Recommended:** move each string into `en.ts` and `ja.ts` and call the translation function. (b) Change the `ConfirmDialog` default `cancelLabel` to the translated "Cancel", which fixes every call site at once. (c) Add a lint or test that fails on obvious hardcoded UI text. (d) Translate only the display of the sample dataset name; keep the stored name stable.
 
 ## Android
 
@@ -207,34 +207,34 @@ Cheapest and most visible first.
 
 | Order | Item | Effort | Why |
 | --- | --- | --- | --- |
-| 1 | 30. docker-compose ignores env vars | Small | Self-hosters' settings silently do nothing |
-| 2 | 31. `CRON_SECRET` missing from `env.example` | Small | Cleanup never runs on Vercel |
-| 3 | 42. Deep links on Android | Small | Documented feature that cannot work on the phone |
-| 4 | 44. Notification permission asked once | Small | Declining hides the service notification forever |
-| 5 | 45. Update badge without an Android file | Small | Misleading badge |
-| 6 | 38. English text in the Japanese UI | Small | Visible polish issue |
-| 7 | 36. History cannot filter by template | Small | README promises it |
-| 8 | 29. Own template list has no search or sort | Small | Server side of item 35 |
-| 9 | 35. Mine and Saved tabs have no search or sort | Small | Do after item 29 |
-| 10 | 19. Job list has no paging or filters | Small | Older jobs are unreachable through the API |
-| 11 | 20. Job replies omit printer and template | Small | The data is already in the database |
-| 12 | 32. Sessions cannot be revoked one by one | Small | Lost device means logging out everywhere |
-| 13 | 33. No limits on templates, datasets, profiles | Small | Protects self-hosted servers from unbounded growth |
-| 14 | 41. No background job notification | Medium | Failures are invisible |
-| 15 | 26. Account export and backup | Medium | Basic account lifecycle, mostly cheap to build |
-| 16 | 27. Account deletion | Medium | Basic account lifecycle, mostly cheap to build |
-| 17 | 28. No read or list endpoints | Medium | Integrations need a full sync cache without it |
-| 18 | 18. Batch printing entry point | Medium | Worker, metrics and History column already exist |
-| 19 | 34. Version history screen | Medium | Promised in the README, and the API is ready |
-| 20 | ✅ 22. Bad `json_path` prints blanks | Small | Solved: an unresolvable path now fails the job with a clear message; an explicit `null` still resolves |
-| 21 | ✅ 24. Invalid orientation and fit accepted | Small | Solved: one shared validator normalizes case and rejects unknown values on every print path |
-| 22 | ✅ 37. Preview-only barcodes print blank | Small | Solved: "preview only" badge, design-time hint, print-time confirm |
-| 23 | ✅ 39. Plain HTTP blocked in release builds | Small | Solved: cleartext patching already existed; the real bug was the patch script failing on CRLF build files (Windows) |
-| 24 | ✅ 40. Battery toggle shows false success | Small | Solved: permission declared, rejections surfaced, real state shown after the dialog |
-| 25 | ✅ 43. Queue stops after Android kills the app | Medium | Solved (option b): a restarted service has no Tauri core, so the worker can't run there — the notification now honestly says the queue is paused, and reopening the app resumes it with a visible toast |
-| 26 | ✅ 21. `/v1/print` margins, records, validation | Small | Solved: the API now takes the four margins and `records`, runs them through the shared validator, and returns a clear 400 (like orientation/fit in item 24) instead of silently ignoring them |
-| 27 | ✅ 25. Print via PC has no margins | Small | Solved: the phone now sends the four margins over to the PC, which runs them through the same shared validator — a phone job and a local job lay out identically |
-| 28 | ✅ 23. Deep links miss options | Small | Solved: `printninja://print` now carries `page_range`, `grayscale` and the four margins, each run through the shared validator (a bad value drops to "unset", the deep-link convention) |
+| 1 | 42. Deep links on Android | Small | Documented feature that cannot work on the phone |
+| 2 | 44. Notification permission asked once | Small | Declining hides the service notification forever |
+| 3 | 45. Update badge without an Android file | Small | Misleading badge |
+| 4 | 36. History cannot filter by template | Small | README promises it |
+| 5 | 29. Own template list has no search or sort | Small | Server side of item 35 |
+| 6 | 35. Mine and Saved tabs have no search or sort | Small | Do after item 29 |
+| 7 | 32. Sessions cannot be revoked one by one | Small | Lost device means logging out everywhere |
+| 8 | 33. No limits on templates, datasets, profiles | Small | Protects self-hosted servers from unbounded growth |
+| 9 | 41. No background job notification | Medium | Failures are invisible |
+| 10 | 26. Account export and backup | Medium | Basic account lifecycle, mostly cheap to build |
+| 11 | 27. Account deletion | Medium | Basic account lifecycle, mostly cheap to build |
+| 12 | 28. No read or list endpoints | Medium | Integrations need a full sync cache without it |
+| 13 | 18. Batch printing entry point | Medium | Worker, metrics and History column already exist |
+| 14 | 34. Version history screen | Medium | Promised in the README, and the API is ready |
+| 15 | ✅ 22. Bad `json_path` prints blanks | Small | Solved: an unresolvable path now fails the job with a clear message; an explicit `null` still resolves |
+| 16 | ✅ 24. Invalid orientation and fit accepted | Small | Solved: one shared validator normalizes case and rejects unknown values on every print path |
+| 17 | ✅ 37. Preview-only barcodes print blank | Small | Solved: "preview only" badge, design-time hint, print-time confirm |
+| 18 | ✅ 39. Plain HTTP blocked in release builds | Small | Solved: cleartext patching already existed; the real bug was the patch script failing on CRLF build files (Windows) |
+| 19 | ✅ 40. Battery toggle shows false success | Small | Solved: permission declared, rejections surfaced, real state shown after the dialog |
+| 20 | ✅ 43. Queue stops after Android kills the app | Medium | Solved (option b): a restarted service has no Tauri core, so the worker can't run there — the notification now honestly says the queue is paused, and reopening the app resumes it with a visible toast |
+| 21 | ✅ 21. `/v1/print` margins, records, validation | Small | Solved: the API now takes the four margins and `records`, runs them through the shared validator, and returns a clear 400 (like orientation/fit in item 24) instead of silently ignoring them |
+| 22 | ✅ 25. Print via PC has no margins | Small | Solved: the phone now sends the four margins over to the PC, which runs them through the same shared validator — a phone job and a local job lay out identically |
+| 23 | ✅ 23. Deep links miss options | Small | Solved: `printninja://print` now carries `page_range`, `grayscale` and the four margins, each run through the shared validator (a bad value drops to "unset", the deep-link convention) |
+| 24 | ✅ 30. docker-compose ignores env vars | Small | Solved: compose now passes through every env.example var with a default, so self-hosted settings (TRUST_PROXY, SESSION_TTL_DAYS, CRON_SECRET, ARGON2_*) actually take effect |
+| 25 | ✅ 31. `CRON_SECRET` missing from `env.example` | Small | Solved: CRON_SECRET added to env.example, a loud start-up warning fires on Vercel when it's unset, and the cleanup endpoint returns 503 instead of 404 |
+| 26 | ✅ 19. Job list has no paging or filters | Small | Solved: GET /v1/jobs now takes limit/offset plus status, source, printer_id, template_id, from and to filters (OpenAPI and tests updated) |
+| 27 | ✅ 20. Job replies omit printer and template | Small | Solved: job replies now carry a details object with printer_id, printer, template_id, template and settings via LEFT JOINs |
+| 28 | ✅ 38. English text in the Japanese UI | Small | Solved: remaining hardcoded English strings moved to en/ja locales; the ConfirmDialog default cancel and the "Sample Order" display are translated while its stored name stays stable |
 
 ---
 

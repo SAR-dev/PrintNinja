@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,6 +18,7 @@ interface ConfirmDialogProps {
   description?: ReactNode;
   /** A verb phrase that says what happens, e.g. "Delete template". */
   confirmLabel: string;
+  /** Defaults to the translated "Cancel" — call sites rarely need it. */
   cancelLabel?: string;
   destructive?: boolean;
   busy?: boolean;
@@ -30,11 +32,12 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
-  cancelLabel = "Cancel",
+  cancelLabel,
   destructive = false,
   busy = false,
   onConfirm,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -48,7 +51,7 @@ export function ConfirmDialog({
             onClick={() => onOpenChange(false)}
             disabled={busy}
           >
-            {cancelLabel}
+            {cancelLabel ?? t("common.cancel")}
           </Button>
           <Button
             variant={destructive ? "destructive" : "default"}

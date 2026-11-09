@@ -38,8 +38,9 @@ test("new template from the pack chooser keeps the pack's HTML", async ({
   // client-side (the rewrite already ran once per page load, so no loop).
   await page.getByRole("link", { name: "Designer" }).click();
 
-  // Empty designer: the "New Template" action opens the pack chooser.
-  await page.getByRole("button", { name: "New Template" }).click();
+  // Empty designer: the toolbar's "New Template" button opens the pack
+  // chooser (the empty state repeats the label, so use the test id).
+  await page.getByTestId(testids.designerNewTemplate).click();
   await page.getByTestId(testids.packCard("invoice")).click();
   await page.getByTestId(testids.packNext).click();
 

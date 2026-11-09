@@ -3,6 +3,8 @@
  * For any feature requiring Rust/native code, shows an alert and returns null.
  */
 
+import { invoke } from "@/lib/invoke";
+
 export const isWebMode = (): boolean => {
   return typeof window !== "undefined" && !(window as any).__TAURI_INTERNALS__;
 };
@@ -38,6 +40,5 @@ export const guardInvoke = async <T = unknown>(
     return null;
   }
 
-  const { invoke } = await import("@/lib/invoke");
   return invoke<T>(cmd, args);
 };
