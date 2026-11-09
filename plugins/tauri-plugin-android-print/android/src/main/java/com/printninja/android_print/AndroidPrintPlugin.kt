@@ -26,6 +26,7 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Base64
 import android.util.Log
 import android.view.View
@@ -720,10 +721,11 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
 
     /**
      * The bulk endpoints a write or a status query needs: the first
-     * bulk-OUT endpoint (interface order, then endpoint order) and, when
-     * one exists, a bulk-IN endpoint — preferably on the same interface
-     * so it is claimed once. Printers that only sink bytes simply have
-     * no IN endpoint, and queries report that instead of failing.
+     * bulk-OUT endpoint (printer-class interfaces first, then interface
+     * order, then endpoint order) and, when one exists, a bulk-IN
+     * endpoint — preferably on the same interface so it is claimed once.
+     * Printers that only sink bytes simply have no IN endpoint, and
+     * queries report that instead of failing.
      */
     private data class BulkEndpoints(
         val outIface: UsbInterface,
@@ -733,10 +735,20 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
     )
 
     private fun bulkEndpoints(device: UsbDevice): BulkEndpoints? {
+        // A multi-function device (a printer plus, say, a card reader)
+        // exposes every interface, and the old "first interface with a
+        // bulk-OUT" rule could land the job on the wrong one. Interface
+        // class 7 is USB's printer class, so its interfaces are visited
+        // first; the rest keep their original order (sortedBy is stable),
+        // which is exactly the old behaviour for devices without a
+        // printer-class interface.
+        val order = (0 until device.interfaceCount).sortedBy {
+            device.getInterface(it).interfaceClass != UsbConstants.USB_CLASS_PRINTER
+        }
         var firstOut: Pair<UsbInterface, UsbEndpoint>? = null
         var firstIn: Pair<UsbInterface, UsbEndpoint>? = null
         var shared: Triple<UsbInterface, UsbEndpoint, UsbEndpoint>? = null
-        for (i in 0 until device.interfaceCount) {
+        for (i in order) {
             val iface = device.getInterface(i)
             var ifaceOut: UsbEndpoint? = null
             var ifaceIn: UsbEndpoint? = null
@@ -756,12 +768,29 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 shared = Triple(iface, ifaceOut, ifaceIn)
             }
         }
-        val out = firstOut ?: return null
+        val out = firstOut ?: run {
+            // Logged so a device that enumerates but never prints has a
+            // trace of what the endpoint scan actually saw.
+            Log.w(
+                tag,
+                "no bulk-OUT endpoint on ${device.deviceName} " +
+                    "(${device.interfaceCount} interface(s))",
+            )
+            return null
+        }
         // One interface with both directions is claimed once; otherwise the
         // first OUT interface and the first IN interface are claimed each.
         val inPair: Pair<UsbInterface, UsbEndpoint>? =
             shared?.let { it.first to it.third } ?: firstIn
-        return BulkEndpoints(out.first, out.second, inPair?.first, inPair?.second)
+        val endpoints = BulkEndpoints(out.first, out.second, inPair?.first, inPair?.second)
+        // Which interface the job goes out on, so a misdirected job on a
+        // multi-function device is one logcat line away from diagnosis.
+        Log.i(
+            tag,
+            "USB ${device.deviceName}: writing to interface ${endpoints.outIface.id} " +
+                "(class ${endpoints.outIface.interfaceClass})",
+        )
+        return endpoints
     }
 
     /**
@@ -1313,6 +1342,21 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                     invoke.reject("could not list Bluetooth devices: ${e.message}")
                 }
             }
+        }
+    }
+
+    /**
+     * Jumps straight to the system Bluetooth screen, where a printer can
+     * be paired. The Add-printer dialog offers this when its bonded list
+     * is empty — pairing is an OS flow the app cannot do itself.
+     */
+    @Command
+    fun openBluetoothSettings(invoke: Invoke) {
+        try {
+            activity.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            invoke.resolve()
+        } catch (e: Exception) {
+            invoke.reject("could not open Bluetooth settings: ${e.message}")
         }
     }
 

@@ -17,6 +17,21 @@ export function isAndroid(): boolean {
 }
 
 /**
+ * True on a desktop Linux WebView.
+ *
+ * Android's user agent also contains "Linux" (`Linux; Android 14; …`),
+ * so it must be excluded — CUPS, the only thing this drives in the UI,
+ * runs on the desktop.
+ */
+export function isLinux(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    !isAndroid() &&
+    /Linux/i.test(navigator.userAgent ?? "")
+  );
+}
+
+/**
  * Connection types the current platform can actually drive.
  *
  * Android has no System transport (and Windows-only spooler/USB/Bluetooth

@@ -47,6 +47,7 @@ import {
   RefreshCw,
   MoreHorizontal,
   AlertTriangle,
+  Info,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -311,6 +312,16 @@ export function PrinterSetupPage() {
     }
   }, [t]);
 
+  // Pairing is an OS flow the app cannot perform: hand the user to the
+  // system Bluetooth screen (Android only).
+  const openBluetoothSettings = async () => {
+    try {
+      await agent("open_bluetooth_settings", {});
+    } catch (e) {
+      notifyError(describeError(e));
+    }
+  };
+
   // The moment the dialog is on Bluetooth (Android), list the bonded
   // printers: they are one tap away, no MAC to type.
   useEffect(() => {
@@ -477,6 +488,16 @@ export function PrinterSetupPage() {
   // the add form and the tabs hide only that. `isAndroid` reads the
   // WebView user agent once per mount; it cannot change at runtime.
   const visibleTypes = useMemo(() => supportedPrinterTypes(PRINTER_TYPES), []);
+  // The dialog's connection select: the supported types, plus the row's
+  // own type while it is being edited. Android cannot drive `system`
+  // printers, but a synced row of that type must stay editable — the
+  // warning in the dialog explains the fix (re-add by address).
+  const dialogTypes = useMemo(() => {
+    const supported = supportedPrinterTypes(PRINTER_TYPES);
+    if (supported.some((x) => x.value === form.printer_type)) return supported;
+    const current = PRINTER_TYPES.find((x) => x.value === form.printer_type);
+    return current ? [...supported, current] : supported;
+  }, [form.printer_type]);
   // Android can produce PDF plus the receipt and label languages that pass
   // the per-language QA gate in platform.ts (PLAN §4, D4.4): its WebView
   // rasterizes them locally. A saved row that already uses another
@@ -738,6 +759,18 @@ export function PrinterSetupPage() {
         sp.name.trim().toLowerCase() === form.name.trim().toLowerCase(),
     );
 
+  // IPP endpoints speak PDF: with any other language, PrintNinja would
+  // send raw printer bytes over IPP, which most endpoints reject.
+  // Warn, never refuse (the same physical printer may well work that
+  // way — the user knows their device).
+  const ippNonPdfWarning =
+    form.printer_type === "ipp" && form.language !== "pdf";
+
+  // Android has no System transport: a `system` row (usually synced from
+  // a PC) cannot print on this phone. Warn, never refuse — the fix is
+  // in the message, and the row stays editable above.
+  const systemAndroidWarning = isAndroid() && form.printer_type === "system";
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -974,15 +1007,27 @@ export function PrinterSetupPage() {
                   <p className="text-xs font-medium">
                     {t("printers.found_bluetooth")}
                   </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void scanBluetooth()}
-                    disabled={scanningBt}
-                    data-testid="printers-scan-bluetooth"
-                  >
-                    {scanningBt ? t("printers.scanning") : t("printers.rescan")}
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void openBluetoothSettings()}
+                      data-testid="printers-open-bluetooth-settings"
+                    >
+                      {t("printers.bluetooth_settings_button")}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void scanBluetooth()}
+                      disabled={scanningBt}
+                      data-testid="printers-scan-bluetooth"
+                    >
+                      {scanningBt
+                        ? t("printers.scanning")
+                        : t("printers.rescan")}
+                    </Button>
+                  </div>
                 </div>
                 {btPrinters.length > 0 ? (
                   <div className="space-y-1.5">
@@ -1033,9 +1078,14 @@ export function PrinterSetupPage() {
                   </div>
                 ) : (
                   !scanningBt && (
-                    <p className="text-xs text-muted-foreground">
-                      {t("printers.no_bluetooth_printers")}
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        {t("printers.no_bluetooth_printers")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {t("printers.bluetooth_settings_hint")}
+                      </p>
+                    </div>
                   )
                 )}
               </div>
@@ -1081,7 +1131,7 @@ export function PrinterSetupPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {visibleTypes.map((x) => (
+                    {dialogTypes.map((x) => (
                       <SelectItem key={x.value} value={x.value}>
                         {t(x.labelKey)}
                       </SelectItem>
@@ -1153,6 +1203,51 @@ export function PrinterSetupPage() {
                 />
                 <p className="text-xs">
                   {t("printers.gdi_warning", { name: form.name })}
+                </p>
+              </div>
+            )}
+
+            {form.printer_type === "raw_tcp" && (
+              <div
+                role="note"
+                className="flex items-start gap-2 rounded-md border border-info/30 bg-info-soft px-3 py-2 text-info"
+              >
+                <Info
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  aria-hidden="true"
+                />
+                <p className="text-xs">
+                  {t("printers.raw_not_encrypted")}
+                </p>
+              </div>
+            )}
+
+            {ippNonPdfWarning && (
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-warning"
+              >
+                <AlertTriangle
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  aria-hidden="true"
+                />
+                <p className="text-xs">
+                  {t("printers.ipp_non_pdf_warning")}
+                </p>
+              </div>
+            )}
+
+            {systemAndroidWarning && (
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-warning"
+              >
+                <AlertTriangle
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  aria-hidden="true"
+                />
+                <p className="text-xs">
+                  {t("printers.system_android_warning")}
                 </p>
               </div>
             )}
