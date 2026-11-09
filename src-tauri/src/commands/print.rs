@@ -2045,15 +2045,19 @@ fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Optio
 pub async fn enumerate_system_printers() -> AppResult<Vec<crate::transport::PrinterInfo>> {
     #[cfg(windows)]
     {
-        Ok(tokio::task::spawn_blocking(WindowsSpooler::enumerate_printers)
-            .await
-            .unwrap_or_default())
+        Ok(
+            tokio::task::spawn_blocking(WindowsSpooler::enumerate_printers)
+                .await
+                .unwrap_or_default(),
+        )
     }
     #[cfg(target_os = "linux")]
     {
-        Ok(tokio::task::spawn_blocking(crate::transport::cups::list_blocking)
-            .await
-            .unwrap_or_default())
+        Ok(
+            tokio::task::spawn_blocking(crate::transport::cups::list_blocking)
+                .await
+                .unwrap_or_default(),
+        )
     }
     #[cfg(not(any(windows, target_os = "linux")))]
     {
@@ -2336,7 +2340,10 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("Invalid orientation 'sideways'"), "{err}");
-        assert!(err.contains("portrait") && err.contains("landscape"), "{err}");
+        assert!(
+            err.contains("portrait") && err.contains("landscape"),
+            "{err}"
+        );
         assert!(
             validate_orientation_and_fit(Some("SIDEWAYS"), Some("fit-width")).is_err(),
             "case does not smuggle a typo past"
@@ -2388,7 +2395,10 @@ mod tests {
 
     #[test]
     fn margins_absent_or_in_range_pass_through() {
-        assert_eq!(validate_margins(None, None, None, None).unwrap(), (None, None, None, None));
+        assert_eq!(
+            validate_margins(None, None, None, None).unwrap(),
+            (None, None, None, None)
+        );
         assert_eq!(
             validate_margins(Some(0.0), Some(10.0), Some(297.0), Some(MAX_MARGIN_MM)).unwrap(),
             (Some(0.0), Some(10.0), Some(297.0), Some(MAX_MARGIN_MM))

@@ -215,11 +215,15 @@ mod tests {
 
         // page_range: a raw string, validated later by the pipeline.
         assert_eq!(
-            print("printninja://print?page_range=1-3").page_range.as_deref(),
+            print("printninja://print?page_range=1-3")
+                .page_range
+                .as_deref(),
             Some("1-3")
         );
         assert_eq!(
-            print("printninja://print?page_range=1%2C3%2C5-7").page_range.as_deref(),
+            print("printninja://print?page_range=1%2C3%2C5-7")
+                .page_range
+                .as_deref(),
             Some("1,3,5-7"),
             "encoded commas decode like every other param"
         );
@@ -242,10 +246,7 @@ mod tests {
             print("printninja://print?grayscale=false").grayscale,
             Some(false)
         );
-        assert_eq!(
-            print("printninja://print?grayscale=bogus").grayscale,
-            None
-        );
+        assert_eq!(print("printninja://print?grayscale=bogus").grayscale, None);
         assert_eq!(print("printninja://print?template=Label").grayscale, None);
 
         // margins: a finite mm value the shared rulebook accepts.

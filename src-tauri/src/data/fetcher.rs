@@ -361,14 +361,21 @@ mod tests {
         let data = serde_json::json!({"a": 1});
         let err = extract_json_path(&data, "missing").unwrap_err().to_string();
         assert!(err.contains("path `missing` not found in data"), "{err}");
-        let err = extract_json_path(&data, "a.missing.deep").unwrap_err().to_string();
-        assert!(err.contains("path `a.missing.deep` not found in data"), "{err}");
+        let err = extract_json_path(&data, "a.missing.deep")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("path `a.missing.deep` not found in data"),
+            "{err}"
+        );
     }
 
     #[test]
     fn extract_json_path_out_of_range_index_is_an_error() {
         let data = serde_json::json!({"items": [10, 20, 30]});
-        let err = extract_json_path(&data, "items.[3]").unwrap_err().to_string();
+        let err = extract_json_path(&data, "items.[3]")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("path `items.[3]` not found in data"), "{err}");
         // An index into a non-array is unresolved too.
         let data = serde_json::json!({"a": {"b": 1}});
@@ -379,7 +386,9 @@ mod tests {
     #[test]
     fn extract_json_path_non_numeric_index_is_an_error() {
         let data = serde_json::json!({"items": [10, 20, 30]});
-        let err = extract_json_path(&data, "items.[abc]").unwrap_err().to_string();
+        let err = extract_json_path(&data, "items.[abc]")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("not an array index"), "{err}");
     }
 
