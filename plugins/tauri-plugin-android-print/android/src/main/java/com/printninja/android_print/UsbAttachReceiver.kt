@@ -53,17 +53,14 @@ class UsbAttachReceiver : BroadcastReceiver() {
         }
     }
 
-    /** Printers declare the class at the interface level per the USB
-     *  spec, but many also set it on the device descriptor — accept
-     *  either so the in-process request path is not class-dependent. */
+    /** The manifest `device_filter.xml` already matches only
+     *  printer-class (USB class 7) devices, so a `USB_DEVICE_ATTACHED`
+     *  that reaches here is a printer by construction. Re-check the
+     *  device class as defense-in-depth against any event the filter
+     *  did not intend. (The class lives on the device descriptor —
+     *  `UsbDevice.getDeviceClass()` — not on `UsbInterface`.) */
     private fun isPrinter(device: UsbDevice): Boolean {
-        if (device.classId == UsbConstants.USB_CLASS_PRINTER) return true
-        for (i in 0 until device.interfaceCount) {
-            if (device.getInterface(i).classId == UsbConstants.USB_CLASS_PRINTER) {
-                return true
-            }
-        }
-        return false
+        return device.deviceClass == UsbConstants.USB_CLASS_PRINTER
     }
 
     private fun deviceFromIntent(intent: Intent): UsbDevice? {
