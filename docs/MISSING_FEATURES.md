@@ -145,15 +145,15 @@ These are small or medium jobs that can be picked up without a big project. The 
 
 **20. \[Small\] Job API replies leave out useful details.** *Problem:* they return only IDs and status, not the printer name, template name, settings or data. Yet the `print.succeeded` webhook for the same job does include names, and the data is already in the database. *Solutions:* (a) **Recommended:** join the printer and template tables and return names, ids and settings. (b) Return a small `details` object so existing fields do not change. (c) Reuse the webhook's serializer so both stay in sync.
 
-**21. \[Small\] `POST /v1/print` is weaker than the app's own screens.** *Problem:* it cannot set margins or print per-record runs (label runs), and it does not check values for orientation, fit, page range or grayscale, even though the API docs list allowed values. *Solutions:* (a) **Recommended:** add the four margins and `records` to the request and pass them into the same `PrintRequest` the UI uses. (b) Validate the setting values and return a clear 400 error. (c) Share one validation function with items 23 and 24.
+**✅ 21. \[Small\] `POST /v1/print` is weaker than the app's own screens.** *Problem:* it cannot set margins or print per-record runs (label runs), and it does not check values for orientation, fit, page range or grayscale, even though the API docs list allowed values. *Solutions:* (a) **Recommended:** add the four margins and `records` to the request and pass them into the same `PrintRequest` the UI uses. (b) Validate the setting values and return a clear 400 error. (c) Share one validation function with items 23 and 24.
 
 **✅ 22. \[Small\] A wrong `json_path` prints blank fields.** *Problem:* if the path in a dataset has a typo or an out-of-range index, the job still "succeeds" and prints a page with every field empty, with no hint why. *Solutions:* (a) **Recommended:** make an unresolved path an error ("path `x.y` not found") that fails the job with a clear message. (b) Let a template mark a field optional and allow blanks only for those. (c) Add a "test path" check in the dataset form that shows the value found.
 
-**23. \[Small\] Deep links cannot carry several print options.** *Problem:* a `printninja://print` link supports preset, template, printer, url, copies, orientation, fit, test, confirm and callback, but not page range, grayscale, margins or inline data. Links must rely on a preset or template default for anything else. *Solutions:* (a) **Recommended:** add `page_range`, `grayscale` and the four margins to `DeepLinkPrint`, validated with the shared validator. (b) Allow inline data only as a small, size-limited encoded parameter, or through `url` (already supported). (c) Keep the trusted-sources check unchanged.
+**✅ 23. \[Small\] Deep links cannot carry several print options.** *Problem:* a `printninja://print` link supports preset, template, printer, url, copies, orientation, fit, test, confirm and callback, but not page range, grayscale, margins or inline data. Links must rely on a preset or template default for anything else. *Solutions:* (a) **Recommended:** add `page_range`, `grayscale` and the four margins to `DeepLinkPrint`, validated with the shared validator. (b) Allow inline data only as a small, size-limited encoded parameter, or through `url` (already supported). (c) Keep the trusted-sources check unchanged.
 
 **✅ 24. \[Small\] Bad `orientation` or `fit` values are accepted silently.** *Problem:* anything other than exactly `"landscape"` becomes portrait, and an unknown `fit` acts like `fit-width`. So `"LandScape"` or `fit: "actual"` gives a wrong-looking result with no warning, while creating a template does validate these. *Solutions:* (a) **Recommended:** reuse `VALID_ORIENTATIONS`, add `VALID_FITS`, and reject unknown values on every print path. (b) If friendliness matters, compare case-insensitively and then normalize. (c) Update the test that locks in the old fallback.
 
-**25. \[Small\] "Print via PC" cannot set margins.** *Problem:* `RemotePrintArgs` has every print option except the four margins, so a phone printing through a paired PC always gets the PC's default margins. That is weaker than a local job. *Solutions:* (a) **Recommended:** add the four margins to `RemotePrintArgs` and include them in the settings JSON. (b) Do this together with item 21, since the PC endpoint must accept them. (c) Add a test that a phone job and a local job give the same page.
+**✅ 25. \[Small\] "Print via PC" cannot set margins.** *Problem:* `RemotePrintArgs` has every print option except the four margins, so a phone printing through a paired PC always gets the PC's default margins. That is weaker than a local job. *Solutions:* (a) **Recommended:** add the four margins to `RemotePrintArgs` and include them in the settings JSON. (b) Do this together with item 21, since the PC endpoint must accept them. (c) Add a test that a phone job and a local job give the same page.
 
 ## Sync server
 
@@ -207,34 +207,34 @@ Cheapest and most visible first.
 
 | Order | Item | Effort | Why |
 | --- | --- | --- | --- |
-| 1 | 21. `/v1/print` margins, records, validation | Small | The API used by POS systems is weaker than the app |
-| 2 | 25. Print via PC has no margins | Small | Same fix area as item 21 |
-| 3 | 23. Deep links miss options | Small | Reuses the validator from items 21 and 24 |
-| 4 | 30. docker-compose ignores env vars | Small | Self-hosters' settings silently do nothing |
-| 5 | 31. `CRON_SECRET` missing from `env.example` | Small | Cleanup never runs on Vercel |
-| 6 | 42. Deep links on Android | Small | Documented feature that cannot work on the phone |
-| 7 | 44. Notification permission asked once | Small | Declining hides the service notification forever |
-| 8 | 45. Update badge without an Android file | Small | Misleading badge |
-| 9 | 38. English text in the Japanese UI | Small | Visible polish issue |
-| 10 | 36. History cannot filter by template | Small | README promises it |
-| 11 | 29. Own template list has no search or sort | Small | Server side of item 35 |
-| 12 | 35. Mine and Saved tabs have no search or sort | Small | Do after item 29 |
-| 13 | 19. Job list has no paging or filters | Small | Older jobs are unreachable through the API |
-| 14 | 20. Job replies omit printer and template | Small | The data is already in the database |
-| 15 | 32. Sessions cannot be revoked one by one | Small | Lost device means logging out everywhere |
-| 16 | 33. No limits on templates, datasets, profiles | Small | Protects self-hosted servers from unbounded growth |
-| 17 | 41. No background job notification | Medium | Failures are invisible |
-| 18 | 26. Account export and backup | Medium | Basic account lifecycle, mostly cheap to build |
-| 19 | 27. Account deletion | Medium | Basic account lifecycle, mostly cheap to build |
-| 20 | 28. No read or list endpoints | Medium | Integrations need a full sync cache without it |
-| 21 | 18. Batch printing entry point | Medium | Worker, metrics and History column already exist |
-| 22 | 34. Version history screen | Medium | Promised in the README, and the API is ready |
-| 23 | ✅ 22. Bad `json_path` prints blanks | Small | Solved: an unresolvable path now fails the job with a clear message; an explicit `null` still resolves |
-| 24 | ✅ 24. Invalid orientation and fit accepted | Small | Solved: one shared validator normalizes case and rejects unknown values on every print path |
-| 25 | ✅ 37. Preview-only barcodes print blank | Small | Solved: "preview only" badge, design-time hint, print-time confirm |
-| 26 | ✅ 39. Plain HTTP blocked in release builds | Small | Solved: cleartext patching already existed; the real bug was the patch script failing on CRLF build files (Windows) |
-| 27 | ✅ 40. Battery toggle shows false success | Small | Solved: permission declared, rejections surfaced, real state shown after the dialog |
-| 28 | ✅ 43. Queue stops after Android kills the app | Medium | Solved (option b): a restarted service has no Tauri core, so the worker can't run there — the notification now honestly says the queue is paused, and reopening the app resumes it with a visible toast |
+| 1 | 30. docker-compose ignores env vars | Small | Self-hosters' settings silently do nothing |
+| 2 | 31. `CRON_SECRET` missing from `env.example` | Small | Cleanup never runs on Vercel |
+| 3 | 42. Deep links on Android | Small | Documented feature that cannot work on the phone |
+| 4 | 44. Notification permission asked once | Small | Declining hides the service notification forever |
+| 5 | 45. Update badge without an Android file | Small | Misleading badge |
+| 6 | 38. English text in the Japanese UI | Small | Visible polish issue |
+| 7 | 36. History cannot filter by template | Small | README promises it |
+| 8 | 29. Own template list has no search or sort | Small | Server side of item 35 |
+| 9 | 35. Mine and Saved tabs have no search or sort | Small | Do after item 29 |
+| 10 | 19. Job list has no paging or filters | Small | Older jobs are unreachable through the API |
+| 11 | 20. Job replies omit printer and template | Small | The data is already in the database |
+| 12 | 32. Sessions cannot be revoked one by one | Small | Lost device means logging out everywhere |
+| 13 | 33. No limits on templates, datasets, profiles | Small | Protects self-hosted servers from unbounded growth |
+| 14 | 41. No background job notification | Medium | Failures are invisible |
+| 15 | 26. Account export and backup | Medium | Basic account lifecycle, mostly cheap to build |
+| 16 | 27. Account deletion | Medium | Basic account lifecycle, mostly cheap to build |
+| 17 | 28. No read or list endpoints | Medium | Integrations need a full sync cache without it |
+| 18 | 18. Batch printing entry point | Medium | Worker, metrics and History column already exist |
+| 19 | 34. Version history screen | Medium | Promised in the README, and the API is ready |
+| 20 | ✅ 22. Bad `json_path` prints blanks | Small | Solved: an unresolvable path now fails the job with a clear message; an explicit `null` still resolves |
+| 21 | ✅ 24. Invalid orientation and fit accepted | Small | Solved: one shared validator normalizes case and rejects unknown values on every print path |
+| 22 | ✅ 37. Preview-only barcodes print blank | Small | Solved: "preview only" badge, design-time hint, print-time confirm |
+| 23 | ✅ 39. Plain HTTP blocked in release builds | Small | Solved: cleartext patching already existed; the real bug was the patch script failing on CRLF build files (Windows) |
+| 24 | ✅ 40. Battery toggle shows false success | Small | Solved: permission declared, rejections surfaced, real state shown after the dialog |
+| 25 | ✅ 43. Queue stops after Android kills the app | Medium | Solved (option b): a restarted service has no Tauri core, so the worker can't run there — the notification now honestly says the queue is paused, and reopening the app resumes it with a visible toast |
+| 26 | ✅ 21. `/v1/print` margins, records, validation | Small | Solved: the API now takes the four margins and `records`, runs them through the shared validator, and returns a clear 400 (like orientation/fit in item 24) instead of silently ignoring them |
+| 27 | ✅ 25. Print via PC has no margins | Small | Solved: the phone now sends the four margins over to the PC, which runs them through the same shared validator — a phone job and a local job lay out identically |
+| 28 | ✅ 23. Deep links miss options | Small | Solved: `printninja://print` now carries `page_range`, `grayscale` and the four margins, each run through the shared validator (a bad value drops to "unset", the deep-link convention) |
 
 ---
 
