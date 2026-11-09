@@ -405,6 +405,11 @@ const ja: Translation = {
     barcode_field_example: "order.id",
     barcode_value_hint: "バーコードの値を入力",
     barcode_fixed_hint: "この種類は固定値で挿入されます。",
+    barcode_preview_only: "プレビューのみ",
+    barcode_preview_only_tip:
+      "プレビューのみ：内蔵プリンターはこれを描画できません — 空白として印刷されます。",
+    barcode_preview_only_hint:
+      "プレビューのみ：内蔵プリンターはこれを描画できないため、空白として印刷されます。",
     barcode_per_print: "印刷ごと、CSVの行ごとに別のコードが付きます。",
     barcode_same: "すべての印刷で同じコードになります。",
     barcode_insert: "挿入",
@@ -505,6 +510,12 @@ const ja: Translation = {
     blocker_template: "印刷するにはテンプレートを選択してください。",
     blocker_copies: "部数は1以上にしてください。",
     blocker_loading: "プリンターとテンプレートを読み込んでいます…",
+    preview_only_title: "プレビュー専用のバーコード",
+    preview_only_body:
+      "このテンプレートは内蔵プリンターが描画できない{{types}}を使用しています。空白として印刷されます。",
+    preview_only_body_static:
+      "このテンプレートには内蔵プリンターが描画できないバーコードが含まれています。空白として印刷されます。",
+    preview_only_print_anyway: "印刷する",
     pages: "ページ数",
     pages_hint:
       "ページ数は1つのオブジェクトをページごとに繰り返します（配列の場合は要素数分印刷されます）。部数はジョブ全体を再送信します。",
@@ -655,6 +666,9 @@ const ja: Translation = {
     hint_raw: "例: 192.168.1.100:9100",
     hint_bluetooth:
       "例: A4:77:17:22:33:44 — ペアリング済みデバイスのMAC（下のリストから選べます）",
+    gdi_warning_title: "ドライバがGDI専用の可能性があります(PDFデータ型なし)",
+    gdi_warning:
+      "{{name}} のプリンターキューは PDF データ型を提供していません。ドライバが GDI 専用の可能性があり、送られた PDF ジョブが印刷されない場合があります。その場合は、このシステムキューの代わりに、同じ物理プリンターをネットワークアドレス（Wi-Fi / LAN の IPP、またはデバイス自体が PDF を読める場合は Raw TCP 9100）で追加してください。",
     edit_printer: "{{name}}を編集",
     test_action: "{{name}}でテスト印刷",
     testing: "テストしています…",
@@ -905,6 +919,9 @@ const ja: Translation = {
     background_close_warning:
       "閉じるとアプリが終了し、印刷キューも停止します。",
     background_toast_updated: "バッテリー設定を更新しました",
+    background_toast_granted: "バッテリー最適化の除外を有効にしました",
+    background_toast_not_granted:
+      "バッテリー最適化の除外は有効になっていません",
     reset_body:
       "テンプレート、印刷履歴、プリンター、フォント、データセット、プロファイル、すべての設定がこのPCから完全に削除されます。アカウントはサーバーに残るため、再度サインインすると復元できます。",
     background_service: "印刷サービス",

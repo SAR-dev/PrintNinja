@@ -12,6 +12,9 @@ import {
   labelFor,
   buildBarcodeSnippet,
   isHelperSymbology,
+  isPreviewOnlySymbology,
+  findPreviewOnlyBarcodes,
+  PREVIEW_ONLY_SYMBOLOGIES,
   PRINT_SYMBOLOGIES,
 } from "@/lib/utils/barcode";
 
@@ -346,5 +349,53 @@ describe("print symbologies", () => {
   it("treat QR as a helper type too", () => {
     expect(isHelperSymbology("qr")).toBe(true);
     expect(isHelperSymbology("datamatrix")).toBe(false);
+  });
+});
+
+describe("preview-only symbologies", () => {
+  it("is exactly the complement of the helper types", () => {
+    for (const { value } of BARCODE_TYPES) {
+      expect(isPreviewOnlySymbology(value), value).toBe(
+        !isHelperSymbology(value),
+      );
+    }
+  });
+
+  it("covers the three 2D types that print blank", () => {
+    for (const type of ["datamatrix", "pdf417", "aztec"]) {
+      expect(PREVIEW_ONLY_SYMBOLOGIES).toContain(type);
+    }
+  });
+});
+
+describe("findPreviewOnlyBarcodes", () => {
+  it("finds a preview-only helper call", () => {
+    const f = findPreviewOnlyBarcodes(
+      '<p>{{barcode "datamatrix" order.id}}</p>',
+    );
+    expect(f.types).toEqual(["Data Matrix"]);
+    expect(f.staticSvg).toBe(false);
+  });
+
+  it("accepts single quotes and extra whitespace", () => {
+    const f = findPreviewOnlyBarcodes("{{  barcode  'pdf417'  x  }}");
+    expect(f.types).toEqual(["PDF417"]);
+  });
+
+  it("ignores printable helper calls", () => {
+    const f = findPreviewOnlyBarcodes('{{barcode "code128" order.id}}');
+    expect(f).toEqual({ types: [], staticSvg: false });
+  });
+
+  it("finds a static SVG block from the insert dialog", () => {
+    const html = buildBarcodeHtml({ type: "aztec", value: "PN-1042" });
+    const f = findPreviewOnlyBarcodes(`<div>${html}</div>`);
+    expect(f.staticSvg).toBe(true);
+    expect(f.types).toEqual([]);
+  });
+
+  it("finds nothing in a plain template", () => {
+    const f = findPreviewOnlyBarcodes("<p>Hi {{store.name}}</p>");
+    expect(f).toEqual({ types: [], staticSvg: false });
   });
 });

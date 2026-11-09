@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Printer-class (USB class 7) devices, any vendor. Declaring this
+     filter for USB_DEVICE_ATTACHED in the manifest is what makes
+     Android remember the permission grant: after one "allow", the
+     system re-grants on the next plug-in without a dialog, and a
+     background job can open a re-plugged printer with the app out of
+     the foreground. See UsbAttachReceiver.kt. -->
+<resources>
+    <usb-device class="7" />
+</resources>

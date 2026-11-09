@@ -467,6 +467,49 @@ pub fn check_copies(raw: u32) -> AppResult<u32> {
     Ok(copies)
 }
 
+/// The orientations the pipeline places a page in: `effective_geometry`
+/// swaps the paper for `landscape` and keeps everything else portrait.
+pub const VALID_ORIENTATIONS: &[&str] = &["portrait", "landscape"];
+
+/// The fit modes the layout engine implements (`scale_for` in
+/// [`crate::render::layout`]). Keep in sync with what the UI offers.
+pub const VALID_FITS: &[&str] = &["actual", "fit-width", "fit-page", "shrink", "fill"];
+
+/// Trim, lowercase and check one user-supplied choice against the values
+/// the pipeline understands. Absent or blank stays absent (the pipeline
+/// keeps its default); anything unknown is rejected instead of being
+/// silently remapped to a different page shape or scale.
+pub fn normalize_choice(
+    raw: Option<&str>,
+    valid: &[&str],
+    what: &str,
+) -> AppResult<Option<String>> {
+    let Some(value) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(None);
+    };
+    let value = value.to_ascii_lowercase();
+    if !valid.contains(&value.as_str()) {
+        return Err(AppError::Validation(format!(
+            "Invalid {what} '{value}'. Expected one of {valid:?}"
+        )));
+    }
+    Ok(Some(value))
+}
+
+/// The one orientation/fit rulebook every print path runs its request
+/// through (local, API, deep link, remote-via-PC, claimed-job retry):
+/// case-insensitive, normalizing (`"LandScape"` prints landscape) and
+/// rejecting values the pipeline does not understand.
+pub fn validate_orientation_and_fit(
+    orientation: Option<&str>,
+    fit_mode: Option<&str>,
+) -> AppResult<(Option<String>, Option<String>)> {
+    Ok((
+        normalize_choice(orientation, VALID_ORIENTATIONS, "orientation")?,
+        normalize_choice(fit_mode, VALID_FITS, "fit mode")?,
+    ))
+}
+
 /// Tauri command wrapper around [`run_print`].
 #[tauri::command]
 pub async fn print_html(
@@ -518,6 +561,16 @@ pub async fn run_print_with(
     // Fail fast on an unsupported fetch method, before the job row exists.
     validate_http_method(req.http_method.as_deref())?;
     let copies = check_copies(req.copies.unwrap_or(1))?;
+    // One shared rulebook for every print path: normalize case and reject
+    // values the pipeline would otherwise silently remap (anything but
+    // "landscape" to portrait, unknown fits to fit-width). Runs before
+    // begin_job, so the stored settings_json is the normalized value a
+    // retry will see.
+    let (orientation, fit_mode) =
+        validate_orientation_and_fit(req.orientation.as_deref(), req.fit_mode.as_deref())?;
+    let mut req = req;
+    req.orientation = orientation;
+    req.fit_mode = fit_mode;
 
     // ── 1. Resolve content ───────────────────────────────────────────
     let content = resolve_content(db, &req)?;
@@ -566,7 +619,7 @@ pub async fn run_claimed_job(
 ) -> AppResult<PrintResponse> {
     let start = Instant::now();
 
-    let (req, replay) = match load_job_request(db, job_id) {
+    let (mut req, replay) = match load_job_request(db, job_id) {
         Ok(v) => v,
         Err(e) => {
             close_job(db, job_id, "failed", Some(e.to_string()), "", &[], 0)?;
@@ -581,6 +634,28 @@ pub async fn run_claimed_job(
             });
         }
     };
+
+    // Rows stored before intake validation may carry values the pipeline
+    // would otherwise silently remap: re-check so a retry fails with the
+    // same clear message a fresh print gets, and normalize what is valid.
+    match validate_orientation_and_fit(req.orientation.as_deref(), req.fit_mode.as_deref()) {
+        Ok((orientation, fit_mode)) => {
+            req.orientation = orientation;
+            req.fit_mode = fit_mode;
+        }
+        Err(e) => {
+            close_job(db, job_id, "failed", Some(e.to_string()), "", &[], 0)?;
+            return Ok(PrintResponse {
+                success: false,
+                job_id: job_id.to_string(),
+                duration_ms: 0,
+                error: Some(e.to_string()),
+                timings: None,
+                rendered_by: None,
+                warnings: Vec::new(),
+            });
+        }
+    }
 
     let content = match replay {
         Some(rendered) => {
@@ -1922,16 +1997,26 @@ fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Optio
     Ok((req, replay))
 }
 
-/// Enumerate system printers
+/// Enumerate system printers.
+///
+/// Async (W4): the Windows list reads every queue's offered datatypes
+/// (cached per queue for an hour), and a wedged queue must not stall the
+/// main thread that serves the command — same rule as the transport's
+/// `discover`. Failures degrade to an empty list, so a spooler hiccup
+/// never fails the Setup page.
 #[tauri::command]
-pub fn enumerate_system_printers() -> AppResult<Vec<crate::transport::PrinterInfo>> {
+pub async fn enumerate_system_printers() -> AppResult<Vec<crate::transport::PrinterInfo>> {
     #[cfg(windows)]
     {
-        Ok(WindowsSpooler::enumerate_printers())
+        Ok(tokio::task::spawn_blocking(WindowsSpooler::enumerate_printers)
+            .await
+            .unwrap_or_default())
     }
     #[cfg(target_os = "linux")]
     {
-        Ok(crate::transport::cups::list_blocking())
+        Ok(tokio::task::spawn_blocking(crate::transport::cups::list_blocking)
+            .await
+            .unwrap_or_default())
     }
     #[cfg(not(any(windows, target_os = "linux")))]
     {
@@ -1965,6 +2050,7 @@ pub async fn list_bluetooth_devices(
                 printer_type: crate::transport::PrinterType::Bluetooth,
                 language: crate::transport::PrinterLanguage::Pdf,
                 status: "unknown".to_string(),
+                pdf_datatype: None,
             })
             .collect())
     }
@@ -2016,6 +2102,7 @@ pub async fn discover_network_printers(
                     printer_type,
                     language: crate::transport::PrinterLanguage::Pdf,
                     status: "unknown".to_string(),
+                    pdf_datatype: None,
                 }
             })
             .collect());
@@ -2057,6 +2144,7 @@ pub async fn discover_network_printers(
                     printer_type,
                     language: crate::transport::PrinterLanguage::Pdf,
                     status: "unknown".to_string(),
+                    pdf_datatype: None,
                 }
             })
             .collect())
@@ -2203,6 +2291,62 @@ mod tests {
         assert_eq!(check_copies(MAX_COPIES).unwrap(), MAX_COPIES);
         assert!(check_copies(MAX_COPIES + 1).is_err(), "over max rejects");
         assert!(check_copies(u32::MAX).is_err(), "u32::MAX rejects");
+    }
+
+    #[test]
+    fn unknown_orientation_is_rejected() {
+        let err = validate_orientation_and_fit(Some("sideways"), None)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Invalid orientation 'sideways'"), "{err}");
+        assert!(err.contains("portrait") && err.contains("landscape"), "{err}");
+        assert!(
+            validate_orientation_and_fit(Some("SIDEWAYS"), Some("fit-width")).is_err(),
+            "case does not smuggle a typo past"
+        );
+    }
+
+    #[test]
+    fn orientation_is_normalized_case_insensitively() {
+        assert_eq!(
+            validate_orientation_and_fit(Some("LandScape"), None).unwrap(),
+            (Some("landscape".into()), None)
+        );
+        assert_eq!(
+            validate_orientation_and_fit(Some("  PORTRAIT  "), None).unwrap(),
+            (Some("portrait".into()), None)
+        );
+    }
+
+    #[test]
+    fn unknown_fit_mode_is_rejected() {
+        let err = validate_orientation_and_fit(None, Some("fit-to-page"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Invalid fit mode 'fit-to-page'"), "{err}");
+        assert!(
+            validate_orientation_and_fit(None, Some("ACTUAL-SIZE")).is_err(),
+            "a near miss must not silently become fit-width"
+        );
+        // Every mode the layout engine implements is accepted, in any case.
+        for fit in VALID_FITS {
+            assert_eq!(
+                validate_orientation_and_fit(None, Some(&fit.to_uppercase())).unwrap(),
+                (None, Some(fit.to_string()))
+            );
+        }
+    }
+
+    #[test]
+    fn absent_or_blank_orientation_and_fit_stay_absent() {
+        assert_eq!(
+            validate_orientation_and_fit(None, None).unwrap(),
+            (None, None)
+        );
+        assert_eq!(
+            validate_orientation_and_fit(Some("   "), Some("")).unwrap(),
+            (None, None)
+        );
     }
 
     /// Pull the `srcdoc` of every design frame back out of the final HTML.

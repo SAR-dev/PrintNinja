@@ -60,7 +60,7 @@ Printers "speak" different command languages: ESC/POS (receipts), ZPL and TSPL (
 
 ## USB on Android
 
-**8. \[High\] USB permission is asked on every connect.** *Problem:* the app does not register for USB-attached events, so Android cannot remember "always allow". The dialog appears every time, which also breaks background printing. *Solutions:* (a) **Recommended:** add a `USB_DEVICE_ATTACHED` intent filter with a `device_filter.xml` that lists printer-class devices, so Android can remember the grant. (b) Reuse the existing device grant without asking again while Android still honors it. (c) Show a one-line explanation before the dialog so it is not a surprise.
+**✅ 8. \[High\] USB permission is asked on every connect.** *Problem:* the app does not register for USB-attached events, so Android cannot remember "always allow". The dialog appears every time, which also breaks background printing. *Solutions:* (a) **Recommended:** add a `USB_DEVICE_ATTACHED` intent filter with a `device_filter.xml` that lists printer-class devices, so Android can remember the grant. (b) Reuse the existing device grant without asking again while Android still honors it. (c) Show a one-line explanation before the dialog so it is not a surprise.
 
 **9. \[Low\] The wrong USB interface might get the job.** *Problem:* the app takes the first "output" channel it finds. A device with several functions (for example a printer plus a card reader) may receive the job on the wrong one. This is a risk seen in the code. *Solutions:* (a) **Recommended:** prefer an interface with class 7 (printer) and fall back to the old behavior only if none exists. (b) Let the user pick the interface in advanced settings. (c) Log the chosen interface so problems are easy to diagnose.
 
@@ -78,7 +78,7 @@ Printers "speak" different command languages: ESC/POS (receipts), ZPL and TSPL (
 
 ## Platforms
 
-**15. \[High\] Windows printers with GDI-only drivers cannot print the PDF.** *Problem:* such drivers cannot turn a PDF into a picture, and the app cannot fix that. Workaround today: add the printer by network address as `ipp` or raw TCP if it reads PDF, or choose a queue whose driver lists PDF. *Solutions:* (a) **Recommended:** detect the driver type and warn when a queue looks GDI-only. (b) Render the page to a bitmap in the app and print it through the GDI path for those queues. (c) Keep the `ipp` or raw TCP workaround in the docs.
+**✅ 15. \[High\] Windows printers with GDI-only drivers cannot print the PDF.** *Problem:* such drivers cannot turn a PDF into a picture, and the app cannot fix that. Workaround today: add the printer by network address as `ipp` or raw TCP if it reads PDF, or choose a queue whose driver lists PDF. *Solutions:* (a) **Recommended:** detect the driver type and warn when a queue looks GDI-only. (b) Render the page to a bitmap in the app and print it through the GDI path for those queues. (c) Keep the `ipp` or raw TCP workaround in the docs.
 
 **16. \[Low\] Android has no system printer type.** *Problem:* `system` printers exist only on Windows and Linux. A printer reached through an Android print service is not available, and a `system` row on Android says it is not supported. *Solutions:* (a) **Recommended:** show a clear message in the form and suggest adding the printer by address as `ipp` or raw TCP. (b) Integrate Android's `PrintManager` through the plugin (large, with limited control over the output). (c) Only build (b) if many users have no other path.
 
@@ -112,22 +112,22 @@ These are **not planned**. They were looked at and accepted.
 | Order | Item | Priority | Size | Why |
 | --- | --- | --- | --- | --- |
 | 1 | 7. Test on real printers | High | Testing, no code | Nothing else matters if real printers do not work |
-| 2 | 8. USB permission on every connect | High | Small | Annoying, and breaks background printing |
-| 3 | 15. Windows GDI-only drivers | High | Small to medium | Warning is small; printing through GDI is medium |
-| 4 | 4. TSPL density, speed, gapless media | Medium | Medium | Common label printers print too light or fail on gapless rolls |
-| 5 | 10. IPP always labeled PDF | Low | Small | Warn or refuse when the language is not PDF |
-| 6 | 16. No system printer on Android | Low | Small | Clear message and a pointer to `ipp` or raw TCP |
-| 7 | 2. Cannot scan for unpaired Bluetooth | Low | Small | Add an "Open Bluetooth settings" button |
-| 8 | 13. Raw TCP unencrypted, test command | Low | Small | Add a note and fix the test command |
-| 9 | 14. CUPS URL only by environment variable | Low | Small | Add a setting in the app |
-| 10 | 17. USB and Bluetooth on desktop | Low | Small | A short how-to guide is enough |
-| 11 | 9. Wrong USB interface | Low | Small | Prefer the printer class (7) interface |
-| 12 | 6. CPCL, raster, PDF need a PC | Low | Small to medium | Message is small; a CPCL encoder is medium |
-| 13 | 12. IPP capabilities never read | Low | Medium | Needed before item 11 |
-| 14 | 11. Few IPP job options | Low | Medium | Do after item 12 so options match the printer |
-| 15 | 5. Status checks for more languages | Low | Medium | Needs each language's documented status reply |
-| 16 | 3. No write pacing | Low | Small to medium | Only if a printer is seen dropping data; needs hardware |
-| 17 | 1. No BLE | Low | Large | New plugin code, permissions and screens; only if a printer needs it |
+| 2 | 4. TSPL density, speed, gapless media | Medium | Medium | Common label printers print too light or fail on gapless rolls |
+| 3 | 10. IPP always labeled PDF | Low | Small | Warn or refuse when the language is not PDF |
+| 4 | 16. No system printer on Android | Low | Small | Clear message and a pointer to `ipp` or raw TCP |
+| 5 | 2. Cannot scan for unpaired Bluetooth | Low | Small | Add an "Open Bluetooth settings" button |
+| 6 | 13. Raw TCP unencrypted, test command | Low | Small | Add a note and fix the test command |
+| 7 | 14. CUPS URL only by environment variable | Low | Small | Add a setting in the app |
+| 8 | 17. USB and Bluetooth on desktop | Low | Small | A short how-to guide is enough |
+| 9 | 9. Wrong USB interface | Low | Small | Prefer the printer class (7) interface |
+| 10 | 6. CPCL, raster, PDF need a PC | Low | Small to medium | Message is small; a CPCL encoder is medium |
+| 11 | 12. IPP capabilities never read | Low | Medium | Needed before item 11 |
+| 12 | 11. Few IPP job options | Low | Medium | Do after item 12 so options match the printer |
+| 13 | 5. Status checks for more languages | Low | Medium | Needs each language's documented status reply |
+| 14 | 3. No write pacing | Low | Small to medium | Only if a printer is seen dropping data; needs hardware |
+| 15 | 1. No BLE | Low | Large | New plugin code, permissions and screens; only if a printer needs it |
+| 16 | ✅ 8. USB permission on every connect | High | Small | Solved: USB_DEVICE_ATTACHED receiver + device_filter.xml, so Android remembers the grant |
+| 17 | ✅ 15. Windows GDI-only drivers | High | Small to medium | Solved: warning when the queue's datatype list offers no PDF (the same signal the RAW fallback uses); rendering through GDI (option b) stays open |
 
 The order goes by priority first (High, Medium, Low), then by how cheap the fix is. Sizes are estimates, not measurements.
 
@@ -181,15 +181,15 @@ These are small or medium jobs that can be picked up without a big project. The 
 
 **36. \[Small\] Print History cannot filter by template.** *Problem:* the README promises filtering by status, source, printer, template and date, but the text search only matches the numeric ID, so you cannot find jobs by template name. *Solutions:* (a) **Recommended:** extend the search to match template and printer names. (b) Add a template dropdown next to the existing filters. (c) Do (a) now and (b) together with item 19 if filtering moves to the server.
 
-**37. \[Small\] Three barcode types preview fine but print blank.** *Problem:* `datamatrix`, `pdf417` and `aztec` show in the preview, but the printing code does not support them. The page prints an empty space and nothing warns you. *Solutions:* (a) **Recommended short term:** hide these types or mark them "preview only" in the Helpers panel, and warn at design and print time. (b) Add Rust support through a barcode library that covers them. (c) Render these types in the JS preview engine and send the image into the print pipeline.
+**✅ 37. \[Small\] Three barcode types preview fine but print blank.** *Problem:* `datamatrix`, `pdf417` and `aztec` show in the preview, but the printing code does not support them. The page prints an empty space and nothing warns you. *Solutions:* (a) **Recommended short term:** hide these types or mark them "preview only" in the Helpers panel, and warn at design and print time. (b) Add Rust support through a barcode library that covers them. (c) Render these types in the JS preview engine and send the image into the print pipeline.
 
 **38. \[Small\] English text in the Japanese UI.** *Problem:* several strings are hardcoded: designer save messages, printer setup table headings and dialogs, Settings font messages, the default "Cancel" on confirm dialogs, two API Explorer messages and the sample dataset name "Sample Order". Workaround today: switch the app to English. *Solutions:* (a) **Recommended:** move each string into `en.ts` and `ja.ts` and call the translation function. (b) Change the `ConfirmDialog` default `cancelLabel` to the translated "Cancel", which fixes every call site at once. (c) Add a lint or test that fails on obvious hardcoded UI text. (d) Translate only the display of the sample dataset name; keep the stored name stable.
 
 ## Android
 
-**39. \[Small\] Release builds block plain HTTP, so phone pairing cannot work.** *Problem:* pairing, shared rendering and Print via PC all use plain HTTP on the local network, by design. In a release APK Android blocks that and shows a confusing network error, so the whole paired-phone feature set is broken. Debug builds work. *Solutions:* (a) **Recommended:** extend `scripts/patch-android-signing.mjs` (or add a new patch script) so release builds also allow cleartext traffic. The Android project is generated, so the fix must live in the patch scripts. The test in `src/test/android-signing.test.ts` currently expects release builds not to have it and needs updating. (b) Add a `network_security_config` that allows cleartext only for the paired PC's address. Android configs cannot match IP ranges, so this is hard for local networks. (c) Allow cleartext in the app but only ever connect to private addresses in the app's own code. (d) Longer term, use TLS with a pinned certificate between phone and PC.
+**✅ 39. \[Small\] Release builds block plain HTTP, so phone pairing cannot work.** *Problem:* pairing, shared rendering and Print via PC all use plain HTTP on the local network, by design. In a release APK Android blocks that and shows a confusing network error, so the whole paired-phone feature set is broken. Debug builds work. *Solutions:* (a) **Recommended:** extend `scripts/patch-android-signing.mjs` (or add a new patch script) so release builds also allow cleartext traffic. The Android project is generated, so the fix must live in the patch scripts. The test in `src/test/android-signing.test.ts` currently expects release builds not to have it and needs updating. (b) Add a `network_security_config` that allows cleartext only for the paired PC's address. Android configs cannot match IP ranges, so this is hard for local networks. (c) Allow cleartext in the app but only ever connect to private addresses in the app's own code. (d) Longer term, use TLS with a pinned certificate between phone and PC.
 
-**40. \[Small\] The battery-optimization toggle fails silently.** *Problem:* the app is missing the permission Android requires, so opening the system screen throws an error. The error is swallowed and the app shows a **success** message anyway. Workaround today: set it by hand in Android settings. *Solutions:* (a) **Recommended:** declare `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` in the plugin manifest and show an error toast when the call fails. (b) If store policy is a concern, open the general battery settings screen (`ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`), which needs no permission. (c) Show the real state afterwards (exempt or not) instead of a blind success message.
+**✅ 40. \[Small\] The battery-optimization toggle fails silently.** *Problem:* the app is missing the permission Android requires, so opening the system screen throws an error. The error is swallowed and the app shows a **success** message anyway. Workaround today: set it by hand in Android settings. *Solutions:* (a) **Recommended:** declare `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` in the plugin manifest and show an error toast when the call fails. (b) If store policy is a concern, open the general battery settings screen (`ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`), which needs no permission. (c) Show the real state afterwards (exempt or not) instead of a blind success message.
 
 **41. \[Medium\] No notification when a background job succeeds or fails.** *Problem:* the only notification is the pinned "service is running" line. A job that fails in the background (printer offline, PC asleep, render timeout) is invisible until you reopen the app and read History. *Solutions:* (a) **Recommended:** post a notification on failure (and optionally success) from the worker, through the Android plugin or a Tauri notification plugin. (b) Add a setting: "Notify on: failures only / all / never". (c) Show the count of waiting jobs in the pinned notification. (d) Tapping a notification opens History on that job.
 
@@ -207,34 +207,34 @@ Cheapest and most visible first.
 
 | Order | Item | Effort | Why |
 | --- | --- | --- | --- |
-| 1 | 39. Plain HTTP blocked in release builds | Small | All paired-phone features are broken in release APKs |
-| 2 | 40. Battery toggle shows false success | Small | A documented flow fails silently |
-| 3 | 22. Bad `json_path` prints blanks | Small | "Successful" prints of empty fields |
-| 4 | 24. Invalid orientation and fit accepted | Small | Wrong-looking output with no warning |
-| 5 | 37. Preview-only barcodes print blank | Small | Preview and print do not match, with no warning |
-| 6 | 21. `/v1/print` margins, records, validation | Small | The API used by POS systems is weaker than the app |
-| 7 | 25. Print via PC has no margins | Small | Same fix area as item 21 |
-| 8 | 23. Deep links miss options | Small | Reuses the validator from items 21 and 24 |
-| 9 | 30. docker-compose ignores env vars | Small | Self-hosters' settings silently do nothing |
-| 10 | 31. `CRON_SECRET` missing from `env.example` | Small | Cleanup never runs on Vercel |
-| 11 | 42. Deep links on Android | Small | Documented feature that cannot work on the phone |
-| 12 | 44. Notification permission asked once | Small | Declining hides the service notification forever |
-| 13 | 45. Update badge without an Android file | Small | Misleading badge |
-| 14 | 38. English text in the Japanese UI | Small | Visible polish issue |
-| 15 | 36. History cannot filter by template | Small | README promises it |
-| 16 | 29. Own template list has no search or sort | Small | Server side of item 35 |
-| 17 | 35. Mine and Saved tabs have no search or sort | Small | Do after item 29 |
-| 18 | 19. Job list has no paging or filters | Small | Older jobs are unreachable through the API |
-| 19 | 20. Job replies omit printer and template | Small | The data is already in the database |
-| 20 | 32. Sessions cannot be revoked one by one | Small | Lost device means logging out everywhere |
-| 21 | 33. No limits on templates, datasets, profiles | Small | Protects self-hosted servers from unbounded growth |
-| 22 | 43. Queue stops after Android kills the app | Medium | Jobs sit unprinted while the app says they will run |
-| 23 | 41. No background job notification | Medium | Failures are invisible |
-| 24 | 26. Account export and backup | Medium | Basic account lifecycle, mostly cheap to build |
-| 25 | 27. Account deletion | Medium | Basic account lifecycle, mostly cheap to build |
-| 26 | 28. No read or list endpoints | Medium | Integrations need a full sync cache without it |
-| 27 | 18. Batch printing entry point | Medium | Worker, metrics and History column already exist |
-| 28 | 34. Version history screen | Medium | Promised in the README, and the API is ready |
+| 1 | 22. Bad `json_path` prints blanks | Small | "Successful" prints of empty fields |
+| 2 | 24. Invalid orientation and fit accepted | Small | Wrong-looking output with no warning |
+| 3 | 21. `/v1/print` margins, records, validation | Small | The API used by POS systems is weaker than the app |
+| 4 | 25. Print via PC has no margins | Small | Same fix area as item 21 |
+| 5 | 23. Deep links miss options | Small | Reuses the validator from items 21 and 24 |
+| 6 | 30. docker-compose ignores env vars | Small | Self-hosters' settings silently do nothing |
+| 7 | 31. `CRON_SECRET` missing from `env.example` | Small | Cleanup never runs on Vercel |
+| 8 | 42. Deep links on Android | Small | Documented feature that cannot work on the phone |
+| 9 | 44. Notification permission asked once | Small | Declining hides the service notification forever |
+| 10 | 45. Update badge without an Android file | Small | Misleading badge |
+| 11 | 38. English text in the Japanese UI | Small | Visible polish issue |
+| 12 | 36. History cannot filter by template | Small | README promises it |
+| 13 | 29. Own template list has no search or sort | Small | Server side of item 35 |
+| 14 | 35. Mine and Saved tabs have no search or sort | Small | Do after item 29 |
+| 15 | 19. Job list has no paging or filters | Small | Older jobs are unreachable through the API |
+| 16 | 20. Job replies omit printer and template | Small | The data is already in the database |
+| 17 | 32. Sessions cannot be revoked one by one | Small | Lost device means logging out everywhere |
+| 18 | 33. No limits on templates, datasets, profiles | Small | Protects self-hosted servers from unbounded growth |
+| 19 | 43. Queue stops after Android kills the app | Medium | Jobs sit unprinted while the app says they will run |
+| 20 | 41. No background job notification | Medium | Failures are invisible |
+| 21 | 26. Account export and backup | Medium | Basic account lifecycle, mostly cheap to build |
+| 22 | 27. Account deletion | Medium | Basic account lifecycle, mostly cheap to build |
+| 23 | 28. No read or list endpoints | Medium | Integrations need a full sync cache without it |
+| 24 | 18. Batch printing entry point | Medium | Worker, metrics and History column already exist |
+| 25 | 34. Version history screen | Medium | Promised in the README, and the API is ready |
+| 26 | ✅ 37. Preview-only barcodes print blank | Small | Solved: "preview only" badge, design-time hint, print-time confirm |
+| 27 | ✅ 39. Plain HTTP blocked in release builds | Small | Solved: cleartext patching already existed; the real bug was the patch script failing on CRLF build files (Windows) |
+| 28 | ✅ 40. Battery toggle shows false success | Small | Solved: permission declared, rejections surfaced, real state shown after the dialog |
 
 ---
 

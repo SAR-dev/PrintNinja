@@ -41,6 +41,24 @@ class ServiceContractTest {
         assertTrue(PrintNinjaService.ACTION_STOP.startsWith("com.printninja."))
     }
 
+    // The USB grant-result action is the integration surface between the
+    // manifest receiver (UsbAttachReceiver) and the in-process request
+    // (AndroidPrintPlugin.ensureUsbPermission): the receiver is declared
+    // in the plugin AndroidManifest.xml with this literal, so renaming
+    // it here silently breaks the grant handoff.
+    @Test
+    fun usbPermissionActionIsNamespacedToThePlugin() {
+        assertEquals("com.printninja.android_print.USB_PERMISSION", USB_PERMISSION_ACTION)
+    }
+
+    @Test
+    fun usbAttachActionIsThePlatformOne() {
+        assertEquals(
+            "android.hardware.usb.action.USB_DEVICE_ATTACHED",
+            UsbAttachReceiver.USB_ATTACHED_ACTION,
+        )
+    }
+
     // The notification text is the app's only visible proof that the
     // local API server is alive in the background, so the wording (and
     // the address) is pinned here.

@@ -32,7 +32,9 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { TimingBreakdown } from "@/components/TimingBreakdown";
+import { findPreviewOnlyBarcodes } from "@/lib/utils/barcode";
 import { formatSeconds } from "@/lib/timings";
 import { useSystemPrinters } from "@/lib/hooks/useSystemPrinters";
 import {
@@ -346,6 +348,23 @@ function PrintForm() {
       templates.find((x) => x.name === selectedPcTemplate.name)
     : selectedTemplate;
 
+  // Preview-only barcodes in the template this print will use
+  // (MISSING_FEATURES #37): the Rust engine draws nothing for them, so the
+  // page would print an empty space with no sign. The via-PC listing
+  // carries no content, so the scan reads the same-named local copy; a
+  // guest template with no local copy simply goes unscanned.
+  const previewOnly = useMemo(
+    () => findPreviewOnlyBarcodes(previewTemplate?.html ?? ""),
+    [previewTemplate],
+  );
+  const hasPreviewOnly = previewOnly.types.length > 0 || previewOnly.staticSvg;
+  const [previewOnlyConfirm, setPreviewOnlyConfirm] = useState(false);
+  // The retry flag of the attempt the confirm dialog is holding.
+  const pendingRetry = useRef(false);
+  // "Print anyway" was chosen for this printer + template; reset with the
+  // outcome whenever either selection changes.
+  const previewOnlyAck = useRef(false);
+
   const selectedTemplateId = selectedTemplate?.id;
   // The template's orientation is the default; flipping the selector below
   // overrides it for this print only (never written back).
@@ -563,6 +582,7 @@ function PrintForm() {
     setRemoteCode(null);
     setPrintedVia(null);
     keyRef.current = "";
+    previewOnlyAck.current = false;
   };
 
   // A page range like "3-4" is meant for one document: a different template
@@ -603,7 +623,7 @@ function PrintForm() {
     store.setPaper(remembered.paper_w, remembered.paper_h);
   };
 
-  const handlePrint = async (retry = false) => {
+  const handlePrint = (retry = false) => {
     if (!store.printerId) {
       notifyError(t("print.blocker_printer"));
       return;
@@ -616,6 +636,17 @@ function PrintForm() {
       notifyError(t("print.blocker_copies"));
       return;
     }
+    // Preview-only barcodes would print as an empty space: confirm once
+    // per selection before the job goes out (MISSING_FEATURES #37).
+    if (hasPreviewOnly && !previewOnlyAck.current) {
+      pendingRetry.current = retry;
+      setPreviewOnlyConfirm(true);
+      return;
+    }
+    void doPrint(retry);
+  };
+
+  const doPrint = async (retry: boolean) => {
     // Remember this printer's choices for its next visit (F3). Saved
     // before the transport call so the prefs survive a failed print too.
     if (!viaPc) {
@@ -1010,6 +1041,32 @@ function PrintForm() {
     </Dialog>
   );
 
+  // Preview-only barcodes would print as an empty space: one confirmation
+  // per selection, then "Print anyway" is remembered until the printer or
+  // template changes (reset with the outcome).
+  const previewOnlyDialog = hasPreviewOnly ? (
+    <ConfirmDialog
+      open={previewOnlyConfirm}
+      onOpenChange={(open) => {
+        if (!open) setPreviewOnlyConfirm(false);
+      }}
+      title={t("print.preview_only_title")}
+      description={
+        previewOnly.types.length > 0
+          ? t("print.preview_only_body", {
+              types: previewOnly.types.join(", "),
+            })
+          : t("print.preview_only_body_static")
+      }
+      confirmLabel={t("print.preview_only_print_anyway")}
+      onConfirm={() => {
+        previewOnlyAck.current = true;
+        setPreviewOnlyConfirm(false);
+        void doPrint(pendingRetry.current);
+      }}
+    />
+  ) : null;
+
   // Design size comes from the template; the paper size below overrides it
   // per axis (null = template size). All controls live inline in this card.
   const dataFields = (
@@ -1123,6 +1180,7 @@ function PrintForm() {
           onSetPaperWidth={savedDbId != null ? openPaperSizeDialog : undefined}
         />
         {paperSizeDialog}
+        {previewOnlyDialog}
       </>
     );
   }
@@ -1131,6 +1189,7 @@ function PrintForm() {
     <div className="space-y-4">
       <PageHeader title={t("print.title")} description={t("pages.print")} />
       {paperSizeDialog}
+      {previewOnlyDialog}
 
       {/* Print via PC: the job runs on the paired PC's printers, never on
           this phone's transports. */}

@@ -165,6 +165,14 @@ export interface SystemPrinterRow {
   printer_type: string;
   language: string;
   status?: string;
+  /**
+   * Windows spooler queues only: the queue's print processor offers a
+   * `PDF` datatype. `false` — the offered list is readable but has no
+   * PDF entry, so the driver *may* be GDI-only and a PDF job goes out as
+   * RAW; `null`/absent — unknown (other platforms, remote shares, or the
+   * list could not be read).
+   */
+  pdf_datatype?: boolean | null;
 }
 
 export interface PrintHtmlReq {

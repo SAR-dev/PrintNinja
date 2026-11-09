@@ -340,3 +340,49 @@ export function bcidFor(type: string): string | null {
 export function labelFor(type: string): string {
   return BARCODE_TYPES.find((t) => t.value === type)?.label ?? type;
 }
+
+/**
+ * Symbologies the JS preview draws (bwip-js) but the Rust print engine
+ * cannot: `{{barcode}}` renders them as an empty spot, and the Designer's
+ * dialog keeps them a static SVG instead of a helper call.
+ *
+ * Derived from `BARCODE_TYPES`, so it tracks both that list and
+ * `SYMBOLOGIES` in src-tauri/src/render/barcode.rs — the day a type
+ * becomes printable it drops out of this list on its own.
+ */
+export const PREVIEW_ONLY_SYMBOLOGIES: readonly string[] = BARCODE_TYPES.filter(
+  (t) => !isHelperSymbology(t.value),
+).map((t) => t.value);
+
+/** True when the built-in print engine cannot draw `type`. */
+export function isPreviewOnlySymbology(type: string): boolean {
+  return PREVIEW_ONLY_SYMBOLOGIES.includes(type);
+}
+
+export interface PreviewOnlyFindings {
+  /** Friendly labels of preview-only types used in `{{barcode ...}}` calls. */
+  types: string[];
+  /** A static SVG barcode block — the dialog's substitute for these types. */
+  staticSvg: boolean;
+}
+
+/**
+ * The preview-only barcodes a template's HTML holds, so the Print page can
+ * warn before sending a job that would come out blank:
+ *
+ * - `{{barcode "datamatrix" ...}}` — the Rust helper draws nothing for it;
+ * - a `<div class="barcode" style=...>` block — the Designer dialog inserts
+ *   a static SVG exactly for the types the print path cannot draw
+ *   (the Rust helper's wrapper carries no style attribute).
+ */
+export function findPreviewOnlyBarcodes(html: string): PreviewOnlyFindings {
+  const found = new Set<string>();
+  for (const m of html.matchAll(/\{\{\s*barcode\s+["']([A-Za-z0-9]+)["']/gi)) {
+    const type = m[1].toLowerCase();
+    if (isPreviewOnlySymbology(type)) found.add(labelFor(type));
+  }
+  return {
+    types: [...found],
+    staticSvg: /<div\s+class="barcode"\s+style=/i.test(html),
+  };
+}

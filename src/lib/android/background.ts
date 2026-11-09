@@ -43,15 +43,13 @@ export async function isBackgroundServiceRunning(): Promise<boolean> {
  * Doze and app standby otherwise defer the queue worker and the local
  * API server. Call only from an explicit user toggle — never silently.
  * Resolves true when the screen was shown, false when already exempt
- * or the OS cannot show it.
+ * or the OS cannot show it. Rejects when the system refuses the
+ * request (e.g. missing platform support) — the caller shows the
+ * error instead of a fake success.
  */
 export async function requestBatteryExemption(): Promise<boolean> {
   if (!isAndroid()) return false;
-  try {
-    return await plugin<boolean>("request_battery_exemption");
-  } catch {
-    return false;
-  }
+  return plugin<boolean>("request_battery_exemption");
 }
 
 export async function isBatteryExemptionGranted(): Promise<boolean> {

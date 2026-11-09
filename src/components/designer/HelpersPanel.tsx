@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
-import { BARCODE_TYPES } from "@/lib/utils/barcode";
+import { BARCODE_TYPES, isPreviewOnlySymbology } from "@/lib/utils/barcode";
 
 export const HELPERS = [
   "currency",
@@ -68,15 +68,30 @@ export function HelpersPanel({ onInsert }: Props) {
       <div className="text-xs text-muted-foreground">
         {t("designer.barcode_types")}
       </div>
+      {/* Every type, not a sample: the preview-only ones must stay visible
+          and marked, or a template can hold a barcode nobody knows prints
+          blank (MISSING_FEATURES #37). */}
       <div className="flex flex-wrap gap-1">
-        {BARCODE_TYPES.slice(0, 5).map((bc) => (
-          <Badge key={bc.value} variant="outline" className="text-xs">
-            {bc.label}
-          </Badge>
-        ))}
-        <Badge variant="outline" className="text-xs">
-          {t("designer.barcode_more", { count: BARCODE_TYPES.length - 5 })}
-        </Badge>
+        {BARCODE_TYPES.map((bc) => {
+          const previewOnly = isPreviewOnlySymbology(bc.value);
+          return (
+            <Badge
+              key={bc.value}
+              variant="outline"
+              className="text-xs"
+              title={
+                previewOnly ? t("designer.barcode_preview_only_tip") : undefined
+              }
+            >
+              {bc.label}
+              {previewOnly && (
+                <span className="ml-1.5 rounded-sm bg-warning-soft px-1 text-[10px] font-semibold uppercase tracking-wide text-warning">
+                  {t("designer.barcode_preview_only")}
+                </span>
+              )}
+            </Badge>
+          );
+        })}
       </div>
     </div>
   );
