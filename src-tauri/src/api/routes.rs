@@ -816,6 +816,13 @@ fn job_time_bound(raw: &str) -> Result<(String, String), ApiRejection> {
     )))
 }
 
+/// The five `details` columns read from a job row, in SELECT order: the
+/// job's own `printer_id`, the joined printer name, the job's own
+/// `template_id`, the joined template name, and `settings_json`. The ids
+/// come from the job's FK columns (not the joined `p.id`/`t.id`) so they
+/// survive the referenced row being deleted; the names go null then.
+type JobDetailCols = (Option<i64>, Option<String>, Option<i64>, Option<String>, Option<String>);
+
 /// The `details` object both job endpoints append (P20): the names the
 /// job points at, not only the ids. `printer`/`template` are the same
 /// name strings the `print.succeeded` callback carries (see
@@ -857,7 +864,7 @@ async fn get_job(
         .prepare(
             "SELECT j.id, j.status, j.error, j.duration_ms, j.copies, j.source, j.created_at,
                     j.requested_by_device_id, j.template_revision,
-                    p.id, p.name, t.id, t.name, j.settings_json
+                    j.printer_id, p.name, j.template_id, t.name, j.settings_json
              FROM print_jobs j
              LEFT JOIN printers p ON p.id = j.printer_id
              LEFT JOIN templates t ON t.id = j.template_id
@@ -871,13 +878,7 @@ async fn get_job(
         .map_err(ApiRejection::from)?
         .ok_or_else(|| ApiRejection::NotFound(format!("Job {} not found", id)))?;
 
-    let (printer_id, printer_name, template_id, template_name, settings_json): (
-        Option<i64>,
-        Option<String>,
-        Option<i64>,
-        Option<String>,
-        Option<String>,
-    ) = (
+    let (printer_id, printer_name, template_id, template_name, settings_json): JobDetailCols = (
         row.get(9)?,
         row.get(10)?,
         row.get(11)?,
@@ -909,12 +910,12 @@ async fn list_jobs(
     let conn = guard.connection();
 
     // The LEFT JOINs (not INNER) keep jobs whose printer or template was
-    // deleted: the FKs are ON DELETE SET NULL, so their details fields
-    // simply read null.
+    // deleted: the ids are read from the job's own FK columns so they
+    // survive the delete, while the joined names read null.
     let mut sql = String::from(
         "SELECT j.id, j.status, j.source, j.copies, j.created_at,
                 j.requested_by_device_id, j.template_revision,
-                p.id, p.name, t.id, t.name, j.settings_json
+                j.printer_id, p.name, j.template_id, t.name, j.settings_json
          FROM print_jobs j
          LEFT JOIN printers p ON p.id = j.printer_id
          LEFT JOIN templates t ON t.id = j.template_id",
@@ -958,13 +959,8 @@ async fn list_jobs(
 
     let jobs: Vec<Value> = stmt
         .query_map(refs.as_slice(), |row| {
-            let (printer_id, printer_name, template_id, template_name, settings_json): (
-                Option<i64>,
-                Option<String>,
-                Option<i64>,
-                Option<String>,
-                Option<String>,
-            ) = (row.get(7)?, row.get(8)?, row.get(9)?, row.get(10)?, row.get(11)?);
+            let (printer_id, printer_name, template_id, template_name, settings_json): JobDetailCols =
+                (row.get(7)?, row.get(8)?, row.get(9)?, row.get(10)?, row.get(11)?);
             Ok(json!({
                 "id": row.get::<_, i64>(0)?,
                 "status": row.get::<_, String>(1)?,
