@@ -66,6 +66,9 @@ class MdnsDiscovery(private val context: Context) {
      * land on the main thread while this waits, so the callbacks are
      * never starved. Returns each reachable printer once.
      */
+    // NsdManager.resolveService and NsdServiceInfo.host are deprecated
+    // (API 36) with no replacement.
+    @Suppress("DEPRECATION")
     fun discoverOnce(timeoutMs: Long): List<FoundPrinter> {
         val found = java.util.concurrent.ConcurrentHashMap<String, FoundPrinter>()
         val types = listOf("_ipp._tcp." to "ipp", "_pdl-datastream._tcp." to "raw_tcp")
@@ -146,6 +149,7 @@ class MdnsDiscovery(private val context: Context) {
         return found.values.sortedBy { it.name }.toList()
     }
 
+    @Suppress("DEPRECATION")
     private fun resolveService(serviceInfo: NsdServiceInfo, onFound: (String, String, Int) -> Unit) {
         nsdManager.resolveService(serviceInfo, object : NsdManager.ResolveListener {
             override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {

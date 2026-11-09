@@ -3,6 +3,8 @@
  * In web mode, throws an error explaining the limitation.
  */
 
+import { invoke } from "@/lib/invoke";
+
 export const tauriInvoke = async <T = unknown>(
   cmd: string,
   args?: any,
@@ -12,7 +14,6 @@ export const tauriInvoke = async <T = unknown>(
       `"${cmd}" requires the desktop app. Please run PrintNinja as a Tauri application.`,
     );
   }
-  const { invoke } = await import("@/lib/invoke");
   return invoke<T>(cmd, args);
 };
 

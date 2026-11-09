@@ -12,13 +12,32 @@ import {
 import { AuthGate } from "./components/AuthGate";
 import { Layout } from "./components/Layout";
 import { Onboarding } from "./components/Onboarding";
-import { DesignerPage } from "./pages/Designer";
-import { PrintPage } from "./pages/Print";
-import { PrinterSetupPage } from "./pages/PrinterSetup";
-import { HistoryPage } from "./pages/History";
-import { AutomationPage } from "./pages/Automation";
-import { SettingsPage } from "./pages/Settings";
-import { TemplatesPage } from "./pages/Templates";
+// Each page is its own chunk: the app opens on a single route, and the
+// rest (designer canvas, print flow, template management) should not
+// block first paint — on a phone, or a desktop cold start.
+const DesignerPage = lazy(() =>
+  import("./pages/Designer").then((m) => ({ default: m.DesignerPage })),
+);
+const PrintPage = lazy(() =>
+  import("./pages/Print").then((m) => ({ default: m.PrintPage })),
+);
+const PrinterSetupPage = lazy(() =>
+  import("./pages/PrinterSetup").then((m) => ({
+    default: m.PrinterSetupPage,
+  })),
+);
+const HistoryPage = lazy(() =>
+  import("./pages/History").then((m) => ({ default: m.HistoryPage })),
+);
+const AutomationPage = lazy(() =>
+  import("./pages/Automation").then((m) => ({ default: m.AutomationPage })),
+);
+const SettingsPage = lazy(() =>
+  import("./pages/Settings").then((m) => ({ default: m.SettingsPage })),
+);
+const TemplatesPage = lazy(() =>
+  import("./pages/Templates").then((m) => ({ default: m.TemplatesPage })),
+);
 import { diagnostics } from "./lib/diagnostics";
 import { startOnPrint } from "./lib/shell/startRoute";
 import { notifyInfo } from "./lib/notify";
@@ -29,6 +48,15 @@ import { PairingGate } from "./components/PairingGate";
 const UiKitPage = import.meta.env.DEV
   ? lazy(() => import("./pages/UiKit"))
   : null;
+
+/** Full-screen spinner shown while a route's chunk is loading. */
+function PageLoading() {
+  return (
+    <div className="min-h-dvh-safe flex items-center justify-center bg-background">
+      <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 /** Nothing renders until there is a session the server accepts. */
 export default function App() {
@@ -217,32 +245,34 @@ function AppContent() {
   return (
     <AppRouter>
       <Layout>
-        <Routes>
-          <Route path="/" element={<DesignerPage />} />
-          <Route path="/template/:id" element={<DesignerPage />} />
-          <Route path="/templates" element={<TemplatesPage />} />
-          <Route path="/print" element={<PrintPage />} />
-          <Route path="/pair" element={<PairRoute />} />
-          <Route path="/printers" element={<PrinterSetupPage />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/automation" element={<AutomationPage />} />
-          <Route
-            path="/api-explorer"
-            element={<Navigate to="/automation?tab=explorer" replace />}
-          />
-          <Route path="/settings" element={<SettingsRoute />} />
-          {UiKitPage && (
+        <Suspense fallback={<PageLoading />}>
+          <Routes>
+            <Route path="/" element={<DesignerPage />} />
+            <Route path="/template/:id" element={<DesignerPage />} />
+            <Route path="/templates" element={<TemplatesPage />} />
+            <Route path="/print" element={<PrintPage />} />
+            <Route path="/pair" element={<PairRoute />} />
+            <Route path="/printers" element={<PrinterSetupPage />} />
+            <Route path="/history" element={<HistoryPage />} />
+            <Route path="/automation" element={<AutomationPage />} />
             <Route
-              path="/__ui"
-              element={
-                <Suspense fallback={null}>
-                  <UiKitPage />
-                </Suspense>
-              }
+              path="/api-explorer"
+              element={<Navigate to="/automation?tab=explorer" replace />}
             />
-          )}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route path="/settings" element={<SettingsRoute />} />
+            {UiKitPage && (
+              <Route
+                path="/__ui"
+                element={
+                  <Suspense fallback={null}>
+                    <UiKitPage />
+                  </Suspense>
+                }
+              />
+            )}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </Layout>
     </AppRouter>
   );

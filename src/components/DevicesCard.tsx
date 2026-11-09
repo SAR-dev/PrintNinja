@@ -14,7 +14,7 @@ import type {
   RenderShareStatus,
 } from "@/lib/agent/types";
 import { describeError } from "@/lib/errors";
-import { isAndroid } from "@/lib/android/background";
+import { isAndroid } from "@/lib/android/platform";
 import {
   notifyApiStatusChanged,
   startApiServer,
