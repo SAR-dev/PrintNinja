@@ -92,9 +92,21 @@ pub fn tasklist_names(stdout: &str, image: &str) -> bool {
         .contains(&image.to_ascii_lowercase())
 }
 
+/// A `std` command that never opens a console window. The app is a GUI
+/// process, so a bare `tasklist`/`taskkill` spawn flashes a command prompt
+/// each time — and the process-table checks run on every failed browser
+/// start, which at launch meant a burst of prompts.
+#[cfg(windows)]
+pub(crate) fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new(program);
+    cmd.creation_flags(windows::Win32::System::Threading::CREATE_NO_WINDOW.0);
+    cmd
+}
+
 #[cfg(windows)]
 pub(crate) fn processes_running(image: &str) -> bool {
-    std::process::Command::new("tasklist")
+    hidden_command("tasklist")
         .args(["/FI", &format!("IMAGENAME eq {image}")])
         .output()
         .map(|o| tasklist_names(&String::from_utf8_lossy(&o.stdout), image))
@@ -137,7 +149,7 @@ async fn kill_edge_verified() -> (bool, u32) {
     // ~7.5 s worst case: 15 rounds of (kill, 500 ms, verify).
     kill_until_dead(
         || {
-            let _ = std::process::Command::new("taskkill")
+            let _ = hidden_command("taskkill")
                 .args(["/F", "/IM", "msedge.exe"])
                 .status();
         },
