@@ -394,6 +394,11 @@ const en = {
     barcode_field_example: "order.id",
     barcode_value_hint: "Enter barcode value",
     barcode_fixed_hint: "This type is inserted with a fixed value.",
+    barcode_preview_only: "preview only",
+    barcode_preview_only_tip:
+      "Preview only: built-in printers cannot draw this type — it prints as an empty space.",
+    barcode_preview_only_hint:
+      "Preview only: built-in printers cannot draw this type, so it will print as an empty space.",
     barcode_per_print: "Each print and each CSV row gets its own code.",
     barcode_same: "The same code on every print.",
     barcode_insert: "Insert",
@@ -490,6 +495,12 @@ const en = {
     blocker_template: "Choose a template to enable printing.",
     blocker_copies: "Copies must be at least 1.",
     blocker_loading: "Loading printers and templates…",
+    preview_only_title: "Preview-only barcodes",
+    preview_only_body:
+      "This template uses {{types}}, which built-in printers cannot draw. They will print as an empty space.",
+    preview_only_body_static:
+      "This template contains a barcode that built-in printers cannot draw. It will print as an empty space.",
+    preview_only_print_anyway: "Print anyway",
     pages: "Pages",
     pages_hint:
       "Pages repeats one object per page (an array prints its own length); Copies re-sends the whole job.",
@@ -639,6 +650,9 @@ const en = {
     hint_raw: "For example 192.168.1.100:9100",
     hint_bluetooth:
       "For example A4:77:17:22:33:44 — the MAC of a paired device (the list below offers them)",
+    gdi_warning_title: "Driver may be GDI-only (no PDF datatype)",
+    gdi_warning:
+      "{{name}}'s print queue does not offer a PDF datatype, so its driver may be GDI-only: PDF jobs sent to it may not print. If that happens, add the same physical printer by its network address (Wi-Fi / LAN → IPP, or Raw TCP 9100 if the device reads PDF) instead of this system queue.",
     edit_printer: "Edit {{name}}",
     test_action: "Test print on {{name}}",
     testing: "Testing…",
@@ -887,6 +901,8 @@ const en = {
     background_close_warning:
       "Closing will quit the app and stop the print queue.",
     background_toast_updated: "Battery setting updated",
+    background_toast_granted: "Battery exemption enabled",
+    background_toast_not_granted: "Battery exemption was not enabled",
     reset_body:
       "Templates, print history, printers, fonts, datasets, profiles and all settings will be permanently deleted from this PC. The server keeps the account — sign back in to pull it down again.",
     background_service: "Print service",

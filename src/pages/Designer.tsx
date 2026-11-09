@@ -78,6 +78,7 @@ import {
   BARCODE_TYPES,
   buildBarcodeSnippet,
   isHelperSymbology,
+  isPreviewOnlySymbology,
 } from "@/lib/utils/barcode";
 import {
   DEFAULT_TEMPLATE_HTML,
@@ -1505,6 +1506,17 @@ export function DesignerPage() {
                     ? t("designer.barcode_per_print")
                     : t("designer.barcode_same")}
               </p>
+              {/* Design-time warning (MISSING_FEATURES #37): the preview
+                  draws these, the built-in print engine will not. */}
+              {isPreviewOnlySymbology(barcodeType) && (
+                <p
+                  id="barcode-preview-only-hint"
+                  role="alert"
+                  className="text-xs text-warning"
+                >
+                  {t("designer.barcode_preview_only_hint")}
+                </p>
+              )}
               {barcodeError && (
                 <p
                   id="barcode-error"

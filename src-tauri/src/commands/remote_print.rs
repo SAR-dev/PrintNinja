@@ -13,7 +13,9 @@
 //! `server_id`/`server_revision` from the phone's own template row.
 
 use crate::api::peer_consume::{describe_no_answer_for, pair_base, RenderPair};
-use crate::commands::print::{check_copies, MAX_API_DATA_BYTES, MAX_RECORDS};
+use crate::commands::print::{
+    check_copies, validate_orientation_and_fit, MAX_API_DATA_BYTES, MAX_RECORDS,
+};
 use crate::db::DbState;
 use crate::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
@@ -566,6 +568,11 @@ pub async fn remote_print_inner(
     };
 
     let copies = check_copies(args.copies.unwrap_or(1))?;
+    // The PC's pipeline re-checks these (run_print_with is the
+    // authoritative gate); rejecting here means the phone learns before
+    // any round trip, with the same message.
+    let (orientation, fit_mode) =
+        validate_orientation_and_fit(args.orientation.as_deref(), args.fit_mode.as_deref())?;
     if args.records.is_some_and(|n| n > MAX_RECORDS) {
         return Err(AppError::Validation(format!(
             "Too many pages requested: {} (max {MAX_RECORDS})",
@@ -591,12 +598,9 @@ pub async fn remote_print_inner(
     for (k, v) in [
         (
             "orientation",
-            args.orientation.as_deref().map(|s| serde_json::json!(s)),
+            orientation.as_deref().map(|s| serde_json::json!(s)),
         ),
-        (
-            "fit",
-            args.fit_mode.as_deref().map(|s| serde_json::json!(s)),
-        ),
+        ("fit", fit_mode.as_deref().map(|s| serde_json::json!(s))),
         (
             "page_range",
             args.page_range.as_deref().map(|s| serde_json::json!(s)),

@@ -10,6 +10,16 @@ pub struct PrinterInfo {
     pub printer_type: PrinterType,
     pub language: PrinterLanguage,
     pub status: String,
+    /// Whether this queue's print processor offers a `PDF` datatype
+    /// (Windows spooler queues only): `Some(true)` — a PDF job goes out
+    /// declared as PDF; `Some(false)` — the offered list is readable but
+    /// has no `PDF` entry, so the driver *may* be GDI-only and a PDF job
+    /// would go out as RAW; `None` — unknown (other platforms, remote
+    /// queues, or the list could not be read). Best-effort hint: the UI
+    /// warns, it never refuses. `#[serde(default)]` keeps rows from an
+    /// older PC (no field) deserializable.
+    #[serde(default)]
+    pub pdf_datatype: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -637,10 +647,27 @@ mod tests {
             printer_type: PrinterType::RawTcp,
             language: PrinterLanguage::Pdf,
             status: "unknown".into(),
+            pdf_datatype: None,
         };
         let json = serde_json::to_value(&info).expect("serializes");
         assert_eq!(json["printer_type"], "raw_tcp");
         assert_eq!(json["language"], "pdf");
+    }
+
+    /// A row serialized by an older build (no `pdf_datatype` field) must
+    /// still parse, as `None` = unknown — never a failed handshake.
+    #[test]
+    fn rows_without_pdf_datatype_default_to_unknown() {
+        let row = serde_json::json!({
+            "id": "q",
+            "name": "Q",
+            "address": "Q",
+            "printer_type": "system",
+            "language": "pdf",
+            "status": "online",
+        });
+        let info: PrinterInfo = serde_json::from_value(row).expect("old row parses");
+        assert_eq!(info.pdf_datatype, None);
     }
 
     /// P4: the language column decides the encoder, and anything the schema

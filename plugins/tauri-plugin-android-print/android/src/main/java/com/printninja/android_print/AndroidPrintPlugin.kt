@@ -654,7 +654,7 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
      * than stacking two dialogs for the same device.
      */
     private val usbPermissionLock = Object()
-    private val usbPermissionAction = "com.printninja.android_print.USB_PERMISSION"
+    private val usbPermissionAction = USB_PERMISSION_ACTION
 
     @Suppress("DEPRECATION")
     private fun ensureUsbPermission(device: UsbDevice): Boolean {

@@ -46,6 +46,7 @@ import {
   Scan,
   RefreshCw,
   MoreHorizontal,
+  AlertTriangle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -94,6 +95,8 @@ interface SystemPrinter {
   status?: string;
   /** Present on network discoveries (`ipp` / `raw_tcp`); absent on OS rows. */
   printer_type?: string;
+  /** Windows spooler rows only: queue offers a PDF datatype (see SystemPrinterRow). */
+  pdf_datatype?: boolean | null;
 }
 
 /** Tabs group printers by how they connect. */
@@ -721,6 +724,20 @@ export function PrinterSetupPage() {
           ? "printers.hint_bluetooth"
           : null;
 
+  // Item 15: a Windows queue whose print processor offers no PDF datatype
+  // sends a PDF job out as RAW, which a GDI-only driver prints as its
+  // source text. Best effort — the backend reads the offered list when the
+  // dialog scans the machine (cached an hour) and stays silent when it
+  // cannot know (remote shares, unreadable list).
+  const gdiWarning =
+    form.printer_type === "system" &&
+    form.language === "pdf" &&
+    systemPrinters.some(
+      (sp) =>
+        sp.pdf_datatype === false &&
+        sp.name.trim().toLowerCase() === form.name.trim().toLowerCase(),
+    );
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -850,6 +867,11 @@ export function PrinterSetupPage() {
                       key={sp.id}
                       variant="outline"
                       size="sm"
+                      title={
+                        sp.pdf_datatype === false
+                          ? t("printers.gdi_warning_title")
+                          : undefined
+                      }
                       onClick={() =>
                         setForm((f) => ({
                           ...f,
@@ -860,6 +882,12 @@ export function PrinterSetupPage() {
                       }
                     >
                       {sp.name}
+                      {sp.pdf_datatype === false && (
+                        <AlertTriangle
+                          className="h-3.5 w-3.5 text-warning"
+                          aria-hidden="true"
+                        />
+                      )}
                     </Button>
                   ))}
                 </div>
@@ -1112,6 +1140,22 @@ export function PrinterSetupPage() {
                 </p>
               )}
             </div>
+
+            {gdiWarning && (
+              <div
+                role="alert"
+                data-testid="printer-gdi-warning"
+                className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-warning"
+              >
+                <AlertTriangle
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  aria-hidden="true"
+                />
+                <p className="text-xs">
+                  {t("printers.gdi_warning", { name: form.name })}
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className={field}>

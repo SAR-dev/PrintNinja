@@ -117,6 +117,13 @@ describe("patch-android-signing", () => {
   it("is idempotent", () => {
     expect(patchBuildGradle(out)).toBe(out);
   });
+  it("patches CRLF files (Windows-generated) like LF", () => {
+    const crlfOut = patchBuildGradle(
+      (SAMPLE as string).replace(/\n/g, "\r\n"),
+    ) as string;
+    expect(crlfOut).toBe((out as string).replace(/\n/g, "\r\n"));
+    expect(patchBuildGradle(crlfOut)).toBe(crlfOut);
+  });
   it("renders key.properties for the shared keystore", () => {
     const props = keyPropertiesContent("s3cret", "printninja") as string;
     expect(props).toContain("storeFile=printninja.keystore");

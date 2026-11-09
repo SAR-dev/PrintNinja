@@ -304,6 +304,10 @@ pub async fn list_cups_printers() -> Vec<PrinterInfo> {
                 printer_type: PrinterType::System,
                 language: PrinterLanguage::Pdf,
                 status: printer_state_word(q.state).to_string(),
+                // CUPS queues are not probed for a PDF datatype: the
+                // hint is a Windows-spooler signal and stays unknown
+                // (no warning) here.
+                pdf_datatype: None,
             })
             .collect(),
         Err(e) => {

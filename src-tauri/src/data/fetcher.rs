@@ -106,9 +106,11 @@ impl DataFetcher {
             let data: serde_json::Value = serde_json::from_str(&text)
                 .map_err(|e| anyhow::anyhow!("Invalid JSON from {}: {}", options.url, e))?;
 
-            // Apply JSON path if specified
+            // Apply JSON path if specified. An unresolved path fails the
+            // fetch — the pipeline turns that into a failed job — instead
+            // of handing back blanks that print an empty-looking page.
             if let Some(path) = &options.json_path {
-                return Ok(extract_json_path(&data, path));
+                return extract_json_path(&data, path);
             }
 
             return Ok(data);
@@ -249,21 +251,34 @@ pub(crate) fn normalize_method(raw: &str) -> reqwest::Method {
     }
 }
 
-fn extract_json_path(data: &serde_json::Value, path: &str) -> serde_json::Value {
+/// Resolve a dotted path with optional `[n]` array segments against
+/// `data`. A path that cannot be resolved — a missing key, an out-of-range
+/// index, or an index into something that is not an array — is an error,
+/// not a silent blank: a typo in a dataset field must fail the job
+/// visibly instead of printing a page with every field empty. A key that
+/// exists and holds an explicit `null` does resolve, to `null`.
+fn extract_json_path(data: &serde_json::Value, path: &str) -> Result<serde_json::Value> {
     let parts: Vec<&str> = path.split('.').collect();
     let mut current = data;
 
     for part in parts {
         if let Some(index) = part.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
-            if let Ok(i) = index.parse::<usize>() {
-                current = &current[i];
-            }
+            let i: usize = index.parse().map_err(|_| {
+                anyhow::anyhow!(
+                    "path `{path}` not found in data: '[{index}]' is not an array index"
+                )
+            })?;
+            current = current
+                .get(i)
+                .ok_or_else(|| anyhow::anyhow!("path `{path}` not found in data"))?;
         } else {
-            current = &current[part];
+            current = current
+                .get(part)
+                .ok_or_else(|| anyhow::anyhow!("path `{path}` not found in data"))?;
         }
     }
 
-    current.clone()
+    Ok(current.clone())
 }
 
 #[cfg(test)]
@@ -326,23 +341,80 @@ mod tests {
     #[test]
     fn extract_json_path_traverses_nested_objects() {
         let data = serde_json::json!({"a": {"b": {"c": 42}}});
-        assert_eq!(extract_json_path(&data, "a.b.c"), serde_json::json!(42));
+        assert_eq!(
+            extract_json_path(&data, "a.b.c").unwrap(),
+            serde_json::json!(42)
+        );
     }
 
     #[test]
     fn extract_json_path_supports_array_index() {
         let data = serde_json::json!({"items": [10, 20, 30]});
-        assert_eq!(extract_json_path(&data, "items.[1]"), serde_json::json!(20));
+        assert_eq!(
+            extract_json_path(&data, "items.[1]").unwrap(),
+            serde_json::json!(20)
+        );
     }
 
     #[test]
-    fn extract_json_path_returns_null_for_missing_key() {
+    fn extract_json_path_missing_key_is_an_error_not_a_blank() {
         let data = serde_json::json!({"a": 1});
-        assert_eq!(extract_json_path(&data, "missing"), serde_json::Value::Null);
+        let err = extract_json_path(&data, "missing").unwrap_err().to_string();
+        assert!(err.contains("path `missing` not found in data"), "{err}");
+        let err = extract_json_path(&data, "a.missing.deep").unwrap_err().to_string();
+        assert!(err.contains("path `a.missing.deep` not found in data"), "{err}");
+    }
+
+    #[test]
+    fn extract_json_path_out_of_range_index_is_an_error() {
+        let data = serde_json::json!({"items": [10, 20, 30]});
+        let err = extract_json_path(&data, "items.[3]").unwrap_err().to_string();
+        assert!(err.contains("path `items.[3]` not found in data"), "{err}");
+        // An index into a non-array is unresolved too.
+        let data = serde_json::json!({"a": {"b": 1}});
+        let err = extract_json_path(&data, "a.[0]").unwrap_err().to_string();
+        assert!(err.contains("path `a.[0]` not found in data"), "{err}");
+    }
+
+    #[test]
+    fn extract_json_path_non_numeric_index_is_an_error() {
+        let data = serde_json::json!({"items": [10, 20, 30]});
+        let err = extract_json_path(&data, "items.[abc]").unwrap_err().to_string();
+        assert!(err.contains("not an array index"), "{err}");
+    }
+
+    #[test]
+    fn extract_json_path_resolves_an_explicit_null() {
+        let data = serde_json::json!({"a": null});
         assert_eq!(
-            extract_json_path(&data, "a.missing.deep"),
+            extract_json_path(&data, "a").unwrap(),
             serde_json::Value::Null
         );
+    }
+
+    /// The job-level consequence of a bad path: the fetch itself fails with
+    /// the message (the pipeline stores that on the job row as `failed`).
+    #[tokio::test]
+    async fn unresolved_json_path_fails_the_fetch() {
+        let json = r#"{"a": {"b": 1}}"#;
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/json\r\n\r\n{}",
+            json.len(),
+            json
+        );
+        let addr = serve_once(resp).await;
+
+        let fetcher = DataFetcher::allowing_private();
+        let opts = FetchOptions {
+            url: format!("http://{}/data", addr),
+            method: "GET".into(),
+            headers: None,
+            timeout_secs: 5,
+            max_size_bytes: 1024,
+            json_path: Some("a.typo".into()),
+        };
+        let err = fetcher.fetch(&opts).await.unwrap_err().to_string();
+        assert!(err.contains("path `a.typo` not found in data"), "{err}");
     }
 
     #[tokio::test]

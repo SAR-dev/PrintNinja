@@ -59,6 +59,26 @@ fn spool_datatype(mime_type: &str) -> &'static str {
     }
 }
 
+/// Whether a datatype list offers `PDF`.
+///
+/// `None` means the *list* is unknown (remote queue, access denied, the
+/// call failed) — not that the queue lacks PDF, so callers must not read
+/// it as "no PDF". The match ignores case and surrounding spaces, so a
+/// driver's ` Pdf ` entry counts.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn offers_pdf_datatype(offered: Option<&[String]>) -> Option<bool> {
+    offered.map(|list| list.iter().any(|d| d.trim().eq_ignore_ascii_case("pdf")))
+}
+
+/// A `\\server\share` port is a remote queue: its driver lives on the
+/// server, so this machine cannot know whether it offers `PDF` — and
+/// probing a down server can stall the list. Best effort: leave the hint
+/// unknown.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn remote_share_port(port: &str) -> bool {
+    port.starts_with("\\\\")
+}
+
 /// The datatype to declare for a job, given what the queue's print
 /// processor offers.
 ///
@@ -82,10 +102,11 @@ fn choose_datatype(mime_type: &str, offered: Option<&[String]>) -> &'static str 
     if wanted != "PDF" {
         return wanted;
     }
-    match offered {
-        None => wanted,
-        Some(list) if list.iter().any(|d| d.trim().eq_ignore_ascii_case("PDF")) => wanted,
-        Some(_) => "RAW",
+    match offers_pdf_datatype(offered) {
+        // Readable list without PDF: fall back to RAW.
+        Some(false) => "RAW",
+        // Offers PDF, or the list is unreadable: keep what the job wants.
+        Some(true) | None => wanted,
     }
 }
 
@@ -317,6 +338,21 @@ impl WindowsSpooler {
 
                 let offline = spooler_status_problem(info.Status).is_some();
 
+                // Best-effort GDI-only hint (item 15): a readable offered
+                // list without `PDF` is exactly when a PDF job would go
+                // out as RAW, which a GDI-only driver prints as its source
+                // text. Cached per queue for an hour; unreadable lists and
+                // remote shares stay unknown.
+                let pdf_datatype = if remote_share_port(&port) {
+                    None
+                } else {
+                    offers_pdf_datatype(
+                        WindowsSpooler::new(name.clone())
+                            .offered_datatypes()
+                            .as_deref(),
+                    )
+                };
+
                 printers.push(PrinterInfo {
                     id: name.clone(),
                     name,
@@ -324,6 +360,7 @@ impl WindowsSpooler {
                     printer_type: PrinterType::System,
                     language: PrinterLanguage::Pdf,
                     status: if offline { "offline" } else { "online" }.to_string(),
+                    pdf_datatype,
                 });
             }
         }
@@ -623,9 +660,9 @@ impl PrinterTransport for WindowsSpooler {
 pub async fn pdf_sent_as_raw(printer_name: &str) -> bool {
     let name = printer_name.to_string();
     tokio::task::spawn_blocking(move || {
-        WindowsSpooler::new(name)
-            .offered_datatypes()
-            .map(|list| !list.iter().any(|d| d.trim().eq_ignore_ascii_case("pdf")))
+        let offered = WindowsSpooler::new(name).offered_datatypes();
+        offers_pdf_datatype(offered.as_deref())
+            .map(|offers_pdf| !offers_pdf)
             .unwrap_or(false)
     })
     .await
@@ -817,6 +854,53 @@ mod tests {
     fn the_pdf_match_ignores_case_and_padding() {
         let odd = list(&["raw", " Pdf "]);
         assert_eq!(choose_datatype("application/pdf", Some(&odd)), "PDF");
+    }
+
+    // Item 15: the GDI-only hint. The signal is the same one the send
+    // path uses (the processor's offered datatypes), so the hint is true
+    // only when a PDF job would genuinely go out as RAW.
+
+    #[test]
+    fn a_readable_list_without_pdf_is_the_gdi_risk() {
+        // The stock winprint processor: RAW/EMF/TEXT, no PDF entry.
+        let stock = list(&["RAW", "RAW [FF appended]", "NT EMF 1.008", "TEXT"]);
+        assert_eq!(offers_pdf_datatype(Some(&stock)), Some(false));
+        // A PDF-capable driver registers a PDF datatype.
+        let with_pdf = list(&["RAW", "PDF", "NT EMF 1.008"]);
+        assert_eq!(offers_pdf_datatype(Some(&with_pdf)), Some(true));
+    }
+
+    #[test]
+    fn the_pdf_offer_match_ignores_case_and_padding() {
+        assert_eq!(
+            offers_pdf_datatype(Some(&list(&["raw", " Pdf "]))),
+            Some(true)
+        );
+        assert_eq!(
+            offers_pdf_datatype(Some(&list(&["RAW", "TEXT"]))),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn an_unreadable_datatype_list_is_unknown_not_gdi() {
+        // No list must not be reported as "no PDF": a queue that does not
+        // take PDF refuses the job loudly (1804), it does not print
+        // garbage.
+        assert_eq!(offers_pdf_datatype(None), None);
+    }
+
+    #[test]
+    fn remote_share_ports_are_not_probed_for_datatypes() {
+        // \\server\share queues live on another machine; the local
+        // spooler cannot see their processor's datatypes.
+        assert!(remote_share_port(r"\\print-server\lobby"));
+        assert!(remote_share_port(r"\\192.168.1.20\shared"));
+        assert!(!remote_share_port("WINSPOOL"));
+        assert!(!remote_share_port("USB001"));
+        assert!(!remote_share_port("PORT:10.0.0.5:9100"));
+        // A single backslash is not a UNC prefix.
+        assert!(!remote_share_port(r"\not-unc"));
     }
 
     #[test]
