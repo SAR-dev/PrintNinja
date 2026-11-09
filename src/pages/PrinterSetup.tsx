@@ -1212,13 +1212,8 @@ export function PrinterSetupPage() {
                 role="note"
                 className="flex items-start gap-2 rounded-md border border-info/30 bg-info-soft px-3 py-2 text-info"
               >
-                <Info
-                  className="mt-0.5 h-4 w-4 shrink-0"
-                  aria-hidden="true"
-                />
-                <p className="text-xs">
-                  {t("printers.raw_not_encrypted")}
-                </p>
+                <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <p className="text-xs">{t("printers.raw_not_encrypted")}</p>
               </div>
             )}
 
@@ -1231,9 +1226,7 @@ export function PrinterSetupPage() {
                   className="mt-0.5 h-4 w-4 shrink-0"
                   aria-hidden="true"
                 />
-                <p className="text-xs">
-                  {t("printers.ipp_non_pdf_warning")}
-                </p>
+                <p className="text-xs">{t("printers.ipp_non_pdf_warning")}</p>
               </div>
             )}
 
