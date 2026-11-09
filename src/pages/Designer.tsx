@@ -1136,9 +1136,7 @@ export function DesignerPage() {
             onNew={() => unlessDiscarding(() => openNewTemplateDialog())}
             onSave={() => void handleSave()}
             saveDisabled={offline || isReadOnly({ origin }) || !!nameError}
-            saveTitle={
-              offline ? t("designer.save_offline_title") : undefined
-            }
+            saveTitle={offline ? t("designer.save_offline_title") : undefined}
             templateName={templateName}
             onTemplateNameChange={setTemplateName}
             remoteId={remoteId}
