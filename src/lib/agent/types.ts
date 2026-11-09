@@ -165,6 +165,14 @@ export interface SystemPrinterRow {
   printer_type: string;
   language: string;
   status?: string;
+  /**
+   * Windows spooler queues only: the queue's print processor offers a
+   * `PDF` datatype. `false` — the offered list is readable but has no
+   * PDF entry, so the driver *may* be GDI-only and a PDF job goes out as
+   * RAW; `null`/absent — unknown (other platforms, remote shares, or the
+   * list could not be read).
+   */
+  pdf_datatype?: boolean | null;
 }
 
 export interface PrintHtmlReq {
@@ -258,6 +266,13 @@ export interface RemotePrintArgs {
   fit_mode?: string;
   page_range?: string;
   grayscale?: boolean;
+  /** Page margins in millimetres, one field per side like the local
+   * print request. Absent stays absent — the PC keeps the template
+   * default for that side. */
+  margin_top?: number;
+  margin_right?: number;
+  margin_bottom?: number;
+  margin_left?: number;
   test?: boolean;
   /** Caller-generated key; retries of one attempt reuse it. */
   idempotency_key?: string;
@@ -602,5 +617,15 @@ export interface PeerRenderResult {
 
 export interface DeeplinkResult {
   action: string;
+  /** `printninja://print?` only (MISSING_FEATURES #23): the new optional
+   *  print parameters the parser carries. Garbage drops to `null`, the
+   *  deep-link convention for typed values (a bad `copies` drops too),
+   *  so `null` always means "not set — keep the app default". */
+  page_range?: string | null;
+  grayscale?: boolean | null;
+  margin_top?: number | null;
+  margin_right?: number | null;
+  margin_bottom?: number | null;
+  margin_left?: number | null;
   [key: string]: unknown;
 }

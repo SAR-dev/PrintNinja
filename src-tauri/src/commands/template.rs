@@ -34,7 +34,11 @@ pub struct Template {
     pub updated_at: String,
 }
 
-const VALID_ORIENTATIONS: &[&str] = &["portrait", "landscape"];
+/// One list for the whole app: the print pipeline validates and
+/// normalizes against it (`validate_orientation_and_fit`), templates
+/// validate on create, so a template can never require a page the
+/// printer cannot be asked for.
+use crate::commands::print::VALID_ORIENTATIONS;
 
 #[tauri::command]
 pub fn list_templates(db: State<DbState>) -> AppResult<Vec<Template>> {

@@ -343,6 +343,102 @@ describe("Bluetooth in the add dialog", () => {
   });
 });
 
+describe("GDI-only system queue warning", () => {
+  // The backend sets `pdf_datatype` to `false` when the queue's offered
+  // datatype list is readable and has no `PDF` entry (the RAW-fallback
+  // condition), `true` when the queue offers PDF, and `null`/absent when
+  // it cannot know (remote shares, unreadable list).
+  const SYSTEM_PRINTERS = [
+    {
+      id: "HP LaserJet 1020",
+      name: "HP LaserJet 1020",
+      address: "WINSPOOL",
+      printer_type: "system",
+      language: "pdf",
+      status: "online",
+      pdf_datatype: false,
+    },
+    {
+      id: "Microsoft Print to PDF",
+      name: "Microsoft Print to PDF",
+      address: "WINSPOOL",
+      printer_type: "system",
+      language: "pdf",
+      status: "online",
+      pdf_datatype: true,
+    },
+    {
+      id: "OfficeShare\\Lobby",
+      name: "OfficeShare\\Lobby",
+      address: "\\\\print-server\\lobby",
+      printer_type: "system",
+      language: "pdf",
+      status: "online",
+      pdf_datatype: null,
+    },
+  ];
+
+  beforeEach(() => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers") return PRINTERS;
+      if (cmd === "enumerate_system_printers") return SYSTEM_PRINTERS;
+      return null;
+    });
+  });
+
+  async function openAddDialog() {
+    renderPage();
+    await screen.findByText("Dock Zebra");
+    fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));
+    return screen.findByRole("dialog");
+  }
+
+  it("marks the GDI-risk chip and stays quiet for known and unknown queues", async () => {
+    await openAddDialog();
+    const flagged = await screen.findByRole("button", {
+      name: /HP LaserJet 1020/,
+    });
+    expect(flagged).toHaveAttribute(
+      "title",
+      "Driver may be GDI-only (no PDF datatype)",
+    );
+    // PDF-offering and unknown (remote share) chips carry no marker.
+    expect(
+      screen.getByRole("button", { name: /Microsoft Print to PDF/ }),
+    ).not.toHaveAttribute("title");
+    expect(
+      screen.getByRole("button", { name: /OfficeShare\\Lobby/ }),
+    ).not.toHaveAttribute("title");
+  });
+
+  it("warns in the form when a GDI-risk queue is picked, and clears it otherwise", async () => {
+    await openAddDialog();
+    fireEvent.click(
+      await screen.findByRole("button", { name: /HP LaserJet 1020/ }),
+    );
+    const warning = await screen.findByTestId("printer-gdi-warning");
+    expect(warning).toHaveAttribute("role", "alert");
+    expect(warning).toHaveTextContent(/GDI-only/);
+    // A PDF-offering queue: no warning.
+    fireEvent.click(
+      screen.getByRole("button", { name: /Microsoft Print to PDF/ }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId("printer-gdi-warning")).toBeNull(),
+    );
+    // An unknown (remote share) queue: still no warning — unknown is not GDI.
+    fireEvent.click(screen.getByRole("button", { name: /OfficeShare\\Lobby/ }));
+    await waitFor(() =>
+      expect(screen.queryByTestId("printer-gdi-warning")).toBeNull(),
+    );
+    // System queues label the address field "Printer name" too (the queue
+    // name is the address), so target the name input by id.
+    expect(
+      screen.getByLabelText("Printer name", { selector: "#printer-name" }),
+    ).toHaveValue("OfficeShare\\Lobby");
+  });
+});
+
 describe("Print via PC notice", () => {
   it("explains the idle list and offers the exit", async () => {
     invoke.mockImplementation(async (cmd: string, args?: any) => {

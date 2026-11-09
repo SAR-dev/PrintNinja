@@ -18,6 +18,11 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Battery-optimization exemption: opening the system screen
+         (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) throws
+         SecurityException without this, which the toggle used to
+         swallow and report as success. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application>
         <!-- Merged into the app manifest by the Gradle manifest merger.
@@ -31,5 +36,24 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps the local print queue and print API available while the app is in the background" />
         </service>
+        <!-- USB printers: declaring a receiver for USB_DEVICE_ATTACHED
+             is what makes Android remember the permission grant —
+             without it the "allow access" dialog reopens on every
+             connect and a background job cannot open a re-plugged
+             printer. The filter (res/xml/device_filter.xml) matches
+             printer-class devices; the receiver asks for the grant
+             itself when a printer arrives without one. -->
+        <receiver
+            android:name="com.printninja.android_print.UsbAttachReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+                <action android:name="com.printninja.android_print.USB_PERMISSION" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
+        </receiver>
     </application>
 </manifest>

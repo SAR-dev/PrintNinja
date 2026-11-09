@@ -318,6 +318,36 @@ fn settings_copies(settings: &Value) -> u64 {
     settings.get("copies").and_then(|c| c.as_u64()).unwrap_or(1)
 }
 
+/// One margin out of `settings.margins`: absent `margins` or an absent
+/// (or `null`) member stays absent, so the layout keeps the template
+/// default for that side — the same reading the job-replay path
+/// (`load_job_request`) applies to the stored `settings_json`. A
+/// non-number member is refused rather than guessed at: the pipeline
+/// would have to decide which of "5 mm" and "5.0" the caller meant.
+fn margin_setting(settings: &Value, name: &str) -> Result<Option<f64>, ApiRejection> {
+    let Some(margins) = settings.get("margins") else {
+        return Ok(None);
+    };
+    if !margins.is_object() {
+        return Err(ApiRejection::BadRequestWithCode(
+            "`settings.margins` must be an object with `top`, `right`, `bottom` and `left` in millimetres".into(),
+            "invalid_margins",
+        ));
+    }
+    let Some(v) = margins.get(name) else {
+        return Ok(None);
+    };
+    if v.is_null() {
+        return Ok(None);
+    }
+    v.as_f64().map(Some).ok_or_else(|| {
+        ApiRejection::BadRequestWithCode(
+            format!("`settings.margins.{name}` must be a number of millimetres"),
+            "invalid_margins",
+        )
+    })
+}
+
 /// Name lookup for legacy callers: there is no HTML body in an API
 /// request, so without a template there would be nothing to render.
 fn resolve_template_by_name(
@@ -461,6 +491,42 @@ async fn print_job(
             )));
         }
     }
+    // Margins (MISSING_FEATURES #21): the same shape the job-replay path
+    // reads back from `settings_json`, so an API job and a local job with
+    // the same margins lay out identically. The range check is the shared
+    // rulebook; the 400 code keeps the body machine-readable.
+    let (margin_top, margin_right, margin_bottom, margin_left) =
+        crate::commands::print::validate_margins(
+            margin_setting(&settings, "top")?,
+            margin_setting(&settings, "right")?,
+            margin_setting(&settings, "bottom")?,
+            margin_setting(&settings, "left")?,
+        )
+        .map_err(|e| ApiRejection::BadRequestWithCode(e.to_string(), "invalid_margins"))?;
+    // Per-record runs (MISSING_FEATURES #21): the pipeline rejects
+    // over-max records in the template stage — after the job row exists —
+    // so the API refuses them pre-DB with a code, like copies.
+    let records = match settings.get("records") {
+        None => None,
+        Some(r) => {
+            let Some(r) = r.as_u64() else {
+                return Err(ApiRejection::BadRequestWithCode(
+                    "`settings.records` must be a whole number of pages".into(),
+                    "invalid_records",
+                ));
+            };
+            if r > crate::commands::print::MAX_RECORDS as u64 {
+                return Err(ApiRejection::BadRequestWithCode(
+                    format!(
+                        "Too many pages requested: {r} (max {})",
+                        crate::commands::print::MAX_RECORDS
+                    ),
+                    "too_many_records",
+                ));
+            }
+            Some(r as u32)
+        }
+    };
 
     // Everything that touches the DB happens in its own scope so the
     // `MutexGuard` is definitely released before the print. Holding it across
@@ -521,11 +587,11 @@ async fn print_job(
             .and_then(|o| o.as_str())
             .map(str::to_string),
         copies: Some(copies),
-        records: None,
-        margin_top: None,
-        margin_right: None,
-        margin_bottom: None,
-        margin_left: None,
+        records,
+        margin_top,
+        margin_right,
+        margin_bottom,
+        margin_left,
         fit_mode: settings
             .get("fit")
             .and_then(|f| f.as_str())

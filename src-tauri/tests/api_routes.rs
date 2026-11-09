@@ -2068,6 +2068,225 @@ async fn print_rejects_oversize_data_without_creating_a_job() {
 }
 
 // ───────────────────────────────────────────────────────────────
+// margins + records via the API (MISSING_FEATURES #21)
+// ───────────────────────────────────────────────────────────────
+
+/// The `settings_json` of the newest job row, parsed.
+fn latest_settings_json(db: &Db) -> serde_json::Value {
+    let raw: String = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT settings_json FROM print_jobs ORDER BY id DESC LIMIT 1",
+            [],
+            |r| r.get(0),
+        )
+        .expect("a job row exists");
+    serde_json::from_str(&raw).expect("settings_json is valid")
+}
+
+/// `settings.margins` and `settings.records` ride the same `PrintRequest`
+/// the UI uses, and the margins land in the job's `settings_json` in the
+/// exact shape the job-replay path reads back: an object of four sides,
+/// absent sides as `null` (the template default stays in effect for them).
+#[tokio::test]
+async fn print_margins_and_records_flow_into_the_job() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "margin-token-1");
+
+    let (status, _) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(32),
+        Some("margin-token-1"),
+        serde_json::json!({
+            "template": "Receipt",
+            "printer": "Desk",
+            "data": {"order": {"id": 7}},
+            "settings": {
+                "records": 2,
+                "margins": {"top": 5.0, "right": 6.0, "bottom": 7.0, "left": 8.0}
+            }
+        }),
+    )
+    .await;
+    // The physical print to the seeded IPP printer (1.2.3.4) fails in CI —
+    // nothing answers it — so this test cannot require a 2xx (the same
+    // reason the other `/v1/print` tests only assert the request was not
+    // accepted as "queued"). What it owns is that *valid* margins + records
+    // clear the validators (a 4xx would be a validator bug) and land in the
+    // job's `settings_json` in the shape the replay path reads back.
+    assert!(
+        !(400..500).contains(&status.as_u16()),
+        "valid margins + records pass validation, got {status}"
+    );
+    let settings = latest_settings_json(&db);
+    assert_eq!(
+        settings["margins"],
+        serde_json::json!({"top": 5.0, "right": 6.0, "bottom": 7.0, "left": 8.0})
+    );
+
+    // One side set, the rest absent: only that side changes.
+    let (status, _) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(32),
+        Some("margin-token-1"),
+        serde_json::json!({
+            "template": "Receipt",
+            "printer": "Desk",
+            "data": {},
+            "settings": {"margins": {"top": 12.5}}
+        }),
+    )
+    .await;
+    assert!(
+        !(400..500).contains(&status.as_u16()),
+        "a partial margins object passes validation, got {status}"
+    );
+    let settings = latest_settings_json(&db);
+    assert_eq!(
+        settings["margins"],
+        serde_json::json!({"top": 12.5, "right": null, "bottom": null, "left": null})
+    );
+}
+
+/// Every bad margin value is refused with 400 + `invalid_margins` before
+/// any job row exists: negative, past the 300 mm cap, not a number, and a
+/// `margins` key that is not an object. (NaN cannot reach the handler —
+/// the JSON body parser rejects it first — and the shared validator's
+/// unit tests pin that side.)
+#[tokio::test]
+async fn print_rejects_bad_margins_without_creating_a_job() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "margin-token-2");
+
+    let bad_margins: &[&str] = &[
+        "-5",           // negative
+        "301",          // past the 300 mm cap
+        "\"10\"",       // a string, not a number
+        "1e9",          // finite but absurd
+        "[5, 6, 7, 8]", // not an object
+        "\"top\"",      // not an object
+    ];
+    for raw in bad_margins {
+        let (status, body) = lan_post(
+            router(&db),
+            "/v1/print",
+            lan_ip(33),
+            Some("margin-token-2"),
+            serde_json::json!({
+                "template": "Receipt",
+                "printer": "Desk",
+                "data": {},
+                "settings": {"margins": serde_json::from_str::<serde_json::Value>(raw).unwrap()}
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "margins {raw}");
+        assert_eq!(
+            body["code"].as_str(),
+            Some("invalid_margins"),
+            "machine-readable code: {body}"
+        );
+    }
+    assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+/// Over-max records are refused pre-DB with 400 + `too_many_records`,
+/// like copies; a records value that is not a whole number gets
+/// `invalid_records`.
+#[tokio::test]
+async fn print_rejects_bad_records_without_creating_a_job() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "margin-token-3");
+
+    let (status, body) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(34),
+        Some("margin-token-3"),
+        serde_json::json!({
+            "template": "Receipt",
+            "printer": "Desk",
+            "data": {},
+            "settings": {"records": 501}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"].as_str(), Some("too_many_records"), "{body}");
+    assert!(
+        body["error"].as_str().unwrap_or("").contains("501"),
+        "message names the limit: {body}"
+    );
+
+    for raw in [r#""3""#, "2.5"] {
+        let (status, body) = lan_post(
+            router(&db),
+            "/v1/print",
+            lan_ip(34),
+            Some("margin-token-3"),
+            serde_json::json!({
+                "template": "Receipt",
+                "printer": "Desk",
+                "data": {},
+                "settings": {"records": serde_json::from_str::<serde_json::Value>(raw).unwrap()}
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "records {raw}");
+        assert_eq!(
+            body["code"].as_str(),
+            Some("invalid_records"),
+            "machine-readable code: {body}"
+        );
+    }
+    assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+/// A setting value the pipeline itself rejects — unknown `orientation` /
+/// `fit`, an unparseable `page_range` — surfaces over the API as a 400
+/// with the pipeline's message, and creates no job.
+#[tokio::test]
+async fn print_rejects_pipeline_invalid_setting_values_as_400() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "margin-token-4");
+
+    let cases: &[(&str, &str)] = &[
+        (r#""diagonal""#, "orientation"),
+        (r#""stretch""#, "fit"),
+        (r#""9-1""#, "page_range"),
+    ];
+    for &(raw, what) in cases {
+        let (status, body) = lan_post(
+            router(&db),
+            "/v1/print",
+            lan_ip(35),
+            Some("margin-token-4"),
+            serde_json::json!({
+                "template": "Receipt",
+                "printer": "Desk",
+                "data": {},
+                "settings": {what: serde_json::from_str::<serde_json::Value>(raw).unwrap()}
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{what}={raw}");
+        assert!(
+            body["error"].as_str().is_some_and(|m| !m.is_empty()),
+            "the pipeline's message rides the body: {body}"
+        );
+    }
+    assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+// ───────────────────────────────────────────────────────────────
 // template version check (ARCHITECTURE §9)
 // ───────────────────────────────────────────────────────────────
 

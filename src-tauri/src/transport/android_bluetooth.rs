@@ -274,6 +274,7 @@ impl PrinterTransport for AndroidBluetoothPrinter {
                 printer_type: crate::transport::PrinterType::Bluetooth,
                 language: crate::transport::PrinterLanguage::Pdf,
                 status: "unknown".to_string(),
+                pdf_datatype: None,
             })
             .collect()
     }

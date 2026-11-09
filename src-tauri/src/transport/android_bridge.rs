@@ -45,6 +45,7 @@ impl AndroidBridge {
                     printer_type: crate::transport::PrinterType::Ipp,
                     language: crate::transport::PrinterLanguage::Pdf,
                     status: "unknown".to_string(),
+                    pdf_datatype: None,
                 })
                 .collect()
         }

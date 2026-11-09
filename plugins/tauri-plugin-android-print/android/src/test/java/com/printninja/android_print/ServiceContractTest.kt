@@ -41,29 +41,67 @@ class ServiceContractTest {
         assertTrue(PrintNinjaService.ACTION_STOP.startsWith("com.printninja."))
     }
 
-    // The notification text is the app's only visible proof that the
-    // local API server is alive in the background, so the wording (and
-    // the address) is pinned here.
+    // The USB grant-result action is the integration surface between the
+    // manifest receiver (UsbAttachReceiver) and the in-process request
+    // (AndroidPrintPlugin.ensureUsbPermission): the receiver is declared
+    // in the plugin AndroidManifest.xml with this literal, so renaming
+    // it here silently breaks the grant handoff.
+    @Test
+    fun usbPermissionActionIsNamespacedToThePlugin() {
+        assertEquals("com.printninja.android_print.USB_PERMISSION", USB_PERMISSION_ACTION)
+    }
+
+    @Test
+    fun usbAttachActionIsThePlatformOne() {
+        assertEquals(
+            "android.hardware.usb.action.USB_DEVICE_ATTACHED",
+            UsbAttachReceiver.USB_ATTACHED_ACTION,
+        )
+    }
+
+    // The notification text is the app's only visible proof of what is
+    // actually alive in the background (queue worker, API server), so
+    // the wording (and the address) is pinned here.
 
     @Test
     fun apiRunningNotificationShowsTheLiveAddress() {
-        val (title, text) = PrintNinjaService.notificationText(true, "192.168.1.24:17717")
+        val (title, text) = PrintNinjaService.notificationText(true, true, "192.168.1.24:17717")
         assertEquals("PrintNinja is running", title)
         assertEquals("API server listening on 192.168.1.24:17717", text)
     }
 
     @Test
     fun apiStoppedNotificationFallsBackToThePrintQueueWording() {
-        val (title, text) = PrintNinjaService.notificationText(false, null)
+        val (title, text) = PrintNinjaService.notificationText(true, false, null)
         assertEquals("PrintNinja print service is running", title)
         assertEquals("The print queue stays available in the background.", text)
     }
 
     @Test
     fun aStaleAddressNeverShowsWhileTheServerIsDown() {
-        val (title, text) = PrintNinjaService.notificationText(false, "127.0.0.1:17717")
+        val (title, text) = PrintNinjaService.notificationText(true, false, "127.0.0.1:17717")
         assertEquals("PrintNinja print service is running", title)
         assertFalse(text.contains("17717"))
+    }
+
+    // After Android kills the process, only the service is restarted:
+    // the Rust queue worker does not come back until the app is opened.
+    // The notification must say the queue is paused — never claim it is
+    // draining — so the paused wording is pinned here too.
+
+    @Test
+    fun serviceRestartWithoutTheAppSaysTheQueueIsPaused() {
+        val (title, text) = PrintNinjaService.notificationText(false, false, null)
+        assertEquals("PrintNinja restarted", title)
+        assertEquals("The print queue is paused. Open the app to resume printing.", text)
+    }
+
+    @Test
+    fun aPausedQueueNeverShowsAnAddressOrALiveWording() {
+        val (title, text) = PrintNinjaService.notificationText(false, true, "127.0.0.1:17717")
+        assertEquals("PrintNinja restarted", title)
+        assertFalse(text.contains("17717"))
+        assertFalse(text.contains("available"))
     }
 
     // Android 13+ hides the foreground notification until the user allows
