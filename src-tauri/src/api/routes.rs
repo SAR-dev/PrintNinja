@@ -819,9 +819,16 @@ fn job_time_bound(raw: &str) -> Result<(String, String), ApiRejection> {
 /// The five `details` columns read from a job row, in SELECT order: the
 /// job's own `printer_id`, the joined printer name, the job's own
 /// `template_id`, the joined template name, and `settings_json`. The ids
-/// come from the job's FK columns (not the joined `p.id`/`t.id`) so they
-/// survive the referenced row being deleted; the names go null then.
-type JobDetailCols = (Option<i64>, Option<String>, Option<i64>, Option<String>, Option<String>);
+/// are read from the job's own FK columns, not the joined `p.id`/`t.id`;
+/// with the FKs ON DELETE SET NULL, a deleted reference reads null for
+/// both the id and the name.
+type JobDetailCols = (
+    Option<i64>,
+    Option<String>,
+    Option<i64>,
+    Option<String>,
+    Option<String>,
+);
 
 /// The `details` object both job endpoints append (P20): the names the
 /// job points at, not only the ids. `printer`/`template` are the same
@@ -910,8 +917,8 @@ async fn list_jobs(
     let conn = guard.connection();
 
     // The LEFT JOINs (not INNER) keep jobs whose printer or template was
-    // deleted: the ids are read from the job's own FK columns so they
-    // survive the delete, while the joined names read null.
+    // deleted; with the FKs ON DELETE SET NULL both the id and the
+    // joined name read null for such a job.
     let mut sql = String::from(
         "SELECT j.id, j.status, j.source, j.copies, j.created_at,
                 j.requested_by_device_id, j.template_revision,
