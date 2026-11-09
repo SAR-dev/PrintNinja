@@ -63,9 +63,9 @@ describe("loadConfig", () => {
     expect(
       loadConfig({ ...required, CRON_SECRET: "" }).cronSecret,
     ).toBeUndefined();
-    expect(
-      loadConfig({ ...required, CRON_SECRET: "s3cret" }).cronSecret,
-    ).toBe("s3cret");
+    expect(loadConfig({ ...required, CRON_SECRET: "s3cret" }).cronSecret).toBe(
+      "s3cret",
+    );
   });
 
   it("coerces numeric strings and rejects out-of-range values", () => {
