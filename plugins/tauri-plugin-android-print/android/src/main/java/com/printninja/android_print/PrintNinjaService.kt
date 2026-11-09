@@ -39,6 +39,14 @@ import java.lang.ref.WeakReference
  * (and again from the webview), so the queue survives before any command
  * runs. Stopped only from the notification's Close action or the
  * plugin's stopBackgroundService command.
+ *
+ * Process death: the queue worker (and the API server) live on the
+ * Rust side, which only exists while the Tauri app is booted. If
+ * Android kills the process and restarts this service, the new process
+ * has the service but no app — [queueWorkerRunning] stays false and the
+ * notification says the queue is paused instead of claiming it is
+ * live. Reopening the app boots the worker and [setQueueWorkerState]
+ * puts the live wording back.
  */
 class PrintNinjaService : Service() {
 
@@ -63,8 +71,11 @@ class PrintNinjaService : Service() {
             }
         }
         startForegroundWithNotification()
-        // If the system kills us (memory pressure), restart: the queue
-        // rows persist in SQLite, so printing resumes where it stopped.
+        // If the system kills us (memory pressure), restart. Note the
+        // restart is service-only: the Rust queue worker lives with the
+        // Tauri app, which a service restart does not bring back, so
+        // the queue stays paused (rows persist in SQLite) until the app
+        // is reopened. The notification says that honestly.
         return START_STICKY
     }
 
@@ -175,6 +186,18 @@ class PrintNinjaService : Service() {
         var apiServerAddress: String? = null
             private set
 
+        /**
+         * Whether the Rust queue worker is alive in this process. The
+         * worker is spawned when the Tauri app boots (setup), and the
+         * plugin's load() — which only runs with a live app — sets this
+         * true. A service-restarted process never runs load(), so the
+         * flag stays false and the notification must not claim the
+         * queue is draining.
+         */
+        @Volatile
+        var queueWorkerRunning: Boolean = false
+            private set
+
         /** Idempotent: starting twice keeps one service. */
         fun start(context: Context) {
             try {
@@ -217,13 +240,35 @@ class PrintNinjaService : Service() {
         }
 
         /**
+         * Called by the plugin when the app boots (load): the Rust queue
+         * worker exists from this moment on, so the notification may
+         * claim the queue is live again. The flip rewrites the pinned
+         * notification — which after a service restart shows the
+         * paused wording until this runs.
+         */
+        fun setQueueWorkerState(context: Context, running: Boolean) {
+            if (queueWorkerRunning == running) return
+            queueWorkerRunning = running
+            if (isRunning) refreshNotification(context)
+        }
+
+        /**
          * Title and body for the pinned notification: the live API
-         * address while the server runs, the print-queue text otherwise.
+         * address while the server runs, the print-queue text while the
+         * worker runs, and an honest "paused" text when Android
+         * restarted the service without the app (worker down).
          * Split out so the contract test can pin the wording without an
          * Android [Context].
          */
-        fun notificationText(running: Boolean, address: String?): Pair<String, String> =
-            if (running && address != null) {
+        fun notificationText(
+            workerRunning: Boolean,
+            apiRunning: Boolean,
+            address: String?,
+        ): Pair<String, String> =
+            if (!workerRunning) {
+                "PrintNinja restarted" to
+                    "The print queue is paused. Open the app to resume printing."
+            } else if (apiRunning && address != null) {
                 "PrintNinja is running" to "API server listening on $address"
             } else {
                 "PrintNinja print service is running" to
@@ -285,7 +330,8 @@ class PrintNinjaService : Service() {
                 Intent(context, PrintNinjaService::class.java).setAction(ACTION_CLOSE),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
-            val (title, text) = notificationText(apiServerRunning, apiServerAddress)
+            val (title, text) =
+                notificationText(queueWorkerRunning, apiServerRunning, apiServerAddress)
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setContentTitle(title)
                 .setContentText(text)

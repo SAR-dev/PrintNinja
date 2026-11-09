@@ -14,9 +14,12 @@ import { createFakeCache, type SyncChangeIn } from "./cache.js";
 /**
  * Mirrors parse_deep_link in src-tauri/src/deeplink.rs: same actions,
  * same defaults (confirm unless 0/false, test only on 1/true, copies
- * parsed or dropped), same unknown-action error. Serde's externally
- * tagged enum shape is reproduced ({ Print: {...} } etc.) so specs
- * assert the exact wire the app would get.
+ * parsed or dropped), same unknown-action error. The new print options
+ * follow the same drop-on-garbage convention: grayscale only on
+ * 1/true or 0/false, margins through the shared 0..=300 mm rulebook
+ * (anything else, like a garbage copies, drops to null). Serde's
+ * externally tagged enum shape is reproduced ({ Print: {...} } etc.)
+ * so specs assert the exact wire the app would get.
  */
 function parseDeepLink(url: string): unknown {
   const rest = url.startsWith("printninja://")
@@ -44,6 +47,16 @@ function parseDeepLink(url: string): unknown {
         : NaN;
     const testFlag = params.get("test");
     const confirmFlag = params.get("confirm");
+    // Rust's f64 parse accepts NaN/inf, so like Rust this runs the
+    // value through the shared margin rulebook (finite, 0..=300) after
+    // a grammar check that accepts only what Rust's f64 parser would.
+    const grayRaw = params.get("grayscale");
+    const grayscale =
+      grayRaw === "1" || grayRaw === "true"
+        ? true
+        : grayRaw === "0" || grayRaw === "false"
+          ? false
+          : null;
     return {
       Print: {
         preset: params.get("preset") ?? null,
@@ -56,6 +69,12 @@ function parseDeepLink(url: string): unknown {
             : null,
         orientation: params.get("orientation") ?? null,
         fit: params.get("fit") ?? null,
+        page_range: params.get("page_range") ?? null,
+        grayscale,
+        margin_top: parseMargin(params.get("margin_top")),
+        margin_right: parseMargin(params.get("margin_right")),
+        margin_bottom: parseMargin(params.get("margin_bottom")),
+        margin_left: parseMargin(params.get("margin_left")),
         test: testFlag === "1" || testFlag === "true",
         confirm: !(confirmFlag === "0" || confirmFlag === "false"),
         callback: params.get("callback") ?? null,
@@ -77,6 +96,23 @@ function decodeQueryComponent(s: string): string {
   } catch {
     return s.replace(/\+/g, " ");
   }
+}
+
+/**
+ * Mirrors parse_margin in src-tauri/src/deeplink.rs: the value must
+ * match Rust's f64 grammar (so "NaN"/"inf"/" 5" never reach Number,
+ * which would parse some of them) and then pass the shared margin
+ * rulebook — finite, 0..=300 mm — else null, like a garbage copies.
+ */
+function parseMargin(raw: string | undefined): number | null {
+  if (
+    raw === undefined ||
+    !/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(raw)
+  ) {
+    return null;
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 && n <= 300 ? n : null;
 }
 
 const PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

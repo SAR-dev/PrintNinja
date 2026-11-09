@@ -21,6 +21,8 @@ import { SettingsPage } from "./pages/Settings";
 import { TemplatesPage } from "./pages/Templates";
 import { diagnostics } from "./lib/diagnostics";
 import { startOnPrint } from "./lib/shell/startRoute";
+import { notifyInfo } from "./lib/notify";
+import i18n from "./lib/i18n";
 import { PairingGate } from "./components/PairingGate";
 
 // Reference page for shared components. Not bundled into production builds.
@@ -94,7 +96,21 @@ function AppContent() {
     // away. No-op everywhere else; failures are best-effort (the
     // service also starts from the native plugin load).
     void import("@/lib/android/background")
-      .then((m) => m.ensureBackgroundService())
+      .then(async (m) => {
+        if (!(await m.ensureBackgroundService())) return;
+        // Opening the app boots the Rust queue worker again, so any
+        // jobs still queued — e.g. left behind after Android killed
+        // the process and only restarted the background service —
+        // will drain from here. Say so once, so the reopen is
+        // visibly what resumes printing.
+        const jobs = await agent("list_jobs", {}).catch(() => []);
+        const queued = jobs.filter((j) => j.status === "queued").length;
+        if (queued > 0) {
+          notifyInfo(i18n.t("shell.resuming_queued", { count: queued }), {
+            id: "queue-resumed",
+          });
+        }
+      })
       .catch(() => {});
   }, []);
 

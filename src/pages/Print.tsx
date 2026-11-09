@@ -718,8 +718,9 @@ function PrintForm() {
 
   // One print through the paired PC. A fresh attempt mints the
   // idempotency key; a retry reuses it, so a timeout never prints twice.
-  // Paper size and margins stay home: the API has no fields for them, so
-  // the PC prints at the template's design size.
+  // Paper size stays home (the API has no field for it), but the four
+  // margins ride along — the same values the local path sends — so a
+  // phone job lays out the page the same way a local one would.
   const handleRemotePrint = async (retry: boolean) => {
     const pair = resolvePhonePair(pairs, viaPcDevice);
     if (!pair) {
@@ -763,6 +764,10 @@ function PrintForm() {
           printer_name: store.printerId,
           copies: store.copies,
           records: store.records,
+          margin_top: store.marginTop,
+          margin_right: store.marginRight,
+          margin_bottom: store.marginBottom,
+          margin_left: store.marginLeft,
           orientation: store.orientation,
           fit_mode: store.fitMode,
           page_range: store.pageRange.trim() || undefined,

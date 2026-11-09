@@ -610,5 +610,15 @@ export interface PeerRenderResult {
 
 export interface DeeplinkResult {
   action: string;
+  /** `printninja://print?` only (MISSING_FEATURES #23): the new optional
+   *  print parameters the parser carries. Garbage drops to `null`, the
+   *  deep-link convention for typed values (a bad `copies` drops too),
+   *  so `null` always means "not set — keep the app default". */
+  page_range?: string | null;
+  grayscale?: boolean | null;
+  margin_top?: number | null;
+  margin_right?: number | null;
+  margin_bottom?: number | null;
+  margin_left?: number | null;
   [key: string]: unknown;
 }
