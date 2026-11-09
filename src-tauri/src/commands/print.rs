@@ -515,6 +515,13 @@ pub fn validate_orientation_and_fit(
 /// hostile API payload) cannot push the content off the page.
 pub const MAX_MARGIN_MM: f64 = 300.0;
 
+/// The four optional margin sides, in `(top, right, bottom, left)` order,
+/// as checked and returned by [`validate_margins`]. Named so the
+/// `AppResult`-wrapping-a-4-`Option<f64>`-tuple signature stays under
+/// `clippy::type_complexity`'s threshold; it is still just that tuple, so
+/// every caller destructures it unchanged.
+pub type MarginSides = (Option<f64>, Option<f64>, Option<f64>, Option<f64>);
+
 /// The one margin rulebook every print path that accepts explicit
 /// margins runs them through (API, remote-via-PC, deep link): a present
 /// value must be finite, at least 0 and at most [`MAX_MARGIN_MM`].
@@ -527,12 +534,12 @@ pub fn validate_margins(
     right: Option<f64>,
     bottom: Option<f64>,
     left: Option<f64>,
-) -> AppResult<(Option<f64>, Option<f64>, Option<f64>, Option<f64>)> {
+) -> AppResult<MarginSides> {
     let check = |raw: Option<f64>, what: &str| -> AppResult<Option<f64>> {
         let Some(v) = raw else {
             return Ok(None);
         };
-        if !v.is_finite() || v < 0.0 || v > MAX_MARGIN_MM {
+        if !v.is_finite() || !(0.0..=MAX_MARGIN_MM).contains(&v) {
             return Err(AppError::Validation(format!(
                 "Invalid {what} margin {v}: expected a number of millimetres between 0 and {MAX_MARGIN_MM}"
             )));

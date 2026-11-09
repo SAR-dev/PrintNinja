@@ -3,7 +3,12 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DeepLinkAction {
-    Print(DeepLinkPrint),
+    // `Box`ed: `DeepLinkPrint` grew (page_range, grayscale, four margins)
+    // past `clippy::large_enum_variant`'s threshold, so heap-allocating it
+    // keeps the small `Open`/`Template` variants from paying for the large
+    // one. Serde serialises `Box<T>` transparently as `T`, so the Tauri
+    // command boundary and every match site are unaffected.
+    Print(Box<DeepLinkPrint>),
     Open(String),
     Template(String),
 }
@@ -79,7 +84,7 @@ pub fn parse_deep_link(url: &str) -> Result<DeepLinkAction, String> {
                     .unwrap_or(true),
                 callback: params.get("callback").map(|s| s.to_string()),
             };
-            Ok(DeepLinkAction::Print(print))
+            Ok(DeepLinkAction::Print(Box::new(print)))
         }
         _ if path.starts_with("open/") => {
             let destination = path.strip_prefix("open/").unwrap_or("");
