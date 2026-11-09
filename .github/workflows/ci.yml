@@ -347,6 +347,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # The generated project's Gradle wrapper downloads its distribution
+      # from services.gradle.org on first use; a CDN hiccup (e.g. a 504)
+      # would fail the whole build, and the wrapper does not retry. Cache
+      # the distribution and dependency cache across runs. Bump the key
+      # when the Tauri template bumps Gradle (the version is in the
+      # wrapper's download URL, visible in build logs).
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle
+          key: gradle-9.6.1-${{ runner.os }}
       # Self-hosted runners do not ship an Android SDK (unlike
       # GitHub-hosted ones). Download the cmdline-tools when sdkmanager
       # is missing and point ANDROID_HOME at them for the steps below.
@@ -576,6 +587,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # The generated project's Gradle wrapper downloads its distribution
+      # from services.gradle.org on first use; a CDN hiccup (e.g. a 504)
+      # would fail the whole build, and the wrapper does not retry. Cache
+      # the distribution and dependency cache across runs. Bump the key
+      # when the Tauri template bumps Gradle (the version is in the
+      # wrapper's download URL, visible in build logs).
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle
+          key: gradle-9.6.1-${{ runner.os }}
       # Self-hosted runners do not ship an Android SDK (unlike
       # GitHub-hosted ones). Download the cmdline-tools when sdkmanager
       # is missing and point ANDROID_HOME at them for the steps below.
