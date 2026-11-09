@@ -661,6 +661,15 @@ const en = {
     gdi_warning_title: "Driver may be GDI-only (no PDF datatype)",
     gdi_warning:
       "{{name}}'s print queue does not offer a PDF datatype, so its driver may be GDI-only: PDF jobs sent to it may not print. If that happens, add the same physical printer by its network address (Wi-Fi / LAN → IPP, or Raw TCP 9100 if the device reads PDF) instead of this system queue.",
+    raw_not_encrypted:
+      "Raw TCP sends the bytes exactly as rendered — nothing on the wire is encrypted. Keep this to a trusted local network.",
+    ipp_non_pdf_warning:
+      "IPP printers expect PDF. With a non-PDF language, PrintNinja would send raw printer bytes over IPP, which most IPP endpoints reject — if test prints fail, add the same printer as Raw TCP (host:port) instead.",
+    system_android_warning:
+      "System (OS print queue) printers are not supported on Android. To keep using this printer, re-add it on this phone by address as IPP or Raw TCP.",
+    bluetooth_settings_button: "Open Bluetooth settings",
+    bluetooth_settings_hint:
+      "Pairing happens in Android itself: the button opens the system screen where you pair the printer, then come back and rescan.",
     edit_printer: "Edit {{name}}",
     test_action: "Test print on {{name}}",
     testing: "Testing…",
@@ -970,6 +979,10 @@ const en = {
     api_autostart_hint: "Uses the port and sharing settings.",
     api_background_hint:
       "Keeps running in the background — the pinned notification shows this address while the server is up.",
+    cups_title: "CUPS (Linux)",
+    cups_url: "CUPS server URL",
+    cups_url_hint:
+      "Where PrintNinja finds the CUPS daemon for system printers. Overrides the PRINTNINJA_CUPS_URL environment variable; empty falls back to http://localhost:631.",
     api_curl_title: "curl example",
     devices_title: "Shared rendering",
     devices_hint:

@@ -354,6 +354,10 @@ export function SettingsPage() {
     }
   }, [browserChoice, customPath, recheckEngine, t]);
 
+  // The CUPS daemon address (Linux): a device-local setting that wins
+  // over the PRINTNINJA_CUPS_URL environment variable.
+  const [cupsUrl, setCupsUrl] = useState("");
+
   const [shareUrl, setShareUrl] = useState("");
   const [shareHandle, setShareHandle] = useState("");
   const [sharePassword, setSharePassword] = useState("");
@@ -382,6 +386,7 @@ export function SettingsPage() {
         closeTray,
         bChoice,
         bPath,
+        cups,
       ] = await Promise.all([
         readSetting("retention_days"),
         readSetting("max_records"),
@@ -393,7 +398,9 @@ export function SettingsPage() {
         readSetting("close_to_tray"),
         readSetting("browser-choice"),
         readSetting("browser-custom-path"),
+        readSetting("cups-url"),
       ]);
+      if (cups) setCupsUrl(cups);
       if (days) setRetentionDays(days);
       if (max) setMaxRecords(max);
       if (domains) setAllowedDomains(domains);
@@ -746,6 +753,37 @@ export function SettingsPage() {
                 </TabsContent>
 
                 <TabsContent value="general" className="mt-0 space-y-4">
+                  {engineStatus?.platform === "linux" && (
+                    /* Linux only: system printers are served through CUPS,
+                       and a non-local daemon needs its address here. */
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">
+                          {t("settings_page.cups_title")}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-1">
+                          <Label htmlFor="cups-url">
+                            {t("settings_page.cups_url")}
+                          </Label>
+                          <Input
+                            id="cups-url"
+                            data-testid="settings-cups-url"
+                            placeholder="http://localhost:631"
+                            value={cupsUrl}
+                            onChange={(e) => setCupsUrl(e.target.value)}
+                            onBlur={() =>
+                              void writeSetting("cups-url", cupsUrl.trim())
+                            }
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            {t("settings_page.cups_url_hint")}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                   <AppearanceSettings />
                   <Card>
                     <CardHeader>

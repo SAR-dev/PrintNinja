@@ -246,6 +246,11 @@ Each badge links to the place where you can turn that switch off.
 
 **My USB or Bluetooth printer is not listed on Windows.** Install it as a Windows printer first. PrintNinja uses the Windows spooler for both.
 
+**How to add a USB or Bluetooth printer on Windows or Linux.** PrintNinja does not scan for USB or Bluetooth devices on desktop; the printer must first be installed by the OS, after which it appears as a **system** printer in the Add dialog.
+
+- **Windows:** plug in the USB cable (or pair the Bluetooth printer in Windows Settings → Bluetooth & devices). Open **Printers & scanners** → **Add device**; Windows installs the driver and creates a spooler queue. The printer then appears in PrintNinja's Add dialog under *System*. If the printer speaks a command language (ESC/POS, ZPL, TSPL, CPCL) rather than PDF, set **Language** accordingly after adding it — a PDF-language USB printer will print garbage.
+- **Linux:** install CUPS and the printer driver. For a USB or Bluetooth thermal/label printer that speaks a command language, create a **raw** CUPS queue (e.g. `lpadmin -p MyPrinter -m raw -v usb://…` or `bluetooth://…`) so CUPS passes the bytes through untouched. The queue then appears in PrintNinja's Add dialog under *System* (CUPS). Set **Language** to the printer's command language.
+
 **Android stops printing after I close the app.** Open Settings and check that the background service is running and that battery optimizations are ignored for PrintNinja.
 
 **A data URL is blocked.** Go to **Settings → Data & network**. You can allow the domain there. Private-IP blocking is also on that page.
@@ -261,6 +266,7 @@ If you are stuck, export logs from **Settings → Diagnostics** and attach them 
 - [`docs/architecture/RENDERING_AND_LAYOUT.md`](docs/architecture/RENDERING_AND_LAYOUT.md): how a design becomes pages and sheets
 - [`docs/architecture/PRINTERS_AND_TRANSPORTS.md`](docs/architecture/PRINTERS_AND_TRANSPORTS.md): transports, printer languages, per-OS notes
 - [`docs/MISSING_FEATURES.md`](docs/MISSING_FEATURES.md): printer support gaps by platform and connection type, with priorities and workarounds
+- [`docs/TEST_CHECKLIST.md`](docs/TEST_CHECKLIST.md): real-printer test checklist (text, barcode, image, long job) — not yet run on hardware
 - [`docs/architecture/QUEUE_AND_HISTORY.md`](docs/architecture/QUEUE_AND_HISTORY.md): the queue, timings, metrics and callbacks
 - [`docs/architecture/PHONE_AND_PC_SHARING.md`](docs/architecture/PHONE_AND_PC_SHARING.md): pairing, tokens, guests and Print via PC, plus the recorded "why" behind the rules
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): developer quick start, project layout, commands, release

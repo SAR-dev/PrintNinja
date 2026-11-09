@@ -303,6 +303,11 @@ const implemented: Record<string, Handler> = {
   // Bonded Bluetooth is an Android-only surface; the e2e browser has
   // none, so the honest answer is an empty list.
   list_bluetooth_devices: () => [],
+  // Mirrors the non-Android branch of the Rust command, which refuses
+  // rather than opening anything (Bluetooth settings are Android-only).
+  open_bluetooth_settings: () => {
+    throw new Error("Bluetooth settings only exist on Android");
+  },
   cache_apply_changes: (args) =>
     cache.applyChanges(
       (args["changes"] as SyncChangeIn[] | undefined) ?? [],

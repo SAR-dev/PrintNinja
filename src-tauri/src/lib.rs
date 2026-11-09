@@ -170,6 +170,9 @@ pub fn run() {
             // browser.
             if let Ok(guard) = db_state.lock() {
                 render::browser_choice::apply_from(guard.connection());
+                // Same for the CUPS URL, so system printers resolve against
+                // the configured daemon from the first probe.
+                transport::cups::apply_from(guard.connection());
             }
 
             // Orphaned font files (crashed deletes, failed overwrites) go
@@ -403,6 +406,7 @@ pub fn run() {
             commands::print::print_html,
             commands::print::enumerate_system_printers,
             commands::print::list_bluetooth_devices,
+            commands::print::open_bluetooth_settings,
             commands::print::discover_network_printers,
             commands::print::discover_network_printers_mdns,
             commands::print::discover_peers_mdns,

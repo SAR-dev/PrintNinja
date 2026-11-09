@@ -18,10 +18,59 @@ use super::{
 /// missing daemon refuses fast, and Setup must not hang on a wedged one.
 const CUPS_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// The CUPS base URL from Settings (device-local, never synced).
+pub const CUPS_URL_KEY: &str = "cups-url";
+
+/// The transport layer never touches the database — the settings table is
+/// behind `DbState`, and `create_transport` runs where it is not in
+/// scope. So the setting lives here as a cached copy, refreshed by
+/// `apply_from`: once at app setup, after every `set_setting` of this key,
+/// and after a device reset (the same pattern as
+/// `render::browser_choice`). Resolution order: setting, then the
+/// `PRINTNINJA_CUPS_URL` environment variable, then the local default.
+static CUPS_URL: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Whether `key` is the CUPS URL setting, so `set_setting` knows when to
+/// refresh the cache.
+pub fn is_cups_setting_key(key: &str) -> bool {
+    key == CUPS_URL_KEY
+}
+
+/// Replace the cached URL (an empty string means "unset").
+pub fn set_cups_url(url: Option<String>) {
+    let mut guard = CUPS_URL.lock().unwrap();
+    *guard = url.filter(|s| !s.trim().is_empty());
+}
+
+/// Refresh the cache from the settings table.
+pub fn apply_from(conn: &rusqlite::Connection) {
+    let read: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            [CUPS_URL_KEY],
+            |r| r.get(0),
+        )
+        .ok();
+    set_cups_url(read);
+}
+
 fn cups_base_url() -> String {
-    std::env::var("PRINTNINJA_CUPS_URL")
-        .ok()
-        .filter(|s| !s.trim().is_empty())
+    let setting = CUPS_URL.lock().unwrap().clone();
+    resolve_cups_base_url(
+        setting.as_deref(),
+        std::env::var("PRINTNINJA_CUPS_URL").ok().as_deref(),
+    )
+}
+
+/// Resolve the CUPS base URL: the setting wins over the environment
+/// variable, which wins over the local default. Trailing slashes are
+/// trimmed so `http://host:631/` does not produce double-slash paths.
+fn resolve_cups_base_url(setting: Option<&str>, env: Option<&str>) -> String {
+    setting
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| env.map(str::trim).filter(|s| !s.is_empty()))
+        .map(|s| s.trim_end_matches('/').to_string())
         .unwrap_or_else(|| "http://localhost:631".to_string())
 }
 
@@ -468,6 +517,49 @@ mod tests {
         body[2] = 0x04;
         body[3] = 0x00;
         assert!(parse_cups_printers(&body).is_err());
+    }
+
+    // --- CUPS base URL resolution (setting > env > default) ---
+
+    #[test]
+    fn the_setting_wins_over_the_env_var() {
+        assert_eq!(
+            resolve_cups_base_url(Some("http://office:631"), Some("http://env:631")),
+            "http://office:631"
+        );
+    }
+
+    #[test]
+    fn the_env_var_wins_over_the_default() {
+        assert_eq!(
+            resolve_cups_base_url(None, Some("http://env:631")),
+            "http://env:631"
+        );
+        assert_eq!(resolve_cups_base_url(None, None), "http://localhost:631");
+    }
+
+    #[test]
+    fn an_empty_setting_falls_through_to_the_env_var() {
+        assert_eq!(
+            resolve_cups_base_url(Some("   "), Some("http://env:631")),
+            "http://env:631"
+        );
+        assert_eq!(
+            resolve_cups_base_url(Some(""), None),
+            "http://localhost:631"
+        );
+    }
+
+    #[test]
+    fn trailing_slashes_are_trimmed_so_paths_stay_single_slash() {
+        assert_eq!(
+            resolve_cups_base_url(Some("http://office:631/"), None),
+            "http://office:631"
+        );
+        assert_eq!(
+            resolve_cups_base_url(Some("http://office:631//"), Some("http://env:631/")),
+            "http://office:631"
+        );
     }
 
     #[test]

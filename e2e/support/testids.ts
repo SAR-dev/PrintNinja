@@ -70,6 +70,8 @@ export const testids = {
   settingsApiPort: "settings-api-port",
   /** Automation → API server: the Android background/pinned-notification note. */
   settingsApiBackground: "settings-api-background",
+  /** Settings general (Linux only): CUPS daemon URL field (device-local). */
+  settingsCupsUrl: "settings-cups-url",
   /** Settings background: launch at startup toggle. */
   settingsLaunchAtStartup: "settings-launch-at-startup",
   /** Settings background: start minimized toggle. */
@@ -146,6 +148,8 @@ export const testids = {
   devicesPairAgain: (id: string) => `devices-pair-again-${id}`,
   /** Printers page: the "Found on this network" scan list in the Add sheet. */
   printersScanNetwork: "printers-scan-network",
+  /** Printers page (Android, Bluetooth): open the OS Bluetooth settings. */
+  printersOpenBluetoothSettings: "printers-open-bluetooth-settings",
   /** Printers page: one row of the discovered-printers scan list. */
   discoveredPrinter: (id: string) => `discovered-printer-${id}`,
   /** Designer pack chooser: one pack card (parameterized by pack id). */
