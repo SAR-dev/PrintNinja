@@ -523,27 +523,17 @@ fn remote_settings(
 ) -> serde_json::Value {
     let mut settings = serde_json::json!({ "copies": copies });
     for (k, v) in [
-        (
-            "orientation",
-            orientation.map(serde_json::Value::from),
-        ),
+        ("orientation", orientation.map(serde_json::Value::from)),
         ("fit", fit_mode.map(serde_json::Value::from)),
         ("page_range", page_range.map(serde_json::Value::from)),
         ("grayscale", grayscale.map(serde_json::Value::from)),
-        (
-            "http_method",
-            http_method.map(serde_json::Value::from),
-        ),
+        ("http_method", http_method.map(serde_json::Value::from)),
     ] {
         if let Some(v) = v {
             settings[k] = v;
         }
     }
-    if margins.0.is_some()
-        || margins.1.is_some()
-        || margins.2.is_some()
-        || margins.3.is_some()
-    {
+    if margins.0.is_some() || margins.1.is_some() || margins.2.is_some() || margins.3.is_some() {
         settings["margins"] = serde_json::json!({
             "top": margins.0,
             "right": margins.1,
