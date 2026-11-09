@@ -146,14 +146,43 @@ impl Default for OpenApiSpec {
                 "/v1/jobs": {
                     "get": {
                         "summary": "List jobs",
+                        "description": "Newest first. Unfiltered, it answers the 200 newest jobs — the old behaviour, so existing callers are unaffected. Each job carries a `details` object: `printer_id`/`printer` and `template_id`/`template` (the names, null when the row's printer or template was deleted) and `settings` (the job's stored settings, null when it has none).",
+                        "parameters": [
+                            { "name": "limit", "in": "query", "required": false,
+                              "schema": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 },
+                              "description": "Page size" },
+                            { "name": "offset", "in": "query", "required": false,
+                              "schema": { "type": "integer", "minimum": 0, "default": 0 },
+                              "description": "Rows to skip" },
+                            { "name": "status", "in": "query", "required": false,
+                              "schema": { "type": "string", "enum": ["queued", "printing", "success", "failed", "cancelled"] },
+                              "description": "Filter by job status" },
+                            { "name": "source", "in": "query", "required": false,
+                              "schema": { "type": "string", "enum": ["ui", "api", "deeplink", "batch", "test"] },
+                              "description": "Filter by where the job came from" },
+                            { "name": "printer_id", "in": "query", "required": false,
+                              "schema": { "type": "integer" },
+                              "description": "Filter by printer" },
+                            { "name": "template_id", "in": "query", "required": false,
+                              "schema": { "type": "integer" },
+                              "description": "Filter by template" },
+                            { "name": "from", "in": "query", "required": false,
+                              "schema": { "type": "string" },
+                              "description": "Inclusive lower bound on `created_at` (UTC): RFC 3339, or `YYYY-MM-DD` for the start of that day" },
+                            { "name": "to", "in": "query", "required": false,
+                              "schema": { "type": "string" },
+                              "description": "Inclusive upper bound on `created_at` (UTC): RFC 3339, or `YYYY-MM-DD` for the end of that day" }
+                        ],
                         "responses": {
-                            "200": { "description": "Jobs, with a `count`" },                        }
+                            "200": { "description": "A page of jobs, with `count` (the page size) and the `limit`/`offset` that were answered" },
+                            "400": { "description": "A filter value the table cannot hold (an unknown `status`/`source`), an unparseable `from`/`to`, or a `limit` outside 1–1000" }
+                        }
                     }
                 },
                 "/v1/jobs/{id}": {
                     "get": {
                         "summary": "Get job status",
-                        "description": "The record carries `requested_by_device_id`: the paired phone that asked for the print, or null for a local print.",
+                        "description": "The record carries `requested_by_device_id`: the paired phone that asked for the print, or null for a local print. It also carries `details`: `printer_id`/`printer` and `template_id`/`template` (the names, null when the row's printer or template was deleted) and `settings` (the job's stored settings, null when it has none).",
                         "responses": {
                             "200": { "description": "Job record" },
                             "400": { "description": "`id` is not an integer" },                            "404": { "description": "No such job" }

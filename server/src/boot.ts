@@ -61,6 +61,19 @@ export async function buildStack(): Promise<Stack> {
   app.addHook("onClose", async () => {
     await db.$disconnect();
   });
+  // Vercel sets VERCEL=1 in the function environment. There is no
+  // in-process cleanup timer on that entry (api/index.ts), so the
+  // scheduled GET /v2/internal/cleanup call is the only purge — warn
+  // loudly at start-up when the secret that enables it is missing,
+  // instead of letting expired sessions and tombstones pile up
+  // silently behind a 503.
+  if (!config.cronSecret && process.env.VERCEL) {
+    app.log.warn(
+      "CRON_SECRET is not set: GET /v2/internal/cleanup answers 503 and " +
+        "nothing will purge expired sessions or sync tombstones. Set " +
+        "CRON_SECRET (e.g. `openssl rand -hex 32`) in the Vercel project.",
+    );
+  }
   return {
     app,
     config,

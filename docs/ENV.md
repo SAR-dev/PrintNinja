@@ -57,7 +57,11 @@ any secret.
 Shared secret for `GET /v2/internal/cleanup` (purges expired sessions
 and tombstones older than the retention window). On Vercel, a Vercel
 Cron declared in `server/vercel.json` calls it daily with a Bearer
-token; without the secret the endpoint answers 404 (disabled). Generate with
+token; without the secret the endpoint answers 503 (disabled — the
+message names the cause) and the service logs a loud warning at
+start-up. An empty value counts as unset: `${CRON_SECRET:-}` in compose
+and a bare `CRON_SECRET=` in `.env` both disable the endpoint rather
+than failing the config. Generate with
 `openssl rand -hex 32` and never commit it. Not needed for the Docker
 or local entries, which run the same purges from their own timers.
 

@@ -4,7 +4,10 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { purgeExpiredSessions } from "../../domain/auth/index.js";
 import { purgeOldTombstones } from "../../domain/sync/index.js";
-import { NotFoundError, UnauthorizedError } from "../../domain/errors.js";
+import {
+  ServiceUnavailableError,
+  UnauthorizedError,
+} from "../../domain/errors.js";
 import type { AppDeps } from "../../domain/ports.js";
 import { errorBody } from "../schemas/error.js";
 
@@ -23,8 +26,10 @@ const cleanupResponse = z.object({
 /**
  * Scheduled maintenance for deployments with no long-lived process
  * (Vercel): one endpoint the scheduler calls instead of the in-process
- * timer in server.ts. Disabled (404) when CRON_SECRET is unset; the
- * secret travels as a Bearer token and is compared in constant time.
+ * timer in server.ts. Disabled (503) when CRON_SECRET is unset, so a
+ * misconfigured deployment sees the cause instead of a 404 that reads
+ * as "wrong path"; the secret travels as a Bearer token and is
+ * compared in constant time.
  */
 export async function internalRoutes(
   app: FastifyInstance,
@@ -37,14 +42,16 @@ export async function internalRoutes(
     {
       schema: {
         description:
-          "Scheduled cleanup: purge expired sessions and tombstones older than the retention window. Bearer CRON_SECRET; 404 when unconfigured.",
-        response: { 200: cleanupResponse, 401: errorBody, 404: errorBody },
+          "Scheduled cleanup: purge expired sessions and tombstones older than the retention window. Bearer CRON_SECRET; 503 when CRON_SECRET is unset.",
+        response: { 200: cleanupResponse, 401: errorBody, 503: errorBody },
       },
     },
     async (request) => {
       const expected = options.cronSecret;
       if (!expected) {
-        throw new NotFoundError();
+        throw new ServiceUnavailableError(
+          "Cleanup is not configured (CRON_SECRET is unset)",
+        );
       }
       const presented = request.headers.authorization?.startsWith("Bearer ")
         ? request.headers.authorization.slice("Bearer ".length)
