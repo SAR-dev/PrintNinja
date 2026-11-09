@@ -353,7 +353,11 @@ fn smoke_test(exe: &Path) -> std::io::Result<()> {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(exe, std::fs::Permissions::from_mode(0o755));
     }
-    let out = std::process::Command::new(exe)
+    #[cfg(windows)]
+    let mut cmd = super::fix::hidden_command(exe);
+    #[cfg(not(windows))]
+    let mut cmd = std::process::Command::new(exe);
+    let out = cmd
         .arg("--version")
         .output()
         .map_err(|e| std::io::Error::new(e.kind(), format!("launch: {e}")))?;
