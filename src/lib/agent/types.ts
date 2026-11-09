@@ -266,6 +266,13 @@ export interface RemotePrintArgs {
   fit_mode?: string;
   page_range?: string;
   grayscale?: boolean;
+  /** Page margins in millimetres, one field per side like the local
+   * print request. Absent stays absent — the PC keeps the template
+   * default for that side. */
+  margin_top?: number;
+  margin_right?: number;
+  margin_bottom?: number;
+  margin_left?: number;
   test?: boolean;
   /** Caller-generated key; retries of one attempt reuse it. */
   idempotency_key?: string;
