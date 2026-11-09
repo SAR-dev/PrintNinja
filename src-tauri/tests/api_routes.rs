@@ -3049,8 +3049,8 @@ async fn list_jobs_rejects_filters_the_table_cannot_hold() {
 
 /// Both job endpoints append `details`: the printer/template names and
 /// the stored settings (P20) — the same names the `print.succeeded`
-/// callback carries. A job whose printer was deleted (ON DELETE SET
-/// NULL) keeps its id but reports null names.
+/// callback carries. A job whose printer was deleted reports null for
+/// both the id and the name (the FK is ON DELETE SET NULL).
 #[tokio::test]
 async fn job_endpoints_report_details() {
     let db = setup();
@@ -3066,7 +3066,7 @@ async fn job_endpoints_report_details() {
     );
     let full_id = job_ids_newest_first(&db)[0];
 
-    let (ghost_printer_id, ghost_job_id): (i64, i64) = {
+    let ghost_job_id: i64 = {
         let guard = db.lock().unwrap();
         let c = guard.connection();
         c.execute(
@@ -3095,7 +3095,7 @@ async fn job_endpoints_report_details() {
             .unwrap();
         c.execute("DELETE FROM printers WHERE id = ?1", [ghost_id])
             .unwrap();
-        (ghost_id, job_id)
+        job_id
     };
 
     let (status, body) = get_body(router(&db), &format!("/v1/jobs/{full_id}")).await;
@@ -3112,8 +3112,9 @@ async fn job_endpoints_report_details() {
     let d = &body["details"];
     assert_eq!(d["printer"], serde_json::Value::Null);
     assert_eq!(
-        d["printer_id"], ghost_printer_id,
-        "the id stays, the name goes"
+        d["printer_id"],
+        serde_json::Value::Null,
+        "ON DELETE SET NULL clears the id along with the name"
     );
     assert_eq!(d["template"], serde_json::Value::Null);
     assert_eq!(
