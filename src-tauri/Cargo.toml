@@ -61,6 +61,18 @@ png = "0.17"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tauri-plugin-opener = "2"
 mdns-sd = "0.13"
+# PDF-input rasterization (render/pdfium.rs): interprets a submitted PDF's
+# first page into a 1-bit raster for command-language printers. The binary
+# is vendored at resources/pdfium (pdfium.dll on Windows, libpdfium.so on
+# Linux; Apache-2.0 — see its LICENSE.txt); the
+# `pdfium_7881` binding pairs with the bundled build 8046d (the FPDF_LIBRARY
+# function table is append-only, so a binding at or below the binary's
+# revision is the safe direction). Desktop-only: on Android the PDF
+# input is rendered on the device by the platform's own PDFium port
+# (android.graphics.pdf.PdfRenderer, see render/mod.rs) instead of a
+# bundled binary.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+pdfium-render = { version = "0.9", default-features = false, features = ["pdfium_7881", "thread_safe"] }
 # euid check for the persistent Chromium launch: running as root without
 # `--no-sandbox` is unsupported, and the flag must be decided at launch,
 # not from refused stderr like the one-shot retry can.

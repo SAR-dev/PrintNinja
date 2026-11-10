@@ -131,6 +131,13 @@ pub fn router_with_state(
             state.clone(),
             crate::api::render_share::require_paired_or_local,
         ))
+        // Axum's 2 MiB default would chop a legitimate `POST /v1/print`
+        // whose `pdf` field carries a ~5 MiB document (~6.7 MiB of
+        // base64 plus the JSON envelope). `MAX_PDF_BYTES` still bounds
+        // the decoded document in the handler.
+        .layer(axum::extract::DefaultBodyLimit::max(
+            crate::commands::print::MAX_PRINT_BODY_BYTES,
+        ))
         .with_state(state)
         // Per-request spans (method, path, status, latency): the only way
         // to join a slow print across middleware and handler in the logs.
@@ -299,6 +306,10 @@ struct PrintJobRequest {
     template_server_id: Option<String>,
     template_server_revision: Option<i64>,
     printer: String,
+    /// Existing PDF to print, base64-encoded (the REST API takes no binary
+    /// body). Mutually exclusive with `template`/`template_server_id`,
+    /// `data` and `data_url`; capped at `MAX_PDF_BYTES` after decoding.
+    pdf: Option<String>,
     data: Option<Value>,
     data_url: Option<String>,
     settings: Option<Value>,
@@ -491,6 +502,76 @@ async fn print_job(
             )));
         }
     }
+    // A job takes one content source (TODO item 3): a PDF in, or a template
+    // to render, never both. The either/or is decided here — pre-DB — so a
+    // conflicting request creates no job row, and the decoded bytes are
+    // checked against `MAX_PDF_BYTES` before anything else runs.
+    let has_template = req.template.as_deref().is_some_and(|t| !t.is_empty())
+        || req
+            .template_server_id
+            .as_deref()
+            .is_some_and(|s| !s.is_empty());
+    let has_pdf = req.pdf.as_deref().is_some_and(|p| !p.is_empty());
+    if has_pdf && has_template {
+        return Err(ApiRejection::BadRequestWithCode(
+            "a job takes one content source: `pdf` conflicts with `template`/`template_server_id`"
+                .into(),
+            "conflicting_content",
+        ));
+    }
+    if has_pdf && req.data.is_some() {
+        return Err(ApiRejection::BadRequestWithCode(
+            "a job takes one content source: `pdf` conflicts with `data`".into(),
+            "conflicting_content",
+        ));
+    }
+    if has_pdf
+        && req
+            .data_url
+            .as_deref()
+            .is_some_and(|u| !u.trim().is_empty())
+    {
+        return Err(ApiRejection::BadRequestWithCode(
+            "a job takes one content source: `pdf` conflicts with `data_url`".into(),
+            "conflicting_content",
+        ));
+    }
+    let pdf_bytes: Option<Vec<u8>> = if has_pdf {
+        use base64::Engine;
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(req.pdf.as_deref().unwrap().trim())
+            .map_err(|e| {
+                ApiRejection::BadRequestWithCode(
+                    format!("`pdf` is not valid base64: {e}"),
+                    "invalid_pdf",
+                )
+            })?;
+        if decoded.is_empty() {
+            return Err(ApiRejection::BadRequestWithCode(
+                "`pdf` decodes to an empty document".into(),
+                "invalid_pdf",
+            ));
+        }
+        if decoded.len() > crate::commands::print::MAX_PDF_BYTES {
+            return Err(ApiRejection::BadRequestWithCode(
+                format!(
+                    "`pdf` is {} bytes after decoding; the limit is {}",
+                    decoded.len(),
+                    crate::commands::print::MAX_PDF_BYTES
+                ),
+                "pdf_too_large",
+            ));
+        }
+        Some(decoded)
+    } else {
+        None
+    };
+    if !has_template && !has_pdf {
+        return Err(ApiRejection::BadRequest(
+            "`template` (or `template_server_id`) or `pdf` is required (the API has no inline HTML body)"
+                .into(),
+        ));
+    }
     // Margins (MISSING_FEATURES #21): the same shape the job-replay path
     // reads back from `settings_json`, so an API job and a local job with
     // the same margins lay out identically. The range check is the shared
@@ -532,19 +613,26 @@ async fn print_job(
     // `MutexGuard` is definitely released before the print. Holding it across
     // a network round-trip to a thermal printer would stall every other
     // command, and the pipeline takes the lock again for its history write.
-    let template_id = {
+    let template_id: Option<i64> = {
         let guard = db.lock().map_err(ApiRejection::from)?;
         let conn = guard.connection();
 
-        // A synced caller names the exact revision (ARCHITECTURE §9).
-        // A legacy caller sends only the name and keeps the old lookup.
-        let pc_name = crate::commands::api::device_name();
-        let template_id = if let Some(server_id) =
-            req.template_server_id.as_deref().filter(|s| !s.is_empty())
+        // A PDF job carries its own content: nothing to resolve.
+        // Otherwise — a synced caller names the exact revision
+        // (ARCHITECTURE §9); a legacy caller sends only the name and keeps
+        // the old lookup.
+        let template_id = if has_pdf {
+            None
+        } else if let Some(server_id) = req.template_server_id.as_deref().filter(|s| !s.is_empty())
         {
-            resolve_template_by_version(conn, server_id, req.template_server_revision, &pc_name)?
+            Some(resolve_template_by_version(
+                conn,
+                server_id,
+                req.template_server_revision,
+                &crate::commands::api::device_name(),
+            )?)
         } else {
-            resolve_template_by_name(conn, req.template.as_deref())?
+            Some(resolve_template_by_name(conn, req.template.as_deref())?)
         };
 
         // Fail early with 404 rather than after a pointless render.
@@ -580,6 +668,8 @@ async fn print_job(
     let print_req = crate::commands::print::PrintRequest {
         printer_name: req.printer.clone(),
         html: String::new(),
+        // Decoded (and either/or-checked) above; None for template jobs.
+        pdf: pdf_bytes,
         page_width_mm: None,
         page_height_mm: None,
         orientation: settings
@@ -605,7 +695,8 @@ async fn print_job(
             .get("http_method")
             .and_then(|v| v.as_str())
             .map(str::to_string),
-        template_id: Some(template_id),
+        // None for a PDF job (its content is `pdf`, not a template).
+        template_id,
         data: req.data.clone(),
         data_url: req.data_url.clone(),
         test: req.test,

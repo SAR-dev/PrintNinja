@@ -59,6 +59,7 @@ server/src/infra/db/generated
 playwright-report
 test-results
 coverage
+src-tauri/test-report/
 
 # TypeScript incremental build info
 *.tsbuildinfo

@@ -1,0 +1,42 @@
+# Test container for the desktop crate (src-tauri).
+#
+# The image is the toolchain only; the workspace is mounted at run time
+# by docker-compose.test.yml, so the image never goes stale against the
+# code and rebuilding it is cheap.
+#
+#   docker compose -f src-tauri/docker-compose.test.yml run --rm rust-test
+#
+# Linux build dependencies for a Tauri 2 desktop crate:
+# - libwebkit2gtk-4.1 + libgtk-3: the WebView the tauri crate links
+# - libayatana-appindicator3: the tray-icon feature
+# - librsvg2: icon loading
+# - build-essential + pkg-config: rusqlite's bundled SQLite compiles from
+#   source, and tauri-build probes the web libraries through pkg-config
+#
+# The toolchain itself: rustup reads the repo-root rust-toolchain.toml
+# (channel 1.90.0) from the mounted workspace and installs it on the
+# first build; the base image's stable is only the fallback.
+#
+# The PDFium unit tests run here too: the container has no bundled
+# layout yet, so render/pdfium.rs falls back to its
+# CARGO_MANIFEST_DIR/resources/pdfium candidate and binds the vendored
+# libpdfium.so (x86-64) from the mounted workspace.
+FROM rust:1.90.0-bookworm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        file \
+        pkg-config \
+        libssl-dev \
+        libwebkit2gtk-4.1-dev \
+        libgtk-3-dev \
+        libayatana-appindicator3-dev \
+        librsvg2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Machine-readable test report (the test:rust:report script).
+RUN cargo install --locked cargo-junit
+
+WORKDIR /workspace

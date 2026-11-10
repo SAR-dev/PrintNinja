@@ -20,6 +20,7 @@ import type {
   PrinterRow,
   PrintResponse,
   ProfileRow,
+  ProbeCapabilitiesResult,
   PairedDevice,
   PairingInvite,
   NewPairingInvite,
@@ -145,6 +146,21 @@ export interface AgentCommands {
   delete_printer: [{ id: number }, null];
   get_printer: [{ id: number }, PrinterRow];
   test_printer: [{ id: number }, null];
+  /**
+   * What the printer speaks, asked before its row is saved (never an
+   * error: a silent or refusing query comes back `detected: false`).
+   */
+  probe_printer_capabilities: [
+    {
+      printer_type: string;
+      name?: string;
+      address: string;
+      username?: string;
+      password?: string;
+      skip_tls_verification?: boolean;
+    },
+    ProbeCapabilitiesResult,
+  ];
   enumerate_system_printers: [{}, SystemPrinterRow[]];
   // Bonded Bluetooth devices (Android): the MAC doubles as the address a
   // Bluetooth printer row stores, so the result is a printer-shaped list.

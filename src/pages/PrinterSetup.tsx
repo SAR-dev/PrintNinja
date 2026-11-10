@@ -5,7 +5,7 @@ import {
   supportedPrinterTypes,
 } from "@/lib/platform";
 import { TimeoutError, withTimeout } from "@/lib/withTimeout";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { PageHeader } from "@/components/PageHeader";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
@@ -62,7 +62,7 @@ import {
   validatePrinterForm,
   type LoosePrinterForm,
 } from "@/lib/printerSchema";
-import type { PrinterRow } from "@/lib/agent/types";
+import type { PrinterRow, ProbeCapabilitiesResult } from "@/lib/agent/types";
 
 const PRINTER_TYPES = [
   { value: "ipp", labelKey: "printers.conn_ipp" },
@@ -200,9 +200,19 @@ export function PrinterSetupPage() {
     skip_tls_verification: false,
   };
 
+  // What the capability probe found (TODO items 2 + 4). The probe never
+  // errors: silence or a refused query is just "unknown — please pick".
+  const [detecting, setDetecting] = useState(false);
+  const [detectResult, setDetectResult] =
+    useState<ProbeCapabilitiesResult | null>(null);
+  // A manual language pick beats the probe's suggestion.
+  const languageTouched = useRef(false);
+
   const openAdd = () => {
     setEditingId(null);
     setForm(blankForm);
+    setDetectResult(null);
+    languageTouched.current = false;
     setShowAdd(true);
   };
 
@@ -220,7 +230,41 @@ export function PrinterSetupPage() {
       password: p.password ?? "",
       skip_tls_verification: p.skip_tls_verification ?? false,
     });
+    setDetectResult(null);
+    languageTouched.current = false;
     setShowAdd(true);
+  };
+
+  /** Ask the printer what it speaks and pre-fill the language if the
+   * operator has not picked one yet. Never fails the form: a probe
+   * problem shows as "unknown", the same as a silent printer. */
+  const runDetect = async () => {
+    setDetecting(true);
+    setDetectResult(null);
+    try {
+      const res = await agent("probe_printer_capabilities", {
+        printer_type: form.printer_type,
+        name: form.name || undefined,
+        address: form.address,
+        username: form.username || undefined,
+        password: form.password || undefined,
+        skip_tls_verification: form.skip_tls_verification || undefined,
+      });
+      setDetectResult(res);
+      if (
+        res.suggested_language &&
+        !languageTouched.current &&
+        res.suggested_language !== form.language
+      ) {
+        setForm((f) => ({ ...f, language: res.suggested_language! }));
+      }
+    } catch {
+      // The contract says the probe never errors; this only catches a
+      // dead IPC channel, and that also reads as "unknown".
+      setDetectResult(null);
+    } finally {
+      setDetecting(false);
+    }
   };
 
   const load = useCallback(async () => {
@@ -503,12 +547,23 @@ export function PrinterSetupPage() {
   // rasterizes them locally. A saved row that already uses another
   // language stays visible so editing it does not silently change its
   // language.
+  //
+  // Raw-wire types (usb/bluetooth) additionally hide `pdf`: their
+  // firmware cannot parse PDF bytes, so a PDF row there prints blank.
+  // A legacy row saved with PDF stays visible while it is being edited
+  // (same keep-current fallback) and gets the note below; the backend
+  // keeps the print-time warning as the safety net for the few models
+  // that really do read raw PDF.
   const visibleLanguages = useMemo(() => {
-    const supported = supportedPrinterLanguages(LANGUAGES);
+    const rawWire =
+      form.printer_type === "usb" || form.printer_type === "bluetooth";
+    const supported = supportedPrinterLanguages(LANGUAGES).filter(
+      (l) => !rawWire || l.value !== "pdf",
+    );
     if (supported.some((l) => l.value === form.language)) return supported;
     const current = LANGUAGES.find((l) => l.value === form.language);
     return current ? [...supported, current] : supported;
-  }, [form.language]);
+  }, [form.language, form.printer_type]);
   const languagesLimited = visibleLanguages.length < LANGUAGES.length;
   const visibleGroups = useMemo(
     () =>
@@ -765,6 +820,14 @@ export function PrinterSetupPage() {
   // way — the user knows their device).
   const ippNonPdfWarning =
     form.printer_type === "ipp" && form.language !== "pdf";
+
+  // A legacy row saved before `pdf` was hidden from the raw-wire
+  // dropdown: PDF bytes over USB/BT print blank. Warn, never refuse —
+  // a few models do read raw PDF, and the backend keeps its print-time
+  // warning as the safety net for that edge case.
+  const rawWirePdfWarning =
+    (form.printer_type === "usb" || form.printer_type === "bluetooth") &&
+    form.language === "pdf";
 
   // Android has no System transport: a `system` row (usually synced from
   // a PC) cannot print on this phone. Warn, never refuse — the fix is
@@ -1140,12 +1203,35 @@ export function PrinterSetupPage() {
                 </Select>
               </div>
               <div className={field}>
-                <Label htmlFor="printer-language">
-                  {t("printers.form_language")}
-                </Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="printer-language">
+                    {t("printers.form_language")}
+                  </Label>
+                  {/* TODO 2+4: ask the printer what it speaks before the
+                      row is saved. System printers convert anything the
+                      spooler gives them, so there is nothing to ask. */}
+                  {form.printer_type !== "system" && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 gap-1 px-2 text-xs"
+                      disabled={detecting || !form.address.trim()}
+                      onClick={() => void runDetect()}
+                    >
+                      <Scan className="h-3 w-3" aria-hidden="true" />
+                      {detecting
+                        ? t("printers.detecting")
+                        : t("printers.detect")}
+                    </Button>
+                  )}
+                </div>
                 <Select
                   value={form.language}
-                  onValueChange={(v) => setForm((f) => ({ ...f, language: v }))}
+                  onValueChange={(v) => {
+                    languageTouched.current = true;
+                    setForm((f) => ({ ...f, language: v }));
+                  }}
                 >
                   <SelectTrigger
                     id="printer-language"
@@ -1166,6 +1252,21 @@ export function PrinterSetupPage() {
             {languagesLimited && (
               <p className="text-xs text-muted-foreground">
                 {t("printers.lang_android_hint")}
+              </p>
+            )}
+            {detectResult && !detecting && (
+              <p
+                data-testid="printer-detect-result"
+                className="text-xs text-muted-foreground"
+              >
+                {detectResult.detected
+                  ? t("printers.detect_done", {
+                      name:
+                        detectResult.make_and_model ??
+                        detectResult.suggested_language ??
+                        "",
+                    })
+                  : t("printers.detect_unknown")}
               </p>
             )}
 
@@ -1227,6 +1328,20 @@ export function PrinterSetupPage() {
                   aria-hidden="true"
                 />
                 <p className="text-xs">{t("printers.ipp_non_pdf_warning")}</p>
+              </div>
+            )}
+
+            {rawWirePdfWarning && (
+              <div
+                role="alert"
+                data-testid="printer-raw-pdf-warning"
+                className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-warning"
+              >
+                <AlertTriangle
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  aria-hidden="true"
+                />
+                <p className="text-xs">{t("printers.raw_wire_pdf_warning")}</p>
               </div>
             )}
 

@@ -85,6 +85,7 @@ fn print_request(printer: &str) -> PrintRequest {
     PrintRequest {
         printer_name: printer.to_string(),
         html: "<html><body><p>label</p></body></html>".to_string(),
+        pdf: None,
         page_width_mm: Some(100.0),
         page_height_mm: Some(150.0),
         orientation: Some("portrait".to_string()),

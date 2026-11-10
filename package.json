@@ -7,6 +7,8 @@
     "dev": "vite",
     "dev:printer": "node dev-printer/server.cjs",
     "dev:printer:smoke": "node dev-printer/smoke.cjs",
+    "dev:printer:raw": "node dev-printer/server.cjs --raw",
+    "dev:printer:raw:smoke": "node dev-printer/smoke-raw.cjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "biome check",
@@ -17,6 +19,8 @@
     "format": "biome format --write",
     "format:check": "biome format",
     "test": "vitest run",
+    "test:rust": "docker compose -f src-tauri/docker-compose.test.yml run --rm rust-test",
+    "test:rust:report": "docker compose -f src-tauri/docker-compose.test.yml run --rm rust-test cargo junit --no-fail-fast -o /workspace/src-tauri/test-report/junit.xml",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "gen:api": "openapi-typescript server/openapi/openapi.json -o src/lib/api/schema.d.ts",
@@ -26,10 +30,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "release": "node scripts/release.mjs",
-    "version:set": "node scripts/set-version.mjs",
-    "release:patch": "node scripts/release.mjs patch",
-    "release:minor": "node scripts/release.mjs minor",
-    "release:major": "node scripts/release.mjs major"
+    "version:set": "node scripts/set-version.mjs"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",
