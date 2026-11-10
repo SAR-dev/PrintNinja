@@ -79,7 +79,9 @@ scripts/      Release and versioning helpers
 | `pnpm tauri:build` | Build the installer for the current platform |
 | `pnpm --filter server dev` | Run the share service with reload |
 | `pnpm --filter server test` | Share service unit and integration tests |
-| `cargo test --manifest-path src-tauri/Cargo.toml` | Rust tests |
+| `cargo test --manifest-path src-tauri/Cargo.toml` | Rust tests (native) |
+| `pnpm test:rust` | Rust tests in Docker (bounded memory, same result) |
+| `pnpm test:rust:report` | Same, writing a JUnit report to `src-tauri/test-report/junit.xml` |
 
 Run `pnpm check` before you push. See [CI.md](./CI.md).
 
@@ -96,14 +98,35 @@ It uses a local SQLite file by default. For production, set `DATABASE_URL`
 (`libsql://…`) and `DATABASE_AUTH_TOKEN` for Turso Cloud. Every variable is
 listed in [ENV.md](./ENV.md).
 
+## Run the Rust tests in Docker
+
+The desktop crate compiles heavy debug binaries; a parallel native
+`cargo test` can peak at several gigabytes. The Docker runner
+(`src-tauri/docker-compose.test.yml`) bounds that: `CARGO_BUILD_JOBS` is
+capped at 2 and the container at 6 GB, so an over-sized run fails fast
+inside the box instead of pressuring the machine.
+
+```bash
+pnpm test:rust              # cargo test, streamed output
+pnpm test:rust:report       # cargo-junit, report at src-tauri/test-report/junit.xml
+```
+
+The image holds only the toolchain and the Tauri Linux build deps; the
+workspace is mounted, so the tests always run against the current
+checkout, and a named volume keeps the dependency build between runs
+(first run compiles everything, later runs recompile only the crate).
+The PDFium unit tests run on Linux too: the crate binds the vendored
+`resources/pdfium/libpdfium.so` from the mounted workspace, so the
+suite is platform-complete here.
+
 ## Release
 
 ```bash
-pnpm release:patch   # bump + commit + tag (or release:minor / release:major)
+pnpm release         # date version (YYYY.MMDD.N) + commit + tag; add --label TEXT to note it
 ```
 
 Pushing a `v*` tag builds the installers on GitHub Actions and attaches them
 to a draft release. You can also build them on your own machines with
-`node scripts/release-local.mjs X.Y.Z --push`. The release scripts update the
+`node scripts/release-local.mjs --push`. The release scripts update the
 version in every manifest *and* the README badge in one step, so nothing
 drifts. See [RELEASE.md](./RELEASE.md) and [SIGNING.md](./SIGNING.md).

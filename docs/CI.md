@@ -64,8 +64,8 @@ AppImage; any OS with the Android SDK and keystore env vars: APK and AAB).
 The draft release collects whatever each machine produced. Needs Node 22,
 pnpm 10, Rust 1.90 and `gh` logged in. Details: [`RELEASE.md`](RELEASE.md).
 
-`pnpm release patch|minor|major` only bumps, commits and tags; it builds
-nothing.
+`pnpm release` only sets the date version (`YYYY.MMDD.N`), commits and tags; it builds
+nothing. The tag is still strict `vX.Y.Z`, which a date version satisfies.
 
 Pushing a `v*` tag also starts the hosted release: `version-check` rejects any
 tag that is not on `main`, then `windows-build`, `linux-build` and

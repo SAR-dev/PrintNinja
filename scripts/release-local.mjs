@@ -4,8 +4,12 @@
 // allows (Windows -> MSI, Linux -> deb/AppImage, any OS with an Android
 // SDK -> APK/AAB); the draft release collects whatever was produced.
 //
-//   node scripts/release-local.mjs 0.2.0 [--push] [--skip-checks]
+//   node scripts/release-local.mjs [X.Y.Z] [--label TEXT] [--push] [--skip-checks]
 //     [--share-url https://share.example.com]
+//
+// Without a version it uses today's date, YYYY.MMDD.N, where N is the next free
+// release number of the day (2026.1225.0, 2026.1225.1, ...; see
+// scripts/lib/version.mjs). Pass X.Y.Z only to override that.
 //
 // Without --push nothing leaves the machine: it bumps, checks, builds
 // locally and prints the remaining commands. With --push it also pushes
@@ -22,14 +26,26 @@ import { existsSync, readFileSync, readdirSync, renameSync, statSync, mkdirSync,
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
+import {
+  VERSION_RE,
+  assertBuildable,
+  checkLabel,
+  cmpVersions as cmp,
+  dateVersionPrefix,
+  listTakenVersions,
+  nextDateVersion,
+  platformVersionProblems,
+} from "./lib/version.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PNPM = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
 function usage() {
-  console.log(`Usage: node scripts/release-local.mjs <X.Y.Z> [--push] [--skip-checks] [--share-url URL]
+  console.log(`Usage: node scripts/release-local.mjs [X.Y.Z] [--label TEXT] [--push] [--skip-checks] [--share-url URL]
 
-  X.Y.Z          exact version, must be higher than the current one
+  (no version)   today's date: YYYY.MMDD.N, N = next free release number of the day
+  X.Y.Z          exact version override, must be higher than the current one
+  --label TEXT   note added to the tag message, commit body and draft release title
   --push         also push main + the tag and create/update the draft release
   --skip-checks  skip lint/tests/clippy (for iterating on build issues)
   --share-url    baked into the app as the share pre-fill
@@ -104,16 +120,34 @@ const shareIdx = raw.indexOf("--share-url");
 const shareUrl =
   shareIdx === -1 ? "https://print-ninja.vercel.app" : (raw[shareIdx + 1] ?? "");
 if (shareIdx !== -1 && !raw[shareIdx + 1]) die("--share-url needs a value (or omit the flag)");
-const positional = raw.filter(
-  (a, i) => !a.startsWith("--") && !(shareIdx !== -1 && (i === shareIdx || i === shareIdx + 1)),
-);
-if (positional.length !== 1) {
-  usage();
-  die("give exactly one version like 1.2.3");
+let label = null;
+const labelIdx = raw.indexOf("--label");
+if (labelIdx !== -1) label = raw[labelIdx + 1] ?? "";
+const labelEq = raw.find((a) => a.startsWith("--label="));
+if (labelEq) label = labelEq.slice("--label=".length);
+if (label !== null) {
+  const labelProblem = checkLabel(label);
+  if (labelProblem) die(labelProblem);
+  label = label.trim();
 }
-const version = positional[0];
-if (!/^\d+\.\d+\.\d+$/.test(version)) die(`"${version}" is not a version like 1.2.3`);
-const tag = `v${version}`;
+const labelSuffix = label ? ` (${label})` : "";
+const positional = raw.filter(
+  (a, i) =>
+    !a.startsWith("--") &&
+    !(shareIdx !== -1 && (i === shareIdx || i === shareIdx + 1)) &&
+    !(labelIdx !== -1 && i === labelIdx + 1),
+);
+if (positional.length > 1) {
+  usage();
+  die("give at most one version like 1.2.3, or none to use today's date");
+}
+if (["patch", "minor", "major"].includes(positional[0])) {
+  die(`"${positional[0]}" is not supported: versions come from the date (YYYY.MMDD.N). Leave the version out, and use --label ${positional[0]} to mark the release.`);
+}
+// Filled in below once the current version is known (date versions need it).
+let version = positional[0] ?? "";
+if (version && !VERSION_RE.test(version)) die(`"${version}" is not a version like 1.2.3 (or leave it out to use today's date)`);
+let tag = "";
 
 // ---- preflight (read-only) ----------------------------------------------
 
@@ -129,11 +163,21 @@ if (!have("pnpm") && !existsSync(join(ROOT, "node_modules"))) {
   die("pnpm not found and node_modules missing: install pnpm 10 first");
 }
 const current = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
-const cmp = (a, b) => {
-  const [x, y] = [a.split(".").map(Number), b.split(".").map(Number)];
-  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
-  return 0;
-};
+if (!version) {
+  const { versions, remoteOk } = listTakenVersions((...a) => out("git", a).trim(), dateVersionPrefix());
+  if (!remoteOk) console.warn("Warning: could not list tags on origin, picked the release number N from local tags only.");
+  try {
+    version = nextDateVersion({ taken: versions, current });
+  } catch (e) {
+    die(e.message);
+  }
+}
+try {
+  assertBuildable(version);
+} catch (e) {
+  die(e.message);
+}
+tag = `v${version}`;
 if (cmp(version, current) <= 0) die(`${version} is not higher than the current version ${current}`);
 const branch = out("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
 if (branch !== "main") die(`on branch "${branch}"; releases ship from main`);
@@ -157,11 +201,13 @@ try {
 } catch (e) {
   if (!/already exists on origin/.test(e.message)) console.warn("Warning: could not reach origin.");
 }
-console.log(`=== release-local ${current} -> ${version} (${tag}) on ${process.platform} ===`);
+console.log(`=== release-local ${current} -> ${version} (${tag})${labelSuffix} on ${process.platform} ===`);
 
 // ---- version bump (same files release.mjs updates) -----------------
 
 sh("node", ["scripts/set-version.mjs", version]);
+const platformProblems = platformVersionProblems(readFileSync(join(ROOT, "src-tauri/tauri.conf.json"), "utf8"), version);
+if (platformProblems.length) die(`platform version overrides are wrong: ${platformProblems.join("; ")}`);
 
 // ---- checks (the same set as `pnpm check --rust`, minus e2e) ------------------------------------
 
@@ -193,7 +239,7 @@ if (!skipChecks) {
 
 sh("git", ["add", "--", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "src/components/Layout.tsx", "README.md"]);
 try {
-  execFileSync("git", ["-c", "user.name=Release", "-c", "user.email=release@local", "commit", "-m", `release: ${tag}`, "-m", `Release printninja ${version}`], { cwd: ROOT, stdio: "inherit" });
+  execFileSync("git", ["-c", "user.name=Release", "-c", "user.email=release@local", "commit", "-m", `release: ${tag}${labelSuffix}`, "-m", `Release printninja ${version}${label ? `\n\nLabel: ${label}` : ""}`], { cwd: ROOT, stdio: "inherit" });
 } catch {
   // Already bumped+committed by an earlier interrupted run: reuse it.
   console.log("(commit exists, continuing)");
@@ -202,7 +248,7 @@ try {
   out("git", ["rev-parse", tag]);
   console.log(`(tag ${tag} exists, continuing)`);
 } catch {
-  sh("git", ["tag", "-a", tag, "-m", `release: ${tag}`]);
+  sh("git", ["tag", "-a", tag, "-m", `release: ${tag}${labelSuffix}`]);
 }
 
 // ---- builds (whatever this OS allows) ------------------------------------
@@ -273,7 +319,7 @@ for (const f of artifacts) console.log(`  ${f}`);
 
 if (!push) {
   console.log(`\nNext (this publishes):\n  git push --atomic origin main ${tag}`);
-  console.log(`  gh release create ${tag} --draft --title "PrintNinja ${tag}"`);
+  console.log(`  gh release create ${tag} --draft --title "PrintNinja ${tag}${labelSuffix}"`);
   console.log(`  gh release upload ${tag} ${artifacts.map((f) => `"${f}"`).join(" ")} --clobber`);
   process.exit(0);
 }
@@ -282,7 +328,7 @@ try {
   out("gh", ["release", "view", tag]);
   console.log(`(release ${tag} exists, reusing)`);
 } catch {
-  sh("gh", ["release", "create", tag, "--draft", "--title", `PrintNinja ${tag}`]);
+  sh("gh", ["release", "create", tag, "--draft", "--title", `PrintNinja ${tag}${labelSuffix}`]);
 }
 sh("gh", ["release", "upload", tag, ...artifacts, "--clobber"]);
 console.log(`\n[ok] pushed main + ${tag}; draft release updated. Open it on GitHub to publish.`);

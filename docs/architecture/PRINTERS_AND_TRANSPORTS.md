@@ -50,6 +50,14 @@ The printer's language decides what the backend produces.
 **The PDF path** is for office printers: the page is rendered at its real
 size in millimetres and the resulting document is sent untouched. No
 screenshot, no translation — the printer's own PDF interpreter does the work.
+A job may also carry an *existing* PDF document (the `pdf` field of
+`POST /v1/print`) instead of a template: on a PDF-language printer it is
+sent untouched like any rendered one, and on a command-language printer
+its first page is rasterised by the app's bundled PDF engine at the
+printer's dot density and wrapped by the same encoders as an HTML-derived
+raster — so a PDF reaches a thermal head without the printer ever seeing
+a PDF. See [rendering and layout](./RENDERING_AND_LAYOUT.md) for the
+details.
 
 **The bitmap path** is for receipt and label printers, which understand small
 command languages rather than documents. The sheet is photographed at exactly
@@ -106,7 +114,12 @@ and which transports exist.
   context) and the device thresholds the pixels to 1-bit dots before the
   encoder. Those languages are not yet verified on a real head (PLAN §4,
   D4.1), so the printer form offers only the QA'd ones and labels them
-  accordingly; CPCL and raster still need a paired PC (PDF only). Network
+  accordingly; CPCL and raster still need a paired PC (PDF only). PDF
+*input* jobs (an existing document instead of a template) rasterise on
+the device — the platform's own PDFium port (`PdfRenderer`) renders the
+first page and thresholds it, so no engine binary goes into the APK —
+and work unpaired on a thermal head; only PDF-language printers still
+need the pair. Network
   printers are added by address or picked from an mDNS scan of the LAN;
   USB printers are listed through the USB host API, and Bluetooth
   printers are chosen from the bonded devices, which the Add sheet lists

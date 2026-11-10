@@ -93,6 +93,7 @@ fn print_request(printer: &str) -> PrintRequest {
     PrintRequest {
         printer_name: printer.to_string(),
         html: "<html><body><p>label</p></body></html>".to_string(),
+        pdf: None,
         page_width_mm: Some(40.0),
         page_height_mm: Some(30.0),
         orientation: Some("portrait".to_string()),
@@ -341,4 +342,177 @@ async fn the_raster_is_sized_in_the_printers_own_dots() {
     // browser must be asked for the printer's resolution, not the screen's.
     let (_, seen) = capture("zpl").await;
     assert_eq!(seen, Some((320, 240)));
+}
+
+// ── PDF input (TODO item 3) ─────────────────────────────────────────────────
+//
+// A job can carry an existing PDF instead of HTML: pdf-language printers
+// take the bytes as-is, command-language printers get the first page
+// rasterised to their own dot dimensions and encoded like any other image.
+
+/// The document a PDF-input job prints in these tests.
+const SAMPLE_PDF: &[u8] = b"%PDF-1.4 fake document";
+
+/// Serves the PDF-input path with a fixed raster: the pipeline still runs
+/// the layout, the queue permit, the real encoders and the real TCP
+/// transport. It records the document it was given so a test can assert the
+/// exact bytes reached the rasterizer.
+struct PdfInStub {
+    raster: RasterImage,
+    pages: u32,
+    pdf_seen: Arc<Mutex<Option<Vec<u8>>>>,
+}
+
+#[async_trait::async_trait]
+impl JobRenderer for PdfInStub {
+    async fn render(&self, _: &str, _: f64, _: f64, _: &str) -> anyhow::Result<Vec<u8>> {
+        panic!("a pdf job must never run the HTML renderer");
+    }
+
+    async fn rasterize_pdf(
+        &self,
+        pdf: &[u8],
+        _: usize,
+        _: usize,
+    ) -> anyhow::Result<(RasterImage, u32)> {
+        self.pdf_seen.lock().unwrap().replace(pdf.to_vec());
+        Ok((self.raster.clone(), self.pages))
+    }
+}
+
+/// A PDF-input request: the document, and no HTML (the two conflict).
+fn pdf_request(printer: &str, pdf: Vec<u8>) -> PrintRequest {
+    let mut req = print_request(printer);
+    req.html = String::new();
+    req.pdf = Some(pdf);
+    req
+}
+
+/// Print one PDF-input job to a loopback printer speaking `language` and
+/// return the exact job bytes plus the document the stub rasterizer saw.
+async fn capture_pdf(language: &str, pages: u32) -> (Vec<u8>, Option<Vec<u8>>, Vec<String>) {
+    let db = test_db();
+    let (port, capture) = loopback(language).await;
+    seed_printer(&db, "Thermal", language, port);
+    let queue = PrintQueue::new();
+    let cache = cache_dir();
+    let pdf_seen = Arc::new(Mutex::new(None));
+    let renderer = PdfInStub {
+        raster: test_raster(),
+        pages,
+        pdf_seen: pdf_seen.clone(),
+    };
+    let res = run_print_with(
+        &cache,
+        &db,
+        &queue,
+        pdf_request("Thermal", SAMPLE_PDF.to_vec()),
+        &renderer,
+    )
+    .await
+    .expect("pipeline");
+    assert!(res.success, "job must succeed: {:?}", res.error);
+    let bytes = capture.await.expect("capture");
+    let pdf_seen = pdf_seen.lock().unwrap().take();
+    (bytes, pdf_seen, res.warnings)
+}
+
+#[tokio::test]
+async fn pdf_jobs_on_pdf_printers_send_the_document_untouched() {
+    // The document is the job: no engine in between.
+    let (bytes, pdf_seen, _) = capture_pdf("pdf", 1).await;
+    assert_eq!(
+        bytes, SAMPLE_PDF,
+        "pdf language sends the document untouched"
+    );
+    // The document is the job: the Pdf-language branch passes the bytes
+    // straight through and never consults the renderer (no engine in
+    // between) — only command-language jobs hand the PDF to it.
+    assert_eq!(
+        pdf_seen, None,
+        "pdf language must not ask the renderer for anything"
+    );
+}
+
+#[tokio::test]
+async fn pdf_jobs_on_command_printers_encode_the_same_raster_as_html() {
+    // Same fixed raster in, same encoder out: the job bytes for a PDF must
+    // be identical to the HTML job that rasterises to the same dots.
+    for language in ["escpos", "tspl", "zpl", "cpcl"] {
+        let (html_bytes, _) = capture(language).await;
+        let (pdf_bytes, pdf_seen, _) = capture_pdf(language, 1).await;
+        assert_eq!(
+            pdf_seen,
+            Some(SAMPLE_PDF.to_vec()),
+            "{language}: the rasterizer must get the document itself"
+        );
+        assert_eq!(
+            html_bytes, pdf_bytes,
+            "{language}: the pdf path must encode the raster exactly like the html path"
+        );
+    }
+}
+
+#[tokio::test]
+async fn pdf_jobs_warn_when_only_the_first_page_prints() {
+    let (_, _, warnings) = capture_pdf("escpos", 3).await;
+    assert!(
+        warnings.iter().any(|w| w.contains("3 pages")),
+        "a multi-page pdf must warn that only page 1 printed: {warnings:?}"
+    );
+}
+
+#[tokio::test]
+async fn pdf_jobs_over_the_size_cap_are_refused_before_anything_runs() {
+    let db = test_db();
+    let (port, _capture) = loopback("escpos").await;
+    seed_printer(&db, "Thermal", "escpos", port);
+    let queue = PrintQueue::new();
+    let cache = cache_dir();
+    let big = vec![0u8; printninja_lib::commands::print::MAX_PDF_BYTES + 1];
+    let res = run_print_with(
+        &cache,
+        &db,
+        &queue,
+        pdf_request("Thermal", big),
+        &PdfInStub {
+            raster: test_raster(),
+            pages: 1,
+            pdf_seen: Arc::new(Mutex::new(None)),
+        },
+    )
+    .await;
+    assert!(res.is_err(), "an oversize pdf must be refused");
+    // Intake refused it: no job row exists, so nothing would retry or
+    // reprint it later.
+    let guard = db.lock().unwrap();
+    let jobs: i64 = guard
+        .connection()
+        .query_row("SELECT COUNT(*) FROM print_jobs", [], |r| r.get(0))
+        .expect("count");
+    assert_eq!(jobs, 0, "a refused job must not create a row");
+}
+
+#[tokio::test]
+async fn a_pdf_conflicting_with_html_is_refused() {
+    let db = test_db();
+    let (port, _capture) = loopback("escpos").await;
+    seed_printer(&db, "Thermal", "escpos", port);
+    let queue = PrintQueue::new();
+    let cache = cache_dir();
+    let mut req = print_request("Thermal");
+    req.pdf = Some(SAMPLE_PDF.to_vec()); // html stays set
+    let res = run_print_with(
+        &cache,
+        &db,
+        &queue,
+        req,
+        &PdfInStub {
+            raster: test_raster(),
+            pages: 1,
+            pdf_seen: Arc::new(Mutex::new(None)),
+        },
+    )
+    .await;
+    assert!(res.is_err(), "a job takes one content source");
 }

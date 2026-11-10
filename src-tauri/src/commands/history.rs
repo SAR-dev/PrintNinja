@@ -192,18 +192,21 @@ pub fn reprint_job_conn(conn: &Connection, id: i64) -> AppResult<PrintJob> {
     })?;
 
     // Clone the row itself — including its stored input payload
-    // (`data_json`), which the worker replays when it prints the clone
-    // (P3). The fresh row is `queued`; nothing but the worker prints it.
-    // `template_revision` carries (same template prints); `printed_by`
-    // stays NULL — the clone prints locally, not through the PC.
+    // (`data_json`) and its document (`pdf_data`), which the worker
+    // replays when it prints the clone (P3). The fresh row is `queued`;
+    // nothing but the worker prints it. `template_revision` carries (same
+    // template prints); `printed_by` stays NULL — the clone prints
+    // locally, not through the PC.
     conn.execute(
         "INSERT INTO print_jobs
             (batch_id, record_index, template_id, printer_id,
              source, source_url, status, error, copies, settings_json, rendered_html,
-             idempotency_key, is_test, data_json, requested_by_device_id, template_revision)
+             idempotency_key, is_test, data_json, requested_by_device_id, template_revision,
+             pdf_data)
          SELECT NULL, NULL, template_id, printer_id,
                 source, source_url, 'queued', NULL, copies, settings_json, rendered_html,
-                NULL, is_test, data_json, requested_by_device_id, template_revision
+                NULL, is_test, data_json, requested_by_device_id, template_revision,
+                pdf_data
          FROM print_jobs WHERE id = ?1",
         [id],
     )?;

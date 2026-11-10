@@ -384,6 +384,7 @@ pub async fn test_printer(
     let req = crate::commands::print::PrintRequest {
         printer_name: printer.name.clone(),
         html,
+        pdf: None,
         page_width_mm: printer.paper_width_mm.map(|v| v as f64),
         page_height_mm: None,
         orientation: Some("portrait".into()),
@@ -414,6 +415,60 @@ pub async fn test_printer(
             res.error.unwrap_or_else(|| "test print failed".into()),
         ))
     }
+}
+
+/// What the printer understands, asked *before* its row is saved (TODO
+/// items 2 + 4): the document formats it accepts (IPP), its
+/// make-and-model, and the language suggested by either.
+///
+/// Read-only — status queries print nothing — and graceful by
+/// contract: an unreachable, refusing or silent printer comes back as
+/// `detected: false`, never as an error. The form keeps its default
+/// language and shows "unknown — please pick".
+#[tauri::command(rename_all = "snake_case")]
+pub async fn probe_printer_capabilities(
+    printer_type: String,
+    name: Option<String>,
+    address: String,
+    username: Option<String>,
+    password: Option<String>,
+    skip_tls_verification: Option<bool>,
+) -> AppResult<crate::transport::capabilities::ProbeCapabilities> {
+    probe_printer_capabilities_inner(
+        &printer_type,
+        name.as_deref().unwrap_or(""),
+        &address,
+        &crate::transport::TransportSettings {
+            username,
+            password,
+            skip_tls_verification: skip_tls_verification.unwrap_or(false),
+        },
+    )
+    .await
+}
+
+/// The seam the Tauri command wraps: tests (and anything else) call
+/// this directly, the way `update_printer_conn` is tested.
+pub async fn probe_printer_capabilities_inner(
+    printer_type: &str,
+    name: &str,
+    address: &str,
+    settings: &crate::transport::TransportSettings,
+) -> AppResult<crate::transport::capabilities::ProbeCapabilities> {
+    let ty = printer_type.trim().to_ascii_lowercase();
+    if !VALID_PRINTER_TYPES.contains(&ty.as_str()) {
+        return Err(AppError::Validation(format!(
+            "Invalid printer type '{}'. Expected one of {:?}",
+            printer_type, VALID_PRINTER_TYPES
+        )));
+    }
+    Ok(crate::transport::capabilities::probe(
+        &crate::transport::parse_printer_type(&ty),
+        name,
+        address,
+        settings,
+    )
+    .await)
 }
 
 const TEST_PAGE_HTML: &str = r#"<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
