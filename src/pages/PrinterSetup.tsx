@@ -809,7 +809,12 @@ export function PrinterSetupPage() {
       : form.printer_type === "raw_tcp"
         ? "printers.hint_raw"
         : form.printer_type === "bluetooth"
-          ? "printers.hint_bluetooth"
+          ? // Android offers the bonded-device list below; the desktop has
+            // no list and now prints driverless, so its hint names the
+            // OS pairing step instead.
+            isAndroid()
+            ? "printers.hint_bluetooth"
+            : "printers.hint_bluetooth_desktop"
           : null;
 
   // Item 15: a Windows queue whose print processor offers no PDF datatype

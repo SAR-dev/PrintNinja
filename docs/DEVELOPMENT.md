@@ -57,7 +57,7 @@ scripts/      Release and versioning helpers
 | Desktop and mobile shell | Tauri 2 (Windows MSI, Linux deb and AppImage, Android arm64) |
 | Core | Rust 1.90, Tokio, axum and tower-http (local API), reqwest (rustls), rusqlite (bundled SQLite) |
 | Rendering | Handlebars (Rust and JS), headless Edge over the DevTools protocol (Windows), headless Chromium (Linux), the system WebView (Android), `barcoders` and `qrcode`, `bwip-js` for previews |
-| Printing | IPP, raw TCP, Windows spooler (also USB and Bluetooth), CUPS (Linux), a Kotlin plugin for Android (WebView to PDF, `UsbManager`, RFCOMM) |
+| Printing | IPP, raw TCP, Windows spooler (USB), CUPS (Linux), driverless Bluetooth on Windows (COM port), Linux (RFCOMM) and Android (a Kotlin plugin: WebView to PDF, `UsbManager`, RFCOMM) |
 | UI | React 18, TypeScript 5.6, Vite 6, Tailwind 3, shadcn/ui on Radix, Zustand, TanStack Query and Table, React Router 7, react-hook-form, i18next, cmdk, sonner |
 | Template CSS | Tailwind v4 `compile()`, run in the app and stored with each template version |
 | Editor | CodeMirror 6, `react-diff-viewer-continued`, `react-markdown` with `remark-gfm` |

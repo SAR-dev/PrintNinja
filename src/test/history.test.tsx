@@ -180,6 +180,36 @@ describe("History page", () => {
     expect(screen.queryByText("#1")).not.toBeInTheDocument();
   });
 
+  it("searches template names", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_jobs")
+        return [
+          job({ id: 1, template_id: 3 }),
+          job({ id: 2, template_id: 7, printer_id: 1 }),
+        ];
+      if (cmd === "list_printers") return [{ id: 1, name: "Dock Zebra" }];
+      if (cmd === "list_templates")
+        return [
+          { id: 3, name: "Shipping label" },
+          { id: 7, name: "Receipt roll" },
+        ];
+      return null;
+    });
+    renderPage();
+    await screen.findByText("#1");
+    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+      target: { value: "receipt roll" },
+    });
+    expect(await screen.findByText("#2")).toBeInTheDocument();
+    expect(screen.queryByText("#1")).not.toBeInTheDocument();
+    // The id form still matches too, so old habits keep working.
+    fireEvent.change(screen.getByRole("textbox", { name: "Search" }), {
+      target: { value: "template 3" },
+    });
+    expect(await screen.findByText("#1")).toBeInTheDocument();
+    expect(screen.queryByText("#2")).not.toBeInTheDocument();
+  });
+
   it("names the job in the delete confirmation and does not delete until confirmed", async () => {
     renderPage();
     await screen.findByText("#2");

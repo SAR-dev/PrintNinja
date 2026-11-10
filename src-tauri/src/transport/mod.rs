@@ -290,11 +290,14 @@ pub mod android_bluetooth;
 pub mod android_bridge;
 #[cfg(target_os = "android")]
 pub mod android_usb;
+pub mod bluetooth_addr;
 pub mod capabilities;
 pub mod cups;
 pub mod escpos;
 pub mod ipp;
 pub mod label_langs;
+#[cfg(target_os = "linux")]
+pub mod linux_bluetooth;
 pub mod raw_tcp;
 pub mod status;
 pub mod windows_bluetooth;
@@ -369,6 +372,7 @@ pub fn create_transport(
         #[cfg(windows)]
         PrinterType::Bluetooth => Some(Box::new(windows_bluetooth::WindowsBluetoothPrinter::new(
             name.to_string(),
+            address.to_string(),
         ))),
         #[cfg(target_os = "android")]
         PrinterType::Usb => Some(Box::new(android_usb::AndroidUsbPrinter::new(
@@ -380,10 +384,19 @@ pub fn create_transport(
             name.to_string(),
             address.to_string(),
         ))),
-        // Off Windows (and off Android, which drives USB/Bluetooth through
-        // the Kotlin plugin above) there is no spooler and no USB/Bluetooth
-        // transport (Linux serves system printers through CUPS, matched
-        // above), so every other variant is unsupported here.
+        // Linux dials the paired device's RFCOMM socket directly — no
+        // driver, no CUPS queue (USB still has no direct transport and
+        // falls through to the refusal below).
+        #[cfg(target_os = "linux")]
+        PrinterType::Bluetooth => Some(Box::new(linux_bluetooth::LinuxBluetoothPrinter::new(
+            name.to_string(),
+            address.to_string(),
+        ))),
+        // Off Windows, off Linux and off Android (which drives
+        // USB/Bluetooth through the Kotlin plugin above) there is no
+        // spooler and no USB/Bluetooth transport (Linux serves system
+        // printers through CUPS, matched above), so every other
+        // variant is unsupported here.
         #[cfg(not(windows))]
         _ => None,
     }
@@ -553,13 +566,25 @@ impl TransportRegistry {
                 )
                 .reach()
                 .await;
+                // Direct when the address names a port (explicit COM, or
+                // a MAC Windows already gave one), spooler status
+                // otherwise — the same resolution the job itself uses.
                 #[cfg(windows)]
-                let res = windows_spooler::WindowsSpooler::new(name.to_string()).check_ready();
+                let res = windows_bluetooth::WindowsBluetoothPrinter::new(
+                    name.to_string(),
+                    address.to_string(),
+                )
+                .reach()
+                .await;
+                // Direct RFCOMM connect to the paired device: a probe is
+                // a connection and nothing else, so nothing is written.
                 #[cfg(target_os = "linux")]
-                let res: Result<(), String> = Err(format!(
-                    "Bluetooth printers on Linux are not driven directly; install the device as a CUPS raw queue (sudo lpadmin -p '{}' -m raw -v bluetooth://... -E) and add it as type 'system'",
-                    name
-                ));
+                let res = linux_bluetooth::LinuxBluetoothPrinter::new(
+                    name.to_string(),
+                    address.to_string(),
+                )
+                .reach()
+                .await;
                 #[cfg(not(any(target_os = "android", windows, target_os = "linux")))]
                 let res: Result<(), String> = Err(format!(
                     "`{printer_type}` printers are not supported on this platform"
@@ -886,42 +911,85 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[tokio::test]
-    async fn usb_and_bluetooth_on_linux_are_cups_raw_queues() {
-        // Linux does not drive USB/Bluetooth directly; the app reports the
-        // supported route (CUPS raw queue) instead of silently succeeding.
-        for kind in [PrinterType::Usb, PrinterType::Bluetooth] {
-            let err = TransportRegistry::probe(
-                &kind,
-                "MyThermal",
-                "usb://dummy",
-                &TransportSettings::default(),
-            )
-            .await
-            .unwrap_err();
-            assert!(err.contains("CUPS raw queue"), "{kind}: {err}");
-            assert!(err.contains("lpadmin"), "{kind}: {err}");
-            assert!(err.contains("type 'system'"), "{kind}: {err}");
-        }
-        // The generic send path also refuses direct USB/Bluetooth on Linux.
-        for kind in [PrinterType::Usb, PrinterType::Bluetooth] {
-            let err = TransportRegistry::send_to(
-                &kind,
-                "MyThermal",
-                "usb://dummy",
-                RenderedJob {
-                    job_id: "j".into(),
-                    printer_id: "p".into(),
-                    data: vec![0x1b, 0x40],
-                    mime_type: "application/octet-stream".into(),
-                    copies: 1,
-                    language: PrinterLanguage::Escpos,
-                },
-                &TransportSettings::default(),
-            )
-            .await
-            .unwrap_err();
-            assert!(err.contains("not supported"), "{kind}: {err}");
-        }
+    async fn usb_on_linux_is_a_cups_raw_queue() {
+        // USB has no direct transport on Linux; the app reports the
+        // supported route (CUPS raw queue) instead of silently
+        // succeeding.
+        let err = TransportRegistry::probe(
+            &PrinterType::Usb,
+            "MyThermal",
+            "usb://dummy",
+            &TransportSettings::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("CUPS raw queue"), "{err}");
+        assert!(err.contains("lpadmin"), "{err}");
+        assert!(err.contains("type 'system'"), "{err}");
+        // The generic send path still refuses direct USB on Linux.
+        let err = TransportRegistry::send_to(
+            &PrinterType::Usb,
+            "MyThermal",
+            "usb://dummy",
+            RenderedJob {
+                job_id: "j".into(),
+                printer_id: "p".into(),
+                data: vec![0x1b, 0x40],
+                mime_type: "application/octet-stream".into(),
+                copies: 1,
+                language: PrinterLanguage::Escpos,
+            },
+            &TransportSettings::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("not supported"), "{err}");
+    }
+
+    /// Bluetooth on Linux is direct now: the transport exists and an
+    /// address that is not a Bluetooth address fails with the format
+    /// message — never with "unsupported" and never with the old CUPS
+    /// raw-queue advice.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn bluetooth_on_linux_dials_the_device_directly() {
+        assert!(create_transport(
+            &PrinterType::Bluetooth,
+            "MyThermal",
+            "A4:77:17:22:33:44",
+            &TransportSettings::default()
+        )
+        .is_some());
+
+        let err = TransportRegistry::probe(
+            &PrinterType::Bluetooth,
+            "MyThermal",
+            "usb://dummy",
+            &TransportSettings::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("A4:77:17:22:33:44"), "{err}");
+        assert!(!err.contains("CUPS"), "no queue advice for a direct wire: {err}");
+
+        let err = TransportRegistry::send_to(
+            &PrinterType::Bluetooth,
+            "MyThermal",
+            "usb://dummy",
+            RenderedJob {
+                job_id: "j".into(),
+                printer_id: "p".into(),
+                data: vec![0x1b, 0x40],
+                mime_type: "application/octet-stream".into(),
+                copies: 1,
+                language: PrinterLanguage::Escpos,
+            },
+            &TransportSettings::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("A4:77:17:22:33:44"), "{err}");
+        assert!(!err.contains("not supported"), "{err}");
     }
 
     #[test]
@@ -949,6 +1017,15 @@ mod tests {
             &PrinterType::Usb,
             "Thermal",
             "",
+            &TransportSettings::default()
+        )
+        .is_some());
+        // Bluetooth too: the driverless COM path (or the spooler
+        // fallback) exists on Windows.
+        assert!(create_transport(
+            &PrinterType::Bluetooth,
+            "Thermal",
+            "COM7",
             &TransportSettings::default()
         )
         .is_some());

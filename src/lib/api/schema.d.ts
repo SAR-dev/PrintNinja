@@ -1322,12 +1322,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The signed-in user's own templates, newest first. */
+        /** @description The signed-in user's own templates: search, sort, pages. */
         get: {
             parameters: {
                 query?: {
                     page?: number;
                     page_size?: number;
+                    q?: string;
+                    sort?: "updated" | "used" | "name";
                 };
                 header?: never;
                 path?: never;

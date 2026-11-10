@@ -193,7 +193,7 @@ Other options include `url` (a data URL), `test=1`, `orientation`, `fit` and `pr
 - Network (IPP, raw TCP 9100) and system printers on Windows and Linux
 - LAN scan finds IPP and raw printers on the network over mDNS; a discovered printer is added in one tap
 - On Android, the Add dialog also lists your paired Bluetooth printers (bonded devices) with the same one-tap Fill and Add
-- USB and Bluetooth through the Windows spooler, or directly on Android
+- USB through the Windows spooler or a CUPS raw queue (directly on Android); Bluetooth directly on Windows, Linux and Android — pair it in the OS settings and enter its MAC, no driver needed (Windows can print through the device's COM port instead)
 - Printer languages: PDF, ESC/POS, ZPL, TSPL, CPCL and raster (Android prints ESC/POS, ZPL and TSPL on the device itself; CPCL and raster need a paired PC)
 - Status checks before a raw job is sent, and timeouts so a stuck printer never hangs a job
 
@@ -238,18 +238,18 @@ Each badge links to the place where you can turn that switch off.
 
 **It says the template is missing or out of date.** Print via PC compares template versions on purpose. Tap **Sync** on the phone, or sync the template on the PC.
 
-**Printing from Linux fails.** Install CUPS and Chromium or Chrome. For USB and Bluetooth thermal printers, use a CUPS raw queue; PrintNinja cannot talk to them directly on Linux.
+**Printing from Linux fails.** Install CUPS and Chromium or Chrome. For USB thermal printers, use a CUPS raw queue; PrintNinja cannot talk to USB directly on Linux. Bluetooth needs neither: pair the printer in your OS Bluetooth settings and enter its MAC.
 
 **Printing on Windows fails and says Edge produced no PDF.** The first thing to check is whether PrintNinja runs as administrator — headless Edge will not print from an elevated process, the app says so, and restarting it without "Run as administrator" fixes it. Otherwise, a running Edge session can take headless print launches for itself (exit code 0, no PDF). Run **Fix PC printing** in Settings → Diagnostics: it closes Edge (verifying that it is really gone), clears stale render profiles and runs a test render. If Edge keeps respawning, use the headless browser the repair offers to download (~150 MB, SHA-256 verified, no installer) — it prints while your Edge windows stay open. Advanced: point `PRINTNINJA_EDGE_BIN` at a browser of your choice (see `docs/ENV.md`).
 
 **A USB or Bluetooth receipt or label printer prints pages of random characters.** The printer's language is set to PDF, so the raw PDF file is being sent to a head that only understands a command language. Open **Printers**, edit the printer and set **Language** to the one it speaks (ESC/POS for most receipt printers; ZPL, TSPL or CPCL for label printers). If it was already ESC/POS, check that the printer itself is in that mode; many label printers ship in a different one.
 
-**My USB or Bluetooth printer is not listed on Windows.** Install it as a Windows printer first. PrintNinja uses the Windows spooler for both.
+**My USB printer is not listed on Windows.** Install it as a Windows printer first; PrintNinja uses the Windows spooler. Bluetooth printers do not need this — pair the printer in Windows Settings → Bluetooth & devices, then add it in PrintNinja as **Bluetooth** with its MAC (or the COM port Windows assigns it).
 
-**How to add a USB or Bluetooth printer on Windows or Linux.** PrintNinja does not scan for USB or Bluetooth devices on desktop; the printer must first be installed by the OS, after which it appears as a **system** printer in the Add dialog.
+**How to add a USB or Bluetooth printer on Windows or Linux.** Bluetooth needs no driver: pair the printer in the OS Bluetooth settings and add it in PrintNinja as **Bluetooth** with the printer's MAC (on Windows the COM port works too). USB on desktop has no direct path — the printer must first be installed by the OS, after which it appears as a **system** printer in the Add dialog.
 
-- **Windows:** plug in the USB cable (or pair the Bluetooth printer in Windows Settings → Bluetooth & devices). Open **Printers & scanners** → **Add device**; Windows installs the driver and creates a spooler queue. The printer then appears in PrintNinja's Add dialog under *System*. If the printer speaks a command language (ESC/POS, ZPL, TSPL, CPCL) rather than PDF, set **Language** accordingly after adding it — a PDF-language USB printer will print garbage.
-- **Linux:** install CUPS and the printer driver. For a USB or Bluetooth thermal/label printer that speaks a command language, create a **raw** CUPS queue (e.g. `lpadmin -p MyPrinter -m raw -v usb://…` or `bluetooth://…`) so CUPS passes the bytes through untouched. The queue then appears in PrintNinja's Add dialog under *System* (CUPS). Set **Language** to the printer's command language.
+- **Windows (USB):** plug in the USB cable. Open **Printers & scanners** → **Add device**; Windows installs the driver and creates a spooler queue. The printer then appears in PrintNinja's Add dialog under *System*. If the printer speaks a command language (ESC/POS, ZPL, TSPL, CPCL) rather than PDF, set **Language** accordingly after adding it — a PDF-language USB printer will print garbage.
+- **Linux (USB):** install CUPS and the printer driver. For a USB thermal/label printer that speaks a command language, create a **raw** CUPS queue (e.g. `lpadmin -p MyPrinter -m raw -v usb://…`) so CUPS passes the bytes through untouched. The queue then appears in PrintNinja's Add dialog under *System* (CUPS). Set **Language** to the printer's command language.
 
 **Android stops printing after I close the app.** Open Settings and check that the background service is running and that battery optimizations are ignored for PrintNinja.
 

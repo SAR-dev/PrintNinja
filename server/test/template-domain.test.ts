@@ -468,6 +468,36 @@ describe("lists, search and use", () => {
     expect(other.items).toEqual([]);
   });
 
+  it("mine searches literally and sorts by name, published or not", async () => {
+    const { r, a, b } = await seeded();
+
+    const literal = await listMine({ templates: r.templates }, OWNER_ID, {
+      page: 1,
+      pageSize: 20,
+      q: "100%",
+    });
+    expect(literal.items.map((t) => t.id)).toEqual([b]);
+    expect(literal.total).toBe(1);
+
+    // Search reaches the owner's private templates too — unlike community.
+    const privateHit = await listMine({ templates: r.templates }, OWNER_ID, {
+      page: 1,
+      pageSize: 20,
+      q: "alpha",
+    });
+    expect(privateHit.items.map((t) => t.id)).toEqual([a]);
+
+    const sorted = await listMine({ templates: r.templates }, OWNER_ID, {
+      page: 1,
+      pageSize: 20,
+      sort: "name",
+    });
+    expect(sorted.items.map((t) => t.name)).toEqual([
+      "Alpha label",
+      "beta 100% cotton",
+    ]);
+  });
+
   it("community shows published only, finds owner handle and literal %", async () => {
     const { r, b } = await seeded();
     const all = await listCommunity(

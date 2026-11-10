@@ -90,8 +90,10 @@ Printers "speak" different command languages: ESC/POS (receipts), ZPL and TSPL (
 | Raw TCP (port 9100) | Yes | Yes | Yes | No |
 | System queue | Yes (spooler) | Yes (CUPS) | No | No |
 | USB | Via spooler only | Via CUPS raw queue | Direct, any USB device | No |
-| Bluetooth | Via spooler only | Via CUPS raw queue | Direct, classic only, paired devices only | No |
+| Bluetooth | Direct (COM port), or spooler queue | Direct (RFCOMM), or CUPS raw queue | Direct, classic only, paired devices only | No |
 | Browse the network (mDNS) | Yes | Yes | Yes | No |
+
+**Update (driverless Bluetooth):** Bluetooth no longer needs an installed queue on Windows or Linux — pair the printer in the OS Bluetooth settings and the app dials the device directly (its COM port on Windows, an RFCOMM socket on Linux), with no driver involved. Scanning for devices is still the OS's job, and USB is unchanged.
 
 *Solutions:* (a) **Recommended:** add a short "how to add a USB or Bluetooth printer" guide for Windows and Linux (install it in the OS first). (b) Tag OS-installed USB and Bluetooth queues in the list so they are easy to find. (c) Direct USB on desktop through a USB library is possible but was deliberately ruled out for Windows.
 
@@ -99,13 +101,13 @@ Printers "speak" different command languages: ESC/POS (receipts), ZPL and TSPL (
 
 These are **not planned**. They were looked at and accepted.
 
-- **Windows has no direct USB or Bluetooth.** Both go through the Windows spooler, so the printer must be installed as a Windows printer first. A design without the spooler was studied and not built. Side effect: jobs are sent as `RAW`, so a PDF only works if the printer itself reads PDF.
+- **Windows has no direct USB.** USB goes through the Windows spooler, so the printer must be installed as a Windows printer first. A design without the spooler was studied and not built for USB. Side effect: jobs are sent as `RAW`, so a PDF only works if the printer itself reads PDF. Bluetooth does have a direct path now: the paired device's COM port, with the spooler queue kept as the fallback when the address names no port.
 - **Windows printing as administrator is not supported.** Headless Edge quietly does nothing when its parent app is elevated. The app detects this and shows a "restart normally" message. *What to do:* start the app without "Run as administrator", and remove any Compatibility setting that forces it.
-- **Linux has no direct USB or Bluetooth.** Use a CUPS raw queue and add it as a `system` printer.
+- **Linux has no direct USB.** Use a CUPS raw queue and add it as a `system` printer. Bluetooth dials the paired device's RFCOMM socket directly instead.
 - **iOS and macOS are not supported as print targets.** There is no iOS code, and on macOS both rendering and delivery say "unsupported".
 - **Raw TCP stays a plain connection.** No encryption, no sign-in (see item 13).
 
-**Tip: slow Bluetooth printing on Windows?** First check the stage timings in History. A big `send_ms` number points at the Windows spooler. Cheap things to try before changing any code: turn off "Enable bidirectional support" on the queue's Ports tab, and turn on "Print directly to the printer" on its Advanced tab. These are common Windows fixes and were not tested with PrintNinja.
+**Tip: slow Bluetooth printing on Windows?** First check the stage timings in History. A big `send_ms` number points at the Windows spooler. Cheap things to try before changing any code: turn off "Enable bidirectional support" on the queue's Ports tab, and turn on "Print directly to the printer" on its Advanced tab. These are common Windows fixes and were not tested with PrintNinja. Better still: give the row the printer's COM port as its address — the direct path bypasses the spooler entirely.
 
 ## Suggested order (printer items)
 

@@ -42,7 +42,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Label } from "@/components/ui/label";
 import { usePrintStore } from "@/lib/store/printStore";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
 import { Button } from "@/components/ui/button";
@@ -73,6 +72,70 @@ import type { ReactNode } from "react";
 
 type ServerSummary = share.CommunitySummary;
 
+/**
+ * Client-side search over what a row actually shows: name, summary and
+ * author. The lists are local, so filtering is instant (item 35, option b).
+ */
+function matchesSearch(row: TemplateRow, raw: string): boolean {
+  const q = raw.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    row.name.toLowerCase().includes(q) ||
+    row.summary.toLowerCase().includes(q) ||
+    (row.origin_owner ?? "").toLowerCase().includes(q)
+  );
+}
+
+/** Search box + sort select (+ optional refresh): the toolbar all three tabs share. */
+function TemplateSearchSort({
+  search,
+  onSearch,
+  sort,
+  onSort,
+  sortOptions,
+  onRefresh,
+}: {
+  search: string;
+  onSearch: (value: string) => void;
+  sort: string;
+  onSort: (value: string) => void;
+  sortOptions: { value: string; label: string }[];
+  onRefresh?: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-2 md:flex-row">
+      <Input
+        aria-label={t("templates.search_label")}
+        placeholder={t("templates.search_placeholder")}
+        value={search}
+        onChange={(e) => onSearch(e.target.value)}
+        className="flex-1"
+      />
+      <Select value={sort} onValueChange={onSort}>
+        <SelectTrigger
+          aria-label={t("templates.sort_aria")}
+          className="w-full md:w-[170px]"
+        >
+          <SelectValue placeholder={t("templates.sort_placeholder")} />
+        </SelectTrigger>
+        <SelectContent>
+          {sortOptions.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {onRefresh && (
+        <Button variant="outline" onClick={onRefresh}>
+          {t("templates.refresh")}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function TemplatesPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -97,18 +160,17 @@ export function TemplatesPage() {
   }, [search]);
   const [mine, setMine] = useState<TemplateRow[]>([]);
   const [saved, setSaved] = useState<TemplateRow[]>([]);
-  // Controlled sorting for the phone-only sort dropdowns below: desktop
-  // keeps header-button sorting on the same state.
+  // Per-tab search text (item 35): the lists are local, so the filtering
+  // below is instant. Sorting stays controlled: the toolbar select and the
+  // desktop header buttons both drive these same states.
+  const [mineSearch, setMineSearch] = useState("");
+  const [savedSearch, setSavedSearch] = useState("");
   const [mineSorting, setMineSorting] = useState<SortingState>([
     { id: "updated", desc: true },
   ]);
   const [savedSorting, setSavedSorting] = useState<SortingState>([
     { id: "name", desc: false },
   ]);
-  // The phone dropdown shows the active value, never the placeholder:
-  // defaults match the initial sortings above.
-  const [mineSortKey, setMineSortKey] = useState("updated");
-  const [savedSortKey, setSavedSortKey] = useState("name");
   const isPhone = useMediaQuery(PHONE_QUERY);
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState<number | null>(null);
@@ -173,6 +235,11 @@ export function TemplatesPage() {
       setCommunityLoading(false);
     }
   }, [debouncedSearch, sort]);
+
+  // The local lists filter in the browser (item 35): small lists, so no
+  // server round trip. The tab counts keep showing the unfiltered totals.
+  const visibleMine = mine.filter((row) => matchesSearch(row, mineSearch));
+  const visibleSaved = saved.filter((row) => matchesSearch(row, savedSearch));
 
   useEffect(() => {
     loadMine();
@@ -590,41 +657,9 @@ export function TemplatesPage() {
     </div>
   );
 
-  // Phone-only sort dropdown: cards have no headers to sort by. Desktop
-  // keeps header-button sorting on the same state.
-  const sortSelect = (
-    id: string,
-    sortKey: string,
-    onSortKey: (key: string) => void,
-    withUpdated: boolean,
-  ) => (
-    <div className="mb-2 flex items-center justify-end gap-2">
-      <Label htmlFor={id}>{t("templates.sort_label")}</Label>
-      <Select value={sortKey} onValueChange={onSortKey}>
-        <SelectTrigger
-          id={id}
-          aria-label={t("templates.sort_aria")}
-          className="w-[170px]"
-        >
-          <SelectValue placeholder={t("templates.sort_placeholder")} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="name">{t("templates.sort_name")}</SelectItem>
-          {withUpdated && (
-            <SelectItem value="updated">
-              {t("templates.sort_updated")}
-            </SelectItem>
-          )}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-  const applySortKey = (
-    key: string,
-    setKey: (k: string) => void,
-    setSorting: (s: SortingState) => void,
-  ) => {
-    setKey(key);
+  // Phone-only sort dropdown replaced by the shared toolbar above: both
+  // header buttons and the toolbar select drive the same sorting state.
+  const applySortKey = (key: string, setSorting: (s: SortingState) => void) => {
     if (key === "name") setSorting([{ id: "name", desc: false }]);
     else if (key === "updated") setSorting([{ id: "updated", desc: true }]);
     else setSorting([]);
@@ -882,14 +917,17 @@ export function TemplatesPage() {
         </TabsList>
 
         {/* Mine */}
-        <TabsContent value="mine" className="mt-4">
-          {isPhone &&
-            sortSelect(
-              "mine-sort",
-              mineSortKey,
-              (k) => applySortKey(k, setMineSortKey, setMineSorting),
-              true,
-            )}
+        <TabsContent value="mine" className="mt-4 space-y-4">
+          <TemplateSearchSort
+            search={mineSearch}
+            onSearch={setMineSearch}
+            sort={mineSorting[0]?.id ?? ""}
+            onSort={(k) => applySortKey(k, setMineSorting)}
+            sortOptions={[
+              { value: "name", label: t("templates.sort_name") },
+              { value: "updated", label: t("templates.sort_updated") },
+            ]}
+          />
           {conflicts.length > 0 && (
             <div
               data-testid="conflict-banner"
@@ -915,86 +953,80 @@ export function TemplatesPage() {
           <DataTable
             caption="My templates"
             columns={mineColumns}
-            data={mine}
+            data={visibleMine}
             getRowId={(r) => String(r.id)}
             onRowActivate={(r) => navigate(`/template/${r.id}`)}
             sorting={mineSorting}
             onSortingChange={setMineSorting}
             renderCard={mineCard}
-            empty={{
-              title: t("templates.empty_mine_title"),
-              description: t("templates.empty_mine_desc"),
-              // Creating a template is a PC-side action (PLAN §6, D4).
-              action: isPhone
-                ? undefined
+            empty={
+              mine.length > 0 && visibleMine.length === 0
+                ? { title: t("templates.no_search_hits") }
                 : {
-                    label: t("templates.empty_mine_action"),
-                    onClick: () => navigate("/"),
-                  },
-            }}
+                    title: t("templates.empty_mine_title"),
+                    description: t("templates.empty_mine_desc"),
+                    // Creating a template is a PC-side action (PLAN §6, D4).
+                    action: isPhone
+                      ? undefined
+                      : {
+                          label: t("templates.empty_mine_action"),
+                          onClick: () => navigate("/"),
+                        },
+                  }
+            }
           />
         </TabsContent>
 
         {/* Saved */}
-        <TabsContent value="saved" className="mt-4">
-          {isPhone &&
-            sortSelect(
-              "saved-sort",
-              savedSortKey,
-              (k) => applySortKey(k, setSavedSortKey, setSavedSorting),
-              false,
-            )}
+        <TabsContent value="saved" className="mt-4 space-y-4">
+          <TemplateSearchSort
+            search={savedSearch}
+            onSearch={setSavedSearch}
+            sort={savedSorting[0]?.id ?? ""}
+            onSort={(k) => applySortKey(k, setSavedSorting)}
+            sortOptions={[
+              { value: "name", label: t("templates.sort_name") },
+              { value: "updated", label: t("templates.sort_updated") },
+            ]}
+          />
           <DataTable
             caption="Saved templates"
             columns={savedColumns}
-            data={saved}
+            data={visibleSaved}
             getRowId={(r) => String(r.id)}
             onRowActivate={(r) => navigate(`/template/${r.id}`)}
             sorting={savedSorting}
             onSortingChange={setSavedSorting}
             renderCard={savedCard}
-            empty={{
-              title: t("templates.empty_saved_title"),
-              description: t("templates.empty_saved_desc"),
-              action: {
-                label: t("templates.empty_saved_action"),
-                onClick: () => setActiveTab("community"),
-              },
-            }}
+            empty={
+              saved.length > 0 && visibleSaved.length === 0
+                ? { title: t("templates.no_search_hits") }
+                : {
+                    title: t("templates.empty_saved_title"),
+                    description: t("templates.empty_saved_desc"),
+                    action: {
+                      label: t("templates.empty_saved_action"),
+                      onClick: () => setActiveTab("community"),
+                    },
+                  }
+            }
           />
         </TabsContent>
 
         {/* Community gallery: previews matter here, so cards stay */}
         <TabsContent value="community" className="mt-4 space-y-4">
-          <div className="flex flex-col gap-2 md:flex-row">
-            <Input
-              aria-label={t("templates.search_label")}
-              placeholder={t("templates.search_placeholder")}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex-1"
-            />
-            <Select value={sort} onValueChange={setSort}>
-              <SelectTrigger
-                aria-label={t("templates.sort_aria")}
-                className="w-full md:w-[170px]"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="updated">
-                  {t("templates.sort_updated")}
-                </SelectItem>
-                <SelectItem value="used">{t("templates.sort_used")}</SelectItem>
-                <SelectItem value="name">
-                  {t("templates.sort_alpha")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline" onClick={loadCommunity}>
-              {t("templates.refresh")}
-            </Button>
-          </div>
+          <TemplateSearchSort
+            search={search}
+            onSearch={setSearch}
+            sort={sort}
+            onSort={setSort}
+            sortOptions={[
+              { value: "updated", label: t("templates.sort_updated") },
+              { value: "used", label: t("templates.sort_used") },
+              { value: "name", label: t("templates.sort_alpha") },
+            ]}
+            onRefresh={loadCommunity}
+          />
 
           {!configured ? (
             <Card>

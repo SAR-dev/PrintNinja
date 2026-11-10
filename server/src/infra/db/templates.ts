@@ -5,6 +5,8 @@ import {
   TemplateNameTakenError,
 } from "../../domain/errors.js";
 import type {
+  CommunitySort,
+  ListQuery,
   PageQuery,
   PublishedQuery,
   TemplateRepository,
@@ -30,6 +32,30 @@ import {
  * cannot lose each other. The domain decides (reads, replay, version
  * or not); this module makes the write atomic.
  */
+
+/** Text search shared by both template lists: name, summary, owner handle. */
+function searchFilter(q: string | undefined): Prisma.TemplateWhereInput {
+  if (!q) return {};
+  return {
+    OR: [
+      { name: { contains: q } },
+      { summary: { contains: q } },
+      { owner: { handle: { contains: q } } },
+    ],
+  };
+}
+
+/** One ordering for both template lists, ties broken by id ascending. */
+function orderByFor(
+  sort: CommunitySort,
+): Prisma.TemplateOrderByWithRelationInput[] {
+  return sort === "used"
+    ? [{ useCount: "desc" }, { updatedAt: "desc" }, { id: "asc" }]
+    : sort === "name"
+      ? [{ name: "asc" }, { id: "asc" }]
+      : [{ updatedAt: "desc" }, { id: "asc" }];
+}
+
 export function createTemplateRepository(db: DbClient): TemplateRepository {
   return {
     async findById(id: string): Promise<TemplateView | null> {
@@ -245,8 +271,12 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
       });
     },
 
-    async listByOwner(ownerId: string, query: PageQuery) {
-      const where = { ownerId };
+    async listByOwner(ownerId: string, query: ListQuery) {
+      const q = query.q?.trim();
+      const where = {
+        ownerId,
+        ...searchFilter(q),
+      };
       const [total, rows] = await Promise.all([
         db.template.count({ where }),
         db.template.findMany({
@@ -255,7 +285,7 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
             owner: { select: { handle: true } },
             _count: { select: { versions: true } },
           },
-          orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+          orderBy: orderByFor(query.sort ?? "updated"),
           skip: (query.page - 1) * query.pageSize,
           take: query.pageSize,
         }),
@@ -267,30 +297,9 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
       const q = query.q?.trim();
       const where = {
         publishedAt: { not: null },
-        ...(q
-          ? {
-              OR: [
-                { name: { contains: q } },
-                { summary: { contains: q } },
-                {
-                  owner: {
-                    handle: { contains: q },
-                  },
-                },
-              ],
-            }
-          : {}),
+        ...searchFilter(q),
       };
-      const orderBy =
-        query.sort === "used"
-          ? [
-              { useCount: "desc" as const },
-              { updatedAt: "desc" as const },
-              { id: "asc" as const },
-            ]
-          : query.sort === "name"
-            ? [{ name: "asc" as const }, { id: "asc" as const }]
-            : [{ updatedAt: "desc" as const }, { id: "asc" as const }];
+      const orderBy = orderByFor(query.sort);
       const [total, rows] = await Promise.all([
         db.template.count({ where }),
         db.template.findMany({
