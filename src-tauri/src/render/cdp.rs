@@ -604,27 +604,60 @@ impl Browser {
         })
     }
 
+    /// The process's exit status if it has already exited, `None` while it
+    /// is still running. A mid-run death (crash, OS kill, …) used to be
+    /// silent — the only trace was the slow restart on the next print.
+    async fn exit_status_if_dead(&self) -> Option<std::process::ExitStatus> {
+        self.child.lock().await.try_wait().ok().flatten()
+    }
+
     async fn stop(&self) {
-        let mut child = self.child.lock().await;
         if !self.conn.is_open() {
             // The connection is gone (browser crashed, or the PC slept and
             // the socket died): there is nobody to ask politely, and waiting
             // for it to exit on its own only delays the restart — the next
             // print used to pay up to 4 s for it.
-            let _ = child.kill().await;
+            // Record how the process went before it is killed: the exit
+            // code (or lack of one) says whether the OS took it, it
+            // crashed, or the socket simply died under a live process.
+            // (Re-locks `child` — do not call this while holding it.)
+            match self.exit_status_if_dead().await {
+                Some(status) => {
+                    tracing::warn!(status = %status, "persistent browser process already exited")
+                }
+                None => tracing::warn!(
+                    "persistent browser socket closed but the process is still alive; killing it"
+                ),
+            }
+            let _ = self.child.lock().await.kill().await;
             return;
         }
+        let mut child = self.child.lock().await;
         let _ = tokio::time::timeout(
             Duration::from_secs(2),
             self.conn.call(None, "Browser.close", json!({})),
         )
         .await;
-        // `close` normally ends the process on its own; make sure.
-        if tokio::time::timeout(Duration::from_secs(2), child.wait())
-            .await
-            .is_err()
-        {
-            let _ = child.kill().await;
+        // `close` normally ends the process on its own; make sure — and
+        // notice a non-zero exit, a `Browser.close` that still ends badly
+        // is a crash we would otherwise never see.
+        match tokio::time::timeout(Duration::from_secs(2), child.wait()).await {
+            Ok(Ok(status)) if !status.success() => tracing::warn!(
+                status = %status,
+                "persistent browser exited non-zero after Browser.close"
+            ),
+            Ok(Err(e)) => {
+                tracing::warn!(
+                    error = %e,
+                    "could not reap the persistent browser after Browser.close"
+                );
+                let _ = child.kill().await;
+            }
+            Err(_) => {
+                tracing::warn!("persistent browser ignored Browser.close; killing it");
+                let _ = child.kill().await;
+            }
+            Ok(Ok(_)) => {}
         }
     }
 }
@@ -1094,6 +1127,31 @@ exec sleep 60
 
         edge.print_pdf(&cfg, "file:///b.html").await.unwrap();
         assert_eq!(rig.starts(), 2, "a second browser was started");
+        edge.shutdown().await;
+    }
+
+    /// A mid-run death leaves its exit status behind for the restart path
+    /// to log; a live browser has none to report.
+    #[tokio::test]
+    async fn a_dead_browser_leaves_its_exit_status() {
+        let rig = Rig::new();
+        let fake = Fake::default();
+        let cfg = fake_edge(&rig.cache, fake.serve().await);
+        let edge = PersistentBrowser::default();
+        let browser = edge.browser(&cfg).await.unwrap();
+
+        // Still running: no status yet.
+        assert!(browser.exit_status_if_dead().await.is_none());
+
+        // Die the way an OS kill does.
+        browser.child.lock().await.kill().await.unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while browser.exit_status_if_dead().await.is_none() {
+            assert!(Instant::now() < deadline, "the kill was never reaped");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let status = browser.exit_status_if_dead().await.unwrap();
+        assert!(!status.success(), "a killed browser is not a clean exit");
         edge.shutdown().await;
     }
 
