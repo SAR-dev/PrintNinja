@@ -170,9 +170,15 @@ describe("printer types per platform", () => {
         invoke.mock.calls.some((c) => c[0] === "discover_network_printers"),
       ).toBe(true),
     );
+    // Collapsed by default: only the count shows until tapped.
+    const toggle = await within(panel).findByRole("button", {
+      name: "Found on this network (2)",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(
-      await within(panel).findByText("Found on this network"),
-    ).toBeInTheDocument();
+      within(panel).queryByTestId("discovered-printer-net:192.168.1.21:9100"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(toggle);
     const row = await within(panel).findByTestId(
       "discovered-printer-net:192.168.1.21:9100",
     );

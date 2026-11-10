@@ -285,6 +285,43 @@ describe("Bluetooth in the add dialog", () => {
     ).toHaveAttribute("aria-describedby", "printer-address-hint");
   });
 
+  // The section is collapsed by default (count only); expand it first.
+  async function expandBondedList(panel: HTMLElement) {
+    const toggle = await within(panel).findByRole("button", {
+      name: "Paired Bluetooth printers (1)",
+    });
+    fireEvent.click(toggle);
+    return toggle;
+  }
+
+  it("keeps bonded printers collapsed behind their count until tapped", async () => {
+    const done = phoneMode();
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers") return PRINTERS;
+      if (cmd === "list_bluetooth_devices") return [BT_ROW];
+      if (cmd === "enumerate_system_printers") return [];
+      return null;
+    });
+    try {
+      const panel = await openBluetoothDialog();
+      const toggle = await within(panel).findByRole("button", {
+        name: "Paired Bluetooth printers (1)",
+      });
+      // Collapsed by default: only the count shows, no rows.
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(
+        screen.queryByTestId("discovered-bluetooth-A4:77:17:22:33:44"),
+      ).not.toBeInTheDocument();
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(
+        await screen.findByTestId("discovered-bluetooth-A4:77:17:22:33:44"),
+      ).toBeInTheDocument();
+    } finally {
+      done();
+    }
+  });
+
   it("lists bonded printers with Fill and Add on Android", async () => {
     const done = phoneMode();
     invoke.mockImplementation(async (cmd: string) => {
@@ -295,6 +332,7 @@ describe("Bluetooth in the add dialog", () => {
     });
     try {
       const panel = await openBluetoothDialog();
+      await expandBondedList(panel);
       const row = await screen.findByTestId(
         "discovered-bluetooth-A4:77:17:22:33:44",
       );
@@ -317,7 +355,8 @@ describe("Bluetooth in the add dialog", () => {
       return null;
     });
     try {
-      await openBluetoothDialog();
+      const panel = await openBluetoothDialog();
+      await expandBondedList(panel);
       const row = await screen.findByTestId(
         "discovered-bluetooth-A4:77:17:22:33:44",
       );
