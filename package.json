@@ -25,6 +25,7 @@
     "test:ui": "vitest --ui",
     "gen:api": "openapi-typescript server/openapi/openapi.json -o src/lib/api/schema.d.ts",
     "e2e": "pnpm --filter e2e test",
+    "e2e:docker": "docker compose -f e2e/docker-compose.e2e.yml run --rm e2e",
     "import:v1": "pnpm --filter server db:import",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

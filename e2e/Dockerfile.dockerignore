@@ -1,0 +1,29 @@
+# Build context for e2e/Dockerfile is the repository root. This file (named
+# after the Dockerfile) replaces the root .dockerignore for this build: the
+# e2e image must keep the app source (src/, public/, index.html,
+# vite.config.ts) because it runs the vite dev server against the real
+# frontend, unlike the server image which excludes it.
+#
+# Exclude host build outputs and native artifacts (they are platform-bound
+# and regenerated inside the image) so the context stays small and a Windows
+# checkout cannot leak Windows node_modules / target trees into the image.
+.git/
+src-tauri/
+server-legacy/
+node_modules/
+**/node_modules/
+dist/
+server/dist/
+server/src/infra/prisma/generated/
+e2e/support/virtual-printer/target/
+test-results/
+**/test-results/
+playwright-report/
+**/playwright-report/
+coverage/
+**/coverage/
+*.tsbuildinfo
+*.db
+**/.env
+**/.env.*
+!**/.env.sample
