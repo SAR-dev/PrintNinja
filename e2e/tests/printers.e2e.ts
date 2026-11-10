@@ -106,6 +106,8 @@ test("discovered mDNS printer can be added from the scan row", async ({
   // The "Found on this network" scan list lives inside the Add sheet.
   await openAdd(page);
   await page.getByTestId(testids.printersScanNetwork).click();
+  // The scan list is collapsed to its count by default — expand it first.
+  await page.getByTestId(testids.printersToggleNetwork).click();
   const row = page.getByTestId(testids.discoveredPrinter("net:10.0.0.5:631"));
   await expect(row).toBeVisible({ timeout: 15_000 });
   await expect(row.getByText("E2E ipp printer")).toBeVisible();

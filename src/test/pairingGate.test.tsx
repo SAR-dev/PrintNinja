@@ -221,7 +221,7 @@ describe("PairingGate", () => {
       const input = await screen.findByTestId("devices-code-input");
       expect(onPaired).not.toHaveBeenCalled();
       // Example code in XYZ letters, dimmed so it reads as a hint.
-      expect(input).toHaveAttribute("placeholder", "XXXXXXXX");
+      expect(input).toHaveAttribute("placeholder", "XYZ7K4MP");
       expect(input).toHaveClass("placeholder:opacity-50");
 
       const t0 = Date.now();

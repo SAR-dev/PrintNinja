@@ -46,6 +46,16 @@ heading.
 
 ### Changed
 
+- **Add-printer discovered sections collapse to their count.** In the
+  Add printer sheet, "Found on this network" and "Paired Bluetooth
+  printers" now show only their count by default — background
+  discoveries no longer resize the dialog out from under the form.
+  Tapping the header (with a rotating chevron) expands the list for
+  selection. Same behaviour on desktop and Android.
+- **Pairing-code placeholder shows an example combination.** The
+  8-character pairing input placeholder changed from `XXXXXXXX` to
+  `XYZ7K4MP`, so it reads as a sample code (all characters from the
+  pairing alphabet) instead of a length hint.
 - `print_jobs` schema gains `pdf_data BLOB` (run-input for PDF jobs).
 - OpenAPI: a job needs a template **or** a `pdf` (`template` is no
   longer unconditionally `required`); the `POST /v1/print` body limit

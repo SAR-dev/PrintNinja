@@ -39,6 +39,7 @@ import {
   Wifi,
   Usb,
   Bluetooth,
+  ChevronDown,
   Monitor,
   Pencil,
   Trash2,
@@ -56,6 +57,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import {
   defaultLanguageFor,
@@ -157,6 +159,10 @@ export function PrinterSetupPage() {
   // Bluetooth row stores, so the dialog offers them instead of a typed MAC.
   const [btPrinters, setBtPrinters] = useState<SystemPrinter[]>([]);
   const [scanningBt, setScanningBt] = useState(false);
+  // Discovered sections start collapsed (count only): background mDNS/BT
+  // results must not resize the dialog out from under the form.
+  const [netExpanded, setNetExpanded] = useState(false);
+  const [btExpanded, setBtExpanded] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<PrinterRow | null>(null);
 
   const [showAdd, setShowAdd] = useState(false);
@@ -213,6 +219,8 @@ export function PrinterSetupPage() {
     setForm(blankForm);
     setDetectResult(null);
     languageTouched.current = false;
+    setNetExpanded(false);
+    setBtExpanded(false);
     setShowAdd(true);
   };
 
@@ -232,6 +240,8 @@ export function PrinterSetupPage() {
     });
     setDetectResult(null);
     languageTouched.current = false;
+    setNetExpanded(false);
+    setBtExpanded(false);
     setShowAdd(true);
   };
 
@@ -471,6 +481,8 @@ export function PrinterSetupPage() {
       setShowAdd(false);
       setEditingId(null);
       setForm(blankForm);
+      setNetExpanded(false);
+      setBtExpanded(false);
       await load();
     } catch (e) {
       const msg = describeError(e);
@@ -933,6 +945,8 @@ export function PrinterSetupPage() {
           if (!open) {
             setEditingId(null);
             setForm(blankForm);
+            setNetExpanded(false);
+            setBtExpanded(false);
           }
         }}
       >
@@ -991,10 +1005,28 @@ export function PrinterSetupPage() {
             )}
 
             <div className="rounded-md border p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs font-medium">
-                  {t("printers.found_network")}
-                </p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                {/* Collapsed by default: only the count shows, so background
+                    discoveries never resize the dialog. */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-2 justify-start gap-1.5 text-xs"
+                  aria-expanded={netExpanded}
+                  disabled={networkPrinters.length === 0}
+                  onClick={() => setNetExpanded((v) => !v)}
+                  data-testid="printers-toggle-network"
+                >
+                  <Wifi className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  {t("printers.found_network")} ({networkPrinters.length})
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 shrink-0 transition-transform",
+                      netExpanded && "rotate-180",
+                    )}
+                    aria-hidden="true"
+                  />
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1005,7 +1037,7 @@ export function PrinterSetupPage() {
                   {scanningNet ? t("printers.scanning") : t("printers.rescan")}
                 </Button>
               </div>
-              {networkPrinters.length > 0 ? (
+              {netExpanded && networkPrinters.length > 0 ? (
                 <div className="space-y-1.5">
                   {networkPrinters.map((np) => (
                     <div
@@ -1066,10 +1098,29 @@ export function PrinterSetupPage() {
 
             {isAndroid() && form.printer_type === "bluetooth" && (
               <div className="rounded-md border p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs font-medium">
-                    {t("printers.found_bluetooth")}
-                  </p>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="-ml-2 justify-start gap-1.5 text-xs"
+                    aria-expanded={btExpanded}
+                    disabled={btPrinters.length === 0}
+                    onClick={() => setBtExpanded((v) => !v)}
+                    data-testid="printers-toggle-bluetooth"
+                  >
+                    <Bluetooth
+                      className="h-3.5 w-3.5 shrink-0"
+                      aria-hidden="true"
+                    />
+                    {t("printers.found_bluetooth")} ({btPrinters.length})
+                    <ChevronDown
+                      className={cn(
+                        "h-3.5 w-3.5 shrink-0 transition-transform",
+                        btExpanded && "rotate-180",
+                      )}
+                      aria-hidden="true"
+                    />
+                  </Button>
                   <div className="flex gap-1">
                     <Button
                       variant="ghost"
@@ -1092,7 +1143,7 @@ export function PrinterSetupPage() {
                     </Button>
                   </div>
                 </div>
-                {btPrinters.length > 0 ? (
+                {btExpanded && btPrinters.length > 0 ? (
                   <div className="space-y-1.5">
                     {btPrinters.map((bp) => (
                       <div

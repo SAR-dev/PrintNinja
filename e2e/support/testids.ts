@@ -148,6 +148,10 @@ export const testids = {
   devicesPairAgain: (id: string) => `devices-pair-again-${id}`,
   /** Printers page: the "Found on this network" scan list in the Add sheet. */
   printersScanNetwork: "printers-scan-network",
+  /** Printers page (Add sheet): expand/collapse the network scan list. */
+  printersToggleNetwork: "printers-toggle-network",
+  /** Printers page (Add sheet, Android): expand/collapse the bonded list. */
+  printersToggleBluetooth: "printers-toggle-bluetooth",
   /** Printers page (Android, Bluetooth): open the OS Bluetooth settings. */
   printersOpenBluetoothSettings: "printers-open-bluetooth-settings",
   /** Printers page: one row of the discovered-printers scan list. */
