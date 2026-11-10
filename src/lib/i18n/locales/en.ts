@@ -658,6 +658,8 @@ const en = {
     hint_raw: "For example 192.168.1.100:9100",
     hint_bluetooth:
       "For example A4:77:17:22:33:44 — the MAC of a paired device (the list below offers them)",
+    hint_bluetooth_desktop:
+      "Pair the printer in your OS Bluetooth settings first, then enter its MAC — for example A4:77:17:22:33:44. No driver needed. Windows: the printer's COM port (for example COM7) works too",
     gdi_warning_title: "Driver may be GDI-only (no PDF datatype)",
     gdi_warning:
       "{{name}}'s print queue does not offer a PDF datatype, so its driver may be GDI-only: PDF jobs sent to it may not print. If that happens, add the same physical printer by its network address (Wi-Fi / LAN → IPP, or Raw TCP 9100 if the device reads PDF) instead of this system queue.",
@@ -1372,6 +1374,7 @@ const en = {
     sort_alpha: "A–Z",
     search_label: "Search templates",
     search_placeholder: "Search by name",
+    no_search_hits: "Nothing matches that search.",
     refresh: "Refresh",
     conflict_single: "“{{name}}” changed on another PC.",
     conflict_many: "{{count}} templates changed on another PC.",

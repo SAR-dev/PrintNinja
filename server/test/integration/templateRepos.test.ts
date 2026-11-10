@@ -292,6 +292,53 @@ for (const name of ["fake", "prisma"] as const) {
       expect(page.total).toBe(2);
     });
 
+    it("searches and sorts the owner's list, private rows included", async () => {
+      const pub = randomUUID();
+      const priv = randomUUID();
+      await be.templates.create(
+        write(pub, owner, { name: "100% cotton", summary: "soft goods" }),
+        version,
+      );
+      await be.templates.create(
+        write(priv, owner, { name: "Hidden label" }),
+        version,
+      );
+      // Published or not, both belong to the owner and both are listed.
+      await be.templates.setPublished(pub, new Date());
+      await be.templates.create(
+        write(randomUUID(), other, { name: "Not mine" }),
+        version,
+      );
+
+      const all = await be.templates.listByOwner(owner, {
+        page: 1,
+        pageSize: 20,
+      });
+      expect(all.total).toBe(2);
+
+      for (const q of ["100%", "soft", "hidden"]) {
+        const found = await be.templates.listByOwner(owner, {
+          page: 1,
+          pageSize: 20,
+          q,
+        });
+        expect(
+          found.items.map((t) => t.id),
+          `q=${q}`,
+        ).toContain(q === "100%" || q === "soft" ? pub : priv);
+      }
+
+      const named = await be.templates.listByOwner(owner, {
+        page: 1,
+        pageSize: 20,
+        sort: "name",
+      });
+      expect(named.items.map((t) => t.name)).toEqual([
+        "100% cotton",
+        "Hidden label",
+      ]);
+    });
+
     it("searches name, summary and owner handle literally, published only", async () => {
       const pub = randomUUID();
       const priv = randomUUID();

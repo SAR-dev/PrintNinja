@@ -675,6 +675,8 @@ const ja: Translation = {
     hint_raw: "例: 192.168.1.100:9100",
     hint_bluetooth:
       "例: A4:77:17:22:33:44 — ペアリング済みデバイスのMAC（下のリストから選べます）",
+    hint_bluetooth_desktop:
+      "まずOSのBluetooth設定でプリンターをペアリングし、MACアドレスを入力してください（例: A4:77:17:22:33:44）。ドライバは不要です。Windowsの場合はプリンターのCOMポート（例: COM7）でもかまいません",
     gdi_warning_title: "ドライバがGDI専用の可能性があります(PDFデータ型なし)",
     gdi_warning:
       "{{name}} のプリンターキューは PDF データ型を提供していません。ドライバが GDI 専用の可能性があり、送られた PDF ジョブが印刷されない場合があります。その場合は、このシステムキューの代わりに、同じ物理プリンターをネットワークアドレス（Wi-Fi / LAN の IPP、またはデバイス自体が PDF を読める場合は Raw TCP 9100）で追加してください。",
@@ -1409,6 +1411,7 @@ const ja: Translation = {
     sort_alpha: "名前順",
     search_label: "テンプレートを検索",
     search_placeholder: "名前で検索",
+    no_search_hits: "一致する結果がありません。",
     refresh: "更新",
     conflict_single: "「{{name}}」が別のPCで変更されました。",
     conflict_many: "{{count}}件のテンプレートが別のPCで変更されました。",

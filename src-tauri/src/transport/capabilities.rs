@@ -15,9 +15,11 @@
 //! - `usb` / `bluetooth` — device identity first (no I/O to the
 //!   printer): the model string the system reports for the device is
 //!   matched against the same model → language table the IPP path
-//!   uses; on Android a protocol probe follows when the name does not
-//!   decide it. Windows drives these through the spooler, so there is
-//!   no raw wire to query there — identity only.
+//!   uses; when the name does not decide it, Android and Linux ask the
+//!   wire — a protocol probe over the device's own connection (Linux
+//!   dials RFCOMM directly, so the add form can too). Windows has no
+//!   raw wire to query there (spooler queues and name-based identity
+//!   only).
 //! - `system` — the spooler converts whatever we send; nothing to ask.
 //!
 //! The contract is the one `IppPrinter::printer_state_reasons` sets:
@@ -446,7 +448,37 @@ async fn probe_usb(_name: &str, _address: &str) -> ProbeCapabilities {
     ProbeCapabilities::unknown()
 }
 
-#[cfg(not(any(target_os = "android", target_os = "windows")))]
+/// Linux drives Bluetooth directly (an RFCOMM socket), so the probe
+/// can ask the device itself: the model name in the row decides first
+/// — the operator usually typed the model — and only when it does not
+/// does the wire answer, one dialect at a time on fresh connections
+/// with the same `answered()` rules as the raw-TCP probe. An
+/// unreachable device or a silent one comes back "unknown", never an
+/// error.
+#[cfg(target_os = "linux")]
+async fn probe_bluetooth(name: &str, address: &str) -> ProbeCapabilities {
+    if let Some(language) = language_for_model(name) {
+        let mut out = ProbeCapabilities::unknown();
+        out.detected = true;
+        out.suggested_language = Some(language.into());
+        out.make_and_model = Some(name.to_string());
+        return out;
+    }
+    let mut out = ProbeCapabilities::unknown();
+    if let Some(dialect) =
+        crate::transport::linux_bluetooth::LinuxBluetoothPrinter::probe_wire_dialect(address).await
+    {
+        out.detected = true;
+        out.suggested_language = Some(language_of(dialect).into());
+    }
+    out
+}
+
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "windows",
+    target_os = "linux"
+)))]
 async fn probe_bluetooth(_name: &str, _address: &str) -> ProbeCapabilities {
     ProbeCapabilities::unknown()
 }
@@ -588,5 +620,33 @@ mod tests {
         let out = probe_raw_tcp("127.0.0.1:1").await;
         assert!(!out.detected);
         assert!(out.suggested_language.is_none());
+    }
+
+    /// Linux: the row's own name decides for free (no I/O), and only
+    /// when it does not does the probe touch the wire — which, with an
+    /// address that is not a Bluetooth address, ends as "unknown"
+    /// rather than an error.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn linux_bluetooth_probe_prefers_the_name_then_the_wire() {
+        let named = probe(
+            &PrinterType::Bluetooth,
+            "Zebra ZT411",
+            "A4:77:17:22:33:44",
+            &TransportSettings::default(),
+        )
+        .await;
+        assert!(named.detected);
+        assert_eq!(named.suggested_language.as_deref(), Some("zpl"));
+
+        let anonymous = probe(
+            &PrinterType::Bluetooth,
+            "Front Desk",
+            "usb://dummy",
+            &TransportSettings::default(),
+        )
+        .await;
+        assert!(!anonymous.detected);
+        assert!(anonymous.suggested_language.is_none());
     }
 }

@@ -15,17 +15,25 @@ A printer is configured with a **type** (how to reach it) and a
 - **System printers** go through the operating system: the Windows spooler on
   Windows, CUPS on Linux. The app hands over finished bytes and lets the OS
   queue them.
-- **USB and Bluetooth printers** are reached differently per platform. On
-  Windows they are spooler lookups by name: the printer must already be
-  installed as a Windows printer, and the app does not open the USB device or
-  the COM port itself. On Android they are driven directly (bulk-OUT through
-  `UsbManager`, RFCOMM serial). On Linux there is no direct transport; the
-  app reports USB/Bluetooth as unsupported and tells the operator to install
-  the device as a CUPS raw queue instead (e.g.
-  `sudo lpadmin -p Label -m raw -v usb://... -E` or
-  `bluetooth://... -E` and add the queue as type `system`). A raw queue passes
-  `application/octet-stream` bytes unchanged, so ESC/POS, ZPL, TSPL, CPCL and
-  raster reach the head exactly as encoded.
+- **USB printers** are reached through the OS. On Windows that is the
+  spooler: the printer must already be installed as a Windows printer, and
+  the app does not open the USB device itself. On Android USB is driven
+  directly (bulk-OUT through `UsbManager`). On Linux there is no direct
+  transport; the app reports USB as unsupported and tells the operator to
+  install the device as a CUPS raw queue instead (e.g.
+  `sudo lpadmin -p Label -m raw -v usb://... -E` and add the queue as type
+  `system`). A raw queue passes `application/octet-stream` bytes unchanged,
+  so ESC/POS, ZPL, TSPL, CPCL and raster reach the head exactly as encoded.
+- **Bluetooth printers are driven directly, with no driver**, on every
+  platform that has them: Android dials an RFCOMM socket through the Kotlin
+  plugin, Linux dials one straight from the kernel's Bluetooth stack, and
+  Windows writes to the paired device's own COM port (found from the row's
+  MAC, or named outright as `COM7`). Pairing itself stays an OS flow — the
+  printer is paired in the system's Bluetooth settings first — and only
+  classic serial (SPP) printers are supported, not BLE. When a Windows
+  address names no COM port, the job falls back to the Windows printer
+  queue of the same name, which must be installed as before; a failed
+  fallback explains both routes.
 
 ## Discovery
 
@@ -40,8 +48,10 @@ browse is one-shot (a few seconds per tap, plus a short automatic window
 after the page opens), never a continuous scan.
 
 A **test print** runs the entire pipeline end to end with mock data to prove
-a new printer works. For Windows system, USB and Bluetooth printers the
-connectivity test only checks the queue's status and sends nothing.
+a new printer works. The connectivity check that precedes it never puts
+anything on paper: Windows system and USB queues report their status,
+Bluetooth opens the COM port or the RFCOMM connection and closes it again,
+and network printers only connect.
 
 ## Languages: two fundamentally different paths
 
@@ -97,17 +107,22 @@ and which transports exist.
 
 - **Windows** renders PDFs through the built-in browser engine (kept warm in
   the background for speed) and reaches printers via network protocols or the
-  system spooler. USB and Bluetooth printers go through the spooler too, so
-  they must be installed as Windows printers first.
+  system spooler. USB printers go through the spooler too, so they must be
+  installed as Windows printers first. Bluetooth is driverless: the job is
+  written straight to the paired device's COM port, and the spooler queue is
+  used only when the address names no port.
 - **Linux** renders through headless Chromium, which must be installed
   (the `.deb` declares `cups` and a Chromium-family browser; the AppImage does
   not bundle one and warns once at startup if none is found —
   `apt install chromium` or `google-chrome`) and reaches printers via network
-  protocols or CUPS (including CUPS raw queues that front USB/Bluetooth
+  protocols or CUPS (including CUPS raw queues that front USB
   thermal heads — `lpadmin -m raw`, declared as `system` with
   `application/octet-stream`). The browser stays running in the background so
-  every print only opens a tab, like on Windows. Direct USB/Bluetooth are not
+  every print only opens a tab, like on Windows. Direct USB is not
   supported — the app tells the operator to use the CUPS raw route instead.
+  Bluetooth is direct: an RFCOMM socket to the device paired in the OS's
+  Bluetooth settings, dialled from the row's MAC (channel 1 unless the
+  address ends in `:2`–`:30`).
 - **Android** renders PDFs through the system WebView, and renders
   ESC/POS, ZPL and TSPL jobs directly: the same WebView measures the page
   at the head's own resolution (1 CSS px = 1 dot, via a density-160
