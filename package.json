@@ -19,6 +19,8 @@
     "format": "biome format --write",
     "format:check": "biome format",
     "test": "vitest run",
+    "test:rust": "docker compose -f src-tauri/docker-compose.test.yml run --rm rust-test",
+    "test:rust:report": "docker compose -f src-tauri/docker-compose.test.yml run --rm rust-test cargo junit --no-fail-fast -o /workspace/src-tauri/test-report/junit.xml",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "gen:api": "openapi-typescript server/openapi/openapi.json -o src/lib/api/schema.d.ts",

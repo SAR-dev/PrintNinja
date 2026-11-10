@@ -303,6 +303,15 @@ const implemented: Record<string, Handler> = {
   // Bonded Bluetooth is an Android-only surface; the e2e browser has
   // none, so the honest answer is an empty list.
   list_bluetooth_devices: () => [],
+  // The probe is graceful by contract: the fake has no printer to ask,
+  // so it answers the "unknown" the form must render without an error.
+  probe_printer_capabilities: () => ({
+    detected: false,
+    suggested_language: null,
+    make_and_model: null,
+    printer_info: null,
+    document_formats: [],
+  }),
   // Mirrors the non-Android branch of the Rust command, which refuses
   // rather than opening anything (Bluetooth settings are Android-only).
   open_bluetooth_settings: () => {

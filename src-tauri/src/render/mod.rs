@@ -24,6 +24,13 @@ mod elevation;
 pub mod fix;
 pub mod handlebars;
 pub mod layout;
+/// PDF-input rasterization via PDFium (see the module docs for the
+/// vendored-binary layout and the bind search order). Android ships no
+/// PDFium binary — `PdfRenderer::pdf_to_raster` renders there with the
+/// platform's own `PdfRenderer` through the plugin — so the module is
+/// desktop-only.
+#[cfg(not(target_os = "android"))]
+pub mod pdfium;
 pub mod raster;
 
 pub struct PdfRenderer {
@@ -335,6 +342,105 @@ impl PdfRenderer {
         // cache dir does not grow a file per print.
         let _ = tokio::fs::remove_file(&html_path).await;
         result
+    }
+
+    /// Rasterise a submitted PDF's first page to the printer's dot
+    /// dimensions (PDF input).
+    ///
+    /// On Windows and Linux the bundled PDFium does it in a blocking task
+    /// (the engine is a C library and must not sit on the async executor);
+    /// on Android the platform's own PDFium port (`PdfRenderer`) does it
+    /// on the device, exactly like the WebView raster path (PLAN §2).
+    /// Returns the raster plus the document's page count — the job warns
+    /// when more than one page printed nothing. Same rule on every
+    /// platform: failure is an error, never a placeholder.
+    pub async fn pdf_to_raster(
+        &self,
+        pdf: &[u8],
+        w_px: usize,
+        h_px: usize,
+    ) -> Result<(crate::render::raster::RasterImage, u32)> {
+        tracing::debug!(w_px, h_px, "rasterizing PDF input for a command-language printer");
+
+        // The platform's own PDFium port renders on the device (PLAN §2).
+        #[cfg(target_os = "android")]
+        let result = Self::android_pdf_raster(pdf, w_px, h_px).await;
+
+        // The bundled PDFium in a blocking task: the engine is a C
+        // library and must not sit on the async executor.
+        #[cfg(not(target_os = "android"))]
+        let result = {
+            let pdf = pdf.to_vec();
+            let (raster, pages) =
+                tokio::task::spawn_blocking(move || crate::render::pdfium::pdf_to_raster(&pdf, w_px, h_px))
+                    .await
+                    .map_err(|e| anyhow!("the PDF raster task failed: {e}"))?
+                    .map_err(|e| anyhow!("could not rasterize the PDF: {e}"))?;
+            Ok((raster, pages))
+        };
+        result
+    }
+
+    /// Android: the platform's `PdfRenderer` (the OS's own PDFium port)
+    /// renders the first page at the head's dot dimensions and thresholds
+    /// on the device (PLAN §2). Kotlin writes the packed dots to a
+    /// cache-dir file, which this reads and deletes, and returns the page
+    /// count for the multi-page warning.
+    ///
+    /// The deadline sits above Kotlin's own 60 s render watchdog, like
+    /// `android_webview_raster`'s: whichever gives up first reports the
+    /// cause.
+    #[cfg(target_os = "android")]
+    async fn android_pdf_raster(
+        pdf: &[u8],
+        w_px: usize,
+        h_px: usize,
+    ) -> Result<(crate::render::raster::RasterImage, u32)> {
+        use base64::Engine as _;
+        use tauri_plugin_android_print::AndroidPrintExt;
+
+        const ANDROID_RENDER_DEADLINE: std::time::Duration = std::time::Duration::from_secs(75);
+
+        let app = crate::render::android_app()
+            .ok_or_else(|| anyhow!("the Android render bridge is not ready yet"))?;
+        let payload = tauri_plugin_android_print::PdfToRasterRequest {
+            pdf_base64: base64::engine::general_purpose::STANDARD.encode(pdf),
+            width_px: w_px as u32,
+            height_px: h_px as u32,
+        };
+        let res = tokio::time::timeout(
+            ANDROID_RENDER_DEADLINE,
+            tokio::task::spawn_blocking(move || app.android_print().pdf_to_raster(payload)),
+        )
+        .await
+        .map_err(|_| {
+            anyhow!(
+                "the Android PDF renderer did not finish within {}s",
+                ANDROID_RENDER_DEADLINE.as_secs()
+            )
+        })?
+        .map_err(|e| anyhow!("the Android PDF raster task failed: {e}"))?
+        .map_err(|e| anyhow!("the Android PDF renderer could not rasterize the job: {e}"))?;
+
+        let bytes = tokio::fs::read(&res.path).await?;
+        let _ = tokio::fs::remove_file(&res.path).await;
+
+        // Length for the error message, taken before `bytes` moves into
+        // `from_packed` (the closure may not borrow it afterwards).
+        let dot_bytes = bytes.len();
+        let raster = crate::render::raster::RasterImage::from_packed(
+            res.width as usize,
+            res.height as usize,
+            bytes,
+        )
+        .ok_or_else(|| {
+            anyhow!(
+                "raster size mismatch from the Android PDF renderer: {dot_bytes} bytes for {}x{} dots",
+                res.width,
+                res.height
+            )
+        })?;
+        Ok((raster, res.page_count))
     }
 
     /// Android: the WebView renders at the head's own resolution (1 CSS px

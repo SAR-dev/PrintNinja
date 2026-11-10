@@ -217,6 +217,20 @@ it never silently falls back. Set it in the environment the app
 launches with (same launcher caveat as `PRINTNINJA_PAIRING_TTL_SECS`).
 The Linux equivalent is `PRINTNINJA_CHROMIUM_BIN`.
 
+### `PDFIUM_LIBRARY_PATH`
+Optional path to a PDFium shared library (or to a directory that
+contains it). PrintNinja rasterises PDF *input* jobs (an existing PDF
+document sent to a command-language printer, see
+`architecture/RENDERING_AND_LAYOUT.md`) with PDFium. By default the app
+binds the copy bundled under `resources/pdfium/` (`pdfium.dll` on
+Windows, `libpdfium.so` on Linux); set this to override it — for example
+a patched or newer PDFium, or the system install on a Linux box that
+ships its own `libpdfium.so`.
+It is read the first time a PDF is rasterised in a process, so set it
+in the environment the app launches with (same launcher caveat as
+`PRINTNINJA_EDGE_BIN`). If the named library does not load, the error
+lists the other candidates the app tried.
+
 ### Webhooks (print callbacks)
 
 `POST /v1/print` accepts an optional `callback_url`; the app posts the

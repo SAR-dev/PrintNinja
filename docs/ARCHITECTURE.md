@@ -28,8 +28,11 @@ flowchart LR
 
 One machine does the heavy work: a **PC** (Windows or Linux) can render a
 design into an image or PDF and can print. A **phone** lays pages out and
-renders receipt and label jobs itself; PDF is the one thing it cannot make,
-so a phone that prints PDF pairs with a PC that does that one step for it.
+renders receipt and label jobs itself; producing a PDF from a template is
+the one step it cannot take, so a phone that prints to a PDF-language
+printer pairs with a PC that does that step for it. An *existing* PDF sent
+to a thermal head is the exception: the phone rasterises its first page on
+the device (the platform's own PDFium port) and prints it unpaired.
 The **share service** in the cloud stores accounts, templates and fonts; it
 has no rendering engine, so a print never travels through it.
 
@@ -37,15 +40,15 @@ has no rendering engine, so a print never travels through it.
 
 ```mermaid
 flowchart LR
-    D[Data and template] --> P[Design pages] --> S[Sheets]
+    D[Data and template, or an existing PDF] --> P[Design pages] --> S[Sheets]
     S --> O[Image or PDF] --> L[Printer language] --> W[Wire] --> PAP[Paper]
     classDef remote fill:#e436,stroke:#e436,color:#fff
     class O remote
 ```
 
-Raw business data goes in one end, printer-specific bytes come out the other,
-and every step exists to answer one question: what should each dot on the
-paper be?
+Data and a template — or an existing PDF document — go in one end,
+printer-specific bytes come out the other, and every step exists to answer
+one question: what should each dot on the paper be?
 
 The middle is the part to hold in your head. A template renders into
 *design pages* exactly as it looks in the Designer, with no knowledge of any
@@ -78,13 +81,13 @@ actions are never one click.
 
 ## The backend pipeline
 
-For every job the backend walks the same eight steps: resolve the content and
-its geometry, open a job record (with a key that makes safe retries
-impossible to double-print), fetch the data (with domain allow-lists and
-private-network blocking), render the design pages, place the pages on
-sheets, produce the output — the step that may run on the paired PC — send
-the bytes once per copy, and close the job as success or failure with the
-reason. The full walk-through is in the deep dives
+For every job the backend walks the same eight steps: resolve the content —
+a template and data, or an existing PDF document — and its geometry, open a
+job record (with a key that makes safe retries impossible to double-print),
+fetch the data (with domain allow-lists and private-network blocking),
+render the design pages, place the pages on sheets, produce the output — the
+step that may run on the paired PC — send the bytes once per copy, and close
+the job as success or failure with the reason. The full walk-through is in the deep dives
 [rendering and layout](./architecture/RENDERING_AND_LAYOUT.md) and
 [printers and transports](./architecture/PRINTERS_AND_TRANSPORTS.md); the
 queue, timings and callback webhooks are in
@@ -102,10 +105,10 @@ sequenceDiagram
     P->>C: code + account check
     C-->>P: device token minted
     Note over P,R: Every print
-    alt thermal (receipt, label) — pair not needed
+    alt thermal (receipt, label, PDF input) — pair not needed
         P->>P: lay pages on sheets, render to dots on the phone
         P->>R: send bytes
-    else PDF — pair needed
+    else PDF-language job — pair needed
         P->>P: lay pages on sheets
         P->>C: finished document + paper, language, resolution
         C-->>P: finished bytes
@@ -161,8 +164,10 @@ timings, so the answer is in History, not in the log.
   templates and printers all live on the machine. Only remote data, cloud
   sync and release checks degrade.
 - **Phone, unpaired** — browsing works, and thermal printers (ESC/POS,
-  ZPL, TSPL) print on the device itself. Only PDF on the phone
-  needs a pair; choosing a PDF printer offers the pairing screen.
+  ZPL, TSPL) print on the device itself, including PDF *input* (a
+  submitted document rasterises on the device). Only PDF-language
+  printers on the phone need a pair; choosing one offers the pairing
+  screen.
 - **Phone paired with a PC** — PDF jobs render on the PC while it is on
   the same network and sharing (shared rendering, or the PC's own printers
   with Print via PC). When the PC is off, asleep or away, the job fails at

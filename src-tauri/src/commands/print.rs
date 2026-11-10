@@ -24,10 +24,33 @@ pub const MAX_COPIES: u32 = 100;
 /// payloads go through `data_url`, whose fetch already caps at 5 MiB.
 pub const MAX_API_DATA_BYTES: usize = 1024 * 1024;
 
+/// Upper bound for an inline `pdf` payload. A document is stored with the
+/// job row (for retry/reprint) and, over the REST API, travels base64 —
+/// ~4/3 of its size — so this stays at the `data_url` fetch cap.
+pub const MAX_PDF_BYTES: usize = 5 * 1024 * 1024;
+
+/// Cap for the `POST /v1/print` body on the main API router. The largest
+/// legal body is a `pdf` field holding `MAX_PDF_BYTES` base64-encoded
+/// (~6.7 MiB) plus the JSON envelope and settings; axum's 2 MiB default
+/// would reject it before the handler's own checks run. The handler still
+/// enforces `MAX_PDF_BYTES` on the decoded bytes.
+pub const MAX_PRINT_BODY_BYTES: usize = 10 * 1024 * 1024;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct PrintRequest {
     pub printer_name: String,
+    /// HTML source. Optional now that `pdf` carries content too: a job
+    /// prints either raw HTML (rendered to the target language) or a
+    /// submitted PDF (passed through or rasterised), never both.
+    #[serde(default)]
     pub html: String,
+    /// Existing PDF to print, as raw bytes. Mutually exclusive with
+    /// `html`/`template_id`/`data`/`data_url`; capped at
+    /// [`MAX_PDF_BYTES`]. Pdf-language printers take it as-is;
+    /// command-language printers get its first page rasterised to their
+    /// dot dimensions (see `render::pdfium`).
+    #[serde(default)]
+    pub pdf: Option<Vec<u8>>,
     pub page_width_mm: Option<f64>,
     pub page_height_mm: Option<f64>,
     pub orientation: Option<String>,
@@ -172,6 +195,28 @@ pub trait JobRenderer: Send + Sync {
         ))
     }
 
+    /// Rasterize the first page of a submitted PDF at exactly `w_px` ×
+    /// `h_px` dots (the PDF-input half of P4), for command-language
+    /// printers that cannot consume the raw bytes.
+    ///
+    /// Returns the raster and the document's page count so the pipeline
+    /// can warn when more than the first page did not print. The default
+    /// refuses, like [`rasterize`](Self::rasterize): a renderer that
+    /// cannot do it must fail the job loudly. [`PdfRenderer`] overrides it
+    /// with the PDFium path; integration tests substitute their own.
+    async fn rasterize_pdf(
+        &self,
+        pdf: &[u8],
+        w_px: usize,
+        h_px: usize,
+    ) -> anyhow::Result<(crate::render::raster::RasterImage, u32)> {
+        let _ = (pdf, w_px, h_px);
+        Err(anyhow::anyhow!(
+            "this renderer cannot rasterize PDF to dots; PDF input on \
+             command-language printers needs the PDFium-backed renderer"
+        ))
+    }
+
     /// Render finished HTML to the bytes a printer head takes, choosing the
     /// renderer call by printer language. This is the print pipeline's
     /// stage 4, shared with the peer-render endpoint so both run the
@@ -244,6 +289,19 @@ impl JobRenderer for PdfRenderer {
         h_px: usize,
     ) -> anyhow::Result<crate::render::raster::RasterImage> {
         self.html_to_raster(final_html, w_px, h_px).await
+    }
+
+    /// The platform dispatch lives in `PdfRenderer::pdf_to_raster`: the
+    /// bundled PDFium on a blocking task on Windows/Linux (native code
+    /// stays off the async executor, like Edge on the screenshot path),
+    /// the platform's own `PdfRenderer` on the device on Android.
+    async fn rasterize_pdf(
+        &self,
+        pdf: &[u8],
+        w_px: usize,
+        h_px: usize,
+    ) -> anyhow::Result<(crate::render::raster::RasterImage, u32)> {
+        self.pdf_to_raster(pdf, w_px, h_px).await
     }
 }
 
@@ -510,6 +568,52 @@ pub fn validate_orientation_and_fit(
     ))
 }
 
+/// The intake rules for the optional `pdf` payload: when present it must
+/// be non-empty, within [`MAX_PDF_BYTES`], and the job's only content
+/// source. Nothing is enforced when the job carries no PDF, so existing
+/// HTML/template requests are untouched.
+pub fn validate_pdf_input(req: &PrintRequest) -> AppResult<()> {
+    let Some(pdf) = req.pdf.as_ref() else {
+        return Ok(());
+    };
+    if pdf.is_empty() {
+        return Err(AppError::Validation(
+            "`pdf` is empty: send a real PDF document, or omit `pdf` to print HTML or a template"
+                .into(),
+        ));
+    }
+    if pdf.len() > MAX_PDF_BYTES {
+        return Err(AppError::Validation(format!(
+            "PDF payload is {} bytes; the limit is {MAX_PDF_BYTES}",
+            pdf.len()
+        )));
+    }
+    let mut conflicts: Vec<&str> = Vec::new();
+    if !req.html.trim().is_empty() {
+        conflicts.push("html");
+    }
+    if req.template_id.is_some() {
+        conflicts.push("template_id");
+    }
+    if req.data.is_some() {
+        conflicts.push("data");
+    }
+    if req
+        .data_url
+        .as_deref()
+        .is_some_and(|u| !u.trim().is_empty())
+    {
+        conflicts.push("data_url");
+    }
+    if !conflicts.is_empty() {
+        return Err(AppError::Validation(format!(
+            "a job takes one content source: `pdf` conflicts with {}",
+            conflicts.join(", ")
+        )));
+    }
+    Ok(())
+}
+
 /// The largest margin one print may carry (mm): bigger than the widest
 /// paper the app knows, so a real margin always fits and a typo (or a
 /// hostile API payload) cannot push the content off the page.
@@ -604,6 +708,8 @@ pub async fn run_print_with(
     validate_page_range(req.page_range.as_deref())?;
     // Fail fast on an unsupported fetch method, before the job row exists.
     validate_http_method(req.http_method.as_deref())?;
+    // Same for a malformed PDF payload, for the same reason.
+    validate_pdf_input(&req)?;
     let copies = check_copies(req.copies.unwrap_or(1))?;
     // One shared rulebook for every print path: normalize case and reject
     // values the pipeline would otherwise silently remap (anything but
@@ -828,13 +934,30 @@ fn resolve_content(db: &DbState, req: &PrintRequest) -> AppResult<ResolvedConten
             let (h, c, compiled, tw, th, o) = resolve_template(conn, tid)?;
             (h, build_template_css(&c, &compiled), tw, th, o)
         }
-        None => (
-            req.html.clone(),
-            String::new(),
-            req.page_width_mm.unwrap_or(DEFAULT_PAPER_W_MM),
-            req.page_height_mm.unwrap_or(DEFAULT_PAPER_H_MM),
-            None,
-        ),
+        None => {
+            // A PDF-input job has no design size; the best guess at its
+            // paper is the printer's stored media width (label printers
+            // record their label width there). Height has no stored
+            // column — a caller that needs a specific label height sends
+            // `page_height_mm`.
+            let row_w = req
+                .pdf
+                .as_ref()
+                .is_some_and(|p| !p.is_empty())
+                .then(|| {
+                    lookup_printer(db, &req.printer_name)
+                        .and_then(|p| p.paper_width_mm)
+                        .map(|w| w as f64)
+                })
+                .flatten();
+            (
+                req.html.clone(),
+                String::new(),
+                req.page_width_mm.or(row_w).unwrap_or(DEFAULT_PAPER_W_MM),
+                req.page_height_mm.unwrap_or(DEFAULT_PAPER_H_MM),
+                None,
+            )
+        }
     };
 
     // Paper size is the physical sheet: an explicit request wins per axis,
@@ -857,7 +980,9 @@ fn resolve_content(db: &DbState, req: &PrintRequest) -> AppResult<ResolvedConten
         design_w_mm: design_w,
         design_h_mm: design_h,
         orientation,
-        render_template: true,
+        // A PDF job has no template to run (and no HTML): the engine stage
+        // is skipped and the render stage reads `req.pdf` directly.
+        render_template: req.pdf.is_none(),
     })
 }
 
@@ -986,7 +1111,9 @@ async fn run_stages(
         .lock()
         .ok()
         .and_then(|guard| crate::api::peer_consume::load_consumer_config(guard.connection()))
-        .filter(|pairs| !pairs.is_empty())
+        // A PDF-input job renders from the caller's own bytes; peers hold
+        // none of them, so no probe flies for it.
+        .filter(|pairs| !pairs.is_empty() && req.pdf.as_ref().is_none_or(Vec::is_empty))
         .map(|pairs| {
             tokio::spawn(
                 async move { crate::api::peer_consume::probe_candidates(&pairs, false).await },
@@ -1234,53 +1361,86 @@ async fn run_stages(
     });
 
     let t_render = Instant::now();
-    // A paired provider renders first when the auto policy is on: same
-    // bytes the local stage would produce, bought from the faster box.
-    // Any peer failure falls back to the local render below — sharing
-    // can only speed a print up, never fail it.
     let mut rendered_by: Option<String> = None;
-    // Probes flew during template+layout; collect them now. Timed
-    // separately (Phase 0): the caps-probe wait is otherwise buried
-    // inside render_ms, and it is the part caching controls.
-    let t_peer_probe = Instant::now();
-    let (candidates, probe_errors) = match peer_probe {
-        Some(task) => task.await.unwrap_or_default(),
-        None => (Vec::new(), Vec::new()),
-    };
-    if peer_had_pairs {
-        tracing::debug!(
-            job_id,
-            peer_probe_ms = ms(t_peer_probe),
-            candidates = candidates.len(),
-            "peer probe collect"
-        );
-    }
-    let attempted = peer_had_pairs;
-    // A peer may lack this device's uploaded fonts: inline them as data
-    // URIs so B renders what the template means — but only when a peer
-    // will actually render. The local fallback below then sees
-    // byte-identical HTML either way.
-    let peer_html = if candidates.is_empty() {
-        None
-    } else {
-        db.lock()
-            .ok()
-            .map(|guard| crate::api::peer_consume::inline_fonts(guard.connection(), &final_html))
-    };
-    // PDF on Android is still bought from the paired PC, which is mandatory
-    // there (the app opens on the pairing screen until one is paired): a
-    // local attempt could only report "no renderer", hiding the real cause
-    // (PC off, unpaired, busy). Thermal jobs now rasterize on the device
-    // itself (PLAN §4), so on Android they go local — `render_best` below
-    // still asks a paired PC first when one answers. Desktop is unchanged:
-    // local rendering, with required mode only for languages the platform
-    // cannot rasterize itself (macOS has no browser renderer).
-    let need_peer = (cfg!(target_os = "android")
-        && matches!(language, crate::transport::PrinterLanguage::Pdf))
-        || !(matches!(language, crate::transport::PrinterLanguage::Pdf)
-            || crate::api::render_share::can_render()
-            || cfg!(target_os = "android"));
-    let peer_result: Result<Option<crate::api::peer_consume::PeerOutcome>, String> =
+    // A PDF-input job renders from the caller's own bytes and skips the
+    // peer logic below entirely: peers render HTML — they never hold
+    // these bytes — and Android's "needs a paired PC" gate would wrongly
+    // fail a PDF a phone could hand its IPP printer as-is. A
+    // Pdf-language printer takes the document untouched (the one input
+    // where PDF beats HTML: no engine at all); a command-language
+    // printer gets its first page rasterised at its dot dimensions, then
+    // the identical encoder the HTML path uses.
+    let rendered: anyhow::Result<(Vec<u8>, String)> = match req
+        .pdf
+        .as_ref()
+        .filter(|p| !p.is_empty())
+    {
+        Some(pdf) => {
+            // This device's own print: hold the guard so the peer
+            // endpoint yields while we rasterize (local prints come
+            // first), like the HTML local path below.
+            let _local = crate::api::render_share::LocalRenderGuard::enter();
+            render_pdf_input(
+                pdf,
+                renderer,
+                language.clone(),
+                paper_w_mm,
+                paper_h_mm,
+                dpi,
+                printer.as_ref().and_then(|p| p.label_gap_mm),
+                &mut warnings,
+            )
+            .await
+        }
+        None => {
+            // A paired provider renders first when the auto policy is on:
+            // same bytes the local stage would produce, bought from the
+            // faster box. Any peer failure falls back to the local render
+            // below — sharing can only speed a print up, never fail it.
+            // Probes flew during template+layout; collect them now. Timed
+            // separately (Phase 0): the caps-probe wait is otherwise buried
+            // inside render_ms, and it is the part caching controls.
+            let t_peer_probe = Instant::now();
+            let (candidates, probe_errors) = match peer_probe {
+                Some(task) => task.await.unwrap_or_default(),
+                None => (Vec::new(), Vec::new()),
+            };
+            if peer_had_pairs {
+                tracing::debug!(
+                    job_id,
+                    peer_probe_ms = ms(t_peer_probe),
+                    candidates = candidates.len(),
+                    "peer probe collect"
+                );
+            }
+            let attempted = peer_had_pairs;
+            // A peer may lack this device's uploaded fonts: inline them as data
+            // URIs so B renders what the template means — but only when a peer
+            // will actually render. The local fallback below then sees
+            // byte-identical HTML either way.
+            let peer_html = if candidates.is_empty() {
+                None
+            } else {
+                db.lock().ok().map(|guard| {
+                    crate::api::peer_consume::inline_fonts(guard.connection(), &final_html)
+                })
+            };
+            // PDF-language jobs on Android are still bought from the paired PC,
+            // which is mandatory there (the app opens on the pairing screen until
+            // one is paired): a local attempt could only report "no renderer",
+            // hiding the real cause (PC off, unpaired, busy). That is the only
+            // peer-bound PDF path — a submitted PDF to a command-language head is
+            // rasterised on the device itself (PLAN §2), like thermal jobs
+            // (PLAN §4). On Android they go local — `render_best` below still
+            // asks a paired PC first when one answers. Desktop is unchanged:
+            // local rendering, with required mode only for languages the platform
+            // cannot rasterize itself (macOS has no browser renderer).
+            let need_peer = (cfg!(target_os = "android")
+                && matches!(language, crate::transport::PrinterLanguage::Pdf))
+                || !(matches!(language, crate::transport::PrinterLanguage::Pdf)
+                    || crate::api::render_share::can_render()
+                    || cfg!(target_os = "android"));
+            let peer_result: Result<Option<crate::api::peer_consume::PeerOutcome>, String> =
         match (peer_had_pairs, need_peer) {
             (false, true) => Err(format!(
                 "this {} job needs a paired PC (pair one in Settings → Shared rendering); this device cannot render {} itself",
@@ -1321,32 +1481,34 @@ async fn run_stages(
                 }
             }
         };
-    if attempted {
-        crate::metrics::count_peer_render(matches!(peer_result, Ok(Some(_))));
-    }
-    let rendered: anyhow::Result<(Vec<u8>, String)> = match peer_result {
-        Ok(Some(o)) => {
-            rendered_by = Some(o.peer_name.clone());
-            Ok((o.bytes, o.mime))
+            if attempted {
+                crate::metrics::count_peer_render(matches!(peer_result, Ok(Some(_))));
+            }
+            match peer_result {
+                Ok(Some(o)) => {
+                    rendered_by = Some(o.peer_name.clone());
+                    Ok((o.bytes, o.mime))
+                }
+                Ok(None) => {
+                    // This device's own print: hold the guard so the peer
+                    // endpoint yields while we render (local prints come first).
+                    let _local = crate::api::render_share::LocalRenderGuard::enter();
+                    renderer
+                        .render_for_language(
+                            &final_html,
+                            paper_w_mm,
+                            paper_h_mm,
+                            &orientation,
+                            language.clone(),
+                            dpi,
+                            printer.as_ref().and_then(|p| p.label_gap_mm),
+                        )
+                        .await
+                        .map(|(b, m)| (b, m.to_string()))
+                }
+                Err(msg) => Err(anyhow::anyhow!(msg)),
+            }
         }
-        Ok(None) => {
-            // This device's own print: hold the guard so the peer
-            // endpoint yields while we render (local prints come first).
-            let _local = crate::api::render_share::LocalRenderGuard::enter();
-            renderer
-                .render_for_language(
-                    &final_html,
-                    paper_w_mm,
-                    paper_h_mm,
-                    &orientation,
-                    language.clone(),
-                    dpi,
-                    printer.as_ref().and_then(|p| p.label_gap_mm),
-                )
-                .await
-                .map(|(b, m)| (b, m.to_string()))
-        }
-        Err(msg) => Err(anyhow::anyhow!(msg)),
     };
     let render_ms = ms(t_render);
     timings.render_ms = render_ms;
@@ -1613,6 +1775,59 @@ async fn run_stages(
     })
 }
 
+/// The PDF-input render stage: the document passes straight through for a
+/// Pdf-language printer, and is rasterised to dots for a command-language
+/// one, whose head cannot consume `%PDF-`.
+///
+/// `language` is the row-resolved language the caller already computed —
+/// unknown printers fall back to Pdf there, so a PDF job for them is a
+/// clean passthrough. Only the first page of a multi-page document
+/// prints; the page count comes back from the rasterizer for the warning.
+#[allow(clippy::too_many_arguments)]
+async fn render_pdf_input(
+    pdf: &[u8],
+    renderer: &dyn JobRenderer,
+    language: crate::transport::PrinterLanguage,
+    paper_w_mm: f64,
+    paper_h_mm: f64,
+    dpi: u32,
+    label_gap_mm: Option<f64>,
+    warnings: &mut Vec<String>,
+) -> anyhow::Result<(Vec<u8>, String)> {
+    match language {
+        crate::transport::PrinterLanguage::Pdf => {
+            // The document is the job: the same bytes in, the same bytes
+            // out, no engine anywhere in between.
+            Ok((pdf.to_vec(), "application/pdf".to_string()))
+        }
+        ref lang => {
+            // 1 CSS px = 1 printer dot, exactly as the HTML raster path:
+            // ask for the paper's dots so nothing is resampled on the way
+            // to the head.
+            let (w_px, h_px) = (
+                crate::render::raster::dots_for_mm(paper_w_mm, dpi),
+                crate::render::raster::dots_for_mm(paper_h_mm, dpi),
+            );
+            let (raster, page_count) = renderer.rasterize_pdf(pdf, w_px, h_px).await?;
+            if page_count > 1 {
+                warnings.push(format!(
+                    "The PDF has {page_count} pages; only the first page was printed."
+                ));
+            }
+            crate::transport::encode_for_language(
+                lang,
+                &raster,
+                paper_w_mm,
+                paper_h_mm,
+                dpi,
+                label_gap_mm,
+            )
+            .map(|(b, m)| (b, m.to_string()))
+            .map_err(anyhow::Error::msg)
+        }
+    }
+}
+
 /// The printer columns the print pipeline needs after render (P4).
 ///
 /// `lookup_printer` used to return `(type, address)`; dispatch needs the
@@ -1785,9 +2000,9 @@ fn begin_job(db: &DbState, req: &PrintRequest, copies: i64, page_mm: (f64, f64))
            (template_id, printer_id, source, source_url,
             status, copies, settings_json, rendered_html, is_test,
             started_at, idempotency_key, data_json, requested_by_device_id,
-            template_revision)
+            template_revision, pdf_data)
          VALUES (?1, ?2, ?3, ?4, 'printing', ?5, ?6, '', ?7,
-                 datetime('now'), ?8, ?9, ?10, ?11)",
+                 datetime('now'), ?8, ?9, ?10, ?11, ?12)",
         rusqlite::params![
             req.template_id,
             printer_id,
@@ -1800,6 +2015,9 @@ fn begin_job(db: &DbState, req: &PrintRequest, copies: i64, page_mm: (f64, f64))
             data_json,
             req.requested_by_device_id,
             template_revision,
+            // The document a PDF job prints, kept like `data_json` so a
+            // queued row can run again (retry/reprint replay it).
+            req.pdf.as_deref(),
         ],
     ) {
         Ok(_) => Ok(conn.last_insert_rowid()),
@@ -1927,6 +2145,7 @@ struct JobRow {
     is_test: i64,
     data_json: Option<String>,
     requested_by_device_id: Option<String>,
+    pdf_data: Option<Vec<u8>>,
 }
 
 fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Option<String>)> {
@@ -1947,10 +2166,11 @@ fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Optio
         is_test,
         data_json,
         requested_by_device_id,
+        pdf_data,
     } = conn.query_row(
         "SELECT j.printer_id, p.name, j.template_id, j.source,
                 j.source_url, j.copies, j.settings_json, j.rendered_html, j.is_test,
-                j.data_json, j.requested_by_device_id
+                j.data_json, j.requested_by_device_id, j.pdf_data
          FROM print_jobs j LEFT JOIN printers p ON p.id = j.printer_id
          WHERE j.id = ?1",
         [job_id],
@@ -1967,6 +2187,7 @@ fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Optio
                 is_test: r.get(8)?,
                 data_json: r.get(9)?,
                 requested_by_device_id: r.get(10)?,
+                pdf_data: r.get(11)?,
             })
         },
     )?;
@@ -1986,9 +2207,11 @@ fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Optio
         _ => None,
     };
 
-    if replay.is_none() && template_id.is_none() {
+    let pdf = pdf_data.filter(|b| !b.is_empty());
+
+    if replay.is_none() && template_id.is_none() && pdf.is_none() {
         return Err(AppError::Validation(
-            "this job has nothing to print: no stored HTML and no template".into(),
+            "this job has nothing to print: no stored HTML, no template and no PDF".into(),
         ));
     }
 
@@ -2001,8 +2224,10 @@ fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Optio
 
     let req = PrintRequest {
         printer_name,
-        // Content comes from the row's replay or its template, never here.
+        // Content comes from the row's replay, its template or its stored
+        // PDF — never from an inline HTML string here.
         html: String::new(),
+        pdf,
         page_width_mm: page.and_then(|p| p.get("width_mm").and_then(|v| v.as_f64())),
         page_height_mm: page.and_then(|p| p.get("height_mm").and_then(|v| v.as_f64())),
         orientation: settings
@@ -2264,6 +2489,7 @@ pub async fn spike_test_print(
 <p>If you can read this, the silent print pipeline works!</p>
 <hr><p><small>Generated by PrintNinja</small></p></body></html>"#
             .to_string(),
+        pdf: None,
         page_width_mm: Some(210.0),
         page_height_mm: Some(297.0),
         orientation: Some("portrait".to_string()),
@@ -2297,6 +2523,7 @@ mod tests {
         PrintRequest {
             printer_name: "P".into(),
             html: "<p>x</p>".into(),
+            pdf: None,
             page_width_mm: Some(100.0),
             page_height_mm: Some(200.0),
             orientation: Some("portrait".into()),

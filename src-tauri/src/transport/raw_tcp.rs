@@ -239,7 +239,7 @@ impl PrinterTransport for RawTcpPrinter {
 ///
 /// A bare host (`192.168.1.5`) or a bare IPv6 literal (`::1`) keeps
 /// `default_port`; `host:9292` and `[::1]:9292` override it.
-fn split_host_port(address: &str, default_port: u16) -> (String, u16) {
+pub(crate) fn split_host_port(address: &str, default_port: u16) -> (String, u16) {
     // Bracketed IPv6: `[::1]:9292`.
     if let Some(rest) = address.strip_prefix('[') {
         if let Some((host, port)) = rest.split_once(']') {

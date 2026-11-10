@@ -1058,10 +1058,12 @@ async fn openapi_documents_the_print_response_codes() {
         "must not document the old fake 'queued' 202"
     );
 
-    // The body is required; only `template` and `printer` are. The handler
-    // treats `data` as optional, so the contract must not claim otherwise
-    // (P12: "openapi.rs says data is required; the code treats it as
-    // optional").
+    // The body is required; only `printer` is. The job's content is
+    // `template` (or `template_server_id`) or `pdf` — a choice the JSON
+    // schema cannot express in `required`, so the handler enforces "one
+    // of the two" with a 400 instead. The handler treats `data` as
+    // optional too, so the contract must not claim otherwise (P12:
+    // "openapi.rs says data is required; the code treats it as optional").
     let required = spec["paths"]["/v1/print"]["post"]["requestBody"]["required"]
         .as_bool()
         .unwrap_or(false);
@@ -1074,8 +1076,12 @@ async fn openapi_documents_the_print_response_codes() {
         .filter_map(|v| v.as_str())
         .collect();
     assert!(
-        fields.contains(&"template") && fields.contains(&"printer"),
-        "template and printer are required: {fields:?}"
+        fields.contains(&"printer"),
+        "printer is required: {fields:?}"
+    );
+    assert!(
+        !fields.contains(&"template"),
+        "`template` has a `pdf` alternative, so it must not be documented as required: {fields:?}"
     );
     assert!(
         !fields.contains(&"data"),
@@ -2028,7 +2034,9 @@ async fn print_rejects_copies_over_max_without_creating_a_job() {
 
 /// An inline `data` payload over ~1 MiB is refused with 400 before any
 /// job row exists; big payloads go through `data_url` instead. Past the
-/// 2 MiB JSON body cap the framework answers 413 first — also no job.
+/// 10 MiB JSON body cap (raised so a `pdf` field can carry its 5 MiB
+/// document base64-encoded) the framework answers 413 first — also no
+/// job.
 #[tokio::test]
 async fn print_rejects_oversize_data_without_creating_a_job() {
     let db = setup();
@@ -2063,7 +2071,7 @@ async fn print_rejects_oversize_data_without_creating_a_job() {
         serde_json::json!({
             "template": "Receipt",
             "printer": "Desk",
-            "data": {"blob": "x".repeat(2 * 1024 * 1024)}
+            "data": {"blob": "x".repeat(11 * 1024 * 1024)}
         }),
     )
     .await;

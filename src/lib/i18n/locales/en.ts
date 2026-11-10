@@ -667,6 +667,13 @@ const en = {
       "IPP printers expect PDF. With a non-PDF language, PrintNinja would send raw printer bytes over IPP, which most IPP endpoints reject — if test prints fail, add the same printer as Raw TCP (host:port) instead.",
     system_android_warning:
       "System (OS print queue) printers are not supported on Android. To keep using this printer, re-add it on this phone by address as IPP or Raw TCP.",
+    raw_wire_pdf_warning:
+      "USB / Bluetooth send the rendered bytes straight to the printer, which cannot read a PDF. Pick the language the printer actually speaks (ESC/POS, TSPL, ZPL, CPCL or Raster) so PrintNinja sends bytes it can print.",
+    detect: "Detect",
+    detecting: "Detecting…",
+    detect_done: "Detected {{name}}",
+    detect_unknown:
+      "The printer did not identify itself — please pick the language above.",
     bluetooth_settings_button: "Open Bluetooth settings",
     bluetooth_settings_hint:
       "Pairing happens in Android itself: the button opens the system screen where you pair the printer, then come back and rescan.",

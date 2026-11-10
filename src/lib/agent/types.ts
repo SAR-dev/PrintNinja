@@ -141,6 +141,25 @@ export interface PrinterRow {
   status?: string;
 }
 
+/**
+ * What a printer told us about itself before its row is saved.
+ * `detected: false` is the honest "unknown" — a silent or refusing
+ * printer is not an error, the form keeps its default language.
+ * Mirrors `ProbeCapabilities` in
+ * `src-tauri/src/transport/capabilities.rs`.
+ */
+export interface ProbeCapabilitiesResult {
+  detected: boolean;
+  /** One of the app's language values, or null when unknown. */
+  suggested_language: string | null;
+  /** `printer-make-and-model` (IPP) or the device's reported name. */
+  make_and_model: string | null;
+  /** `printer-info` (IPP). */
+  printer_info: string | null;
+  /** Document/content MIME formats the printer reported (IPP only). */
+  document_formats: string[];
+}
+
 export interface AddPrinterReq {
   name: string;
   printer_type: string;

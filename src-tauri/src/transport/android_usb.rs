@@ -127,8 +127,9 @@ impl AndroidUsbPrinter {
         self.write_remote(handle, &job.data).await
     }
 
-    /// Open and hold a USB connection for one send.
-    async fn open_remote(&self) -> Result<String, String> {
+    /// Open and hold a USB connection for one send. Also used by the
+    /// capability probe, which closes it again without writing a job.
+    pub(crate) async fn open_remote(&self) -> Result<String, String> {
         use tauri_plugin_android_print::AndroidPrintExt;
 
         let app = self.app()?;
@@ -155,7 +156,7 @@ impl AndroidUsbPrinter {
 
     /// Best-effort release of a held connection. Close errors never fail
     /// a print — the Kotlin side also reaps idle handles.
-    async fn close_remote(&self, handle: &str) {
+    pub(crate) async fn close_remote(&self, handle: &str) {
         use tauri_plugin_android_print::AndroidPrintExt;
 
         let Ok(app) = self.app() else { return };
@@ -233,8 +234,12 @@ impl AndroidUsbPrinter {
     /// Ask a status question and return the reply bytes (empty when the
     /// device stays silent), on the send's held connection. The Kotlin
     /// side bounds the wait, so a printer that never answers still
-    /// resolves.
-    async fn query_remote(&self, handle: &str, request: &[u8]) -> Result<Vec<u8>, String> {
+    /// resolves. Also used by the capability probe.
+    pub(crate) async fn query_remote(
+        &self,
+        handle: &str,
+        request: &[u8],
+    ) -> Result<Vec<u8>, String> {
         use base64::Engine as _;
         use tauri_plugin_android_print::{AndroidPrintExt, UsbQueryOnRequest};
 

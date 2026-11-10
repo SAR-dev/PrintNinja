@@ -97,7 +97,11 @@ CREATE TABLE IF NOT EXISTS print_jobs (
     -- Which paired PC printed this job (ARCHITECTURE §9): the pair's
     -- display name. NULL when printed locally. The phone's history reads
     -- it as "printed by <PC name>".
-    printed_by TEXT
+    printed_by TEXT,
+    -- The document a PDF-input job prints, as raw bytes — the PDF analog
+    -- of `data_json`: run-input, never exposed through `PrintJob`, kept so
+    -- retry/reprint can run the job again. NULL for HTML/template jobs.
+    pdf_data BLOB
 );
 
 CREATE TABLE IF NOT EXISTS settings (

@@ -12,8 +12,9 @@ const RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The follow-up query that asks a failed job why it failed. Short: it runs
 /// *after* the printer already misbehaved once, and a printer that will not
-/// answer it still gets an error built from the job group alone.
-const DIAGNOSE_TIMEOUT: Duration = Duration::from_secs(10);
+/// answer it still gets an error built from the job group alone. The
+/// capability probe (`capabilities::probe_ipp`) shares the same budget.
+pub(crate) const DIAGNOSE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long the reachability probe waits for a TCP connection.
 ///
@@ -128,9 +129,19 @@ impl IppPrinter {
         self
     }
 
+    /// Where the capability probe POSTs its query.
+    pub(crate) fn endpoint_url(&self) -> &str {
+        &self.endpoint.url
+    }
+
+    /// The `printer-uri` the capability probe declares.
+    pub(crate) fn printer_uri(&self) -> &str {
+        &self.endpoint.printer_uri
+    }
+
     /// `Authorization: Basic …` when the row carries a password; the user
     /// is the configured sign-in or the built-in `PrintNinja`.
-    fn auth_header(&self) -> Option<String> {
+    pub(crate) fn auth_header(&self) -> Option<String> {
         use base64::Engine;
         let password = self.password.as_deref()?;
         let user = self.username.as_deref().unwrap_or("PrintNinja");
