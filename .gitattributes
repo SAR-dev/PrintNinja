@@ -2,6 +2,11 @@
 # "exec ./docker-entrypoint.sh: no such file or directory".
 *.sh       text eol=lf
 Dockerfile text eol=lf
+# Dockerignore patterns are parsed byte-for-byte: on a CRLF checkout (Windows
+# core.autocrlf) every pattern gains a trailing \r and silently matches
+# nothing, so the full repo (multi-GB target/ trees) becomes the build context.
+.dockerignore  text eol=lf
+*.dockerignore text eol=lf
 *.yml      text eol=lf
 *.yaml     text eol=lf
 # Biome formats to LF; keep TypeScript LF in the working tree so

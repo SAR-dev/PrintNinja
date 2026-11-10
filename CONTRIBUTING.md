@@ -39,6 +39,8 @@ For the share service, copy `server/env.example` to `server/.env` and run `pnpm 
 
 `pnpm test:rust` runs the whole Rust suite in a Linux container (`src-tauri/Dockerfile.test`). Prefer it over local `cargo test`: the debug build of this crate peaks near 1.5 GB of RAM per job and the container caps jobs and memory, so a run that would pressure the host fails fast inside the box instead. It also runs on Linux, where the PDFium tests exercise the vendored `libpdfium.so` instead of self-skipping. `pnpm test:rust:report` writes a JUnit file instead; any other cargo subcommand can be passed after it.
 
+The Playwright suite can run the same way, in a Linux container: `pnpm e2e:docker` builds the image from the current checkout (`e2e/Dockerfile`) and runs the suite against it. It mirrors the `app-e2e` CI job (Node 22, pnpm 10, Chromium, Ubuntu 24.04), so the committed screenshot baselines compare cleanly and the run is not affected by host-OS quirks (Windows cannot always bind the worker ports, and host-rendered screenshots never match the Linux baselines). To run a single project or test, override the command: `docker compose -f e2e/docker-compose.e2e.yml run --rm e2e pnpm --filter e2e exec playwright test --project=mobile-pixel7`.
+
 If you changed the Android side (the print plugin, `render/` or the android transport paths), also run the two Android checks:
 
 - The Rust cross-target. `cc-rs` does not pick the NDK up from `ANDROID_NDK_HOME` alone, so point it at the prebuilt clang:

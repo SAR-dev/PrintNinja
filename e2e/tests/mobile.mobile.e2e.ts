@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { PAIRED_PC_SETTINGS, installAgent } from "../support/fixtures";
@@ -19,6 +20,22 @@ import { testids } from "../support/testids";
 // Local runs mint the baselines for the local platform only. The CI
 // baselines (-linux) are font-bound to the runner; refresh those through
 // the E2E_UPDATE_SNAPSHOTS Actions variable (docs/CI.md), not locally.
+
+// Web mode bakes the app version from package.json (vite.config.ts), and the
+// update badge only renders for a release newer than it. Derive the mock from
+// the app's own version and bump its leading (date) component by one: the
+// compare walks the dotted parts left to right, so that always wins, for any
+// versioning scheme — no hardcoded value to rot on the next release. The
+// phone badge is icon-only below `sm`, so the string never reaches the
+// screenshot baselines.
+const pkg = JSON.parse(
+  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+) as { version: string };
+const [head, ...tail] = pkg.version.split(".");
+const MOCK_RELEASE_VERSION = `${Number(head) + 1}.${tail.join(".") || "0"}`;
+const MOCK_RELEASE_TAG = `v${MOCK_RELEASE_VERSION}`;
+const MOCK_RELEASE_URL =
+  "https://github.com/SAR-dev/PrintNinja/releases/tag/" + MOCK_RELEASE_TAG;
 
 const ROUTES = [
   "/templates",
@@ -64,8 +81,8 @@ test.beforeEach(async ({ context }) => {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        tag_name: "v9.9.9",
-        html_url: "https://github.com/SAR-dev/PrintNinja/releases/tag/v9.9.9",
+        tag_name: MOCK_RELEASE_TAG,
+        html_url: MOCK_RELEASE_URL,
       }),
     }),
   );
@@ -100,12 +117,11 @@ async function checkRoute(
 ) {
   await expect(page.getByRole("main")).toBeVisible({ timeout: 15_000 });
   // The mocked release is newer than the app: the badge links to it.
-  const badge = page.getByRole("link", { name: "Update to v9.9.9" });
+  const badge = page.getByRole("link", {
+    name: `Update to ${MOCK_RELEASE_TAG}`,
+  });
   await expect(badge).toBeVisible({ timeout: 15_000 });
-  await expect(badge).toHaveAttribute(
-    "href",
-    "https://github.com/SAR-dev/PrintNinja/releases/tag/v9.9.9",
-  );
+  await expect(badge).toHaveAttribute("href", MOCK_RELEASE_URL);
   // Let debounced previews and share polling settle before measuring.
   await page.waitForTimeout(1000);
 
