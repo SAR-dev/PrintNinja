@@ -11,6 +11,8 @@ sections are never edited again; they are the release notes.
 
 ## Unreleased
 
+## [2026.1110.3] - 2026-11-10
+
 ### Added
 
 - **PDF input print jobs.** `POST /v1/print` accepts a base64 `pdf`
