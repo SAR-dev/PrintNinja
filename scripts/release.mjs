@@ -30,6 +30,7 @@ import {
 	platformVersionProblems,
 	withVersion,
 } from "./lib/version.mjs";
+import { bumpChangelog } from "./lib/changelog.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FILES = {
@@ -39,6 +40,8 @@ const FILES = {
 	lock: "src-tauri/Cargo.lock",
 	layout: "src/components/Layout.tsx",
 	readme: "README.md",
+	// Frozen by `bumpChangelog` below, not by `applyVersion`.
+	changelog: "CHANGELOG.md",
 };
 const RELEASE_BRANCH = "main";
 
@@ -267,10 +270,16 @@ try {
 	console.warn("Warning: could not reach origin, skipped the up-to-date and remote tag checks.");
 }
 
+const dateStr = new Date().toISOString().slice(0, 10);
+const changelogNext = bumpChangelog(read(FILES.changelog), version, dateStr);
+
 console.log(`=== Release ${crate} ${current} -> ${version} (${tag})${labelSuffix} ===`);
 console.log(Object.values(FILES).map((f) => `  ${f}`).join("\n"));
 if (isDateVersion(version)) {
 	console.log(`  (Windows MSI version ${msiVersion(version)}, Android versionCode ${androidVersionCode(version)}, both in ${FILES.tauri})`);
+}
+if (changelogNext) {
+	console.log(`  (${FILES.changelog}: "## Unreleased" becomes "## [${version}] - ${dateStr}", the rest of the section is frozen)`);
 }
 
 if (dryRun) {
@@ -282,6 +291,9 @@ if (problems.length) die(`cannot release:\n- ${problems.join("\n- ")}`);
 
 try {
 	applyVersion(version, crate);
+	// Freeze the changelog in the same commit as the version bump, so the
+	// release notes travel with the tag.
+	if (changelogNext) write(FILES.changelog, changelogNext);
 
 	// Same comparison release-local makes, so a bad bump is caught here.
 	const after = readVersions(crate);

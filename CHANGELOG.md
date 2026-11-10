@@ -4,8 +4,10 @@ All notable changes to PrintNinja are recorded here, newest first.
 The version is kept in sync across `package.json`,
 `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`
 (`pnpm version:set`). Add entries to **Unreleased** as work lands;
-when a release bumps the version, the section becomes that version's
-heading.
+`pnpm release` then freezes it in the release commit — the section
+becomes that version's dated heading and a fresh empty **Unreleased**
+opens on top. An entry-less Unreleased is left alone. Released
+sections are never edited again; they are the release notes.
 
 ## Unreleased
 
@@ -46,12 +48,24 @@ heading.
 
 ### Changed
 
+- **`pnpm release` freezes the changelog.** The release script now
+  renames a non-empty **Unreleased** section to the new version's dated
+  heading in the same commit as the version bump and opens a fresh
+  empty **Unreleased** — so each released section is ready to use as
+  that release's notes.
 - **Add-printer discovered sections collapse to their count.** In the
   Add printer sheet, "Found on this network" and "Paired Bluetooth
   printers" now show only their count by default — background
   discoveries no longer resize the dialog out from under the form.
   Tapping the header (with a rotating chevron) expands the list for
   selection. Same behaviour on desktop and Android.
+- **A dead render browser is logged with its exit status.** When the
+  persistent Edge/Chromium process died while the app sat idle, the next
+  print silently paid the full cold start (~8 s) with nothing in the log
+  to explain it. The CDP layer now records how the process went before
+  restarting it — exit code (crash / OS kill) or "socket closed but the
+  process is still alive" — and a non-zero exit after a polite
+  `Browser.close` is logged too.
 - **Pairing-code placeholder shows an example combination.** The
   8-character pairing input placeholder changed from `XXXXXXXX` to
   `XYZ7K4MP`, so it reads as a sample code (all characters from the
