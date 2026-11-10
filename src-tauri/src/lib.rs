@@ -358,6 +358,7 @@ pub fn run() {
             commands::printer::delete_printer,
             commands::printer::get_printer,
             commands::printer::test_printer,
+            commands::printer::probe_printer_capabilities,
             commands::template::list_templates,
             commands::template::create_template,
             commands::template::get_template,

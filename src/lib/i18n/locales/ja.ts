@@ -684,6 +684,13 @@ const ja: Translation = {
       "IPPプリンターは PDF を前提としています。非 PDF の言語を設定すると、PrintNinja は IPP 経由で生データを送出することになり、多くの IPP 端末はこれを拒否します。テスト印刷が失敗する場合は、同じプリンターを Raw TCP（ホスト:ポート）として追加してください。",
     system_android_warning:
       "Android ではシステム（OSプリントキュー）プリンターはサポートされていません。このプリンターを使い続けるには、このスマートフォンでアドレスを指定して IPP または Raw TCP として再度追加してください。",
+    raw_wire_pdf_warning:
+      "USB / Bluetooth はレンダリングされたバイトをプリンターに直接送るため、PDF は読めません。プリンターが実際に話す言語（ESC/POS、TSPL、ZPL、CPCL または Raster）をお選びください。",
+    detect: "検出",
+    detecting: "検出中…",
+    detect_done: "{{name}} と検出しました",
+    detect_unknown:
+      "プリンターが自己紹介しませんでした — 上の言語をお選びください。",
     bluetooth_settings_button: "Bluetooth設定を開く",
     bluetooth_settings_hint:
       "ペアリングはAndroid本体で行います。ボタンでシステムのBluetooth画面が開くので、そこでプリンターをペアリングしてから戻って再スキャンしてください。",

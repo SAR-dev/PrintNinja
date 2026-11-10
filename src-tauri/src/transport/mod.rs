@@ -290,6 +290,7 @@ pub mod android_bluetooth;
 pub mod android_bridge;
 #[cfg(target_os = "android")]
 pub mod android_usb;
+pub mod capabilities;
 pub mod cups;
 pub mod escpos;
 pub mod ipp;

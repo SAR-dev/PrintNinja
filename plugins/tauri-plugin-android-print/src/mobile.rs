@@ -46,6 +46,20 @@ impl<R: Runtime> AndroidPrint<R> {
             .map_err(Into::into)
     }
 
+    /// Rasterise a submitted PDF's first page on the device (PDF input,
+    /// PLAN §2). Kotlin renders it with the platform's own PDFium port
+    /// (`PdfRenderer`), thresholds to dots and writes them to a
+    /// cache-dir file; the response carries its path, the dimensions and
+    /// the page count. The caller reads and deletes the file.
+    pub fn pdf_to_raster(
+        &self,
+        payload: PdfToRasterRequest,
+    ) -> crate::Result<PdfToRasterResponse> {
+        self.0
+            .run_mobile_plugin("pdfToRaster", payload)
+            .map_err(Into::into)
+    }
+
     /// Kotlin answers `{"printers": [...]}`; the inner list is returned so
     /// callers do not see the wrapper.
     pub fn enumerate_usb_printers(&self) -> crate::Result<Vec<UsbPrinter>> {

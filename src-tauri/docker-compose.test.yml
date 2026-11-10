@@ -1,0 +1,34 @@
+# Test runner for the desktop crate. The image (Dockerfile.test) is the
+# toolchain + system build deps; the workspace is mounted in, so the
+# tests always run against the current checkout.
+#
+#   docker compose -f src-tauri/docker-compose.test.yml run --rm rust-test
+#   # JUnit report (the test:rust:report script):
+#   docker compose -f src-tauri/docker-compose.test.yml run --rm rust-test \
+#     cargo junit --no-fail-fast -o /workspace/src-tauri/test-report/junit.xml
+#
+# Memory: the compile phase is the consumer (one rustc per job; a debug
+# build of this crate peaks near 1.5 GB per job). CARGO_BUILD_JOBS is
+# capped at 2 and the container at 6 GB, so a run that would have
+# pressured the host fails fast inside the box instead. Raise both
+# together if the machine has headroom.
+#
+# The target dir is a named volume: the dependency build survives
+# between runs, so after the first run only this crate recompiles.
+name: printninja-rust-test
+services:
+  rust-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    image: printninja/rust-test
+    working_dir: /workspace/src-tauri
+    volumes:
+      - ..:/workspace
+      - rust-test-target:/workspace/src-tauri/target
+    environment:
+      CARGO_BUILD_JOBS: "2"
+    mem_limit: 6g
+    command: cargo test
+volumes:
+  rust-test-target:

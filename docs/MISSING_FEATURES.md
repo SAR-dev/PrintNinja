@@ -70,7 +70,7 @@ Printers "speak" different command languages: ESC/POS (receipts), ZPL and TSPL (
 
 **11. \[Low\] Almost no IPP job options.** *Problem:* only the number of copies is sent. Paper size, tray, two-sided, colour and quality come from the printer's defaults and the PDF's page size, so a printer may use the wrong tray. Workaround today: set the defaults on the printer's panel or web page. *Solutions:* (a) Add optional attributes (`media`, `sides`, `print-quality`, `print-color-mode`) to the job. (b) Read what the printer supports (see item 12) and show only those choices. (c) **Recommended:** (b) then (a), so the form never offers options the printer rejects.
 
-**12. \[Low\] The app never asks an IPP printer what it supports.** *Problem:* it only asks after something fails, so the form cannot warn that a printer does not accept PDF. *Solutions:* (a) **Recommended:** call Get-Printer-Attributes when the printer is added or tested, and store `document-format-supported` and `media-supported`. (b) Cache the answer and refresh it on demand. (c) Show a clear warning in the form when PDF is missing.
+**✅ 12. \[Low\] The app never asks an IPP printer what it supports.** *Problem:* it only asks after something fails, so the form cannot warn that a printer does not accept PDF. *Solutions:* (a) **Recommended:** call Get-Printer-Attributes when the printer is added or tested, and store `document-format-supported` and `media-supported`. (b) Cache the answer and refresh it on demand. (c) Show a clear warning in the form when PDF is missing.
 
 **✅ 13. \[Low\] Raw TCP has no encryption and no sign-in.** *Problem:* that is how port 9100 works. Anyone on the network can send to the printer and jobs travel unprotected, so do not use it for private data. The connection test also always sends an ESC/POS "initialize", whatever language the printer is set to. *Solutions:* (a) **Recommended:** show a visible "not encrypted" note on raw TCP printers. (b) Make the test use the printer's own language, or just open the socket and send nothing. (c) Offer IPP over TLS (IPPS) for printers that support it.
 
@@ -114,8 +114,7 @@ These are **not planned**. They were looked at and accepted.
 | 1 | 7. Test on real printers | High | Testing, no code | Nothing else matters if real printers do not work; the checklist is in docs/TEST_CHECKLIST.md, not yet run on hardware |
 | 2 | 4. TSPL density, speed, gapless media | Medium | Medium | Common label printers print too light or fail on gapless rolls |
 | 3 | 6. CPCL, raster, PDF need a PC | Low | Small to medium | Message is small; a CPCL encoder is medium |
-| 4 | 12. IPP capabilities never read | Low | Medium | Needed before item 11 |
-| 5 | 11. Few IPP job options | Low | Medium | Do after item 12 so options match the printer |
+| 4 | 11. Few IPP job options | Low | Medium | Do after item 12 so options match the printer |
 | 6 | 5. Status checks for more languages | Low | Medium | Needs each language's documented status reply |
 | 7 | 3. No write pacing | Low | Small to medium | Only if a printer is seen dropping data; needs hardware |
 | 8 | 1. No BLE | Low | Large | New plugin code, permissions and screens; only if a printer needs it |
@@ -128,6 +127,7 @@ These are **not planned**. They were looked at and accepted.
 | 15 | ✅ 14. CUPS URL only by environment variable | Low | Small | Solved: CUPS URL field in Settings (Linux) overrides PRINTNINJA_CUPS_URL |
 | 16 | ✅ 16. No system printer on Android | Low | Small | Solved: clear warning on a system row on Android, pointing to ipp or raw TCP |
 | 17 | ✅ 17. USB and Bluetooth on desktop | Low | Small | Solved: "how to add a USB or Bluetooth printer" guide in the README |
+| 18 | ✅ 12. IPP capabilities never read | Low | Medium | Solved: `probe_printer_capabilities` asks Get-Printer-Attributes while the form is filled and pre-fills the language from `document-format-supported`; the same command also probes raw TCP dialects on the wire (the precheck's own status bytes) and USB/Bluetooth by device name. Every probe is read-only and bounded — a silent or unknown printer shows "unknown — please pick", never an error |
 
 The order goes by priority first (High, Medium, Low), then by how cheap the fix is. Sizes are estimates, not measurements.
 

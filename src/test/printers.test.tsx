@@ -439,6 +439,188 @@ describe("GDI-only system queue warning", () => {
   });
 });
 
+describe("Language guard and detection (TODO items 1, 2, 4)", () => {
+  async function openAddDialog() {
+    renderPage();
+    await screen.findByText("Dock Zebra");
+    fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));
+    return screen.findByRole("dialog");
+  }
+
+  const pickConnection = async (panel: HTMLElement, name: string) => {
+    fireEvent.click(within(panel).getByLabelText("Connection"));
+    fireEvent.click(await screen.findByRole("option", { name }));
+  };
+
+  const openLanguage = async (panel: HTMLElement) => {
+    fireEvent.click(within(panel).getByLabelText("Language"));
+  };
+
+  it("omits PDF for USB and Bluetooth rows, keeps it for IPP and System", async () => {
+    const panel = await openAddDialog();
+    // The default (IPP) dialog still offers PDF.
+    await openLanguage(panel);
+    expect(
+      await screen.findByRole("option", { name: "PDF" }),
+    ).toBeInTheDocument();
+
+    await pickConnection(panel, "USB");
+    await openLanguage(panel);
+    expect(screen.queryByRole("option", { name: "PDF" })).toBeNull();
+    expect(
+      screen.getByRole("option", { name: "ESC/POS (receipt)" }),
+    ).toBeInTheDocument();
+
+    await pickConnection(panel, "Bluetooth");
+    await openLanguage(panel);
+    expect(screen.queryByRole("option", { name: "PDF" })).toBeNull();
+
+    await pickConnection(panel, "Wi-Fi / LAN (IPP)");
+    await openLanguage(panel);
+    expect(
+      await screen.findByRole("option", { name: "PDF" }),
+    ).toBeInTheDocument();
+
+    await pickConnection(panel, "System");
+    await openLanguage(panel);
+    expect(
+      await screen.findByRole("option", { name: "PDF" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a legacy USB+PDF row editable and warns it prints blank", async () => {
+    renderPage();
+    await screen.findByText("Counter USB");
+    fireEvent.click(screen.getByRole("button", { name: "Edit Counter USB" }));
+    const panel = await screen.findByRole("dialog");
+    const warning = await screen.findByTestId("printer-raw-pdf-warning");
+    expect(warning).toHaveAttribute("role", "alert");
+    // The saved language stays in the list so editing does not silently
+    // change it.
+    await openLanguage(panel);
+    const pdf = await screen.findByRole("option", { name: "PDF" });
+    fireEvent.click(pdf);
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Save printer" }),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "update_printer",
+        expect.objectContaining({
+          id: 3,
+          req: expect.objectContaining({ language: "pdf" }),
+        }),
+      ),
+    );
+  });
+
+  it("detects the language from the probe and pre-fills an untouched field", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers") return PRINTERS;
+      if (cmd === "enumerate_system_printers") return [];
+      if (cmd === "probe_printer_capabilities")
+        return {
+          detected: true,
+          suggested_language: "zpl",
+          make_and_model: "Zebra ZT411",
+          printer_info: null,
+          document_formats: [],
+        };
+      return null;
+    });
+    const panel = await openAddDialog();
+    // Detect waits for an address to probe.
+    expect(
+      within(panel).getByRole("button", { name: "Detect" }),
+    ).toBeDisabled();
+    fireEvent.change(within(panel).getByLabelText("Address"), {
+      target: { value: "10.0.0.9" },
+    });
+    fireEvent.click(within(panel).getByRole("button", { name: "Detect" }));
+    expect(
+      await screen.findByTestId("printer-detect-result"),
+    ).toHaveTextContent(/Detected Zebra ZT411/);
+    // The untouched language field takes the suggestion, and it is what
+    // gets saved.
+    expect(within(panel).getByLabelText("Language")).toHaveTextContent(
+      "ZPL (label)",
+    );
+    fireEvent.change(within(panel).getByLabelText("Printer name"), {
+      target: { value: "Lobby Zebra" },
+    });
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Save printer" }),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "add_printer",
+        expect.objectContaining({
+          req: expect.objectContaining({
+            printer_type: "ipp",
+            address: "10.0.0.9",
+            language: "zpl",
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("never overrides a language the operator already picked", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers") return PRINTERS;
+      if (cmd === "enumerate_system_printers") return [];
+      if (cmd === "probe_printer_capabilities")
+        return {
+          detected: true,
+          suggested_language: "zpl",
+          make_and_model: "Zebra ZT411",
+          printer_info: null,
+          document_formats: [],
+        };
+      return null;
+    });
+    const panel = await openAddDialog();
+    fireEvent.change(within(panel).getByLabelText("Address"), {
+      target: { value: "10.0.0.9" },
+    });
+    await openLanguage(panel);
+    fireEvent.click(
+      await screen.findByRole("option", { name: "ESC/POS (receipt)" }),
+    );
+    fireEvent.click(within(panel).getByRole("button", { name: "Detect" }));
+    await screen.findByTestId("printer-detect-result");
+    expect(within(panel).getByLabelText("Language")).toHaveTextContent(
+      "ESC/POS (receipt)",
+    );
+  });
+
+  it("reports an unresponsive probe as unknown, not an error", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers") return PRINTERS;
+      if (cmd === "enumerate_system_printers") return [];
+      if (cmd === "probe_printer_capabilities")
+        return {
+          detected: false,
+          suggested_language: null,
+          make_and_model: null,
+          printer_info: null,
+          document_formats: [],
+        };
+      return null;
+    });
+    const panel = await openAddDialog();
+    fireEvent.change(within(panel).getByLabelText("Address"), {
+      target: { value: "10.0.0.9" },
+    });
+    fireEvent.click(within(panel).getByRole("button", { name: "Detect" }));
+    expect(
+      await screen.findByTestId("printer-detect-result"),
+    ).toHaveTextContent(/did not identify/);
+    // The form keeps its default — silence is not a failure.
+    expect(within(panel).getByLabelText("Language")).toHaveTextContent("PDF");
+  });
+});
+
 describe("Print via PC notice", () => {
   it("explains the idle list and offers the exit", async () => {
     invoke.mockImplementation(async (cmd: string, args?: any) => {
