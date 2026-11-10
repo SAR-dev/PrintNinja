@@ -1,8 +1,12 @@
 #!/usr/bin/env node
-// Release helper. Bumps the version in every manifest (the same files release-local checks),
+// Release helper. Sets the version in every manifest (the same files release-local checks),
 // commits, and creates an annotated tag. Cross-platform: needs only Node + git.
 //
-//   pnpm release patch|minor|major|X.Y.Z [--push] [--dry-run]
+//   pnpm release [--label TEXT] [--push] [--dry-run]
+//   pnpm release X.Y.Z [--push] [--dry-run]        (emergency override)
+//
+// The version is picked automatically from the date: YYYY.MMDD.N, where N counts
+// the releases of that day (2026.1225.0, 2026.1225.1, ...; see scripts/lib/version.mjs).
 //
 // Without --push nothing leaves your machine. There is no hosted CI: pushing
 // the tag publishes the tag only. Build and attach installers with
@@ -12,6 +16,20 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+	VERSION_RE,
+	androidVersionCode,
+	assertBuildable,
+	checkLabel,
+	cmpVersions as cmp,
+	dateVersionPrefix,
+	isDateVersion,
+	listTakenVersions,
+	msiVersion,
+	nextDateVersion,
+	platformVersionProblems,
+	withVersion,
+} from "./lib/version.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FILES = {
@@ -41,31 +59,15 @@ function die(msg) {
 }
 
 function usage() {
-	console.log(`Usage: pnpm release <patch|minor|major|X.Y.Z> [--push] [--dry-run]
+	console.log(`Usage: pnpm release [--label TEXT] [--push] [--dry-run]
+       pnpm release X.Y.Z [--push] [--dry-run]
 
-  patch|minor|major   bump from the current version
+  (no version)        use today's date: YYYY.MMDD.N, N = next free release number of the day
   X.Y.Z               set an exact version (must be higher than the current one)
+  --label TEXT        note kept in the tag message and commit body (for example: major, hotfix)
   --push              also push ${RELEASE_BRANCH} and the tag (tag only, no builds)
   --dry-run           show what would happen, change nothing
   --help              show this help`);
-}
-
-const parse = (v) => v.split(".").map(Number);
-function cmp(a, b) {
-	const [x, y] = [parse(a), parse(b)];
-	for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
-	return 0;
-}
-
-function nextVersion(current, arg) {
-	const [maj, min, pat] = parse(current);
-	if (arg === "patch") return `${maj}.${min}.${pat + 1}`;
-	if (arg === "minor") return `${maj}.${min + 1}.0`;
-	if (arg === "major") return `${maj + 1}.0.0`;
-	if (!/^\d+\.\d+\.\d+$/.test(arg)) {
-		die(`"${arg}" is not patch, minor, major or a version like 1.2.3`);
-	}
-	return arg;
 }
 
 // ---- reading versions (same sources CI's version-check reads) --------------
@@ -156,7 +158,7 @@ function bumpCargoToml(text, version) {
 
 function applyVersion(version, crate) {
 	write(FILES.pkg, replaceOnce(read(FILES.pkg), /^(\s*"version"\s*:\s*")[^"]+(")/m, version, FILES.pkg));
-	write(FILES.tauri, replaceOnce(read(FILES.tauri), /("version"\s*:\s*")[^"]+(")/, version, FILES.tauri));
+	write(FILES.tauri, withVersion(read(FILES.tauri), version));
 	write(FILES.cargo, bumpCargoToml(read(FILES.cargo), version));
 	write(FILES.lock, bumpCargoLock(read(FILES.lock), version, crate));
 	write(FILES.layout, replaceOnce(read(FILES.layout), /("v)\d+\.\d+\.\d+(")/, version, FILES.layout));
@@ -172,15 +174,35 @@ if (args.includes("--help") || args.includes("-h")) {
 }
 const push = args.includes("--push");
 const dryRun = args.includes("--dry-run");
-const positional = args.filter((a) => !a.startsWith("--"));
-const unknown = args.filter((a) => a.startsWith("--") && !["--push", "--dry-run"].includes(a));
+let label = null;
+const positional = [];
+const unknown = [];
+for (let i = 0; i < args.length; i++) {
+	const a = args[i];
+	if (a === "--push" || a === "--dry-run") continue;
+	if (a === "--label") label = args[++i] ?? "";
+	else if (a.startsWith("--label=")) label = a.slice("--label=".length);
+	else if (a.startsWith("--")) unknown.push(a);
+	else positional.push(a);
+}
 if (unknown.length) {
 	usage();
 	die(`unknown option: ${unknown.join(", ")}`);
 }
-if (positional.length !== 1) {
+if (label !== null) {
+	const labelProblem = checkLabel(label);
+	if (labelProblem) die(labelProblem);
+	label = label.trim();
+}
+if (positional.length > 1) {
 	usage();
-	die("give exactly one of: patch, minor, major, or X.Y.Z");
+	die("give at most one version (X.Y.Z), or none to use today's date");
+}
+if (["patch", "minor", "major"].includes(positional[0])) {
+	die(
+		`"${positional[0]}" is no longer supported: versions now come from the date (YYYY.MMDD.N).\n` +
+			`Run  pnpm release  for the next date version; mark a big release with  --label ${positional[0]}.`,
+	);
 }
 
 const crate = cargoPackageField(read(FILES.cargo), "name");
@@ -197,8 +219,30 @@ if (mismatched.length) {
 	);
 }
 
-const version = nextVersion(current, positional[0]);
+let version;
+if (positional.length === 0) {
+	const { versions, remoteOk } = listTakenVersions(git, dateVersionPrefix());
+	if (!remoteOk) {
+		console.warn("Warning: could not list tags on origin, picked the release number N from local tags only.");
+	}
+	try {
+		version = nextDateVersion({ taken: versions, current });
+	} catch (err) {
+		die(err.message);
+	}
+} else {
+	version = positional[0];
+	if (!VERSION_RE.test(version)) {
+		die(`"${version}" is not a version like 1.2.3 (or leave it out to use today's date)`);
+	}
+}
+try {
+	assertBuildable(version);
+} catch (err) {
+	die(err.message);
+}
 const tag = `v${version}`;
+const labelSuffix = label ? ` (${label})` : "";
 
 // Checks. In a dry run they are reported; otherwise they stop the release.
 const problems = [];
@@ -223,8 +267,11 @@ try {
 	console.warn("Warning: could not reach origin, skipped the up-to-date and remote tag checks.");
 }
 
-console.log(`=== Release ${crate} ${current} -> ${version} (${tag}) ===`);
+console.log(`=== Release ${crate} ${current} -> ${version} (${tag})${labelSuffix} ===`);
 console.log(Object.values(FILES).map((f) => `  ${f}`).join("\n"));
+if (isDateVersion(version)) {
+	console.log(`  (Windows MSI version ${msiVersion(version)}, Android versionCode ${androidVersionCode(version)}, both in ${FILES.tauri})`);
+}
 
 if (dryRun) {
 	if (problems.length) console.log(`\nA real run would be refused:\n- ${problems.join("\n- ")}`);
@@ -242,10 +289,12 @@ try {
 	if (bad.length) {
 		throw new Error(`version mismatch after bump: ${bad.map(([f, v]) => `${f}=${v || "?"}`).join(", ")}`);
 	}
+	const platform = platformVersionProblems(read(FILES.tauri), version);
+	if (platform.length) throw new Error(`platform version overrides are wrong: ${platform.join("; ")}`);
 
 	git("add", "--", ...Object.values(FILES));
-	git("commit", "-m", `release: ${tag}`, "-m", `Release ${crate} ${version}`);
-	git("tag", "-a", tag, "-m", `release: ${tag}`);
+	git("commit", "-m", `release: ${tag}${labelSuffix}`, "-m", `Release ${crate} ${version}${label ? `\n\nLabel: ${label}` : ""}`);
+	git("tag", "-a", tag, "-m", `release: ${tag}${labelSuffix}`);
 } catch (err) {
 	console.error(`\nError: ${err.stderr || err.message}`);
 	console.error(`Undo with:  git reset --hard HEAD  (and  git tag -d ${tag}  if the tag was created)`);

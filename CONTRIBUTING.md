@@ -83,10 +83,10 @@ Add a regression test for every fix.
 ## Releasing
 
 ```bash
-pnpm release patch       # or minor, major, or X.Y.Z; add --push to push the tag
+pnpm release             # next date version (YYYY.MMDD.N); add --push to push the tag, --label TEXT to note it
 ```
 
-This bumps the version in every manifest (`pnpm version:set` does only that), commits and tags. To build the Windows MSI, Linux packages and Android APK and attach them to a draft GitHub Release, run `node scripts/release-local.mjs X.Y.Z --push` on each machine. Signing is done locally. See [`docs/RELEASE.md`](docs/RELEASE.md) and [`docs/SIGNING.md`](docs/SIGNING.md).
+This sets the version from the date (`YYYY.MMDD.N`, for example `2026.1225.0`, then `2026.1225.1` for a second release that day) in every manifest (`pnpm version:set` does only that), commits and tags. To build the Windows MSI, Linux packages and Android APK and attach them to a draft GitHub Release, run `node scripts/release-local.mjs --push` on each machine. Signing is done locally. See [`docs/RELEASE.md`](docs/RELEASE.md) and [`docs/SIGNING.md`](docs/SIGNING.md).
 
 ## Pull request checklist
 

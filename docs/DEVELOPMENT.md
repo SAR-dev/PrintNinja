@@ -99,11 +99,11 @@ listed in [ENV.md](./ENV.md).
 ## Release
 
 ```bash
-pnpm release:patch   # bump + commit + tag (or release:minor / release:major)
+pnpm release         # date version (YYYY.MMDD.N) + commit + tag; add --label TEXT to note it
 ```
 
 Pushing a `v*` tag builds the installers on GitHub Actions and attaches them
 to a draft release. You can also build them on your own machines with
-`node scripts/release-local.mjs X.Y.Z --push`. The release scripts update the
+`node scripts/release-local.mjs --push`. The release scripts update the
 version in every manifest *and* the README badge in one step, so nothing
 drifts. See [RELEASE.md](./RELEASE.md) and [SIGNING.md](./SIGNING.md).
