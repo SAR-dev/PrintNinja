@@ -32,12 +32,34 @@ For the share service, copy `server/env.example` to `server/.env` and run `pnpm 
 |---|---|
 | App | `pnpm lint`, `pnpm check:tauri-args`, `pnpm build`, `pnpm test` |
 | API types | `pnpm gen:api`, then confirm `git diff` is empty |
-| Rust | `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`, `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`, `cargo test --manifest-path src-tauri/Cargo.toml` |
+| Rust | `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`, `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`, `pnpm test:rust` (or local `cargo test --manifest-path src-tauri/Cargo.toml`) |
 | Share service | `pnpm --filter server typecheck`, `pnpm --filter server arch`, `pnpm --filter server test` |
 | OpenAPI | `pnpm --filter server openapi:generate`, then confirm `server/openapi/openapi.json` is unchanged |
 | End to end | `pnpm e2e` (starts its own local servers and SQLite files, no Docker) |
 
-On a machine with little disk space, `target/` can grow to several GB. Run `cargo clean` when needed and use `CARGO_INCREMENTAL=0 cargo test`.
+`pnpm test:rust` runs the whole Rust suite in a Linux container (`src-tauri/Dockerfile.test`). Prefer it over local `cargo test`: the debug build of this crate peaks near 1.5 GB of RAM per job and the container caps jobs and memory, so a run that would pressure the host fails fast inside the box instead. It also runs on Linux, where the PDFium tests exercise the vendored `libpdfium.so` instead of self-skipping. `pnpm test:rust:report` writes a JUnit file instead; any other cargo subcommand can be passed after it.
+
+If you changed the Android side (the print plugin, `render/` or the android transport paths), also run the two Android checks:
+
+- The Rust cross-target. `cc-rs` does not pick the NDK up from `ANDROID_NDK_HOME` alone, so point it at the prebuilt clang:
+
+  ```bash
+  # Windows; the prebuilt dir on Linux/macOS is linux-x86_64 / darwin-x86_64
+  NDK="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/windows-x86_64/bin"
+  CC_aarch64_linux_android="$NDK/clang" AR_aarch64_linux_android="$NDK/llvm-ar" \
+    cargo check --target aarch64-linux-android --manifest-path src-tauri/Cargo.toml
+  ```
+
+- The Kotlin half of the plugin, from the app's own gradle project (created by any `pnpm tauri android` command; use `gradlew.bat` on Windows):
+
+  ```bash
+  cd src-tauri/gen/android
+  ./gradlew :tauri-plugin-android-print:testDebugUnitTest
+  ```
+
+  The plugin's `src/androidTest` tests need a connected device.
+
+On a machine with little disk space, `target/` can grow to several GB — a 4-ABI Android debug build grew it to about 27 GB here. Run `cargo clean` when done and use `CARGO_INCREMENTAL=0 cargo test` if RAM gets tight. `pnpm test:rust` compiles inside the container, so it does not grow the host `target/`.
 
 ## Code style
 
@@ -76,7 +98,7 @@ On a machine with little disk space, `target/` can grow to several GB. Run `carg
 Add a regression test for every fix.
 
 - **App:** Vitest and Testing Library in `src/test/`. jsdom has no `matchMedia`, so phone behaviour is tested by stubbing it (see `src/test/mobile.test.tsx`).
-- **Rust:** unit tests next to the code and integration tests in `src-tauri/tests/`. Shared rendering is covered by `peer_consume.rs` and `peer_render_priority.rs`; the live-Chromium provider test runs only with `PRINTNINJA_TEST_REAL_CHROMIUM=1`. `virtual_printer.rs` builds a small virtual printer (vendored in `e2e/support/virtual-printer`) and switches it between `ok`, `paperout`, `jam`, `offline`, `hang` and `drop`. It needs only `cargo` and never skips.
+- **Rust:** unit tests next to the code and integration tests in `src-tauri/tests/`. Shared rendering is covered by `peer_consume.rs` and `peer_render_priority.rs`; the live-Chromium provider test runs only with `PRINTNINJA_TEST_REAL_CHROMIUM=1`. `virtual_printer.rs` builds a small virtual printer (vendored in `e2e/support/virtual-printer`) and switches it between `ok`, `paperout`, `jam`, `offline`, `hang` and `drop`. It needs only `cargo` and never skips. The whole suite can also run in a Linux container: `pnpm test:rust`.
 - **Share service:** unit and integration tests in `server/test/` run against local SQLite files. `pnpm --filter server test:e2e` runs over HTTP against a Docker stack (`pnpm --filter server test:e2e:stack`).
 - **End to end:** Playwright in `e2e/tests/`. Desktop projects run Chromium. The `mobile-pixel7` and `mobile-small` projects run `*.mobile.e2e.ts` and check sideways scrolling, 44px tap targets, screenshots and axe. Screenshot baselines are Linux images. To update them after an intended layout change, run `pnpm --filter e2e exec playwright test --project=mobile-pixel7 --project=mobile-small --update-snapshots` on Linux and review the diff.
 

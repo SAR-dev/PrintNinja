@@ -360,7 +360,11 @@ impl PdfRenderer {
         w_px: usize,
         h_px: usize,
     ) -> Result<(crate::render::raster::RasterImage, u32)> {
-        tracing::debug!(w_px, h_px, "rasterizing PDF input for a command-language printer");
+        tracing::debug!(
+            w_px,
+            h_px,
+            "rasterizing PDF input for a command-language printer"
+        );
 
         // The platform's own PDFium port renders on the device (PLAN §2).
         #[cfg(target_os = "android")]
@@ -371,11 +375,12 @@ impl PdfRenderer {
         #[cfg(not(target_os = "android"))]
         let result = {
             let pdf = pdf.to_vec();
-            let (raster, pages) =
-                tokio::task::spawn_blocking(move || crate::render::pdfium::pdf_to_raster(&pdf, w_px, h_px))
-                    .await
-                    .map_err(|e| anyhow!("the PDF raster task failed: {e}"))?
-                    .map_err(|e| anyhow!("could not rasterize the PDF: {e}"))?;
+            let (raster, pages) = tokio::task::spawn_blocking(move || {
+                crate::render::pdfium::pdf_to_raster(&pdf, w_px, h_px)
+            })
+            .await
+            .map_err(|e| anyhow!("the PDF raster task failed: {e}"))?
+            .map_err(|e| anyhow!("could not rasterize the PDF: {e}"))?;
             Ok((raster, pages))
         };
         result
