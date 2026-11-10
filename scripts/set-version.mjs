@@ -6,12 +6,18 @@
 //   pnpm version:set 1.0.0 [--dry-run]
 //
 // It only edits files. It does not commit, tag or push; run `pnpm release`
-// afterwards (it will then see all files in sync). Because `pnpm release X.Y.Z`
-// requires X.Y.Z to be higher than the current version, set the files to the
-// version BEFORE the one you want to release, or release with patch/minor/major.
+// afterwards (it will then see all files in sync). `pnpm release` picks a date
+// version (YYYY.MMDD.N) by itself and requires it to be higher than the current
+// one, so use this script only for a manual override or to repair a drifted file.
+//
+// For a date version (YYYY.MMDD.N) it also writes the Windows MSI version
+// (bundle.windows.wix.version) and the Android versionCode
+// (bundle.android.versionCode) into tauri.conf.json, and removes both again for
+// any other version. See scripts/lib/version.mjs for why.
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertBuildable, withVersion } from "./lib/version.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FILES = {
@@ -40,6 +46,11 @@ if (args.includes("--help") || args.includes("-h") || positional.length !== 1) {
 }
 const version = positional[0].replace(/^v/, "");
 if (!/^\d+\.\d+\.\d+$/.test(version)) die(`"${positional[0]}" is not a version like 1.2.3`);
+try {
+	assertBuildable(version);
+} catch (err) {
+	die(err.message);
+}
 
 // Replace group 1 + <version> + group 2 and insist on exactly one match, so a
 // changed file layout fails loudly instead of silently skipping a file.
@@ -111,7 +122,7 @@ if (!crate) die(`could not read the crate name from ${FILES.cargo}`);
 
 const updated = {
 	[FILES.pkg]: replaceOnce(read(FILES.pkg), /^(\s*"version"\s*:\s*")[^"]+(")/m, FILES.pkg),
-	[FILES.tauri]: replaceOnce(read(FILES.tauri), /("version"\s*:\s*")[^"]+(")/, FILES.tauri),
+	[FILES.tauri]: withVersion(read(FILES.tauri), version),
 	[FILES.cargo]: bumpCargoToml(read(FILES.cargo)),
 	[FILES.lock]: bumpCargoLock(read(FILES.lock)),
 	[FILES.layout]: replaceOnce(read(FILES.layout), /("v)\d+\.\d+\.\d+(")/, FILES.layout),

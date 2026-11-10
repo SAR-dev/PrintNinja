@@ -7,26 +7,62 @@ This guide explains how to version, sign, and ship a new PrintNinja release.
 - **Android**: JDK 17, Android SDK (34), NDK 27+, `cargo ndk`
 - For signing locally: Windows code-signing certificate (`.pfx`) OR Android keystore
 
-## 1. Bump version and tag
+## 1. Set the version and tag
 
-Run this from a clean `main` that is up to date with `origin`:
+Versions come from the date, so you never type one. Run this from a clean `main` that is up
+to date with `origin`:
 
 ```bash
-pnpm release patch          # 4.0.1 -> 4.0.2
-pnpm release minor          # 4.0.1 -> 4.1.0
-pnpm release major          # 4.0.1 -> 5.0.0
-pnpm release 4.1.0          # exact version (must be higher than the current one)
-
-pnpm release patch --dry-run   # show what would happen, change nothing
-pnpm release patch --push      # also push main + the tag (tag only, no builds)
+pnpm release                      # next date version, e.g. 2026.1225.0
+pnpm release --label hotfix       # same, and note "hotfix" in the tag and commit
+pnpm release --dry-run            # show what would happen, change nothing
+pnpm release --push               # also push main + the tag (tag only, no builds)
+pnpm release 5.1.3                # emergency override: exact X.Y.Z, must be higher than the current one
 ```
 
-(`pnpm release:patch`, `release:minor` and `release:major` are shortcuts.)
+### The version format: `YYYY.MMDD.N`
+
+| Release | Version |
+| --- | --- |
+| first on 25 Dec 2026 | `2026.1225.0` |
+| second on 25 Dec 2026 | `2026.1225.1` |
+| first on 5 Jan 2027 | `2027.105.0` |
+
+- `MMDD` is a plain number, so months 1 to 9 have no leading zero (`105`, not `0105`).
+  Semver and Cargo reject leading zeros.
+- `N` counts that day's releases, starting at 0. The script reads the existing `v2026.1225.*`
+  tags locally **and on `origin`** and takes the next free number, so two people releasing on
+  the same day do not collide. If `origin` cannot be reached it warns and uses local tags only.
+  There is room for 100 releases per day (`N` is 0 to 99).
+- The date is your machine's local date at the moment you run the command.
+- The tag is `v` + the version (`v2026.1225.0`), which is what CI expects.
+- A date version always sorts higher than the old `5.x.y` versions, so the in-app update check
+  and the "must be higher" check keep working.
+- There is no major/minor/patch any more. To mark a big release, add `--label major`: the label goes
+  into the tag message and the commit body (and the draft release title with `release-local`),
+  never into the version number.
+- `patch`, `minor`, `major` and the `release:patch/minor/major` shortcuts are gone; the script
+  refuses them with a hint.
+
+### Platform overrides (written automatically)
+
+Two platforms cannot use a bare date version, so a date version also writes two values into
+`src-tauri/tauri.conf.json`. You do not edit them by hand; `release.mjs`, `release-local.mjs`
+and `set-version.mjs` keep them in step and remove them again for a non-date version.
+
+| Platform | Problem | Override | Example for `2026.1225.3` |
+| --- | --- | --- | --- |
+| Windows MSI | first number is limited to 255 | `bundle.windows.wix.version` = `YY.MM.(DD*100+N)` | `26.12.2503` |
+| Android | Tauri's default `versionCode` goes down across New Year, and Android rejects downgrades | `bundle.android.versionCode` = `YYMMDD*100+N` | `26122503` |
+
+`pnpm release 2026.5.0` (a number that is neither a date version nor MSI-safe) is refused.
+
+### What gets updated
 
 The script (`scripts/release.mjs`, needs only Node and git) updates these five
-places (`release-local.mjs` checks the first, second, third and fifth):
+places (`release-local.mjs` checks the first, second, third and fifth), plus the README badge:
 - `package.json`
-- `src-tauri/tauri.conf.json`
+- `src-tauri/tauri.conf.json` (version and the platform overrides above)
 - `src-tauri/Cargo.toml` (`[package]` version)
 - `src-tauri/Cargo.lock` (the crate's own entry)
 - `src/components/Layout.tsx` (the topbar `"vX.Y.Z"` fallback literal)
@@ -51,8 +87,8 @@ above disagree about the current version (a file shown as `(not found)` means it
 could not be read). Bring them back in line with:
 
 ```bash
-pnpm version:set 4.0.1           # set all five files to this version
-pnpm version:set 4.0.1 --dry-run # show which files would change, change nothing
+pnpm version:set 2026.1225.0           # set all files to this version
+pnpm version:set 2026.1225.0 --dry-run # show which files would change, change nothing
 ```
 
 `scripts/set-version.mjs` only edits the files. It does not commit, tag or push, and it
@@ -106,9 +142,11 @@ Each machine builds what it can (Windows: MSI; Linux: deb/AppImage; any OS with 
 APK/AAB); run it on each OS and the draft collects everything.
 
 ```bash
-node scripts/release-local.mjs 4.1.0            # dry run: everything but push + release
-node scripts/release-local.mjs 4.1.0 --push     # + push main/tag, create/update the draft
-node scripts/release-local.mjs 4.1.0 --push --skip-checks   # iterating on build issues
+node scripts/release-local.mjs                  # next date version; everything but push + release
+node scripts/release-local.mjs --push           # + push main/tag, create/update the draft
+node scripts/release-local.mjs --label hotfix --push        # note it in the tag, commit and draft title
+node scripts/release-local.mjs --push --skip-checks         # iterating on build issues
+node scripts/release-local.mjs 2026.1225.0 --push           # explicit version (same rules as before)
 ```
 
 Requirements: Node 22, pnpm 10, Rust 1.90, `gh` authed with repo scope. Android additionally
@@ -120,7 +158,11 @@ needs `ANDROID_HOME` (SDK + NDK 27) and the `ANDROID_KEYSTORE_BASE64` /
 What the script checks before building: you are on `main` with a clean tree, the new version is
 higher than the current one, the tag does not exist locally or on `origin`, and every manifest
 (`package.json`, `tauri.conf.json`, `Cargo.toml`, `Layout.tsx`) agrees on the current version.
-`pnpm release patch` (section 1) is only needed if you want to bump and tag without building.
+`pnpm release` (section 1) is only needed if you want to set the version and tag without building.
+With no version argument the script picks the date version itself, exactly like `pnpm release`,
+so every run without a version starts a **new** release (the next `N`). If you build one release
+on several machines, give each machine the same explicit version (for example
+`node scripts/release-local.mjs 2026.1225.0`), as you would have with a hand-typed version before.
 
 The `server/` share service is tested and drift-checked by `pnpm check` but **not** deployed by
 any tool in this repo. It is deployed by hand, see section 7.
