@@ -315,6 +315,11 @@ mod direct {
     /// so a driver that ignores `COMMTIMEOUTS` still cannot hang the
     /// queue.
     pub(super) async fn send(port: &str, data: &[u8], budget: Duration) -> Result<(), String> {
+        // The closure owns its copy of the name; the timeout message
+        // below still needs one after the move (the spawn's `move`
+        // would otherwise take `port` and leave the format! with a
+        // moved value).
+        let reported_port = port.to_string();
         let port = port.to_string();
         let data = data.to_vec();
         let task = tokio::task::spawn_blocking(move || {
@@ -325,7 +330,7 @@ mod direct {
         });
         match tokio::time::timeout(budget + Duration::from_secs(5), task).await {
             Err(_) => Err(format!(
-                "the printer on {port} stopped responding after {}s — check for a \
+                "the printer on {reported_port} stopped responding after {}s — check for a \
                  paper jam or out-of-paper, or that it is still connected",
                 budget.as_secs()
             )),

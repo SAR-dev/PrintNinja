@@ -52,6 +52,7 @@ impl AndroidBluetoothPrinter {
     fn no_driver_mode(&self) -> String {
         "\"Print through the OS driver\" is not available on Android yet — turn \
          it off for this printer to print directly over Bluetooth"
+            .to_string()
     }
 
     /// How every message about this printer names it.
