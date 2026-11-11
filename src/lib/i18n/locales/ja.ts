@@ -622,6 +622,11 @@ const ja: Translation = {
     ipp_skip_cert: "証明書検証をスキップ",
     ipp_skip_cert_hint:
       "https:// のエンドポイント専用。自己署名など検証できない証明書を通します。",
+    bt_driver: "OSドライバーで印刷する",
+    bt_driver_hint_windows:
+      "オフ = プリンターのCOMポートへ直接印刷（ドライバーもキューも不要）。オン = 同名でWindowsにインストールした印刷キュー経由で印刷 — ドライバーがラスタライズするためPDFも印刷できます。PrintNinjaがこの2つを勝手に切り替えることはありません。",
+    bt_driver_hint_linux:
+      "オフ = ペアリングしたデバイスへ直接印刷（ドライバーもキューも不要）。オン = lpadminで同名作成したCUPSキュー経由で印刷 — ドライバーがラスタライズするためPDFも印刷できます。PrintNinjaがこの2つを勝手に切り替えることはありません。",
     conn_ipp: "Wi-Fi / LAN (IPP)",
     conn_raw: "Wi-Fi / LAN (Raw TCP 9100)",
     conn_usb: "USB",

@@ -607,6 +607,11 @@ const en = {
     ipp_skip_cert: "Skip certificate verification",
     ipp_skip_cert_hint:
       "https:// endpoints only. Lets a self-signed or otherwise unverifiable certificate through.",
+    bt_driver: "Print through the OS driver",
+    bt_driver_hint_windows:
+      "Off prints straight to the printer's COM port — no driver, no queue. On prints through this printer's Windows queue (installed under the same name) — the driver rasterizes, so PDF works too. PrintNinja never switches between the two on its own.",
+    bt_driver_hint_linux:
+      "Off prints straight to the paired device — no driver, no queue. On prints through this printer's CUPS queue (create it with lpadmin under the same name) — the driver rasterizes, so PDF works too. PrintNinja never switches between the two on its own.",
     conn_ipp: "Wi-Fi / LAN (IPP)",
     conn_raw: "Wi-Fi / LAN (Raw TCP 9100)",
     conn_usb: "USB",

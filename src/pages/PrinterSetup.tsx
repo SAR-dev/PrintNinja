@@ -1,6 +1,7 @@
 import { describeError, isAlreadyExists } from "@/lib/errors";
 import {
   isAndroid,
+  isLinux,
   supportedPrinterLanguages,
   supportedPrinterTypes,
 } from "@/lib/platform";
@@ -191,6 +192,7 @@ export function PrinterSetupPage() {
     username: "",
     password: "",
     skip_tls_verification: false,
+    via_driver: false,
   });
 
   const blankForm: LoosePrinterForm = {
@@ -204,6 +206,7 @@ export function PrinterSetupPage() {
     username: "",
     password: "",
     skip_tls_verification: false,
+    via_driver: false,
   };
 
   // What the capability probe found (TODO items 2 + 4). The probe never
@@ -237,6 +240,7 @@ export function PrinterSetupPage() {
       username: p.username ?? "",
       password: p.password ?? "",
       skip_tls_verification: p.skip_tls_verification ?? false,
+      via_driver: p.via_driver ?? false,
     });
     setDetectResult(null);
     languageTouched.current = false;
@@ -1076,7 +1080,14 @@ export function PrinterSetupPage() {
                                     : defaultLanguageFor(
                                         np.printer_type ?? "ipp",
                                         f.language,
+                                        f.via_driver,
                                       ),
+                              // Driver mode is Bluetooth-only; a fill from
+                              // another connection type clears it.
+                              via_driver:
+                                (np.printer_type ?? "ipp") === "bluetooth"
+                                  ? f.via_driver
+                                  : false,
                             }))
                           }
                         >
@@ -1238,8 +1249,12 @@ export function PrinterSetupPage() {
                       // Windows spooler passes the job through as RAW), so
                       // a PDF default would put an unreadable page on a
                       // thermal head — start at ESC/POS instead. An
-                      // explicitly chosen language is left alone.
-                      language: defaultLanguageFor(v, f.language),
+                      // explicitly chosen language is left alone. Driver
+                      // mode keeps PDF valid (the driver rasterizes), and
+                      // leaving Bluetooth clears the flag — it is a
+                      // Bluetooth-only option.
+                      language: defaultLanguageFor(v, f.language, f.via_driver),
+                      via_driver: v === "bluetooth" ? f.via_driver : false,
                     }))
                   }
                 >
@@ -1549,6 +1564,42 @@ export function PrinterSetupPage() {
                     {t("printers.ipp_skip_cert")}
                     <span className="block text-xs text-muted-foreground">
                       {t("printers.ipp_skip_cert_hint")}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
+
+            {/* Manual driver mode: hidden on Android, which has no driver
+                path yet (docs/MISSING_FEATURES.md item 16) — offering a
+                toggle that always errors would be worse than not showing
+                it. On desktop the choice is total: on = the OS queue of
+                this printer's name, off = the driverless wire, and the
+                app never switches between them on its own. */}
+            {form.printer_type === "bluetooth" && !isAndroid() && (
+              <div className="rounded-md border p-3">
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4"
+                    checked={form.via_driver}
+                    aria-describedby="printer-via-driver-hint"
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        via_driver: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>
+                    {t("printers.bt_driver")}
+                    <span
+                      id="printer-via-driver-hint"
+                      className="block text-xs text-muted-foreground"
+                    >
+                      {isLinux()
+                        ? t("printers.bt_driver_hint_linux")
+                        : t("printers.bt_driver_hint_windows")}
                     </span>
                   </span>
                 </label>

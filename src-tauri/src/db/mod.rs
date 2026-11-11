@@ -308,6 +308,14 @@ pub fn ensure_v2_schema(conn: &Connection) -> rusqlite::Result<()> {
             "skip_tls_verification",
             "ALTER TABLE printers ADD COLUMN skip_tls_verification INTEGER NOT NULL DEFAULT 0",
         ),
+        // Manual driver mode for Bluetooth rows: `1` prints through the
+        // OS queue (Windows spooler / CUPS), `0` (the default, and every
+        // pre-existing row) keeps the driverless raw wire. Never set
+        // automatically — the app does not switch paths on its own.
+        (
+            "via_driver",
+            "ALTER TABLE printers ADD COLUMN via_driver INTEGER NOT NULL DEFAULT 0",
+        ),
     ] {
         if !column_exists(conn, "printers", col)? {
             conn.execute(ddl, [])?;
@@ -847,11 +855,12 @@ fn ensure_p2_checks(conn: &Connection) -> rusqlite::Result<()> {
             username TEXT,
             password TEXT,
             skip_tls_verification INTEGER NOT NULL DEFAULT 0,
+            via_driver INTEGER NOT NULL DEFAULT 0,
             default_settings_json TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );",
-        "id, name, type, address, language, paper_width_mm, dpi, label_gap_mm, username, password, skip_tls_verification, default_settings_json, created_at, updated_at",
+        "id, name, type, address, language, paper_width_mm, dpi, label_gap_mm, username, password, skip_tls_verification, via_driver, default_settings_json, created_at, updated_at",
         &[],
     )?;
     rebuild_p2(

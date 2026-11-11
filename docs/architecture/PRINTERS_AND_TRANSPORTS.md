@@ -30,10 +30,18 @@ A printer is configured with a **type** (how to reach it) and a
   Windows writes to the paired device's own COM port (found from the row's
   MAC, or named outright as `COM7`). Pairing itself stays an OS flow — the
   printer is paired in the system's Bluetooth settings first — and only
-  classic serial (SPP) printers are supported, not BLE. When a Windows
-  address names no COM port, the job falls back to the Windows printer
-  queue of the same name, which must be installed as before; a failed
-  fallback explains both routes.
+  classic serial (SPP) printers are supported, not BLE.
+
+  Each Bluetooth row also carries a manual **"Print through the OS
+  driver"** option (`via_driver`, off by default) that picks the *other*
+  path and only that path: on Windows the job goes to the printer queue
+  installed under the same name, on Linux to this printer's CUPS queue
+  (created with `lpadmin` under the same name) — the driver in between
+  rasterizes, so PDF works there. The app never switches paths on its
+  own: a driverless row that names no COM port on Windows fails with
+  guidance instead of quietly using the queue, a driver row never dials
+  the device, and Android has no driver path yet — the option is hidden
+  in its UI and a row carrying it is refused with a clear message.
 
 ## Discovery
 
@@ -50,7 +58,8 @@ after the page opens), never a continuous scan.
 A **test print** runs the entire pipeline end to end with mock data to prove
 a new printer works. The connectivity check that precedes it never puts
 anything on paper: Windows system and USB queues report their status,
-Bluetooth opens the COM port or the RFCOMM connection and closes it again,
+Bluetooth opens the COM port or the RFCOMM connection and closes it again
+(or checks its OS queue's status when the row prints through the driver),
 and network printers only connect.
 
 ## Languages: two fundamentally different paths
@@ -108,9 +117,11 @@ and which transports exist.
 - **Windows** renders PDFs through the built-in browser engine (kept warm in
   the background for speed) and reaches printers via network protocols or the
   system spooler. USB printers go through the spooler too, so they must be
-  installed as Windows printers first. Bluetooth is driverless: the job is
-  written straight to the paired device's COM port, and the spooler queue is
-  used only when the address names no port.
+  installed as Windows printers first. Bluetooth is driverless by default:
+  the job is written straight to the paired device's COM port. A row with
+  **"Print through the OS driver"** on flips that manually — jobs go to
+  the printer queue of the same name (datatype-aware, so PDF is
+  printable), and nothing chooses between the two paths automatically.
 - **Linux** renders through headless Chromium, which must be installed
   (the `.deb` declares `cups` and a Chromium-family browser; the AppImage does
   not bundle one and warns once at startup if none is found —
@@ -120,9 +131,12 @@ and which transports exist.
   `application/octet-stream`). The browser stays running in the background so
   every print only opens a tab, like on Windows. Direct USB is not
   supported — the app tells the operator to use the CUPS raw route instead.
-  Bluetooth is direct: an RFCOMM socket to the device paired in the OS's
-  Bluetooth settings, dialled from the row's MAC (channel 1 unless the
-  address ends in `:2`–`:30`).
+  Bluetooth is direct by default: an RFCOMM socket to the device paired
+  in the OS's Bluetooth settings, dialled from the row's MAC (channel 1
+  unless the address ends in `:2`–`:30`). A row with **"Print through
+  the OS driver"** on prints through its CUPS queue instead — addressed
+  by the row's name, never by the MAC — and the two paths never switch
+  on their own.
 - **Android** renders PDFs through the system WebView, and renders
   ESC/POS, ZPL and TSPL jobs directly: the same WebView measures the page
   at the head's own resolution (1 CSS px = 1 dot, via a density-160

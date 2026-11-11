@@ -1,17 +1,27 @@
-//! Driverless Bluetooth printing on Linux: an RFCOMM (serial port
-//! profile) socket dialled straight to the paired device.
+//! Bluetooth printing on Linux — two paths, chosen by hand.
 //!
-//! No CUPS queue, no printer driver — the kernel's Bluetooth stack
-//! carries the bytes. Pairing itself stays an OS flow (bluetoothctl or
-//! the desktop's Bluetooth settings); once the device is paired this
-//! transport opens the socket by MAC, exactly like Android's plugin
-//! does through its own RFCOMM code.
+//! By default the path is driverless: an RFCOMM (serial port profile)
+//! socket dialled straight to the paired device. No CUPS queue, no
+//! printer driver — the kernel's Bluetooth stack carries the bytes.
+//! Pairing itself stays an OS flow (bluetoothctl or the desktop's
+//! Bluetooth settings); once the device is paired this transport opens
+//! the socket by MAC, exactly like Android's plugin does through its
+//! own RFCOMM code.
 //!
-//! Every operation here is a blocking syscall, so each one runs on the
-//! blocking pool with a deadline of its own: a printer that is off,
-//! out of range or wedged fails in seconds and names the stage, never
-//! hangs the queue. The socket stays non-blocking and is polled, so a
-//! deadline is always ours rather than the kernel's page timeout.
+//! A row with "Print through the OS driver" on (`via_driver`) prints
+//! through this printer's CUPS queue instead — the queue is addressed
+//! by the row's name (`ipp://localhost:631/printers/{name}`), installed
+//! earlier with `lpadmin`, and the driver in between rasterizes what
+//! the raw wire cannot. Nothing switches between the two on its own:
+//! a driver row never dials the MAC, a driverless row never touches
+//! CUPS.
+//!
+//! Every operation on the direct path is a blocking syscall, so each
+//! one runs on the blocking pool with a deadline of its own: a printer
+//! that is off, out of range or wedged fails in seconds and names the
+//! stage, never hangs the queue. The socket stays non-blocking and is
+//! polled, so a deadline is always ours rather than the kernel's page
+//! timeout.
 
 use crate::transport::bluetooth_addr::{self, BluetoothTarget, Mac};
 use crate::transport::{send_timeout, status, PrinterInfo, PrinterTransport, RenderedJob};
@@ -50,11 +60,26 @@ const STATUS_REPLY_TIMEOUT: Duration = Duration::from_secs(3);
 pub struct LinuxBluetoothPrinter {
     pub name: String,
     pub address: String,
+    /// The manual mode: `false` (default) is the driverless RFCOMM
+    /// socket only; `true` prints through this printer's CUPS queue
+    /// only (addressed by `name`). Set per printer — never flipped here.
+    pub via_driver: bool,
 }
 
 impl LinuxBluetoothPrinter {
-    pub fn new(name: String, address: String) -> Self {
-        Self { name, address }
+    pub fn new(name: String, address: String, via_driver: bool) -> Self {
+        Self {
+            name,
+            address,
+            via_driver,
+        }
+    }
+
+    /// This row's CUPS queue for driver mode: built from the *name*
+    /// with an empty address, because the row's address is a MAC and
+    /// `CupsPrinter` would otherwise dial it as a URI.
+    fn queue(&self) -> crate::transport::cups::CupsPrinter {
+        crate::transport::cups::CupsPrinter::new(self.name.clone(), String::new())
     }
 
     /// How every message about this printer names it.
@@ -66,7 +91,8 @@ impl LinuxBluetoothPrinter {
     ///
     /// `COM…` is Windows' serial port and has no meaning here; the
     /// message points back at the shape Linux needs instead of at the
-    /// generic format error alone.
+    /// generic format error alone. Only the driverless path asks: a
+    /// driver row never dials anything.
     fn device(&self) -> Result<(Mac, u8), String> {
         match bluetooth_addr::parse(&self.address) {
             Ok(BluetoothTarget::Device { mac, channel }) => Ok((mac, channel)),
@@ -79,9 +105,13 @@ impl LinuxBluetoothPrinter {
         }
     }
 
-    /// Is the printer answering? Connects an RFCOMM socket and closes
-    /// it — nothing is written, so looking cannot print.
+    /// Is the printer answering? Driver mode: the queue's status.
+    /// Driverless: connect an RFCOMM socket and close it — nothing is
+    /// written, so looking cannot print.
     pub async fn reach(&self) -> Result<(), String> {
+        if self.via_driver {
+            return self.queue().test().await;
+        }
         let me = self.clone();
         tokio::task::spawn_blocking(move || me.reach_blocking())
             .await
@@ -103,7 +133,8 @@ impl LinuxBluetoothPrinter {
     }
 
     /// Open, ask, write, close — all on one held socket, all on the
-    /// blocking pool with deadlines inside.
+    /// blocking pool with deadlines inside. Driver mode never reaches
+    /// this: the trait's `send` hands the job to the CUPS queue first.
     fn send_blocking(&self, job: RenderedJob) -> Result<(), String> {
         let (mac, channel) = self.device()?;
         let at = self.at();
@@ -215,9 +246,7 @@ impl LinuxBluetoothPrinter {
                         "the printer",
                     )
                     .is_ok();
-                    let (reply, _) = read_reply(fd, STATUS_REPLY_TIMEOUT, |r| {
-                        dialect.answered(r)
-                    });
+                    let (reply, _) = read_reply(fd, STATUS_REPLY_TIMEOUT, |r| dialect.answered(r));
                     write_ok && dialect.answered(&reply)
                 };
                 unsafe { libc::close(fd) };
@@ -246,6 +275,12 @@ impl PrinterTransport for LinuxBluetoothPrinter {
     }
 
     async fn send(&self, job: RenderedJob) -> Result<(), String> {
+        // The manual choice decides: a driver row prints through its
+        // CUPS queue, a driverless row dials the device. Never both,
+        // never switched here.
+        if self.via_driver {
+            return self.queue().send(job).await;
+        }
         let me = self.clone();
         tokio::task::spawn_blocking(move || me.send_blocking(job))
             .await
@@ -279,7 +314,13 @@ impl SockAddrRc {
 /// deadline below is enforced by our own poll rather than by the
 /// kernel's page timeout.
 fn socket_rfcomm() -> Result<RawFd, String> {
-    let fd = unsafe { libc::socket(AF_BLUETOOTH, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, BTPROTO_RFCOMM) };
+    let fd = unsafe {
+        libc::socket(
+            AF_BLUETOOTH,
+            libc::SOCK_STREAM | libc::SOCK_CLOEXEC,
+            BTPROTO_RFCOMM,
+        )
+    };
     if fd < 0 {
         let e = io::Error::last_os_error();
         return Err(match e.raw_os_error() {
@@ -385,12 +426,12 @@ fn connect_error(at: &str, channel: u8, e: io::Error) -> String {
         Some(libc::EHOSTUNREACH)
         | Some(libc::ETIMEDOUT)
         | Some(libc::ENODEV)
-        | Some(libc::EHOSTDOWN) => format!(
-            "Could not reach {at} — check it is paired, powered on and in range: {e}"
-        ),
-        Some(libc::EINVAL) => format!(
-            "{at} rejected the address — check the MAC and the RFCOMM channel ({channel})"
-        ),
+        | Some(libc::EHOSTDOWN) => {
+            format!("Could not reach {at} — check it is paired, powered on and in range: {e}")
+        }
+        Some(libc::EINVAL) => {
+            format!("{at} rejected the address — check the MAC and the RFCOMM channel ({channel})")
+        }
         _ => format!("Could not reach {at}: {e}"),
     }
 }
@@ -468,7 +509,10 @@ fn write_all(
         if n < 0 {
             let e = io::Error::last_os_error();
             match e.raw_os_error() {
-                Some(libc::EAGAIN) | Some(libc::EWOULDBLOCK) | Some(libc::EINTR) => {
+                // EWOULDBLOCK is the same value as EAGAIN on Linux, so
+                // naming both is an unreachable pattern — EAGAIN covers
+                // the would-block case.
+                Some(libc::EAGAIN) | Some(libc::EINTR) => {
                     continue;
                 }
                 _ => {
@@ -518,7 +562,10 @@ fn read_reply(
         if n < 0 {
             let e = io::Error::last_os_error();
             match e.raw_os_error() {
-                Some(libc::EAGAIN) | Some(libc::EWOULDBLOCK) | Some(libc::EINTR) => {
+                // EWOULDBLOCK is the same value as EAGAIN on Linux, so
+                // naming both is an unreachable pattern — EAGAIN covers
+                // the would-block case.
+                Some(libc::EAGAIN) | Some(libc::EINTR) => {
                     continue;
                 }
                 _ => return (reply, ReplyEnd::Closed),
@@ -539,7 +586,33 @@ mod tests {
     use super::*;
 
     fn printer(address: &str) -> LinuxBluetoothPrinter {
-        LinuxBluetoothPrinter::new("Label".into(), address.into())
+        LinuxBluetoothPrinter::new("Label".into(), address.into(), false)
+    }
+
+    fn driver_printer(address: &str) -> LinuxBluetoothPrinter {
+        LinuxBluetoothPrinter::new("Label".into(), address.into(), true)
+    }
+
+    /// Driver mode is manual and total: even an address the wire path
+    /// would reject goes to the CUPS queue, never to the socket.
+    #[tokio::test]
+    async fn driver_mode_prints_through_the_queue_not_the_wire() {
+        let err = driver_printer("usb://dummy")
+            .reach()
+            .await
+            .expect_err("no queue of that name is installed in CI");
+        assert!(err.contains("CUPS"), "{err}");
+        assert!(
+            !err.contains("A4:77:17:22:33:44"),
+            "the driverless wire's advice must not appear on the queue path: {err}"
+        );
+    }
+
+    /// Driver mode defaults off: the raw wire stays the default path.
+    #[test]
+    fn driver_mode_defaults_off() {
+        assert!(!printer("A4:77:17:22:33:44").via_driver);
+        assert!(driver_printer("A4:77:17:22:33:44").via_driver);
     }
 
     /// The kernel reads `sockaddr_rc` field for field; getting the byte
@@ -601,6 +674,9 @@ mod tests {
         let p = printer("A4:77:17:22:33:44");
         // Unpaired in CI: must come back as an error, not as a print.
         let result = tokio::time::timeout(Duration::from_secs(15), p.test()).await;
-        assert!(matches!(result, Ok(Err(_))), "test must not succeed or hang");
+        assert!(
+            matches!(result, Ok(Err(_))),
+            "test must not succeed or hang"
+        );
     }
 }
