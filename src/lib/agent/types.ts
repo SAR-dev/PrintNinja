@@ -137,6 +137,11 @@ export interface PrinterRow {
   password?: string | null;
   /** Accept self-signed certificates on this printer's TLS endpoint. */
   skip_tls_verification?: boolean;
+  /**
+   * Manual Bluetooth mode: print through the OS driver queue (Windows
+   * spooler / CUPS) instead of the driverless raw wire. Absent = false.
+   */
+  via_driver?: boolean;
   /** UI-only: last test-print outcome, not stored server-side. */
   status?: string;
 }
@@ -175,6 +180,11 @@ export interface AddPrinterReq {
   password?: string;
   /** Accept self-signed certificates on this printer's TLS endpoint. */
   skip_tls_verification?: boolean;
+  /**
+   * Manual Bluetooth mode: `true` prints through the OS driver queue
+   * instead of the driverless raw wire; absent stores `false`.
+   */
+  via_driver?: boolean;
 }
 
 export interface SystemPrinterRow {

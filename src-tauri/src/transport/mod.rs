@@ -98,10 +98,16 @@ pub(crate) fn insecure_http_client() -> reqwest::Client {
 
 /// Per-printer options a transport may carry on top of the stored address.
 ///
-/// Only IPP reads them today (sign-in credentials, self-signed
-/// certificates); the other transports ignore them, which is why the
-/// defaults — no credentials, verified TLS — are safe to pass around
-/// without thinking.
+/// Only IPP reads the credential/TLS fields today (sign-in credentials,
+/// self-signed certificates); the other transports ignore them, which is
+/// why the defaults — no credentials, verified TLS — are safe to pass
+/// around without thinking.
+///
+/// `via_driver` is the manual Bluetooth mode: `false` (default, and
+/// every path the app never sets otherwise) is the driverless raw wire;
+/// `true` sends through the OS queue (Windows spooler, CUPS) as the
+/// driver the printer is installed with. The user sets it per printer —
+/// nothing here ever flips it, so a job cannot change path mid-flight.
 #[derive(Debug, Clone, Default)]
 pub struct TransportSettings {
     /** IPP sign-in user; `None` keeps the built-in `PrintNinja`. */
@@ -110,6 +116,8 @@ pub struct TransportSettings {
     pub password: Option<String>,
     /** Accept a self-signed certificate on this printer's TLS endpoint. */
     pub skip_tls_verification: bool,
+    /** Print through the OS driver queue instead of the driverless wire (Bluetooth). */
+    pub via_driver: bool,
 }
 
 /// Payloads larger than this cross the Rust→Kotlin bridge by file
@@ -373,6 +381,7 @@ pub fn create_transport(
         PrinterType::Bluetooth => Some(Box::new(windows_bluetooth::WindowsBluetoothPrinter::new(
             name.to_string(),
             address.to_string(),
+            settings.via_driver,
         ))),
         #[cfg(target_os = "android")]
         PrinterType::Usb => Some(Box::new(android_usb::AndroidUsbPrinter::new(
@@ -383,14 +392,17 @@ pub fn create_transport(
         PrinterType::Bluetooth => Some(Box::new(android_bluetooth::AndroidBluetoothPrinter::new(
             name.to_string(),
             address.to_string(),
+            settings.via_driver,
         ))),
         // Linux dials the paired device's RFCOMM socket directly — no
-        // driver, no CUPS queue (USB still has no direct transport and
-        // falls through to the refusal below).
+        // driver, no CUPS queue — unless the row is set to print through
+        // its CUPS queue (USB still has no direct transport and falls
+        // through to the refusal below).
         #[cfg(target_os = "linux")]
         PrinterType::Bluetooth => Some(Box::new(linux_bluetooth::LinuxBluetoothPrinter::new(
             name.to_string(),
             address.to_string(),
+            settings.via_driver,
         ))),
         // Off Windows, off Linux and off Android (which drives
         // USB/Bluetooth through the Kotlin plugin above) there is no
@@ -559,29 +571,34 @@ impl TransportRegistry {
                 res
             }
             PrinterType::Bluetooth => {
+                // The row's manual mode decides the path here too: a
+                // driver row checks its queue's status, a driverless row
+                // opens and closes its own wire — the same resolution
+                // the job itself uses.
                 #[cfg(target_os = "android")]
                 let res = android_bluetooth::AndroidBluetoothPrinter::new(
                     name.to_string(),
                     address.to_string(),
+                    settings.via_driver,
                 )
                 .reach()
                 .await;
-                // Direct when the address names a port (explicit COM, or
-                // a MAC Windows already gave one), spooler status
-                // otherwise — the same resolution the job itself uses.
                 #[cfg(windows)]
                 let res = windows_bluetooth::WindowsBluetoothPrinter::new(
                     name.to_string(),
                     address.to_string(),
+                    settings.via_driver,
                 )
                 .reach()
                 .await;
-                // Direct RFCOMM connect to the paired device: a probe is
+                // Direct RFCOMM connect to the paired device (or the
+                // row's CUPS queue when driver mode is on): a probe is
                 // a connection and nothing else, so nothing is written.
                 #[cfg(target_os = "linux")]
                 let res = linux_bluetooth::LinuxBluetoothPrinter::new(
                     name.to_string(),
                     address.to_string(),
+                    settings.via_driver,
                 )
                 .reach()
                 .await;
@@ -970,7 +987,10 @@ mod tests {
         .await
         .unwrap_err();
         assert!(err.contains("A4:77:17:22:33:44"), "{err}");
-        assert!(!err.contains("CUPS"), "no queue advice for a direct wire: {err}");
+        assert!(
+            !err.contains("CUPS"),
+            "no queue advice for a direct wire: {err}"
+        );
 
         let err = TransportRegistry::send_to(
             &PrinterType::Bluetooth,
@@ -1020,8 +1040,8 @@ mod tests {
             &TransportSettings::default()
         )
         .is_some());
-        // Bluetooth too: the driverless COM path (or the spooler
-        // fallback) exists on Windows.
+        // Bluetooth too: the driverless COM path exists on Windows, and
+        // a driver-mode row resolves its spooler queue.
         assert!(create_transport(
             &PrinterType::Bluetooth,
             "Thermal",
@@ -1029,5 +1049,57 @@ mod tests {
             &TransportSettings::default()
         )
         .is_some());
+        assert!(create_transport(
+            &PrinterType::Bluetooth,
+            "Thermal",
+            "A4:77:17:22:33:44",
+            &TransportSettings {
+                via_driver: true,
+                ..Default::default()
+            }
+        )
+        .is_some());
+    }
+
+    /// Driver mode is a manual, explicit choice: the same row that
+    /// dials the device directly on the default settings must resolve
+    /// to the CUPS queue when the flag is on — and never silently
+    /// otherwise.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn bluetooth_via_driver_sends_to_the_cups_queue() {
+        let err = TransportRegistry::send_to(
+            &PrinterType::Bluetooth,
+            "MyThermal",
+            "A4:77:17:22:33:44",
+            RenderedJob {
+                job_id: "j".into(),
+                printer_id: "p".into(),
+                data: vec![0x1b, 0x40],
+                mime_type: "application/octet-stream".into(),
+                copies: 1,
+                language: PrinterLanguage::Escpos,
+            },
+            &TransportSettings {
+                via_driver: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap_err();
+        // The queue is addressed by name, so the failure is CUPS's —
+        // not the driverless wire's address-format complaint.
+        assert!(err.contains("MyThermal"), "{err}");
+        assert!(
+            !err.contains("A4:77:17"),
+            "queue path must not dial the MAC: {err}"
+        );
+    }
+
+    /// The manual flag defaults off: nothing about the other settings
+    /// implies driver mode.
+    #[test]
+    fn driver_mode_defaults_to_the_driverless_wire() {
+        assert!(!TransportSettings::default().via_driver);
     }
 }

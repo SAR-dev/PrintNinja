@@ -29,15 +29,21 @@ export const PRINTER_LANGUAGES = [
  * USB and Bluetooth are raw wires: the bytes go to the printer unchanged,
  * with no driver in between to rasterize a document. A PDF sent that way
  * prints as pages of gibberish on a receipt or label head, so those types
- * start at ESC/POS instead of the PDF default. Anything the person already
- * moved off PDF is left alone, and every other connection type keeps what
- * it had (IPP and system printers read PDF; JetDirect lasers do too).
+ * start at ESC/POS instead of the PDF default — unless the row is a
+ * Bluetooth one printing through its OS driver (`viaDriver`), where the
+ * driver in between *is* a rasterizer and PDF is a normal choice again.
+ * The flag belongs to Bluetooth only (USB has no driver-mode option), so
+ * it never changes what USB starts at. Anything the person already moved
+ * off PDF is left alone, and every other connection type keeps what it
+ * had (IPP and system printers read PDF; JetDirect lasers do too).
  */
 export function defaultLanguageFor(
   printerType: string,
   current: string,
+  viaDriver = false,
 ): string {
-  const rawWire = printerType === "usb" || printerType === "bluetooth";
+  const rawWire =
+    printerType === "usb" || (printerType === "bluetooth" && !viaDriver);
   return rawWire && current === "pdf" ? "escpos" : current;
 }
 
@@ -188,6 +194,11 @@ export const printerFormSchema = z
     username: z.string().trim().max(200).optional(),
     password: z.string().max(200).optional(),
     skip_tls_verification: z.boolean().optional(),
+    // Manual Bluetooth mode: through the OS driver queue instead of the
+    // driverless wire. Hidden in the Android UI (no driver path there
+    // yet), so a value on a non-Bluetooth type is simply ignored by the
+    // backend — nothing validates it harder than a boolean here.
+    via_driver: z.boolean().optional(),
   })
   .superRefine((form, ctx) => {
     const err = addressError(form.printer_type, form.address);
@@ -215,6 +226,7 @@ export interface LoosePrinterForm {
   username: string;
   password: string;
   skip_tls_verification: boolean;
+  via_driver: boolean;
 }
 
 /** One friendly message for the toast: the first failing field, as an i18n key. */

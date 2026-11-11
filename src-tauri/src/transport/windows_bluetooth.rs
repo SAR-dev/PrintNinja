@@ -1,22 +1,26 @@
-//! Bluetooth printers on Windows — driverless first, spooler as the
-//! fallback.
+//! Bluetooth printers on Windows — two paths, chosen by hand, never
+//! switched automatically.
 //!
-//! A paired printer normally gets a virtual serial port from Windows
-//! (its Serial Port Profile service), and that port needs no printer
-//! driver at all: when the row's address names one — `COM7` directly,
-//! or a MAC whose device already owns a port — the job is written to
-//! the port itself, exactly like Android writes to its RFCOMM socket.
-//! The spooler is never involved on that path, so there is no queue to
-//! install and no spooler latency on the wire.
+//! By default the path is driverless: a paired printer normally gets a
+//! virtual serial port from Windows (its Serial Port Profile service),
+//! and when the row's address names one — `COM7` directly, or a MAC
+//! whose device already owns a port — the job is written to the port
+//! itself, exactly like Android writes to its RFCOMM socket. The spooler
+//! is never involved, so there is no queue to install and no spooler
+//! latency on the wire.
 //!
-//! When the address names no port, behaviour is what it always was:
-//! jobs go to the Windows printer queue of the same *name*, which must
-//! already be installed. Old rows — whose address used to be ignored —
-//! therefore keep printing, and a failed fallback explains how to get a
-//! COM port for the driverless path instead.
+//! A row with "Print through the OS driver" on (`via_driver`) goes the
+//! other way and only that way: jobs go to the Windows printer queue of
+//! the same *name*, which must already be installed, and the driver in
+//! between rasterizes what the raw wire cannot (a PDF-language job, for
+//! one). No COM port is consulted in this mode.
 //!
-//! Nothing here scans for paired devices: pairing stays an OS flow and
-//! `discover` is empty, as on every other desktop transport.
+//! The choice is manual in both directions. A driverless row that names
+//! no port fails with guidance instead of quietly using the queue — the
+//! silent fallback this module used to have is gone — and a driver row
+//! never dials a port directly. Nothing here scans for paired devices:
+//! pairing stays an OS flow and `discover` is empty, as on every other
+//! desktop transport.
 
 use crate::transport::bluetooth_addr::{self, BluetoothTarget};
 use crate::transport::{PrinterInfo, PrinterTransport, RenderedJob};
@@ -37,11 +41,19 @@ const DIRECT_SEND_TIMEOUT: Duration = Duration::from_secs(30);
 pub struct WindowsBluetoothPrinter {
     pub name: String,
     pub address: String,
+    /// The manual mode: `false` (default) is the driverless COM port
+    /// only; `true` prints through the Windows queue of `name` only.
+    /// Set per printer — this module never flips it.
+    pub via_driver: bool,
 }
 
 impl WindowsBluetoothPrinter {
-    pub fn new(name: String, address: String) -> Self {
-        Self { name, address }
+    pub fn new(name: String, address: String, via_driver: bool) -> Self {
+        Self {
+            name,
+            address,
+            via_driver,
+        }
     }
 
     /// The COM port this row should print through, when it can name
@@ -56,57 +68,118 @@ impl WindowsBluetoothPrinter {
         }
     }
 
-    /// Spooler failures for a row that *meant* to go direct say how to
-    /// get a COM port, because "queue not found" alone hides the
-    /// driverless route that was the point of the address.
-    fn fallback_error(&self, base: String) -> String {
+    /// A driverless row that names no port: the one failure this path
+    /// has, worded so both manual fixes are visible — get Windows to
+    /// assign a COM port, or turn on driver mode for this row.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    fn no_com_port_error(&self) -> String {
         match bluetooth_addr::parse(self.address.trim()) {
             Ok(BluetoothTarget::Device { mac, .. }) => format!(
-                "{base} — the address {} names no COM port on this PC. Pair the \
+                "the address {} names no COM port on this PC. Pair the \
                  printer in Windows settings (Settings → Bluetooth & devices) so \
                  Windows assigns one and enter it here (for example COM7); or \
-                 install the printer as a Windows printer and keep this row's name \
-                 equal to that queue's name",
+                 turn on \"Print through the OS driver\" for this printer to \
+                 print through its installed Windows queue instead",
                 mac.text()
             ),
-            _ => base,
+            _ => format!(
+                "`{}` is not a COM port — enter the port Device Manager shows \
+                 (Ports (COM & LPT), for example COM7); or turn on \"Print \
+                 through the OS driver\" for this printer to print through its \
+                 installed Windows queue instead",
+                self.address.trim()
+            ),
         }
     }
 
-    /// Is the printer answering? Direct: open the port and close it —
-    /// nothing is written, so looking cannot print. Fallback: the
-    /// queue's own status check.
+    /// A driver-mode failure: the queue is the path, so the message
+    /// names the queue this row prints through and how to get one.
+    fn driver_error(&self, base: String) -> String {
+        format!(
+            "{base} — \"Print through the OS driver\" sends jobs to the Windows \
+             queue named `{}`; install the printer in Windows (Settings → \
+             Bluetooth & devices → Printers & scanners) under that exact name, \
+             or turn the option off to print to its COM port",
+            self.name
+        )
+    }
+
+    /// Is the printer answering? Driver mode: the queue's own status
+    /// check. Driverless: open the port and close it — nothing is
+    /// written, so looking cannot print.
     pub async fn reach(&self) -> Result<(), String> {
-        #[cfg(windows)]
-        {
-            if let Some(port) = self.direct_port() {
-                return direct::open_and_close(&port).await;
-            }
+        if self.via_driver {
+            return self.driver_reach().await;
         }
+        self.direct_reach().await
+    }
+
+    /// Driver mode: the queue's status, with this row's guidance when
+    /// the queue is missing or stopped.
+    async fn driver_reach(&self) -> Result<(), String> {
         let spooler = crate::transport::windows_spooler::WindowsSpooler::new(self.name.clone());
         let res = tokio::task::spawn_blocking(move || spooler.check_ready())
             .await
             .unwrap_or_else(|e| Err(format!("spooler test task failed: {e}")));
-        res.map_err(|e| self.fallback_error(e))
+        res.map_err(|e| self.driver_error(e))
     }
 
-    /// Direct when the address names a port; otherwise the queue of
-    /// the same name, exactly as before this module grew a direct
-    /// path. Command languages always go out as `RAW` — the bytes are
-    /// the printer's own dialect with nothing in between.
-    pub async fn send_job(&self, job: RenderedJob) -> Result<(), String> {
-        #[cfg(windows)]
-        {
-            if let Some(port) = self.direct_port() {
-                return direct::send(&port, &job.data, send_timeout(DIRECT_SEND_TIMEOUT)).await;
-            }
+    #[cfg(windows)]
+    async fn direct_reach(&self) -> Result<(), String> {
+        match self.direct_port() {
+            Some(port) => direct::open_and_close(&port).await,
+            None => Err(self.no_com_port_error()),
         }
+    }
+
+    #[cfg(not(windows))]
+    async fn direct_reach(&self) -> Result<(), String> {
+        Err("direct Bluetooth printing runs only on Windows".to_string())
+    }
+
+    /// Send the job on the row's chosen path — never the other one.
+    ///
+    /// Driver mode: the spooler's own send, which picks the datatype
+    /// (`RAW` for command bytes, `PDF` for a PDF-language job the queue
+    /// offers) — the driver in between is what makes a PDF printable
+    /// here. Driverless: bytes to the port, no queue in between.
+    pub async fn send_job(&self, job: RenderedJob) -> Result<(), String> {
+        if self.via_driver {
+            return self.driver_send(job).await;
+        }
+        self.direct_send(job).await
+    }
+
+    #[cfg(windows)]
+    async fn driver_send(&self, job: RenderedJob) -> Result<(), String> {
+        let spooler = crate::transport::windows_spooler::WindowsSpooler::new(self.name.clone());
+        PrinterTransport::send(&spooler, job)
+            .await
+            .map_err(|e| self.driver_error(e))
+    }
+
+    #[cfg(not(windows))]
+    async fn driver_send(&self, job: RenderedJob) -> Result<(), String> {
         let spooler = crate::transport::windows_spooler::WindowsSpooler::new(self.name.clone());
         let data = job.data;
         let res = tokio::task::spawn_blocking(move || spooler.send_raw(&data))
             .await
             .unwrap_or_else(|e| Err(format!("spooler send task failed: {e}")));
-        res.map_err(|e| self.fallback_error(e))
+        res.map_err(|e| self.driver_error(e))
+    }
+
+    #[cfg(windows)]
+    async fn direct_send(&self, job: RenderedJob) -> Result<(), String> {
+        match self.direct_port() {
+            Some(port) => direct::send(&port, &job.data, send_timeout(DIRECT_SEND_TIMEOUT)).await,
+            None => Err(self.no_com_port_error()),
+        }
+    }
+
+    #[cfg(not(windows))]
+    async fn direct_send(&self, job: RenderedJob) -> Result<(), String> {
+        let _ = job;
+        Err("direct Bluetooth printing runs only on Windows".to_string())
     }
 }
 
@@ -409,8 +482,15 @@ fn scan_enum_for_port(root: &str, needle: &str) -> Option<String> {
     use winapi::*;
 
     let mut hkey: HKEY = null_mut();
-    if unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, wide(root).as_ptr(), 0, KEY_READ, &mut hkey) }
-        != 0
+    if unsafe {
+        RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            wide(root).as_ptr(),
+            0,
+            KEY_READ,
+            &mut hkey,
+        )
+    } != 0
     {
         return None;
     }
@@ -468,8 +548,15 @@ fn child_keys(instance: &str) -> Vec<String> {
     use winapi::*;
 
     let mut hkey: HKEY = null_mut();
-    if unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, wide(instance).as_ptr(), 0, KEY_READ, &mut hkey) }
-        != 0
+    if unsafe {
+        RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            wide(instance).as_ptr(),
+            0,
+            KEY_READ,
+            &mut hkey,
+        )
+    } != 0
     {
         return Vec::new();
     }
@@ -504,8 +591,15 @@ fn read_port_name(path: &str) -> Option<String> {
     use winapi::*;
 
     let mut hkey: HKEY = null_mut();
-    if unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, wide(path).as_ptr(), 0, KEY_READ, &mut hkey) }
-        != 0
+    if unsafe {
+        RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            wide(path).as_ptr(),
+            0,
+            KEY_READ,
+            &mut hkey,
+        )
+    } != 0
     {
         return None;
     }
@@ -564,35 +658,62 @@ mod tests {
         // The parse half of `direct_port` is platform-independent, so
         // it is asserted everywhere; the registry half needs Windows
         // and runs in the Windows CI job.
-        let p = WindowsBluetoothPrinter::new("T".into(), "COM7".into());
+        let p = WindowsBluetoothPrinter::new("T".into(), "COM7".into(), false);
         #[cfg(windows)]
         assert_eq!(p.direct_port().as_deref(), Some("COM7"));
-        assert!(p.fallback_error("boom".into()).starts_with("boom"));
+        assert!(!p.via_driver, "driver mode must default to the raw wire");
     }
 
+    /// The driverless path has exactly two escapes from "no COM port",
+    /// and both must appear in the message: pair so Windows assigns a
+    /// port, or hand the print to the OS driver explicitly.
     #[test]
-    fn a_failed_fallback_explains_how_to_get_a_port() {
-        let p = WindowsBluetoothPrinter::new("T".into(), "A4:77:17:22:33:44".into());
-        let err = p.fallback_error("queue `T` not found".into());
+    fn a_driverless_row_without_a_port_explains_both_routes() {
+        let p = WindowsBluetoothPrinter::new("T".into(), "A4:77:17:22:33:44".into(), false);
+        let err = p.no_com_port_error();
         assert!(err.contains("A4:77:17:22:33:44"), "{err}");
         assert!(err.contains("COM7"), "{err}");
         assert!(err.contains("Pair the printer"), "{err}");
-        // An address that names nothing in particular keeps the
-        // spooler's own wording untouched.
-        let plain = WindowsBluetoothPrinter::new("T".into(), "whatever".into());
-        assert_eq!(
-            plain.fallback_error("queue `T` not found".into()),
-            "queue `T` not found"
-        );
+        assert!(err.contains("Print through the OS driver"), "{err}");
+        // An address that names nothing in particular still says both.
+        let plain = WindowsBluetoothPrinter::new("T".into(), "whatever".into(), false);
+        let err = plain.no_com_port_error();
+        assert!(err.contains("whatever"), "{err}");
+        assert!(err.contains("Print through the OS driver"), "{err}");
     }
 
+    /// A driver-mode failure is about the queue, never about the COM
+    /// port: the message names the queue and how to leave driver mode.
+    #[test]
+    fn a_driver_failure_names_the_queue() {
+        let p = WindowsBluetoothPrinter::new("Queue7".into(), "COM7".into(), true);
+        let err = p.driver_error("queue not found".into());
+        assert!(err.starts_with("queue not found"), "{err}");
+        assert!(err.contains("Windows queue named `Queue7`"), "{err}");
+        assert!(err.contains("turn the option off"), "{err}");
+    }
+
+    /// Manual means manual: driver mode ignores an explicit COM port
+    /// and resolves the queue instead — the failure that comes back
+    /// names the queue path, not the port.
+    #[tokio::test]
+    async fn driver_mode_never_dials_the_port() {
+        let p = WindowsBluetoothPrinter::new("NoSuchQueue".into(), "COM7".into(), true);
+        let err = tokio::time::timeout(std::time::Duration::from_secs(30), p.reach())
+            .await
+            .expect("the queue check must not hang")
+            .expect_err("no queue of that name exists");
+        assert!(err.contains("Windows queue named `NoSuchQueue`"), "{err}");
+        assert!(!err.contains("COM port COM7"), "{err}");
+    }
+
+    /// The address column still accepts a plain MAC — rows synced from
+    /// phones carry it — and the driverless path answers with its
+    /// guidance rather than a parse error.
     #[test]
     fn a_mac_address_is_a_valid_target_not_a_parse_error() {
-        // Rows sync from phones with the MAC in the address column;
-        // treating that as invalid would break every synced row. The
-        // contract is "try direct, then explain" — see the fallback
-        // message asserted above.
-        let p = WindowsBluetoothPrinter::new("T".into(), "A4:77:17:22:33:44".into());
+        let p = WindowsBluetoothPrinter::new("T".into(), "A4:77:17:22:33:44".into(), false);
         assert!(bluetooth_addr::parse(p.address.trim()).is_ok());
+        assert!(p.no_com_port_error().contains("Pair the printer"));
     }
 }

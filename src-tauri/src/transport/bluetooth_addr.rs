@@ -109,7 +109,7 @@ fn com_port(trimmed: &str) -> Option<String> {
 /// Six (or seven) separator-split groups: a MAC, plus an optional
 /// RFCOMM channel as the seventh.
 fn parse_device(trimmed: &str) -> Option<(Mac, u8)> {
-    let parts: Vec<&str> = trimmed.split(|c| c == ':' || c == '-').collect();
+    let parts: Vec<&str> = trimmed.split([':', '-']).collect();
     if parts.len() != 6 && parts.len() != 7 {
         return None;
     }
@@ -126,7 +126,7 @@ fn parse_device(trimmed: &str) -> Option<(Mac, u8)> {
     } else {
         RFCOMM_DEFAULT_CHANNEL
     };
-    if channel < 1 || channel > RFCOMM_MAX_CHANNEL {
+    if !(1..=RFCOMM_MAX_CHANNEL).contains(&channel) {
         return None;
     }
     Some((Mac(octets), channel))
@@ -171,7 +171,11 @@ mod tests {
         };
         assert_eq!(channel, 2);
         // 0 is reserved by the spec, 31 is past the channel space.
-        for bad in ["A4:77:17:22:33:44:0", "A4:77:17:22:33:44:31", "A4:77:17:22:33:44:zz"] {
+        for bad in [
+            "A4:77:17:22:33:44:0",
+            "A4:77:17:22:33:44:31",
+            "A4:77:17:22:33:44:zz",
+        ] {
             assert!(parse(bad).is_err(), "{bad} must not parse");
         }
         assert_eq!(
@@ -191,7 +195,11 @@ mod tests {
             (r"\\.\COM7", "COM7"),
             ("COM12", "COM12"),
         ] {
-            assert_eq!(parse(raw).unwrap(), BluetoothTarget::ComPort(want.into()), "{raw}");
+            assert_eq!(
+                parse(raw).unwrap(),
+                BluetoothTarget::ComPort(want.into()),
+                "{raw}"
+            );
         }
         // Not ports: fall through to the shared format message.
         for bad in ["COM0", "COM", "COMx", "PORT7"] {

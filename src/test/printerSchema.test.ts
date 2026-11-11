@@ -14,6 +14,7 @@ const base = {
   username: "",
   password: "",
   skip_tls_verification: false,
+  via_driver: false,
 };
 
 describe("validatePrinterForm", () => {
@@ -120,6 +121,27 @@ describe("validatePrinterForm", () => {
       expect(r.req.skip_tls_verification).toBe(true);
     }
   });
+
+  it("carries the manual driver flag through to the request", () => {
+    // Off and on are both explicit values the form always sends — the
+    // stored row is what the transport reads, so nothing can flip the
+    // path without this field flipping too.
+    expect(
+      validatePrinterForm({
+        ...base,
+        printer_type: "bluetooth",
+        address: "A4:77:17:22:33:44",
+      }),
+    ).toMatchObject({ ok: true, req: { via_driver: false } });
+    const on = validatePrinterForm({
+      ...base,
+      printer_type: "bluetooth",
+      address: "A4:77:17:22:33:44",
+      via_driver: true,
+    });
+    expect(on.ok).toBe(true);
+    if (on.ok) expect(on.req.via_driver).toBe(true);
+  });
 });
 
 describe("defaultLanguageFor", () => {
@@ -139,5 +161,15 @@ describe("defaultLanguageFor", () => {
     for (const type of ["ipp", "raw_tcp", "system"]) {
       expect(defaultLanguageFor(type, "pdf")).toBe("pdf");
     }
+  });
+
+  it("keeps PDF on a Bluetooth row printing through its driver", () => {
+    // The driver in between rasterizes — the reason the raw wire needs
+    // ESC/POS does not apply. USB has no driver-mode option, so its
+    // rule is unchanged.
+    expect(defaultLanguageFor("bluetooth", "pdf", true)).toBe("pdf");
+    expect(defaultLanguageFor("usb", "pdf", true)).toBe("escpos");
+    // The flag does not override an explicit non-PDF choice either.
+    expect(defaultLanguageFor("bluetooth", "zpl", true)).toBe("zpl");
   });
 });

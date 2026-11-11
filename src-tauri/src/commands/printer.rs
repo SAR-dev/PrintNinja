@@ -20,6 +20,12 @@ pub struct Printer {
     pub password: Option<String>,
     /** Accept self-signed certificates on this printer's TLS endpoint. */
     pub skip_tls_verification: bool,
+    /**
+     * Manual Bluetooth mode: `true` prints through the OS driver queue
+     * (Windows spooler / CUPS) instead of the driverless raw wire.
+     * Never set automatically.
+     */
+    pub via_driver: bool,
     pub default_settings_json: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -60,7 +66,7 @@ pub fn list_printers(db: State<DbState>) -> AppResult<Vec<Printer>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
                 label_gap_mm, username, password, skip_tls_verification,
-                default_settings_json, created_at, updated_at
+                via_driver, default_settings_json, created_at, updated_at
          FROM printers ORDER BY name COLLATE NOCASE",
     )?;
 
@@ -78,9 +84,10 @@ pub fn list_printers(db: State<DbState>) -> AppResult<Vec<Printer>> {
                 username: row.get(8)?,
                 password: row.get(9)?,
                 skip_tls_verification: row.get(10)?,
-                default_settings_json: row.get(11)?,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
+                via_driver: row.get(11)?,
+                default_settings_json: row.get(12)?,
+                created_at: row.get(13)?,
+                updated_at: row.get(14)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -104,6 +111,13 @@ pub struct AddPrinterRequest {
     pub password: Option<String>,
     #[serde(default)]
     pub skip_tls_verification: Option<bool>,
+    /**
+     * Manual Bluetooth mode; `None`/absent stores `false` — the
+     * driverless wire stays the default and no request can turn it on
+     * without saying so.
+     */
+    #[serde(default)]
+    pub via_driver: Option<bool>,
 }
 
 #[tauri::command]
@@ -130,8 +144,9 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
     conn.execute(
         "INSERT INTO printers
              (name, type, address, language, paper_width_mm, dpi,
-              label_gap_mm, username, password, skip_tls_verification)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+              label_gap_mm, username, password, skip_tls_verification,
+              via_driver)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         // Blank credentials store as NULL, not `""` — an empty password
         // must not turn into a Basic-auth header downstream.
         rusqlite::params![
@@ -145,6 +160,7 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
             req.username.as_ref().filter(|s| !s.is_empty()),
             req.password.as_ref().filter(|s| !s.is_empty()),
             req.skip_tls_verification.unwrap_or(false) as i64,
+            req.via_driver.unwrap_or(false) as i64,
         ],
     )?;
 
@@ -152,7 +168,7 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
     let printer = conn.query_row(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
                 label_gap_mm, username, password, skip_tls_verification,
-                default_settings_json, created_at, updated_at
+                via_driver, default_settings_json, created_at, updated_at
          FROM printers WHERE id = ?1",
         [id],
         |row| {
@@ -168,9 +184,10 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
                 username: row.get(8)?,
                 password: row.get(9)?,
                 skip_tls_verification: row.get(10)?,
-                default_settings_json: row.get(11)?,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
+                via_driver: row.get(11)?,
+                default_settings_json: row.get(12)?,
+                created_at: row.get(13)?,
+                updated_at: row.get(14)?,
             })
         },
     )?;
@@ -214,9 +231,9 @@ pub fn update_printer_conn(
     let affected = conn.execute(
         "UPDATE printers SET name = ?1, type = ?2, address = ?3, language = ?4,
                 paper_width_mm = ?5, dpi = ?6, label_gap_mm = ?7, username = ?8,
-                password = ?9, skip_tls_verification = ?10,
+                password = ?9, skip_tls_verification = ?10, via_driver = ?11,
                 updated_at = datetime('now')
-         WHERE id = ?11",
+         WHERE id = ?12",
         // Blank credentials store as NULL, not `""` — an empty password
         // must not turn into a Basic-auth header downstream.
         rusqlite::params![
@@ -230,6 +247,7 @@ pub fn update_printer_conn(
             req.username.as_ref().filter(|s| !s.is_empty()),
             req.password.as_ref().filter(|s| !s.is_empty()),
             req.skip_tls_verification.unwrap_or(false) as i64,
+            req.via_driver.unwrap_or(false) as i64,
             id,
         ],
     )?;
@@ -239,7 +257,7 @@ pub fn update_printer_conn(
     conn.query_row(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
                 label_gap_mm, username, password, skip_tls_verification,
-                default_settings_json, created_at, updated_at
+                via_driver, default_settings_json, created_at, updated_at
          FROM printers WHERE id = ?1",
         [id],
         |row| {
@@ -255,9 +273,10 @@ pub fn update_printer_conn(
                 username: row.get(8)?,
                 password: row.get(9)?,
                 skip_tls_verification: row.get(10)?,
-                default_settings_json: row.get(11)?,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
+                via_driver: row.get(11)?,
+                default_settings_json: row.get(12)?,
+                created_at: row.get(13)?,
+                updated_at: row.get(14)?,
             })
         },
     )
@@ -273,7 +292,7 @@ fn get_printer_inner(db: &DbState, id: i64) -> AppResult<Printer> {
         .query_row(
             "SELECT id, name, type, address, language, paper_width_mm, dpi,
                     label_gap_mm, username, password, skip_tls_verification,
-                default_settings_json, created_at, updated_at
+                via_driver, default_settings_json, created_at, updated_at
              FROM printers WHERE id = ?1",
             [id],
             |row| {
@@ -289,9 +308,10 @@ fn get_printer_inner(db: &DbState, id: i64) -> AppResult<Printer> {
                     username: row.get(8)?,
                     password: row.get(9)?,
                     skip_tls_verification: row.get(10)?,
-                    default_settings_json: row.get(11)?,
-                    created_at: row.get(12)?,
-                    updated_at: row.get(13)?,
+                    via_driver: row.get(11)?,
+                    default_settings_json: row.get(12)?,
+                    created_at: row.get(13)?,
+                    updated_at: row.get(14)?,
                 })
             },
         )
@@ -334,7 +354,7 @@ pub async fn test_printer(
         conn.query_row(
             "SELECT id, name, type, address, language, paper_width_mm, dpi,
                     label_gap_mm, username, password, skip_tls_verification,
-                default_settings_json, created_at, updated_at
+                via_driver, default_settings_json, created_at, updated_at
              FROM printers WHERE id = ?1",
             [id],
             |row| {
@@ -350,9 +370,10 @@ pub async fn test_printer(
                     username: row.get(8)?,
                     password: row.get(9)?,
                     skip_tls_verification: row.get(10)?,
-                    default_settings_json: row.get(11)?,
-                    created_at: row.get(12)?,
-                    updated_at: row.get(13)?,
+                    via_driver: row.get(11)?,
+                    default_settings_json: row.get(12)?,
+                    created_at: row.get(13)?,
+                    updated_at: row.get(14)?,
                 })
             },
         )
@@ -376,6 +397,7 @@ pub async fn test_printer(
             username: printer.username.clone(),
             password: printer.password.clone(),
             skip_tls_verification: printer.skip_tls_verification,
+            via_driver: printer.via_driver,
         },
     )
     .await
@@ -442,6 +464,9 @@ pub async fn probe_printer_capabilities(
             username,
             password,
             skip_tls_verification: skip_tls_verification.unwrap_or(false),
+            // Pre-save detection asks the wire itself; the row's manual
+            // mode does not exist yet, so the driverless path answers.
+            via_driver: false,
         },
     )
     .await

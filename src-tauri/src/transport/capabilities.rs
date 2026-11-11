@@ -400,10 +400,14 @@ async fn probe_bluetooth(name: &str, address: &str) -> ProbeCapabilities {
             }
         }
     }
-    // 2. The name did not decide: ask the wire.
+    // 2. The name did not decide: ask the wire. Detection always talks
+    // to the device directly — the row's manual driver mode does not
+    // exist yet (this runs from the add form), and a status query is a
+    // question, not a print, on either path.
     let p = crate::transport::android_bluetooth::AndroidBluetoothPrinter::new(
         name.to_string(),
         address.to_string(),
+        false,
     );
     probe_on_android_wire_bluetooth(&p).await
 }
@@ -474,11 +478,7 @@ async fn probe_bluetooth(name: &str, address: &str) -> ProbeCapabilities {
     out
 }
 
-#[cfg(not(any(
-    target_os = "android",
-    target_os = "windows",
-    target_os = "linux"
-)))]
+#[cfg(not(any(target_os = "android", target_os = "windows", target_os = "linux")))]
 async fn probe_bluetooth(_name: &str, _address: &str) -> ProbeCapabilities {
     ProbeCapabilities::unknown()
 }
