@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { t } from "i18next";
 import "@/lib/i18n";
-import { defaultLanguageFor, validatePrinterForm } from "@/lib/printerSchema";
+import {
+  bluetoothAddressIssue,
+  bluetoothAddressOk,
+  defaultLanguageFor,
+  looksLikePortAddress,
+  validatePrinterForm,
+} from "@/lib/printerSchema";
 
 const base = {
   name: "Dock Zebra",
@@ -14,6 +20,7 @@ const base = {
   username: "",
   password: "",
   skip_tls_verification: false,
+  via_driver: false,
 };
 
 describe("validatePrinterForm", () => {
@@ -120,6 +127,27 @@ describe("validatePrinterForm", () => {
       expect(r.req.skip_tls_verification).toBe(true);
     }
   });
+
+  it("carries the manual driver flag through to the request", () => {
+    // Off and on are both explicit values the form always sends — the
+    // stored row is what the transport reads, so nothing can flip the
+    // path without this field flipping too.
+    expect(
+      validatePrinterForm({
+        ...base,
+        printer_type: "bluetooth",
+        address: "A4:77:17:22:33:44",
+      }),
+    ).toMatchObject({ ok: true, req: { via_driver: false } });
+    const on = validatePrinterForm({
+      ...base,
+      printer_type: "bluetooth",
+      address: "A4:77:17:22:33:44",
+      via_driver: true,
+    });
+    expect(on.ok).toBe(true);
+    if (on.ok) expect(on.req.via_driver).toBe(true);
+  });
 });
 
 describe("defaultLanguageFor", () => {
@@ -138,6 +166,99 @@ describe("defaultLanguageFor", () => {
   it("keeps PDF for connections that can take a document", () => {
     for (const type of ["ipp", "raw_tcp", "system"]) {
       expect(defaultLanguageFor(type, "pdf")).toBe("pdf");
+    }
+  });
+
+  it("keeps PDF on a Bluetooth row printing through its driver", () => {
+    // The driver in between rasterizes — the reason the raw wire needs
+    // ESC/POS does not apply. USB has no driver-mode option, so its
+    // rule is unchanged.
+    expect(defaultLanguageFor("bluetooth", "pdf", true)).toBe("pdf");
+    expect(defaultLanguageFor("usb", "pdf", true)).toBe("escpos");
+    // The flag does not override an explicit non-PDF choice either.
+    expect(defaultLanguageFor("bluetooth", "zpl", true)).toBe("zpl");
+  });
+});
+
+describe("Bluetooth address validation (mirrors bluetooth_addr::parse)", () => {
+  it("accepts a MAC in any case and separator, with an optional channel", () => {
+    for (const a of [
+      "A4:77:17:22:33:44",
+      "a4-77-17-22-33-44",
+      "A4:77:17:22:33:44:2",
+      "A4:77:17:22:33:44:30",
+      " A4:77:17:22:33:44 ",
+    ]) {
+      expect(bluetoothAddressOk(a), a).toBe(true);
+    }
+  });
+
+  it("accepts Windows COM ports, with and without the extended prefix", () => {
+    for (const a of ["COM7", "com12", "\\\\.\\COM7", "//./COM7"]) {
+      expect(bluetoothAddressOk(a), a).toBe(true);
+    }
+  });
+
+  it("rejects what the backend rejects", () => {
+    for (const a of [
+      "A4:77:17:22:33",
+      "A4:77:17:22:33:4",
+      "A4:77:17:22:33:44:0",
+      "A4:77:17:22:33:44:31",
+      "A4:77:17:22:33:44:1:1",
+      "GG:77:17:22:33:44",
+      "COM0",
+      "COM",
+      "COMx",
+      "USB003",
+      "Ruijie 80",
+    ]) {
+      expect(bluetoothAddressOk(a), a).toBe(false);
+    }
+  });
+
+  it("recognises ports and queues that were left in the address by mistake", () => {
+    for (const a of [
+      "USB003",
+      "usb1",
+      "LPT1:",
+      "PORTPROMPT:",
+      "nul:",
+      "\\\\.\\pipe\\PDFPrint",
+      "WSD-de33823c-3047-4b1b-ad11-d2df0f8",
+    ]) {
+      expect(looksLikePortAddress(a), a).toBe(true);
+    }
+    expect(looksLikePortAddress("A4:77:17:22:33:44")).toBe(false);
+    expect(looksLikePortAddress("Ruijie 80")).toBe(false);
+  });
+
+  it("names the right message, and stays quiet on empty input", () => {
+    expect(bluetoothAddressIssue("")).toBeNull();
+    expect(bluetoothAddressIssue("  ")).toBeNull();
+    expect(bluetoothAddressIssue("A4:77:17:22:33:44")).toBeNull();
+    expect(bluetoothAddressIssue("USB003")).toBe("printers.err_bt_usb_port");
+    expect(bluetoothAddressIssue("A4:77")).toBe("printers.err_bluetooth");
+  });
+
+  it("blocks a driverless Bluetooth row with a bad address, not a driver-mode one", () => {
+    const row = {
+      ...base,
+      printer_type: "bluetooth",
+      language: "escpos",
+      address: "USB003",
+    };
+    expect(validatePrinterForm(row)).toEqual({
+      ok: false,
+      messageKey: "printers.err_bt_usb_port",
+    });
+    expect(validatePrinterForm({ ...row, via_driver: true }).ok).toBe(true);
+    expect(validatePrinterForm({ ...row, address: "COM7" }).ok).toBe(true);
+  });
+
+  it("has an English message for every key it can return", () => {
+    for (const key of ["printers.err_bt_usb_port", "printers.err_bluetooth"]) {
+      expect(t(key)).not.toBe(key);
     }
   });
 });

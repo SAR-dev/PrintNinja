@@ -146,7 +146,7 @@ export const testids = {
   devicesAddrInput: "devices-addr-input",
   /** Settings API (phone): pair-again button for an unreachable pair. */
   devicesPairAgain: (id: string) => `devices-pair-again-${id}`,
-  /** Printers page: the "Found on this network" scan list in the Add sheet. */
+  /** Printers page (Add sheet): the single Rescan of the "Detected devices" block (computer, network and, on Android, Bluetooth). */
   printersScanNetwork: "printers-scan-network",
   /** Printers page (Add sheet): expand/collapse the network scan list. */
   printersToggleNetwork: "printers-toggle-network",
@@ -154,8 +154,28 @@ export const testids = {
   printersToggleBluetooth: "printers-toggle-bluetooth",
   /** Printers page (Android, Bluetooth): open the OS Bluetooth settings. */
   printersOpenBluetoothSettings: "printers-open-bluetooth-settings",
+  /** Printers page (Add sheet): expand/collapse the OS print-queue list. */
+  printersToggleSystem: "printers-toggle-system",
+  /** Printers page (Add sheet): the "Detected devices" block (counts, one Rescan). */
+  printersDetected: "printers-detected",
+  /** Printers page (Edit sheet): reveals the detected-devices block. */
+  printersShowDetected: "printers-show-detected",
   /** Printers page: one row of the discovered-printers scan list. */
   discoveredPrinter: (id: string) => `discovered-printer-${id}`,
+  /** Printers page: one OS print queue in the detected-devices block. */
+  discoveredSystem: (id: string) => `discovered-system-${id}`,
+  /** Printers page (Android): one paired Bluetooth device. */
+  discoveredBluetooth: (id: string) => `discovered-bluetooth-${id}`,
+  /** Printers sheet: the "Advanced" (paper width, DPI, label gap) toggle. */
+  printerAdvancedToggle: "printer-advanced-toggle",
+  /** Printers sheet (Wi-Fi / IPP): the folded "Sign-in (optional)" toggle. */
+  printerSigninToggle: "printer-signin-toggle",
+  /** Printers sheet: the pinned Cancel / Save footer. */
+  printerDialogFooter: "printer-dialog-footer",
+  /** Printers sheet: inline error under the address field. */
+  printerAddressError: "printer-address-error",
+  /** Printers sheet: the note under the language select. */
+  printerLanguageHint: "printer-language-hint",
   /** Designer pack chooser: one pack card (parameterized by pack id). */
   packCard: (id: string) => `pack-card-${id}`,
   /** Designer pack chooser: advance to the naming step. */

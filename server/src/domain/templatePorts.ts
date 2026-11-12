@@ -96,6 +96,12 @@ export interface PageQuery {
 
 export type CommunitySort = "updated" | "used" | "name";
 
+/** Search and sort for any template list the owner or community sees. */
+export interface ListQuery extends PageQuery {
+  q?: string;
+  sort?: CommunitySort;
+}
+
 export interface PublishedQuery extends PageQuery {
   q?: string;
   sort: CommunitySort;
@@ -130,7 +136,7 @@ export interface TemplateRepository {
   deleteWithTombstone(id: string): Promise<{ ownerId: string } | null>;
   listByOwner(
     ownerId: string,
-    query: PageQuery,
+    query: ListQuery,
   ): Promise<Page<TemplateSummaryView>>;
   listPublished(query: PublishedQuery): Promise<Page<TemplateSummaryView>>;
   /** Adds to use_count for a published template only. False means

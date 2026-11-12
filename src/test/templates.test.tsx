@@ -199,6 +199,43 @@ describe("Templates page", () => {
     expect(screen.getByText("Changes not saved")).toBeInTheDocument();
   });
 
+  it("filters Mine in the browser and says so when nothing matches", async () => {
+    renderPage();
+    await screen.findByText("Shipping label");
+    // Tab counts keep showing the totals while the rows filter.
+    fireEvent.change(screen.getByLabelText("Search templates"), {
+      target: { value: "pallet" },
+    });
+    expect(await screen.findByText("Pallet tag")).toBeInTheDocument();
+    expect(screen.queryByText("Shipping label")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Mine (3)" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search templates"), {
+      target: { value: "zzz-no-such-template" },
+    });
+    expect(
+      await screen.findByText("Nothing matches that search."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Pallet tag")).not.toBeInTheDocument();
+    // The real empty state stays for an actually empty list, not a filter miss.
+    expect(screen.queryByText("No templates yet")).not.toBeInTheDocument();
+  });
+
+  it("filters Saved by name and author", async () => {
+    renderPage();
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: /^Saved/ }));
+    await screen.findByText("Saved A");
+    fireEvent.change(screen.getByLabelText("Search templates"), {
+      target: { value: "bo" },
+    });
+    expect(await screen.findByText("Saved B")).toBeInTheDocument();
+    expect(screen.queryByText("Saved A")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search templates"), {
+      target: { value: "" },
+    });
+    expect(await screen.findByText("Saved A")).toBeInTheDocument();
+  });
+
   it("Print selects the template and goes to the Print page", async () => {
     renderPage();
     await screen.findByText("Shipping label");

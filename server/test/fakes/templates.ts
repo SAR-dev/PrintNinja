@@ -392,9 +392,17 @@ export function createFakeTemplateRepos(users: {
     },
 
     async listByOwner(ownerId, query) {
+      const q = query.q?.trim().toLowerCase();
       const rows = [...store.templates.values()]
         .filter((t) => t.ownerId === ownerId)
-        .sort(compareUpdated);
+        .filter(
+          (t) =>
+            !q ||
+            t.name.toLowerCase().includes(q) ||
+            t.summary.toLowerCase().includes(q) ||
+            t.ownerHandle.toLowerCase().includes(q),
+        )
+        .sort(sortFor(query.sort ?? "updated"));
       return paginate(rows, query);
     },
 

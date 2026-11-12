@@ -308,6 +308,47 @@ describe("ported B4/P1 characterization", () => {
     expect(names).not.toContain("BU");
   });
 
+  it("searches and sorts mine, private rows included", async () => {
+    const { token } = await register("mine-qs");
+    await put(randomUUID(), token, tpl({ name: "Zulu private" }));
+    await put(randomUUID(), token, tpl({ name: "Alpha private" }));
+    const pub = randomUUID();
+    await put(pub, token, tpl({ name: "Mike published" }));
+    await app.inject({
+      method: "POST",
+      url: `/v2/templates/${pub}/publish`,
+      headers: headers(token),
+    });
+
+    const sorted = await app.inject({
+      method: "GET",
+      url: "/v2/templates/mine?sort=name&page_size=100",
+      headers: headers(token),
+    });
+    expect(
+      (sorted.json() as { items: { name: string }[] }).items.map((t) => t.name),
+    ).toEqual(["Alpha private", "Mike published", "Zulu private"]);
+
+    // The query matches private names too: "Alpha private" is unpublished.
+    const searched = await app.inject({
+      method: "GET",
+      url: "/v2/templates/mine?q=alpha",
+      headers: headers(token),
+    });
+    expect(
+      (searched.json() as { items: { name: string }[] }).items.map(
+        (t) => t.name,
+      ),
+    ).toEqual(["Alpha private"]);
+
+    const badSort = await app.inject({
+      method: "GET",
+      url: "/v2/templates/mine?sort=newest",
+      headers: headers(token),
+    });
+    expect(badSort.statusCode).toBe(400);
+  });
+
   it("refuses private templates for save and use, and hides unsaved ones", async () => {
     const owner = await register("sv-owner");
     const other = await register("sv-other");
