@@ -1,7 +1,7 @@
 import { ForbiddenError, NotFoundError, RateLimitedError } from "../errors.js";
 import type { Page } from "../pagination.js";
 import type {
-  PageQuery,
+  ListQuery,
   PublishedQuery,
   TemplateRepository,
   TemplateSummaryView,
@@ -100,11 +100,11 @@ export async function unpublishTemplate(
   return unpublished;
 }
 
-/** The owner's own templates, private and published, newest first. */
+/** The owner's own templates, private and published, newest first by default. */
 export async function listMine(
   repos: { templates: TemplateRepository },
   ownerId: string,
-  query: PageQuery,
+  query: ListQuery,
 ): Promise<Page<TemplateSummaryView>> {
   return repos.templates.listByOwner(ownerId, query);
 }

@@ -32,6 +32,7 @@ fn req(name: &str) -> AddPrinterRequest {
         username: None,
         password: None,
         skip_tls_verification: None,
+        via_driver: None,
     }
 }
 
@@ -115,4 +116,49 @@ fn update_validates_like_add() {
             "invalid input must fail: {bad:?}"
         );
     }
+}
+
+/// The manual driver flag round-trips like every other stored field,
+/// and an update that does not mention it leaves it off — no path
+/// turns driver mode on by accident.
+#[test]
+fn via_driver_stores_and_updates_explicitly() {
+    let db = test_db();
+    let id = add(&db, "Dock Zebra");
+
+    let untouched = with_conn(&db, |conn| {
+        update_printer_conn(conn, id, &req("Dock Zebra"))
+    })
+    .expect("update works");
+    assert!(!untouched.via_driver, "absent must store as driverless");
+
+    let turned_on = with_conn(&db, |conn| {
+        update_printer_conn(
+            conn,
+            id,
+            &AddPrinterRequest {
+                via_driver: Some(true),
+                ..req("Dock Zebra")
+            },
+        )
+    })
+    .expect("update works");
+    assert!(turned_on.via_driver);
+
+    // A later unrelated edit must not silently flip it back either —
+    // the value travels with the form, which always sends it.
+    let kept_on = with_conn(&db, |conn| {
+        update_printer_conn(
+            conn,
+            id,
+            &AddPrinterRequest {
+                via_driver: Some(true),
+                dpi: Some(300),
+                ..req("Dock Zebra")
+            },
+        )
+    })
+    .expect("update works");
+    assert!(kept_on.via_driver);
+    assert_eq!(kept_on.dpi, Some(300));
 }

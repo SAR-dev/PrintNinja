@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS printers (
     username TEXT,
     password TEXT,
     skip_tls_verification INTEGER NOT NULL DEFAULT 0,
+    via_driver INTEGER NOT NULL DEFAULT 0,
     default_settings_json TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))

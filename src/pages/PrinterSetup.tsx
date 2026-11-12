@@ -1,6 +1,7 @@
 import { describeError, isAlreadyExists } from "@/lib/errors";
 import {
   isAndroid,
+  isLinux,
   supportedPrinterLanguages,
   supportedPrinterTypes,
 } from "@/lib/platform";
@@ -19,6 +20,13 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { FoldSection } from "@/components/printers/FoldSection";
+import { DisabledReason } from "@/components/ui/disabled-reason";
+import {
+  DetectedDevices,
+  type DetectedDevice,
+  type DetectedKind,
+} from "@/components/printers/DetectedDevices";
 import {
   Select,
   SelectContent,
@@ -39,7 +47,6 @@ import {
   Wifi,
   Usb,
   Bluetooth,
-  ChevronDown,
   Monitor,
   Pencil,
   Trash2,
@@ -57,9 +64,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
-import { cn } from "@/lib/utils";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import {
+  bluetoothAddressIssue,
   defaultLanguageFor,
   validatePrinterForm,
   type LoosePrinterForm,
@@ -91,16 +98,8 @@ const PAPERS = [
   { value: "210", label: "A4 (210 mm)" },
 ];
 
-interface SystemPrinter {
-  id: string;
-  name: string;
-  address: string;
-  status?: string;
-  /** Present on network discoveries (`ipp` / `raw_tcp`); absent on OS rows. */
-  printer_type?: string;
-  /** Windows spooler rows only: queue offers a PDF datatype (see SystemPrinterRow). */
-  pdf_datatype?: boolean | null;
-}
+/** Anything the dialog can pick up: an OS queue, an mDNS hit or a paired device. */
+type SystemPrinter = DetectedDevice;
 
 /** Tabs group printers by how they connect. */
 const GROUPS = [
@@ -132,6 +131,15 @@ const TYPE_ICONS: Record<string, typeof Printer> = {
 };
 
 /**
+ * USB and driverless Bluetooth hand the bytes to the printer unchanged, so
+ * PDF is not a language they can print. Bluetooth in driver mode goes
+ * through the OS queue, whose driver rasterizes — PDF is valid there.
+ */
+function isRawWire(printerType: string, viaDriver: boolean): boolean {
+  return printerType === "usb" || (printerType === "bluetooth" && !viaDriver);
+}
+
+/**
  * How long the test print may take before the button gives up on it.
  *
  * Long enough for the backend's own worst case: the reachability probe
@@ -153,16 +161,29 @@ export function PrinterSetupPage() {
   const [tab, setTab] = useState("all");
   const [testing, setTesting] = useState<number | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [scanningSys, setScanningSys] = useState(false);
+  // False until the first OS enumeration answers, so the dialog never says
+  // "no printers found" before it has looked.
+  const [systemLoaded, setSystemLoaded] = useState(false);
   const [networkPrinters, setNetworkPrinters] = useState<SystemPrinter[]>([]);
   const [scanningNet, setScanningNet] = useState(false);
   // Bonded Bluetooth printers (Android): their MAC is the address a
   // Bluetooth row stores, so the dialog offers them instead of a typed MAC.
   const [btPrinters, setBtPrinters] = useState<SystemPrinter[]>([]);
   const [scanningBt, setScanningBt] = useState(false);
-  // Discovered sections start collapsed (count only): background mDNS/BT
-  // results must not resize the dialog out from under the form.
-  const [netExpanded, setNetExpanded] = useState(false);
-  const [btExpanded, setBtExpanded] = useState(false);
+  // The detected-devices block shows counts only until a section is opened
+  // (state lives in the block itself, which remounts with each dialog). While
+  // editing it is tucked behind a link: filling from it overwrites the row.
+  const [showDetected, setShowDetected] = useState(false);
+  // Paper width / DPI / label gap sit behind "Advanced"; the header shows
+  // their values so nothing is hidden, only folded.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // IPP sign-in (user, password, certificate check) is rarely needed, so it
+  // starts folded; a row that already has any of it opens it when edited.
+  const [signInOpen, setSignInOpen] = useState(false);
+  // The generic address-format error waits for the first blur; a clear
+  // connection mix-up (USB port in a Bluetooth row) shows at once.
+  const [addressTouched, setAddressTouched] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<PrinterRow | null>(null);
 
   const [showAdd, setShowAdd] = useState(false);
@@ -191,6 +212,7 @@ export function PrinterSetupPage() {
     username: "",
     password: "",
     skip_tls_verification: false,
+    via_driver: false,
   });
 
   const blankForm: LoosePrinterForm = {
@@ -204,6 +226,7 @@ export function PrinterSetupPage() {
     username: "",
     password: "",
     skip_tls_verification: false,
+    via_driver: false,
   };
 
   // What the capability probe found (TODO items 2 + 4). The probe never
@@ -214,13 +237,19 @@ export function PrinterSetupPage() {
   // A manual language pick beats the probe's suggestion.
   const languageTouched = useRef(false);
 
+  const resetDialogUi = () => {
+    setShowDetected(false);
+    setAdvancedOpen(false);
+    setSignInOpen(false);
+    setAddressTouched(false);
+  };
+
   const openAdd = () => {
     setEditingId(null);
     setForm(blankForm);
     setDetectResult(null);
     languageTouched.current = false;
-    setNetExpanded(false);
-    setBtExpanded(false);
+    resetDialogUi();
     setShowAdd(true);
   };
 
@@ -237,11 +266,12 @@ export function PrinterSetupPage() {
       username: p.username ?? "",
       password: p.password ?? "",
       skip_tls_verification: p.skip_tls_verification ?? false,
+      via_driver: p.via_driver ?? false,
     });
     setDetectResult(null);
     languageTouched.current = false;
-    setNetExpanded(false);
-    setBtExpanded(false);
+    resetDialogUi();
+    setSignInOpen(Boolean(p.username || p.password || p.skip_tls_verification));
     setShowAdd(true);
   };
 
@@ -294,7 +324,8 @@ export function PrinterSetupPage() {
     // Discover OS printers for the "Add" dialog.
     agent("enumerate_system_printers", {})
       .then((list) => setSystemPrinters(list ?? []))
-      .catch(() => setSystemPrinters([]));
+      .catch(() => setSystemPrinters([]))
+      .finally(() => setSystemLoaded(true));
     // Background mDNS browse after mount (one-shot, not continuous) so
     // printers appear without an extra tap: an 8 s browse immediately,
     // then a single 8 s re-browse at 15 s (~30 s window total).
@@ -314,28 +345,37 @@ export function PrinterSetupPage() {
     return () => window.clearTimeout(bg);
   }, [load]);
 
-  const refreshSystem = async () => {
+  // The three scans below back the dialog's single Rescan button. Run from
+  // there they are quiet on success (the counts in the block say what was
+  // found) and loud only on failure.
+  const refreshSystem = async (quiet = false) => {
+    setScanningSys(true);
     try {
       const list = await agent("enumerate_system_printers", {});
       setSystemPrinters(list ?? []);
-      notifySuccess(t("printers.toast_found_system", { count: list.length }));
+      if (!quiet) {
+        notifySuccess(t("printers.toast_found_system", { count: list.length }));
+      }
     } catch (e) {
       notifyError(
         t("printers.toast_discovery_failed", { error: describeError(e) }),
       );
+    } finally {
+      setScanningSys(false);
+      setSystemLoaded(true);
     }
   };
 
   // mDNS scan for the add panel: listens for IPP and JetDirect
   // advertisements via NsdManager on Android or mdns-sd on desktop.
-  const scanNetwork = async () => {
+  const scanNetwork = async (quiet = false) => {
     setScanningNet(true);
     try {
       const list = await agent("discover_network_printers", {
         timeout_secs: 8,
       });
       setNetworkPrinters(list ?? []);
-      if (!list || list.length === 0) {
+      if (!quiet && (!list || list.length === 0)) {
         notifyInfo(t("printers.toast_no_network"));
       }
     } catch (e) {
@@ -349,22 +389,77 @@ export function PrinterSetupPage() {
 
   // Bonded-device listing for the add panel (Android only): the MAC of a
   // paired printer is the address a Bluetooth row stores.
-  const scanBluetooth = useCallback(async () => {
-    setScanningBt(true);
-    try {
-      const list = await agent("list_bluetooth_devices", {});
-      setBtPrinters(list ?? []);
-      if (!list || list.length === 0) {
-        notifyInfo(t("printers.toast_no_bluetooth"));
+  const scanBluetooth = useCallback(
+    async (quiet = false) => {
+      setScanningBt(true);
+      try {
+        const list = await agent("list_bluetooth_devices", {});
+        setBtPrinters(list ?? []);
+        if (!quiet && (!list || list.length === 0)) {
+          notifyInfo(t("printers.toast_no_bluetooth"));
+        }
+      } catch (e) {
+        notifyError(
+          t("printers.toast_discovery_failed", { error: describeError(e) }),
+        );
+      } finally {
+        setScanningBt(false);
       }
-    } catch (e) {
-      notifyError(
-        t("printers.toast_discovery_failed", { error: describeError(e) }),
-      );
-    } finally {
-      setScanningBt(false);
+    },
+    [t],
+  );
+
+  /** One Rescan for every source the dialog currently shows. */
+  const rescanAll = () => {
+    const jobs: Promise<void>[] = [];
+    if (!isAndroid()) jobs.push(refreshSystem(true));
+    jobs.push(scanNetwork(true));
+    if (isAndroid() && form.printer_type === "bluetooth") {
+      jobs.push(scanBluetooth(true));
     }
-  }, [t]);
+    void Promise.all(jobs);
+  };
+  const scanningAny = scanningSys || scanningNet || scanningBt;
+
+  /** Copy a detected device into the form without saving anything. */
+  const fillFromDetected = (kind: DetectedKind, d: SystemPrinter) => {
+    if (kind === "system") {
+      setForm((f) => ({
+        ...f,
+        name: d.name,
+        address: d.name,
+        printer_type: "system",
+      }));
+    } else if (kind === "bluetooth") {
+      setForm((f) => ({
+        ...f,
+        name: d.name,
+        address: d.address,
+        printer_type: "bluetooth",
+        // Android rasterizes thermal locally (PLAN §4): a bonded printer
+        // starts at ESC/POS unless another language was already chosen on
+        // purpose.
+        language: f.language === "pdf" ? "escpos" : f.language,
+      }));
+    } else {
+      const type = d.printer_type ?? "ipp";
+      setForm((f) => ({
+        ...f,
+        name: d.name,
+        address: d.address,
+        printer_type: type,
+        language:
+          type === "ipp"
+            ? "pdf"
+            : isAndroid()
+              ? "escpos"
+              : defaultLanguageFor(type, f.language, f.via_driver),
+        // Driver mode is Bluetooth-only; a fill from another connection
+        // type clears it.
+        via_driver: type === "bluetooth" ? f.via_driver : false,
+      }));
+    }
+  };
 
   // Pairing is an OS flow the app cannot perform: hand the user to the
   // system Bluetooth screen (Android only).
@@ -466,6 +561,12 @@ export function PrinterSetupPage() {
   const addPrinter = async () => {
     const parsed = validatePrinterForm(form);
     if (!parsed.ok) {
+      // The paper / DPI / gap fields are folded away: open them so the
+      // error points at something visible.
+      if (/^printers\.err_(paper|dpi|gap)/.test(parsed.messageKey)) {
+        setAdvancedOpen(true);
+      }
+      setAddressTouched(true);
       notifyError(t(parsed.messageKey));
       return;
     }
@@ -481,8 +582,7 @@ export function PrinterSetupPage() {
       setShowAdd(false);
       setEditingId(null);
       setForm(blankForm);
-      setNetExpanded(false);
-      setBtExpanded(false);
+      resetDialogUi();
       await load();
     } catch (e) {
       const msg = describeError(e);
@@ -567,15 +667,14 @@ export function PrinterSetupPage() {
   // keeps the print-time warning as the safety net for the few models
   // that really do read raw PDF.
   const visibleLanguages = useMemo(() => {
-    const rawWire =
-      form.printer_type === "usb" || form.printer_type === "bluetooth";
+    const rawWire = isRawWire(form.printer_type, form.via_driver);
     const supported = supportedPrinterLanguages(LANGUAGES).filter(
       (l) => !rawWire || l.value !== "pdf",
     );
     if (supported.some((l) => l.value === form.language)) return supported;
     const current = LANGUAGES.find((l) => l.value === form.language);
     return current ? [...supported, current] : supported;
-  }, [form.language, form.printer_type]);
+  }, [form.language, form.printer_type, form.via_driver]);
   const languagesLimited = visibleLanguages.length < LANGUAGES.length;
   const visibleGroups = useMemo(
     () =>
@@ -809,7 +908,12 @@ export function PrinterSetupPage() {
       : form.printer_type === "raw_tcp"
         ? "printers.hint_raw"
         : form.printer_type === "bluetooth"
-          ? "printers.hint_bluetooth"
+          ? // Android offers the bonded-device list below; the desktop has
+            // no list and now prints driverless, so its hint names the
+            // OS pairing step instead.
+            isAndroid()
+            ? "printers.hint_bluetooth"
+            : "printers.hint_bluetooth_desktop"
           : null;
 
   // Item 15: a Windows queue whose print processor offers no PDF datatype
@@ -838,13 +942,31 @@ export function PrinterSetupPage() {
   // a few models do read raw PDF, and the backend keeps its print-time
   // warning as the safety net for that edge case.
   const rawWirePdfWarning =
-    (form.printer_type === "usb" || form.printer_type === "bluetooth") &&
-    form.language === "pdf";
+    isRawWire(form.printer_type, form.via_driver) && form.language === "pdf";
 
   // Android has no System transport: a `system` row (usually synced from
   // a PC) cannot print on this phone. Warn, never refuse — the fix is
   // in the message, and the row stays editable above.
   const systemAndroidWarning = isAndroid() && form.printer_type === "system";
+
+  // A driverless Bluetooth row must hold a MAC or COM port. A USB / print
+  // port there is a connection-type mix-up (e.g. the type was switched
+  // after filling from a system printer) and is flagged immediately; any
+  // other malformed address waits for the first blur.
+  const addressIssueKey =
+    form.printer_type === "bluetooth" && !form.via_driver
+      ? bluetoothAddressIssue(form.address)
+      : null;
+  const showAddressIssue =
+    addressIssueKey !== null &&
+    (addressIssueKey === "printers.err_bt_usb_port" || addressTouched);
+  const addressDescribedBy =
+    [
+      addressHintKey ? "printer-address-hint" : null,
+      showAddressIssue ? "printer-address-error" : null,
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
 
   return (
     <div className="space-y-4">
@@ -945,8 +1067,7 @@ export function PrinterSetupPage() {
           if (!open) {
             setEditingId(null);
             setForm(blankForm);
-            setNetExpanded(false);
-            setBtExpanded(false);
+            resetDialogUi();
           }
         }}
       >
@@ -961,248 +1082,42 @@ export function PrinterSetupPage() {
           </DialogHeader>
 
           <div className="flex-1 space-y-4 p-5">
-            {systemPrinters.length > 0 && (
-              <div className="rounded-md border p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs font-medium">
-                    {t("printers.found_system")}
-                  </p>
-                  <Button variant="ghost" size="sm" onClick={refreshSystem}>
-                    {t("printers.rescan")}
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {systemPrinters.map((sp) => (
-                    <Button
-                      key={sp.id}
-                      variant="outline"
-                      size="sm"
-                      title={
-                        sp.pdf_datatype === false
-                          ? t("printers.gdi_warning_title")
-                          : undefined
-                      }
-                      onClick={() =>
-                        setForm((f) => ({
-                          ...f,
-                          name: sp.name,
-                          address: sp.name,
-                          printer_type: "system",
-                        }))
-                      }
-                    >
-                      {sp.name}
-                      {sp.pdf_datatype === false && (
-                        <AlertTriangle
-                          className="h-3.5 w-3.5 text-warning"
-                          aria-hidden="true"
-                        />
-                      )}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="rounded-md border p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                {/* Collapsed by default: only the count shows, so background
-                    discoveries never resize the dialog. */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="-ml-2 justify-start gap-1.5 text-xs"
-                  aria-expanded={netExpanded}
-                  disabled={networkPrinters.length === 0}
-                  onClick={() => setNetExpanded((v) => !v)}
-                  data-testid="printers-toggle-network"
-                >
-                  <Wifi className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  {t("printers.found_network")} ({networkPrinters.length})
-                  <ChevronDown
-                    className={cn(
-                      "h-3.5 w-3.5 shrink-0 transition-transform",
-                      netExpanded && "rotate-180",
-                    )}
-                    aria-hidden="true"
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={scanNetwork}
-                  disabled={scanningNet}
-                  data-testid="printers-scan-network"
-                >
-                  {scanningNet ? t("printers.scanning") : t("printers.rescan")}
-                </Button>
-              </div>
-              {netExpanded && networkPrinters.length > 0 ? (
-                <div className="space-y-1.5">
-                  {networkPrinters.map((np) => (
-                    <div
-                      key={np.id}
-                      className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
-                      data-testid={`discovered-printer-${np.id}`}
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {np.name}
-                        </p>
-                        <p className="truncate font-mono text-xs text-muted-foreground">
-                          {np.address} · {np.printer_type ?? "ipp"}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 gap-1.5">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            setForm((f) => ({
-                              ...f,
-                              name: np.name,
-                              address: np.address,
-                              printer_type: np.printer_type ?? "ipp",
-                              language:
-                                (np.printer_type ?? "ipp") === "ipp"
-                                  ? "pdf"
-                                  : isAndroid()
-                                    ? "escpos"
-                                    : defaultLanguageFor(
-                                        np.printer_type ?? "ipp",
-                                        f.language,
-                                      ),
-                            }))
-                          }
-                        >
-                          {t("printers.fill")}
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => void addDiscovered(np)}
-                        >
-                          {t("common.add")}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                !scanningNet && (
-                  <p className="text-xs text-muted-foreground">
-                    {t("printers.no_network_printers")}
-                  </p>
-                )
-              )}
-            </div>
-
-            {isAndroid() && form.printer_type === "bluetooth" && (
-              <div className="rounded-md border p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="-ml-2 justify-start gap-1.5 text-xs"
-                    aria-expanded={btExpanded}
-                    disabled={btPrinters.length === 0}
-                    onClick={() => setBtExpanded((v) => !v)}
-                    data-testid="printers-toggle-bluetooth"
-                  >
-                    <Bluetooth
-                      className="h-3.5 w-3.5 shrink-0"
-                      aria-hidden="true"
-                    />
-                    {t("printers.found_bluetooth")} ({btPrinters.length})
-                    <ChevronDown
-                      className={cn(
-                        "h-3.5 w-3.5 shrink-0 transition-transform",
-                        btExpanded && "rotate-180",
-                      )}
-                      aria-hidden="true"
-                    />
-                  </Button>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void openBluetoothSettings()}
-                      data-testid="printers-open-bluetooth-settings"
-                    >
-                      {t("printers.bluetooth_settings_button")}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void scanBluetooth()}
-                      disabled={scanningBt}
-                      data-testid="printers-scan-bluetooth"
-                    >
-                      {scanningBt
-                        ? t("printers.scanning")
-                        : t("printers.rescan")}
-                    </Button>
-                  </div>
-                </div>
-                {btExpanded && btPrinters.length > 0 ? (
-                  <div className="space-y-1.5">
-                    {btPrinters.map((bp) => (
-                      <div
-                        key={bp.id}
-                        className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
-                        data-testid={`discovered-bluetooth-${bp.id}`}
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {bp.name}
-                          </p>
-                          <p className="truncate font-mono text-xs text-muted-foreground">
-                            {bp.address} · bluetooth
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 gap-1.5">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              setForm((f) => ({
-                                ...f,
-                                name: bp.name,
-                                address: bp.address,
-                                printer_type: "bluetooth",
-                                // Android rasterizes thermal locally
-                                // (PLAN §4): a bonded printer starts at
-                                // ESC/POS unless another language was
-                                // already chosen on purpose.
-                                language:
-                                  f.language === "pdf" ? "escpos" : f.language,
-                              }))
-                            }
-                          >
-                            {t("printers.fill")}
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => void addDiscovered(bp)}
-                          >
-                            {t("common.add")}
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  !scanningBt && (
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">
-                        {t("printers.no_bluetooth_printers")}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {t("printers.bluetooth_settings_hint")}
-                      </p>
-                    </div>
-                  )
-                )}
-              </div>
+            {editingId !== null && !showDetected ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="-ml-2 gap-1.5 text-xs"
+                onClick={() => setShowDetected(true)}
+                data-testid="printers-show-detected"
+              >
+                <Scan className="h-3.5 w-3.5" aria-hidden="true" />
+                {t("printers.repick_detected")}
+              </Button>
+            ) : (
+              <DetectedDevices
+                system={isAndroid() ? null : systemPrinters}
+                systemLoaded={systemLoaded}
+                network={networkPrinters}
+                bluetooth={
+                  isAndroid() && form.printer_type === "bluetooth"
+                    ? btPrinters
+                    : null
+                }
+                scanning={scanningAny}
+                onRescan={rescanAll}
+                onFill={fillFromDetected}
+                // One-tap add would create a second printer while an
+                // existing one is being edited: fill is the only action then.
+                onAdd={
+                  editingId === null
+                    ? (_kind, d) => void addDiscovered(d)
+                    : undefined
+                }
+                onOpenBluetoothSettings={
+                  isAndroid() ? () => void openBluetoothSettings() : undefined
+                }
+              />
             )}
 
             <div className={field}>
@@ -1233,8 +1148,12 @@ export function PrinterSetupPage() {
                       // Windows spooler passes the job through as RAW), so
                       // a PDF default would put an unreadable page on a
                       // thermal head — start at ESC/POS instead. An
-                      // explicitly chosen language is left alone.
-                      language: defaultLanguageFor(v, f.language),
+                      // explicitly chosen language is left alone. Driver
+                      // mode keeps PDF valid (the driver rasterizes), and
+                      // leaving Bluetooth clears the flag — it is a
+                      // Bluetooth-only option.
+                      language: defaultLanguageFor(v, f.language, f.via_driver),
+                      via_driver: v === "bluetooth" ? f.via_driver : false,
                     }))
                   }
                 >
@@ -1262,19 +1181,27 @@ export function PrinterSetupPage() {
                       row is saved. System printers convert anything the
                       spooler gives them, so there is nothing to ask. */}
                   {form.printer_type !== "system" && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 gap-1 px-2 text-xs"
-                      disabled={detecting || !form.address.trim()}
-                      onClick={() => void runDetect()}
+                    <DisabledReason
+                      reason={
+                        !detecting && !form.address.trim()
+                          ? t("printers.detect_needs_address")
+                          : undefined
+                      }
                     >
-                      <Scan className="h-3 w-3" aria-hidden="true" />
-                      {detecting
-                        ? t("printers.detecting")
-                        : t("printers.detect")}
-                    </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 gap-1 px-2 text-xs"
+                        disabled={detecting || !form.address.trim()}
+                        onClick={() => void runDetect()}
+                      >
+                        <Scan className="h-3 w-3" aria-hidden="true" />
+                        {detecting
+                          ? t("printers.detecting")
+                          : t("printers.detect")}
+                      </Button>
+                    </DisabledReason>
                   )}
                 </div>
                 <Select
@@ -1301,8 +1228,13 @@ export function PrinterSetupPage() {
               </div>
             </div>
             {languagesLimited && (
-              <p className="text-xs text-muted-foreground">
-                {t("printers.lang_android_hint")}
+              <p
+                data-testid="printer-language-hint"
+                className="text-xs text-muted-foreground"
+              >
+                {isAndroid()
+                  ? t("printers.lang_android_hint")
+                  : t("printers.lang_rawwire_hint")}
               </p>
             )}
             {detectResult && !detecting && (
@@ -1326,9 +1258,9 @@ export function PrinterSetupPage() {
               <Input
                 id="printer-address"
                 value={form.address}
-                aria-describedby={
-                  addressHintKey ? "printer-address-hint" : undefined
-                }
+                aria-describedby={addressDescribedBy}
+                aria-invalid={showAddressIssue || undefined}
+                onBlur={() => setAddressTouched(true)}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, address: e.target.value }))
                 }
@@ -1339,6 +1271,16 @@ export function PrinterSetupPage() {
                   className="text-xs text-muted-foreground"
                 >
                   {t(addressHintKey)}
+                </p>
+              )}
+              {showAddressIssue && addressIssueKey && (
+                <p
+                  id="printer-address-error"
+                  role="alert"
+                  data-testid="printer-address-error"
+                  className="text-xs text-destructive"
+                >
+                  {t(addressIssueKey)}
                 </p>
               )}
             </div>
@@ -1411,149 +1353,225 @@ export function PrinterSetupPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className={field}>
-                <Label htmlFor="printer-paper">
-                  {t("printers.paper_width_mm")}
-                </Label>
-                <Input
-                  id="printer-paper"
-                  type="number"
-                  min="1"
-                  max="1000"
-                  list="printer-paper-widths"
-                  value={form.paper_width_mm}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, paper_width_mm: e.target.value }))
-                  }
-                />
-                <datalist id="printer-paper-widths">
-                  {PAPERS.map((x) => (
-                    <option key={x.value} value={x.value}>
-                      {x.label}
-                    </option>
-                  ))}
-                </datalist>
-              </div>
-              <div className={field}>
-                <Label htmlFor="printer-dpi">{t("printers.dpi")}</Label>
-                <Input
-                  id="printer-dpi"
-                  type="number"
-                  min="50"
-                  max="2400"
-                  list="printer-dpis"
-                  value={form.dpi}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, dpi: e.target.value }))
-                  }
-                />
-                <datalist id="printer-dpis">
-                  <option value="203" />
-                  <option value="300" />
-                  <option value="600" />
-                </datalist>
-              </div>
-            </div>
-
-            {form.language === "tspl" && (
-              <div className={field}>
-                <Label htmlFor="printer-label-gap">
-                  {t("printers.label_gap_mm")}
-                </Label>
-                <Input
-                  id="printer-label-gap"
-                  type="number"
-                  min="0.1"
-                  max="50"
-                  step="0.1"
-                  value={form.label_gap_mm}
-                  aria-describedby="printer-label-gap-hint"
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, label_gap_mm: e.target.value }))
-                  }
-                />
-                <p
-                  id="printer-label-gap-hint"
-                  className="text-xs text-muted-foreground"
-                >
-                  {t("printers.label_gap_hint")}
-                </p>
-              </div>
+            {form.printer_type === "ipp" && (
+              <FoldSection
+                id="printer-signin"
+                data-testid="printer-signin-toggle"
+                title={t("printers.ipp_signin")}
+                summary={
+                  form.username || form.password || form.skip_tls_verification
+                    ? t("printers.signin_set")
+                    : t("printers.signin_unset")
+                }
+                open={signInOpen}
+                onToggle={() => setSignInOpen((v) => !v)}
+              >
+                <div className="space-y-3">
+                  <div className={field}>
+                    <Label htmlFor="printer-username">
+                      {t("printers.ipp_username")}
+                    </Label>
+                    <Input
+                      id="printer-username"
+                      autoComplete="off"
+                      value={form.username}
+                      aria-describedby="printer-username-hint"
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, username: e.target.value }))
+                      }
+                    />
+                    <p
+                      id="printer-username-hint"
+                      className="text-xs text-muted-foreground"
+                    >
+                      {t("printers.ipp_username_hint")}
+                    </p>
+                  </div>
+                  <div className={field}>
+                    <Label htmlFor="printer-password">
+                      {t("printers.ipp_password")}
+                    </Label>
+                    <Input
+                      id="printer-password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={form.password}
+                      aria-describedby="printer-password-hint"
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, password: e.target.value }))
+                      }
+                    />
+                    <p
+                      id="printer-password-hint"
+                      className="text-xs text-muted-foreground"
+                    >
+                      {t("printers.ipp_password_hint")}
+                    </p>
+                  </div>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4"
+                      checked={form.skip_tls_verification}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          skip_tls_verification: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span>
+                      {t("printers.ipp_skip_cert")}
+                      <span className="block text-xs text-muted-foreground">
+                        {t("printers.ipp_skip_cert_hint")}
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </FoldSection>
             )}
 
-            {form.printer_type === "ipp" && (
-              <div className="space-y-3 rounded-md border p-3">
-                <p className="text-xs font-medium">
-                  {t("printers.ipp_signin")}
-                </p>
-                <div className={field}>
-                  <Label htmlFor="printer-username">
-                    {t("printers.ipp_username")}
-                  </Label>
-                  <Input
-                    id="printer-username"
-                    autoComplete="off"
-                    value={form.username}
-                    aria-describedby="printer-username-hint"
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, username: e.target.value }))
-                    }
-                  />
-                  <p
-                    id="printer-username-hint"
-                    className="text-xs text-muted-foreground"
-                  >
-                    {t("printers.ipp_username_hint")}
-                  </p>
-                </div>
-                <div className={field}>
-                  <Label htmlFor="printer-password">
-                    {t("printers.ipp_password")}
-                  </Label>
-                  <Input
-                    id="printer-password"
-                    type="password"
-                    autoComplete="new-password"
-                    value={form.password}
-                    aria-describedby="printer-password-hint"
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, password: e.target.value }))
-                    }
-                  />
-                  <p
-                    id="printer-password-hint"
-                    className="text-xs text-muted-foreground"
-                  >
-                    {t("printers.ipp_password_hint")}
-                  </p>
-                </div>
+            {/* Manual driver mode: hidden on Android, which has no driver
+                path yet (docs/MISSING_FEATURES.md item 16) — offering a
+                toggle that always errors would be worse than not showing
+                it. On desktop the choice is total: on = the OS queue of
+                this printer's name, off = the driverless wire, and the
+                app never switches between them on its own. */}
+            {form.printer_type === "bluetooth" && !isAndroid() && (
+              <div className="rounded-md border p-3">
                 <label className="flex items-start gap-2 text-sm">
                   <input
                     type="checkbox"
                     className="mt-0.5 h-4 w-4"
-                    checked={form.skip_tls_verification}
+                    checked={form.via_driver}
+                    aria-describedby="printer-via-driver-hint"
                     onChange={(e) =>
                       setForm((f) => ({
                         ...f,
-                        skip_tls_verification: e.target.checked,
+                        via_driver: e.target.checked,
+                        // PDF is only valid through the OS driver; going
+                        // back to the raw wire restarts at ESC/POS.
+                        language: e.target.checked
+                          ? f.language
+                          : defaultLanguageFor("bluetooth", f.language, false),
                       }))
                     }
                   />
                   <span>
-                    {t("printers.ipp_skip_cert")}
-                    <span className="block text-xs text-muted-foreground">
-                      {t("printers.ipp_skip_cert_hint")}
+                    {t("printers.bt_driver")}
+                    <span
+                      id="printer-via-driver-hint"
+                      className="block text-xs text-muted-foreground"
+                    >
+                      {isLinux()
+                        ? t("printers.bt_driver_hint_linux")
+                        : t("printers.bt_driver_hint_windows")}
                     </span>
                   </span>
                 </label>
               </div>
             )}
+            {/* Paper width, DPI and the TSPL label gap: set once per printer,
+                so they fold away — the header still shows the values. */}
+            <FoldSection
+              id="printer-advanced"
+              data-testid="printer-advanced-toggle"
+              title={t("printers.advanced")}
+              summary={t("printers.advanced_summary", {
+                paper: form.paper_width_mm || "—",
+                dpi: form.dpi || "—",
+              })}
+              open={advancedOpen}
+              onToggle={() => setAdvancedOpen((v) => !v)}
+            >
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className={field}>
+                    <Label htmlFor="printer-paper">
+                      {t("printers.paper_width_mm")}
+                    </Label>
+                    <Input
+                      id="printer-paper"
+                      type="number"
+                      min="1"
+                      max="1000"
+                      list="printer-paper-widths"
+                      value={form.paper_width_mm}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          paper_width_mm: e.target.value,
+                        }))
+                      }
+                    />
+                    <datalist id="printer-paper-widths">
+                      {PAPERS.map((x) => (
+                        <option key={x.value} value={x.value}>
+                          {x.label}
+                        </option>
+                      ))}
+                    </datalist>
+                  </div>
+                  <div className={field}>
+                    <Label htmlFor="printer-dpi">{t("printers.dpi")}</Label>
+                    <Input
+                      id="printer-dpi"
+                      type="number"
+                      min="50"
+                      max="2400"
+                      list="printer-dpis"
+                      value={form.dpi}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, dpi: e.target.value }))
+                      }
+                    />
+                    <datalist id="printer-dpis">
+                      <option value="203" />
+                      <option value="300" />
+                      <option value="600" />
+                    </datalist>
+                  </div>
+                </div>
+
+                {form.language === "tspl" && (
+                  <div className={field}>
+                    <Label htmlFor="printer-label-gap">
+                      {t("printers.label_gap_mm")}
+                    </Label>
+                    <Input
+                      id="printer-label-gap"
+                      type="number"
+                      min="0.1"
+                      max="50"
+                      step="0.1"
+                      value={form.label_gap_mm}
+                      aria-describedby="printer-label-gap-hint"
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          label_gap_mm: e.target.value,
+                        }))
+                      }
+                    />
+                    <p
+                      id="printer-label-gap-hint"
+                      className="text-xs text-muted-foreground"
+                    >
+                      {t("printers.label_gap_hint")}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </FoldSection>
           </div>
 
-          <DialogFooter className="gap-2 border-t p-5 sm:space-x-0">
+          {/* Sticky: Save stays reachable however far the form scrolls. */}
+          <DialogFooter
+            className="sticky bottom-0 z-10 gap-2 border-t bg-background p-5 sm:space-x-0"
+            data-testid="printer-dialog-footer"
+          >
             <Button variant="outline" onClick={() => setShowAdd(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={addPrinter}>{t("printers.save_action")}</Button>
           </DialogFooter>

@@ -119,10 +119,13 @@ export const pageQuery = z.object({
   page_size: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-export const communityQuery = pageQuery.extend({
+/** Paging plus optional search and sort: shared by the owner's own list and the community list. */
+export const listQuery = pageQuery.extend({
   q: z.string().max(100).optional(),
   sort: z.enum(["updated", "used", "name"]).default("updated"),
 });
+
+export const communityQuery = listQuery;
 
 export const useBody = z.object({
   count: z.number().int().min(1).max(100).default(1),

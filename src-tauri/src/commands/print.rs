@@ -1273,6 +1273,7 @@ async fn run_stages(
             username: p.username.clone(),
             password: p.password.clone(),
             skip_tls_verification: p.skip_tls_verification,
+            via_driver: p.via_driver,
         })
         .unwrap_or_default();
 
@@ -1304,12 +1305,14 @@ async fn run_stages(
     // row with language=PDF is a misconfigured thermal printer; say so
     // instead of feeding it %PDF-. Warn-only: the job still goes out, so
     // an exotic printer that really takes PDF over these wires keeps
-    // working.
+    // working. A row printing through its OS driver is exempt: there the
+    // driver in between *is* the rasterizer the warning is about.
     if matches!(language, crate::transport::PrinterLanguage::Pdf)
         && matches!(
             printer_type_for_probe,
             crate::transport::PrinterType::Usb | crate::transport::PrinterType::Bluetooth
         )
+        && !transport_settings.via_driver
     {
         tracing::warn!(
             job_id,
@@ -1705,14 +1708,19 @@ async fn run_stages(
     // fallback, but the app cannot read the log. A successful PDF job on
     // a Windows queue that offers no PDF datatype is exactly the case
     // where a GDI-only driver prints the PDF source or nothing, so the
-    // warning rides on the response like the raw-wire one above.
+    // warning rides on the response like the raw-wire one above. The
+    // rule covers `system` rows and Bluetooth rows printing through
+    // their driver queue — the same spooler, the same datatype choice.
     // `pdf_sent_as_raw` reads the per-queue cache the send just
     // populated; an unreadable datatype list reports false, and there
     // the job declared PDF, so a refusing queue would have failed it
     // loudly instead.
+    let through_windows_queue = matches!(printer_type, crate::transport::PrinterType::System)
+        || (matches!(printer_type, crate::transport::PrinterType::Bluetooth)
+            && transport_settings.via_driver);
     if status == "success"
         && cfg!(windows)
-        && matches!(printer_type, crate::transport::PrinterType::System)
+        && through_windows_queue
         && matches!(language, crate::transport::PrinterLanguage::Pdf)
         && crate::transport::windows_spooler::pdf_sent_as_raw(&req.printer_name).await
     {
@@ -1848,6 +1856,9 @@ pub struct StoredPrinter {
     pub password: Option<String>,
     /// Accept a self-signed certificate on this printer's endpoint.
     pub skip_tls_verification: bool,
+    /// Manual Bluetooth mode: print through the OS driver queue instead
+    /// of the driverless raw wire. Never set automatically.
+    pub via_driver: bool,
 }
 
 /// Look up a printer's stored row by name.
@@ -1861,7 +1872,7 @@ pub fn lookup_printer(db: &DbState, name: &str) -> Option<StoredPrinter> {
     conn.query_row(
         "SELECT type, COALESCE(address, ''), COALESCE(language, 'pdf'), \
                 paper_width_mm, dpi, label_gap_mm, username, password, \
-                skip_tls_verification \
+                skip_tls_verification, via_driver \
          FROM printers WHERE name = ?1 COLLATE NOCASE",
         [name],
         |r| {
@@ -1875,6 +1886,7 @@ pub fn lookup_printer(db: &DbState, name: &str) -> Option<StoredPrinter> {
                 username: r.get(6)?,
                 password: r.get(7)?,
                 skip_tls_verification: r.get(8)?,
+                via_driver: r.get(9)?,
             })
         },
     )

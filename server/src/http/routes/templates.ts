@@ -21,7 +21,7 @@ import { etagMatches } from "../etag.js";
 import { optionalAuth, requireAuth } from "../plugins/auth.js";
 import { errorBody } from "../schemas/error.js";
 import {
-  pageQuery,
+  listQuery,
   putTemplateRequest,
   templateIdParams,
   templatePageSchema,
@@ -235,8 +235,8 @@ export async function templateRoutes(
     {
       preHandler: [requireAuth(deps)],
       schema: {
-        description: "The signed-in user's own templates, newest first.",
-        querystring: pageQuery,
+        description: "The signed-in user's own templates: search, sort, pages.",
+        querystring: listQuery,
         response: {
           200: templatePageSchema,
           400: errorBody,
@@ -252,7 +252,12 @@ export async function templateRoutes(
       const page = await listMine(
         { templates: deps.templates },
         request.authUser.id,
-        { page: request.query.page, pageSize: request.query.page_size },
+        {
+          page: request.query.page,
+          pageSize: request.query.page_size,
+          sort: request.query.sort,
+          ...(request.query.q !== undefined ? { q: request.query.q } : {}),
+        },
       );
       return { ...page, items: page.items.map(toTemplateSummary) };
     },

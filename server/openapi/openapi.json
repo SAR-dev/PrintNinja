@@ -3489,7 +3489,7 @@
     },
     "/v2/templates/mine": {
       "get": {
-        "description": "The signed-in user's own templates, newest first.",
+        "description": "The signed-in user's own templates: search, sort, pages.",
         "parameters": [
           {
             "schema": {
@@ -3511,6 +3511,29 @@
             },
             "in": "query",
             "name": "page_size",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "in": "query",
+            "name": "q",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": "updated",
+              "type": "string",
+              "enum": [
+                "updated",
+                "used",
+                "name"
+              ]
+            },
+            "in": "query",
+            "name": "sort",
             "required": false
           }
         ],

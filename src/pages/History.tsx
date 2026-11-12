@@ -58,6 +58,7 @@ import {
   type HistoryFilter,
   type HistoryJob,
 } from "@/lib/store/historyStore";
+import type { TemplateRow } from "@/lib/agent/types";
 import { parseTimings } from "@/lib/timings";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -123,6 +124,8 @@ export function HistoryPage() {
   const store = useHistoryStore();
   const [loading, setLoading] = useState(true);
   const [printers, setPrinters] = useState<PrinterOption[]>([]);
+  // Local templates, so the search box can match on names (item 36).
+  const [templates, setTemplates] = useState<TemplateRow[]>([]);
   // Paired-phone names for the "from <phone>" label on remote jobs.
   const [phoneNames, setPhoneNames] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -164,6 +167,12 @@ export function HistoryPage() {
         /* printer names are optional here */
       }
       try {
+        const list = await agent("list_templates", {});
+        if (!cancelled) setTemplates(list ?? []);
+      } catch {
+        /* template names are optional here */
+      }
+      try {
         const devices = await agent("list_paired_devices", {});
         if (!cancelled && devices) {
           const names: Record<string, string> = {};
@@ -184,6 +193,9 @@ export function HistoryPage() {
     id == null
       ? "—"
       : (printers.find((p) => p.id === id)?.name ?? `Printer #${id}`);
+
+  const templateName = (id: number | null) =>
+    id == null ? "" : (templates.find((t) => t.id === id)?.name ?? "");
 
   const filteredJobs = useMemo(
     () =>
@@ -211,13 +223,14 @@ export function HistoryPage() {
             (job.batch_id != null && `batch ${job.batch_id}`.includes(q)) ||
             printerName(job.printer_id).toLowerCase().includes(q) ||
             (job.template_id != null &&
-              `template ${job.template_id}`.includes(q));
+              (templateName(job.template_id).toLowerCase().includes(q) ||
+                `template ${job.template_id}`.includes(q)));
           if (!match) return false;
         }
         return true;
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store.jobs, store.filter, printers],
+    [store.jobs, store.filter, printers, templates],
   );
 
   const selectedJobs = filteredJobs.filter((j) => selected.has(String(j.id)));

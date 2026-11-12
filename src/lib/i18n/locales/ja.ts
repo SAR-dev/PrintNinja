@@ -622,6 +622,11 @@ const ja: Translation = {
     ipp_skip_cert: "証明書検証をスキップ",
     ipp_skip_cert_hint:
       "https:// のエンドポイント専用。自己署名など検証できない証明書を通します。",
+    bt_driver: "OSドライバーで印刷する",
+    bt_driver_hint_windows:
+      "オフ = プリンターのCOMポートへ直接印刷（ドライバーもキューも不要）。オン = 同名でWindowsにインストールした印刷キュー経由で印刷 — ドライバーがラスタライズするためPDFも印刷できます。PrintNinjaがこの2つを勝手に切り替えることはありません。",
+    bt_driver_hint_linux:
+      "オフ = ペアリングしたデバイスへ直接印刷（ドライバーもキューも不要）。オン = lpadminで同名作成したCUPSキュー経由で印刷 — ドライバーがラスタライズするためPDFも印刷できます。PrintNinjaがこの2つを勝手に切り替えることはありません。",
     conn_ipp: "Wi-Fi / LAN (IPP)",
     conn_raw: "Wi-Fi / LAN (Raw TCP 9100)",
     conn_usb: "USB",
@@ -658,6 +663,17 @@ const ja: Translation = {
     no_bluetooth_printers:
       "ペアリング済みのBluetoothプリンターがありません。まずAndroidのBluetooth設定でペアリングしてください。",
     rescan: "再スキャン",
+    signin_set: "設定済み",
+    signin_unset: "不要",
+    detected_title: "検出されたデバイス",
+    no_system_printers: "このコンピューターでプリンターが見つかりません。",
+    repick_detected: "検出されたデバイスから選び直す",
+    gdi_row_hint:
+      "PDFデータ型がありません。PDFジョブが生テキストとして印刷される場合があります。",
+    advanced: "詳細設定",
+    advanced_summary: "{{paper}} mm · {{dpi}} dpi",
+    detect_needs_address:
+      "先にアドレスを入力してください。検出は、そのアドレスのプリンターが対応する言語を問い合わせます。",
     form_name: "プリンター名",
     form_name_example: "受付",
     form_connection: "接続",
@@ -675,6 +691,8 @@ const ja: Translation = {
     hint_raw: "例: 192.168.1.100:9100",
     hint_bluetooth:
       "例: A4:77:17:22:33:44 — ペアリング済みデバイスのMAC（下のリストから選べます）",
+    hint_bluetooth_desktop:
+      "まずOSのBluetooth設定でプリンターをペアリングし、MACアドレスを入力してください（例: A4:77:17:22:33:44）。ドライバは不要です。Windowsの場合はプリンターのCOMポート（例: COM7）でもかまいません",
     gdi_warning_title: "ドライバがGDI専用の可能性があります(PDFデータ型なし)",
     gdi_warning:
       "{{name}} のプリンターキューは PDF データ型を提供していません。ドライバが GDI 専用の可能性があり、送られた PDF ジョブが印刷されない場合があります。その場合は、このシステムキューの代わりに、同じ物理プリンターをネットワークアドレス（Wi-Fi / LAN の IPP、またはデバイス自体が PDF を読める場合は Raw TCP 9100）で追加してください。",
@@ -745,6 +763,12 @@ const ja: Translation = {
     lang_raster: "ラスター",
     lang_android_hint:
       "Androidはレシート・ラベル言語（ESC/POS、ZPL、TSPL）を本体で印刷します。これらは偽プリンターでのみ検証済みで、実機での検証は未完了です。CPCL・ラスターは現在提供していません。",
+    lang_rawwire_hint:
+      "USBとBluetoothはプリンターコマンドをデバイスへ直接送るため、PDFは選べません。プリンターが話す言語を選ぶか、ドライバーモードをオンにしてOSのキュー経由でPDFを印刷してください。",
+    err_bt_usb_port:
+      "USBまたはプリントポートのようです。Bluetoothアドレスではありません。接続をUSBにするか、プリンターのMACアドレス（例: A4:77:17:22:33:44）を入力してください。",
+    err_bluetooth:
+      "BluetoothアドレスはA4:77:17:22:33:44のようなMAC（RFCOMMチャンネルは末尾に :1 〜 :30 を付けて指定可）、またはWindowsではCOM7のようなCOMポートにしてください。",
   },
   history: {
     title: "履歴",
@@ -1409,6 +1433,7 @@ const ja: Translation = {
     sort_alpha: "名前順",
     search_label: "テンプレートを検索",
     search_placeholder: "名前で検索",
+    no_search_hits: "一致する結果がありません。",
     refresh: "更新",
     conflict_single: "「{{name}}」が別のPCで変更されました。",
     conflict_many: "{{count}}件のテンプレートが別のPCで変更されました。",

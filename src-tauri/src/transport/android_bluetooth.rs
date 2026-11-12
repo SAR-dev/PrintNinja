@@ -6,6 +6,14 @@
 //! job bytes over the same socket. Android 12+ needs the OS Bluetooth
 //! permission first; the plugin asks for it and waits for the answer, so
 //! the first attempt after granting just works.
+//!
+//! The manual "Print through the OS driver" mode has no Android
+//! implementation yet (Android's `PrintManager` is a separate, large
+//! integration — docs/MISSING_FEATURES.md item 16), so the option is
+//! hidden in the Android UI and a row carrying it fails with a clear
+//! message rather than silently printing driverless — the user asked
+//! for the driver path, and quietly ignoring that would print on a
+//! path they did not choose.
 
 use crate::transport::{status, PrinterInfo, PrinterTransport, RenderedJob};
 use async_trait::async_trait;
@@ -24,11 +32,27 @@ const STATUS_REPLY_TIMEOUT: Duration = Duration::from_secs(3);
 pub struct AndroidBluetoothPrinter {
     pub name: String,
     pub address: String,
+    /// The manual driver mode. Android has no driver path yet, so this
+    /// can only be `false` from the app (the toggle is hidden there);
+    /// `true` would come from a row edited elsewhere and is refused.
+    pub via_driver: bool,
 }
 
 impl AndroidBluetoothPrinter {
-    pub fn new(name: String, address: String) -> Self {
-        Self { name, address }
+    pub fn new(name: String, address: String, via_driver: bool) -> Self {
+        Self {
+            name,
+            address,
+            via_driver,
+        }
+    }
+
+    /// A driver-mode row on Android: no path exists, and guessing one
+    /// would print on the wire the user explicitly did not ask for.
+    fn no_driver_mode(&self) -> String {
+        "\"Print through the OS driver\" is not available on Android yet — turn \
+         it off for this printer to print directly over Bluetooth"
+            .to_string()
     }
 
     /// How every message about this printer names it.
@@ -43,6 +67,9 @@ impl AndroidBluetoothPrinter {
 
     /// Is the printer answering? Connects an RFCOMM socket and closes it.
     pub async fn reach(&self) -> Result<(), String> {
+        if self.via_driver {
+            return Err(self.no_driver_mode());
+        }
         use tauri_plugin_android_print::AndroidPrintExt;
 
         let app = self.app()?;
@@ -291,6 +318,11 @@ impl PrinterTransport for AndroidBluetoothPrinter {
     }
 
     async fn send(&self, job: RenderedJob) -> Result<(), String> {
+        // The manual choice is honored in the refusing direction too:
+        // a driver row never quietly prints on the wire instead.
+        if self.via_driver {
+            return Err(self.no_driver_mode());
+        }
         // One socket for the whole send (A2/A3): open, status query,
         // write, close. The held socket is always released below —
         // success, fault refusal, or transport error.
@@ -310,15 +342,44 @@ mod tests {
     #[cfg(not(target_os = "android"))]
     #[tokio::test]
     async fn bluetooth_is_android_only() {
-        let p = AndroidBluetoothPrinter::new("t".into(), "00:11:22:33:44:55".into());
+        let p = AndroidBluetoothPrinter::new("t".into(), "00:11:22:33:44:55".into(), false);
         let err = p.reach().await.unwrap_err();
         assert!(err.contains("Android"), "{err}");
         assert!(p.discover().await.is_empty());
     }
 
+    /// A driver-mode row (edited on a PC, say) must refuse loudly on
+    /// Android — no driver path exists here — rather than print
+    /// driverless on the path the user did not choose.
+    #[tokio::test]
+    async fn driver_mode_is_refused_not_ignored() {
+        let p = AndroidBluetoothPrinter::new("t".into(), "00:11:22:33:44:55".into(), true);
+        let err = p.reach().await.unwrap_err();
+        assert!(err.contains("not available on Android"), "{err}");
+        let err = p
+            .send(RenderedJob {
+                job_id: "j".into(),
+                printer_id: "p".into(),
+                data: vec![0x1b, 0x40],
+                mime_type: "application/octet-stream".into(),
+                copies: 1,
+                language: crate::transport::PrinterLanguage::Escpos,
+            })
+            .await
+            .unwrap_err();
+        assert!(err.contains("not available on Android"), "{err}");
+    }
+
     #[test]
     fn the_address_names_the_printer() {
-        let p = AndroidBluetoothPrinter::new("t".into(), "00:11:22:33:44:55".into());
+        let p = AndroidBluetoothPrinter::new("t".into(), "00:11:22:33:44:55".into(), false);
         assert!(p.what().contains("00:11:22:33:44:55"));
+    }
+
+    #[test]
+    fn driver_mode_defaults_off() {
+        assert!(
+            !AndroidBluetoothPrinter::new("t".into(), "00:11:22:33:44:55".into(), false).via_driver
+        );
     }
 }

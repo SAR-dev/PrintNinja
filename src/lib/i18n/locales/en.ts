@@ -607,6 +607,11 @@ const en = {
     ipp_skip_cert: "Skip certificate verification",
     ipp_skip_cert_hint:
       "https:// endpoints only. Lets a self-signed or otherwise unverifiable certificate through.",
+    bt_driver: "Print through the OS driver",
+    bt_driver_hint_windows:
+      "Off prints straight to the printer's COM port — no driver, no queue. On prints through this printer's Windows queue (installed under the same name) — the driver rasterizes, so PDF works too. PrintNinja never switches between the two on its own.",
+    bt_driver_hint_linux:
+      "Off prints straight to the paired device — no driver, no queue. On prints through this printer's CUPS queue (create it with lpadmin under the same name) — the driver rasterizes, so PDF works too. PrintNinja never switches between the two on its own.",
     conn_ipp: "Wi-Fi / LAN (IPP)",
     conn_raw: "Wi-Fi / LAN (Raw TCP 9100)",
     conn_usb: "USB",
@@ -642,6 +647,16 @@ const en = {
     no_bluetooth_printers:
       "No paired Bluetooth printers — pair one in Android's Bluetooth settings first.",
     rescan: "Rescan",
+    signin_set: "Configured",
+    signin_unset: "Not needed",
+    detected_title: "Detected devices",
+    no_system_printers: "No printers found on this computer.",
+    repick_detected: "Choose from detected devices instead",
+    gdi_row_hint: "No PDF datatype: PDF jobs may print as raw text.",
+    advanced: "Advanced",
+    advanced_summary: "{{paper}} mm · {{dpi}} dpi",
+    detect_needs_address:
+      "Enter the address first: Detect asks the printer at that address what it speaks.",
     form_name: "Printer name",
     form_name_example: "Front desk",
     form_connection: "Connection",
@@ -658,6 +673,8 @@ const en = {
     hint_raw: "For example 192.168.1.100:9100",
     hint_bluetooth:
       "For example A4:77:17:22:33:44 — the MAC of a paired device (the list below offers them)",
+    hint_bluetooth_desktop:
+      "Pair the printer in your OS Bluetooth settings first, then enter its MAC — for example A4:77:17:22:33:44. No driver needed. Windows: the printer's COM port (for example COM7) works too",
     gdi_warning_title: "Driver may be GDI-only (no PDF datatype)",
     gdi_warning:
       "{{name}}'s print queue does not offer a PDF datatype, so its driver may be GDI-only: PDF jobs sent to it may not print. If that happens, add the same physical printer by its network address (Wi-Fi / LAN → IPP, or Raw TCP 9100 if the device reads PDF) instead of this system queue.",
@@ -727,6 +744,12 @@ const en = {
     lang_raster: "Raster",
     lang_android_hint:
       "Android prints receipt and label languages itself (ESC/POS, ZPL, TSPL), verified against a fake head only — unverified on a real one. CPCL and raster are not offered yet.",
+    lang_rawwire_hint:
+      "USB and Bluetooth send printer commands straight to the device, so PDF is not offered. Pick the language your printer speaks, or turn on driver mode to print PDF through the OS queue.",
+    err_bt_usb_port:
+      "That looks like a USB or print port, not a Bluetooth address. Choose the USB connection, or enter the printer's MAC (for example A4:77:17:22:33:44).",
+    err_bluetooth:
+      "Bluetooth address must be a MAC such as A4:77:17:22:33:44 (optionally :1 to :30 for the RFCOMM channel), or on Windows a COM port such as COM7.",
   },
   history: {
     title: "History",
@@ -1372,6 +1395,7 @@ const en = {
     sort_alpha: "A–Z",
     search_label: "Search templates",
     search_placeholder: "Search by name",
+    no_search_hits: "Nothing matches that search.",
     refresh: "Refresh",
     conflict_single: "“{{name}}” changed on another PC.",
     conflict_many: "{{count}} templates changed on another PC.",
