@@ -11,6 +11,8 @@ sections are never edited again; they are the release notes.
 
 ## Unreleased
 
+## [2026.1112.0] - 2026-11-12
+
 ### Added
 
 - **Driverless Bluetooth printing on Windows and Linux.** Pair the
