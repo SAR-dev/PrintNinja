@@ -84,6 +84,12 @@ sections are never edited again; they are the release notes.
   constructs a transport, a non-address fails with the address-format
   message (never "unsupported" and never queue advice), and a driver-mode
   row resolves to the CUPS queue by name and never dials the MAC.
+- The **Connection** and **Language** fields in the Add/Edit printer
+  dialog were no longer vertically aligned whenever the Detect button
+  showed: the `h-6` button made the Language column's header row taller
+  than the Connection column's label, pushing the Language select down.
+  Both header rows now sit in a fixed `h-6` row, so the two selects start
+  at the same height for every connection type.
 
 ## [2026.1110.3] - 2026-11-10
 
