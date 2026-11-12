@@ -1134,9 +1134,14 @@ export function PrinterSetupPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className={field}>
-                <Label htmlFor="printer-connection">
-                  {t("printers.form_connection")}
-                </Label>
+                {/* Fixed h-6 header row, matching the Language column's
+                    label+Detect row, so the two SelectTriggers below line
+                    up vertically no matter whether the button renders. */}
+                <div className="flex h-6 items-center">
+                  <Label htmlFor="printer-connection">
+                    {t("printers.form_connection")}
+                  </Label>
+                </div>
                 <Select
                   value={form.printer_type}
                   onValueChange={(v) =>
@@ -1173,7 +1178,9 @@ export function PrinterSetupPage() {
                 </Select>
               </div>
               <div className={field}>
-                <div className="flex items-center justify-between gap-2">
+                {/* h-6 matches the Connection column's header row (and the
+                    Detect button), so both selects below start at the same y. */}
+                <div className="flex h-6 items-center justify-between gap-2">
                   <Label htmlFor="printer-language">
                     {t("printers.form_language")}
                   </Label>
