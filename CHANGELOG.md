@@ -11,6 +11,78 @@ sections are never edited again; they are the release notes.
 
 ## Unreleased
 
+### Added
+
+- **Driverless Bluetooth printing on Windows and Linux.** Pair the
+  printer in the OS's Bluetooth settings and add it in PrintNinja by its
+  MAC — no driver, no queue, and (on Linux) no CUPS raw queue. Windows
+  writes the job straight to the paired device's own COM port, located
+  from the row's MAC or named outright as `COM7`; Linux dials an RFCOMM
+  socket from the kernel's Bluetooth stack on channel 1 unless the
+  address says otherwise. Classic serial (SPP) printers only — not BLE.
+  Pairing itself stays an OS flow.
+  - The address accepts a MAC (`:` or `-` separators, any case, an
+    optional `:1`–`:30` RFCOMM channel) or, on Windows, the device's
+    serial port (`COM7`, `\\.\COM7`). A shared parser
+    (`transport/bluetooth_addr.rs`) reads the same stored row on every
+    platform, so a row synced from a phone reads the same everywhere.
+- **"Print through the OS driver" for Bluetooth printers**
+  (`via_driver`, off by default). Flips a Bluetooth row to the *other*
+  path and only that path: on Windows the job goes to the spooler queue
+  installed under the same name, on Linux to the printer's CUPS queue —
+  the driver in between rasterizes, so PDF works there. The app never
+  switches paths on its own: a driverless row that names no COM port on
+  Windows fails with guidance instead of quietly using the queue, a
+  driver row never dials the device, and the option is hidden on
+  Android (no driver path yet) where a row carrying it is refused with a
+  clear message.
+- **Search and sort on My templates.** The owner's own template list
+  (`GET /v2/templates/mine`) now takes `q` and `sort` (`updated` /
+  `used` / `name`), and the Templates screen gains a shared toolbar — a
+  search box over name and summary plus a sort select — used by all three
+  tabs (mine, saved, community).
+
+### Changed
+
+- **The Add-printer dialogue gained a "Detected devices" block.** OS
+  print queues, mDNS network discoveries and paired Bluetooth printers
+  each collapse to their count behind one Rescan button (new
+  `DetectedDevices` + `FoldSection` components); tapping a header opens
+  its list. A PC full of virtual printers (OneNote, Print to PDF, …) or a
+  background mDNS hit no longer resizes the form out from under the
+  operator.
+- **Bluetooth rows validate their address in the form.** A driverless
+  row must be a MAC (or a Windows COM port); an address that is plainly a
+  USB or print port (`USB003`, `LPT1:`, `PORTPROMPT:`, a pipe or WSD path
+  — what ends up there when the connection type is changed after picking
+  a system or USB device) gets its own message instead of a generic
+  "invalid". A driver-mode row skips the check, since the queue is
+  addressed by the printer's name, not the address.
+- **PDF is a normal language choice again for a driver-mode Bluetooth
+  row.** The raw-wire default that drops USB/Bluetooth rows from PDF to
+  ESC/POS no longer applies when the row prints through its OS driver —
+  there the driver *is* the rasterizer the warning is about. The same
+  exemption applies to the "raw wire" and "GDI-only queue" warnings.
+- **A Bluetooth test print opens the real wire.** The connectivity check
+  that precedes a test print now dials the COM port or RFCOMM socket and
+  closes it again (or checks the OS queue's status for a driver-mode
+  row) — still without putting anything on paper.
+- Docs: the README, `docs/architecture/PRINTERS_AND_TRANSPORTS.md` and
+  the troubleshooting notes now describe driverless Bluetooth instead of
+  the old "install a Windows printer (USB *and* Bluetooth) / a CUPS raw
+  queue on Linux" guidance.
+
+### Fixed
+
+- A moved value in the Windows direct-send timeout message: the
+  `spawn_blocking` closure takes the port name by `move`, leaving the
+  error string with a moved value — the message now keeps its own copy.
+- Stale transport tests for the old "Bluetooth on Linux is a CUPS raw
+  queue" behaviour, replaced by the direct-dial expectations: a valid MAC
+  constructs a transport, a non-address fails with the address-format
+  message (never "unsupported" and never queue advice), and a driver-mode
+  row resolves to the CUPS queue by name and never dials the MAC.
+
 ## [2026.1110.3] - 2026-11-10
 
 ### Added
