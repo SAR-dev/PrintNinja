@@ -177,6 +177,12 @@ describe("Printers page", () => {
     fireEvent.change(within(panel).getByLabelText("Address"), {
       target: { value: "10.0.0.7:9100" },
     });
+    // Paper width and DPI are folded under Advanced, whose header already
+    // shows the current values.
+    expect(within(panel).queryByLabelText(/Paper width/)).toBeNull();
+    fireEvent.click(
+      within(panel).getByRole("button", { name: /Advanced.*80 mm · 203 dpi/ }),
+    );
     // Custom numbers outside the old fixed selects are accepted.
     fireEvent.change(within(panel).getByLabelText(/Paper width/), {
       target: { value: "110" },
@@ -429,44 +435,50 @@ describe("GDI-only system queue warning", () => {
     renderPage();
     await screen.findByText("Dock Zebra");
     fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));
-    return screen.findByRole("dialog");
+    const panel = await screen.findByRole("dialog");
+    // System queues are collapsed behind their count: open the list.
+    fireEvent.click(
+      await within(panel).findByRole("button", {
+        name: "Found on this computer (3)",
+      }),
+    );
+    return panel;
   }
 
-  it("marks the GDI-risk chip and stays quiet for known and unknown queues", async () => {
-    await openAddDialog();
-    const flagged = await screen.findByRole("button", {
-      name: /HP LaserJet 1020/,
-    });
-    expect(flagged).toHaveAttribute(
-      "title",
-      "Driver may be GDI-only (no PDF datatype)",
+  /** The Fill button of one system-queue row. */
+  const fillRow = (name: string) =>
+    within(screen.getByTestId(`discovered-system-${name}`)).getByRole(
+      "button",
+      { name: "Fill" },
     );
-    // PDF-offering and unknown (remote share) chips carry no marker.
+
+  it("marks the GDI-risk row and stays quiet for known and unknown queues", async () => {
+    await openAddDialog();
+    const flagged = screen.getByTestId("discovered-system-HP LaserJet 1020");
+    // The risk is spelled out in the row, not hidden in a tooltip.
+    expect(flagged).toHaveTextContent(/No PDF datatype/);
+    // PDF-offering and unknown (remote share) rows carry no marker.
     expect(
-      screen.getByRole("button", { name: /Microsoft Print to PDF/ }),
-    ).not.toHaveAttribute("title");
+      screen.getByTestId("discovered-system-Microsoft Print to PDF"),
+    ).not.toHaveTextContent(/No PDF datatype/);
     expect(
-      screen.getByRole("button", { name: /OfficeShare\\Lobby/ }),
-    ).not.toHaveAttribute("title");
+      screen.getByTestId("discovered-system-OfficeShare\\Lobby"),
+    ).not.toHaveTextContent(/No PDF datatype/);
   });
 
   it("warns in the form when a GDI-risk queue is picked, and clears it otherwise", async () => {
     await openAddDialog();
-    fireEvent.click(
-      await screen.findByRole("button", { name: /HP LaserJet 1020/ }),
-    );
+    fireEvent.click(fillRow("HP LaserJet 1020"));
     const warning = await screen.findByTestId("printer-gdi-warning");
     expect(warning).toHaveAttribute("role", "alert");
     expect(warning).toHaveTextContent(/GDI-only/);
     // A PDF-offering queue: no warning.
-    fireEvent.click(
-      screen.getByRole("button", { name: /Microsoft Print to PDF/ }),
-    );
+    fireEvent.click(fillRow("Microsoft Print to PDF"));
     await waitFor(() =>
       expect(screen.queryByTestId("printer-gdi-warning")).toBeNull(),
     );
     // An unknown (remote share) queue: still no warning — unknown is not GDI.
-    fireEvent.click(screen.getByRole("button", { name: /OfficeShare\\Lobby/ }));
+    fireEvent.click(fillRow("OfficeShare\\Lobby"));
     await waitFor(() =>
       expect(screen.queryByTestId("printer-gdi-warning")).toBeNull(),
     );
@@ -685,5 +697,267 @@ describe("Print via PC notice", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("printers-via-pc-note")).toBeNull(),
     );
+  });
+});
+
+describe("Add / edit dialog layout", () => {
+  const SYSTEM = [
+    { id: "PDF24", name: "PDF24", address: "\\\\.\\pipe\\PDFPrint" },
+    { id: "M220 Printer", name: "M220 Printer", address: "USB003" },
+  ];
+
+  beforeEach(() => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers") return PRINTERS;
+      if (cmd === "enumerate_system_printers") return SYSTEM;
+      if (cmd === "discover_network_printers") return [];
+      return null;
+    });
+  });
+
+  async function openAdd() {
+    renderPage();
+    await screen.findByText("Dock Zebra");
+    fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));
+    return screen.findByRole("dialog");
+  }
+
+  const pickConnection = async (panel: HTMLElement, name: string) => {
+    fireEvent.click(within(panel).getByLabelText("Connection"));
+    fireEvent.click(await screen.findByRole("option", { name }));
+  };
+
+  it("shows detected devices as counts only until a section is opened", async () => {
+    const panel = await openAdd();
+    const toggle = await within(panel).findByRole("button", {
+      name: "Found on this computer (2)",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      within(panel).getByRole("button", { name: "Found on this network (0)" }),
+    ).toBeDisabled();
+    // No row and no chip until the section is opened.
+    expect(screen.queryByTestId("discovered-system-M220 Printer")).toBeNull();
+    expect(
+      within(panel).queryByRole("button", { name: "M220 Printer" }),
+    ).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByTestId("discovered-system-M220 Printer"),
+    ).toBeInTheDocument();
+  });
+
+  it("has one Rescan button for every source", async () => {
+    const panel = await openAdd();
+    await within(panel).findByRole("button", {
+      name: "Found on this computer (2)",
+    });
+    expect(
+      within(panel).getAllByRole("button", { name: "Rescan" }),
+    ).toHaveLength(1);
+    invoke.mockClear();
+    fireEvent.click(within(panel).getByRole("button", { name: "Rescan" }));
+    await waitFor(() => {
+      const cmds = invoke.mock.calls.map((c) => c[0]);
+      expect(cmds).toContain("enumerate_system_printers");
+      expect(cmds).toContain("discover_network_printers");
+    });
+  });
+
+  it("tucks detected devices behind a link while editing", async () => {
+    renderPage();
+    await screen.findByText("Dock Zebra");
+    fireEvent.click(screen.getByRole("button", { name: "Edit Dock Zebra" }));
+    const panel = await screen.findByRole("dialog");
+    expect(within(panel).queryByTestId("printers-detected")).toBeNull();
+    fireEvent.click(within(panel).getByTestId("printers-show-detected"));
+    const block = await within(panel).findByTestId("printers-detected");
+    fireEvent.click(
+      within(block).getByRole("button", { name: "Found on this computer (2)" }),
+    );
+    // Editing never offers a second, one-tap "Add": it would create a new
+    // printer next to the one being edited.
+    const row = screen.getByTestId("discovered-system-M220 Printer");
+    expect(within(row).queryByRole("button", { name: /Add/ })).toBeNull();
+    fireEvent.click(within(row).getByRole("button", { name: "Fill" }));
+    expect(
+      within(panel).getByLabelText("Printer name", {
+        selector: "#printer-name",
+      }),
+    ).toHaveValue("M220 Printer");
+  });
+
+  it("folds paper width and DPI under Advanced and shows their values", async () => {
+    const panel = await openAdd();
+    const toggle = within(panel).getByTestId("printer-advanced-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveTextContent("80 mm · 203 dpi");
+    expect(within(panel).queryByLabelText("DPI")).toBeNull();
+    fireEvent.click(toggle);
+    expect(within(panel).getByLabelText("DPI")).toHaveValue(203);
+  });
+
+  it("opens Advanced when a folded field fails validation", async () => {
+    const panel = await openAdd();
+    fireEvent.change(within(panel).getByLabelText("Printer name"), {
+      target: { value: "Lobby" },
+    });
+    fireEvent.change(within(panel).getByLabelText("Address"), {
+      target: { value: "10.0.0.7" },
+    });
+    // The Advanced header shows what is folded; clear DPI through it.
+    fireEvent.click(within(panel).getByTestId("printer-advanced-toggle"));
+    fireEvent.change(within(panel).getByLabelText("DPI"), {
+      target: { value: "5" },
+    });
+    fireEvent.click(within(panel).getByTestId("printer-advanced-toggle"));
+    expect(within(panel).queryByLabelText("DPI")).toBeNull();
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Save printer" }),
+    );
+    expect(await within(panel).findByLabelText("DPI")).toBeInTheDocument();
+    expect(invoke.mock.calls.some((c) => c[0] === "add_printer")).toBe(false);
+  });
+
+  it("explains why Detect is disabled", async () => {
+    const panel = await openAdd();
+    const detect = within(panel).getByRole("button", { name: "Detect" });
+    expect(detect).toBeDisabled();
+    expect(detect.parentElement).toHaveAttribute("tabindex", "0");
+    fireEvent.change(within(panel).getByLabelText("Address"), {
+      target: { value: "10.0.0.7" },
+    });
+    expect(within(panel).getByRole("button", { name: "Detect" })).toBeEnabled();
+  });
+
+  it("folds the IPP sign-in form until it is opened", async () => {
+    const panel = await openAdd();
+    // Wi-Fi / LAN (IPP) is the default connection.
+    const toggle = within(panel).getByTestId("printer-signin-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveTextContent("Not needed");
+    expect(within(panel).queryByLabelText("Username")).toBeNull();
+    expect(within(panel).queryByLabelText("Password")).toBeNull();
+    fireEvent.click(toggle);
+    expect(within(panel).getByLabelText("Username")).toBeInTheDocument();
+    expect(within(panel).getByLabelText("Password")).toBeInTheDocument();
+    // Other connection types have no sign-in section at all.
+    await pickConnection(panel, "Wi-Fi / LAN (Raw TCP 9100)");
+    expect(within(panel).queryByTestId("printer-signin-toggle")).toBeNull();
+  });
+
+  it("opens the sign-in form when the edited printer already has credentials", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers")
+        return [
+          ...PRINTERS,
+          P({
+            id: 9,
+            name: "Secure IPP",
+            printer_type: "ipp",
+            address: "https://10.0.0.8",
+            username: "admin",
+            password: "secret",
+          }),
+        ];
+      if (cmd === "enumerate_system_printers") return SYSTEM;
+      return [];
+    });
+    renderPage();
+    await screen.findByText("Secure IPP");
+    fireEvent.click(screen.getByRole("button", { name: "Edit Secure IPP" }));
+    const panel = await screen.findByRole("dialog");
+    const toggle = within(panel).getByTestId("printer-signin-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveTextContent("Configured");
+    expect(within(panel).getByLabelText("Username")).toHaveValue("admin");
+    // A printer without credentials still opens folded.
+    fireEvent.keyDown(panel, { key: "Escape" });
+  });
+
+  it("keeps the Save footer sticky", async () => {
+    const panel = await openAdd();
+    const footer = within(panel).getByTestId("printer-dialog-footer");
+    expect(footer.className).toMatch(/sticky/);
+    expect(
+      within(footer).getByRole("button", { name: "Cancel" }),
+    ).toBeInTheDocument();
+  });
+
+  describe("Bluetooth address and hints on desktop", () => {
+    it("flags a USB port typed into a Bluetooth address at once", async () => {
+      const panel = await openAdd();
+      await pickConnection(panel, "Bluetooth");
+      const input = within(panel).getByLabelText("Bluetooth MAC or COM port");
+      fireEvent.change(input, { target: { value: "USB003" } });
+      const err = await within(panel).findByTestId("printer-address-error");
+      expect(err).toHaveTextContent(/USB or print port/);
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input.getAttribute("aria-describedby")).toContain(
+        "printer-address-error",
+      );
+      // And it cannot be saved that way.
+      fireEvent.change(within(panel).getByLabelText("Printer name"), {
+        target: { value: "M220" },
+      });
+      fireEvent.click(
+        within(panel).getByRole("button", { name: "Save printer" }),
+      );
+      expect(invoke.mock.calls.some((c) => c[0] === "add_printer")).toBe(false);
+    });
+
+    it("waits for blur before judging a half-typed MAC", async () => {
+      const panel = await openAdd();
+      await pickConnection(panel, "Bluetooth");
+      const input = within(panel).getByLabelText("Bluetooth MAC or COM port");
+      fireEvent.change(input, { target: { value: "A4:77:17" } });
+      expect(within(panel).queryByTestId("printer-address-error")).toBeNull();
+      fireEvent.blur(input);
+      expect(
+        await within(panel).findByTestId("printer-address-error"),
+      ).toHaveTextContent(/MAC/);
+      fireEvent.change(input, { target: { value: "A4:77:17:22:33:44" } });
+      await waitFor(() =>
+        expect(within(panel).queryByTestId("printer-address-error")).toBeNull(),
+      );
+    });
+
+    it("accepts a COM port, and any address in driver mode", async () => {
+      const panel = await openAdd();
+      await pickConnection(panel, "Bluetooth");
+      const input = within(panel).getByLabelText("Bluetooth MAC or COM port");
+      fireEvent.change(input, { target: { value: "COM7" } });
+      fireEvent.blur(input);
+      expect(within(panel).queryByTestId("printer-address-error")).toBeNull();
+      fireEvent.change(input, { target: { value: "USB003" } });
+      expect(
+        await within(panel).findByTestId("printer-address-error"),
+      ).toBeInTheDocument();
+      // Driver mode prints through the OS queue named by the printer: the
+      // address is not dialled, so it is not held to the MAC shape.
+      fireEvent.click(within(panel).getByRole("checkbox", { name: /driver/i }));
+      await waitFor(() =>
+        expect(within(panel).queryByTestId("printer-address-error")).toBeNull(),
+      );
+    });
+
+    it("shows the raw-wire note, never the Android one, on desktop", async () => {
+      const panel = await openAdd();
+      await pickConnection(panel, "Bluetooth");
+      const hint = await within(panel).findByTestId("printer-language-hint");
+      expect(hint).toHaveTextContent(/PDF is not offered/);
+      expect(hint).not.toHaveTextContent(/Android/);
+    });
+
+    it("offers PDF again once driver mode is on", async () => {
+      const panel = await openAdd();
+      await pickConnection(panel, "Bluetooth");
+      fireEvent.click(within(panel).getByRole("checkbox", { name: /driver/i }));
+      fireEvent.click(within(panel).getByLabelText("Language"));
+      expect(
+        await screen.findByRole("option", { name: "PDF" }),
+      ).toBeInTheDocument();
+    });
   });
 });

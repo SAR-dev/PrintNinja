@@ -663,6 +663,17 @@ const ja: Translation = {
     no_bluetooth_printers:
       "ペアリング済みのBluetoothプリンターがありません。まずAndroidのBluetooth設定でペアリングしてください。",
     rescan: "再スキャン",
+    signin_set: "設定済み",
+    signin_unset: "不要",
+    detected_title: "検出されたデバイス",
+    no_system_printers: "このコンピューターでプリンターが見つかりません。",
+    repick_detected: "検出されたデバイスから選び直す",
+    gdi_row_hint:
+      "PDFデータ型がありません。PDFジョブが生テキストとして印刷される場合があります。",
+    advanced: "詳細設定",
+    advanced_summary: "{{paper}} mm · {{dpi}} dpi",
+    detect_needs_address:
+      "先にアドレスを入力してください。検出は、そのアドレスのプリンターが対応する言語を問い合わせます。",
     form_name: "プリンター名",
     form_name_example: "受付",
     form_connection: "接続",
@@ -752,6 +763,12 @@ const ja: Translation = {
     lang_raster: "ラスター",
     lang_android_hint:
       "Androidはレシート・ラベル言語（ESC/POS、ZPL、TSPL）を本体で印刷します。これらは偽プリンターでのみ検証済みで、実機での検証は未完了です。CPCL・ラスターは現在提供していません。",
+    lang_rawwire_hint:
+      "USBとBluetoothはプリンターコマンドをデバイスへ直接送るため、PDFは選べません。プリンターが話す言語を選ぶか、ドライバーモードをオンにしてOSのキュー経由でPDFを印刷してください。",
+    err_bt_usb_port:
+      "USBまたはプリントポートのようです。Bluetoothアドレスではありません。接続をUSBにするか、プリンターのMACアドレス（例: A4:77:17:22:33:44）を入力してください。",
+    err_bluetooth:
+      "BluetoothアドレスはA4:77:17:22:33:44のようなMAC（RFCOMMチャンネルは末尾に :1 〜 :30 を付けて指定可）、またはWindowsではCOM7のようなCOMポートにしてください。",
   },
   history: {
     title: "履歴",

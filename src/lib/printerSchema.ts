@@ -85,7 +85,62 @@ function ippAddressOk(address: string): boolean {
   return Number.isInteger(port) && port >= 1 && port <= 65535;
 }
 
-function addressError(printerType: string, address: string): string | null {
+/**
+ * A Bluetooth address in any shape the backend's `bluetooth_addr::parse`
+ * accepts: a MAC (`:` or `-` separators, optional `:1`–`:30` RFCOMM
+ * channel) or a Windows serial port (`COM7`, `\\.\COM7`).
+ */
+export function bluetoothAddressOk(address: string): boolean {
+  const a = address.trim();
+  const com = /^(?:\\\\\.\\|\/\/\.\/)?COM(\d{1,5})$/i.exec(a);
+  if (com) {
+    const n = Number(com[1]);
+    return n >= 1 && n <= 65535;
+  }
+  const parts = a.split(/[:-]/);
+  if (parts.length !== 6 && parts.length !== 7) return false;
+  if (!parts.slice(0, 6).every((p) => /^[0-9a-f]{2}$/i.test(p))) return false;
+  if (parts.length === 6) return true;
+  if (!/^\d{1,2}$/.test(parts[6])) return false;
+  const ch = Number(parts[6]);
+  return ch >= 1 && ch <= 30;
+}
+
+/**
+ * An address that is plainly a USB or print-queue port (`USB003`,
+ * `LPT1:`, `PORTPROMPT:`, a pipe or WSD path) — what ends up in a
+ * Bluetooth row when the connection type is changed after picking a
+ * system printer or a USB device. Worth its own message: it is a
+ * connection-type mix-up, not a typo.
+ */
+export function looksLikePortAddress(address: string): boolean {
+  const a = address.trim();
+  return (
+    /^USB\d+$/i.test(a) ||
+    /^LPT\d+:?$/i.test(a) ||
+    /^(PORTPROMPT|FILE|nul|XPSPort|SHRFAX):?$/i.test(a) ||
+    /^\\\\/.test(a) ||
+    /^WSD-/i.test(a)
+  );
+}
+
+/**
+ * The i18n key explaining why a driverless Bluetooth address is wrong, or
+ * `null` when it is fine (or still empty — "required" is its own message).
+ */
+export function bluetoothAddressIssue(address: string): string | null {
+  if (!address.trim()) return null;
+  if (bluetoothAddressOk(address)) return null;
+  return looksLikePortAddress(address)
+    ? "printers.err_bt_usb_port"
+    : "printers.err_bluetooth";
+}
+
+function addressError(
+  printerType: string,
+  address: string,
+  viaDriver = false,
+): string | null {
   switch (printerType) {
     case "ipp":
       return ippAddressOk(address) ? null : "printers.err_ipp_url";
@@ -103,8 +158,12 @@ function addressError(printerType: string, address: string): string | null {
       }
       return null;
     }
+    case "bluetooth":
+      // Driver mode prints through the OS queue named by the printer, so
+      // the address is not dialled and has no fixed shape there.
+      return viaDriver ? null : bluetoothAddressIssue(address);
     default:
-      // usb, bluetooth, system: device ids and names have no fixed shape.
+      // usb, system: device ids and names have no fixed shape.
       return null;
   }
 }
@@ -201,7 +260,11 @@ export const printerFormSchema = z
     via_driver: z.boolean().optional(),
   })
   .superRefine((form, ctx) => {
-    const err = addressError(form.printer_type, form.address);
+    const err = addressError(
+      form.printer_type,
+      form.address,
+      form.via_driver === true,
+    );
     if (err) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
