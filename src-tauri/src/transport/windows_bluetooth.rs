@@ -284,7 +284,6 @@ mod winapi {
     pub const ERROR_FILE_NOT_FOUND: DWORD = 2;
     pub const ERROR_ACCESS_DENIED: DWORD = 5;
     pub const ERROR_SHARING_VIOLATION: DWORD = 32;
-    pub const ERROR_NO_MORE_ITEMS: i32 = 259;
     pub const REG_SZ: DWORD = 1;
     pub const KEY_READ: DWORD = 0x20019;
     pub const HKEY_LOCAL_MACHINE: HKEY = 0x8000_0002usize as HKEY;
