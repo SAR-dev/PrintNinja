@@ -640,6 +640,10 @@ const acknowledgedStubs: string[] = [
   "get_trusted_sources",
   "set_trusted_sources",
   "print_html",
+  // Template preview: the Rust print engine is the only renderer now, and
+  // the e2e browser has none — the preview surfaces fall back to their
+  // raw-source document, which no spec relies on.
+  "render_template_preview",
   "spike_test_print",
   "delete_version",
   "restore_version",

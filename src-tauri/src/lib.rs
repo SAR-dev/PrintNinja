@@ -405,6 +405,7 @@ pub fn run() {
             commands::browser::browser_shell_remove,
             commands::browser::browser_shell_cancel,
             commands::print::print_html,
+            commands::print::render_template_preview,
             commands::print::enumerate_system_printers,
             commands::print::list_bluetooth_devices,
             commands::print::open_bluetooth_settings,

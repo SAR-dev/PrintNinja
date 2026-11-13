@@ -12,7 +12,6 @@ The biggest things to know:
 - **Android printing has never been tested on a real printer** (item 7). It has only been tested against a simulated one.
 - **Android asks for USB permission every single time** you connect (item 8).
 - **Queued jobs on Android do not print after the app is killed** (item 43).
-- **Some barcodes show in the preview but print blank** (item 37).
 - **Windows printers with GDI-only drivers cannot print PDFs** (item 15).
 
 ## How to read the tags
@@ -225,7 +224,7 @@ Cheapest and most visible first.
 | 14 | 34. Version history screen | Medium | Promised in the README, and the API is ready |
 | 15 | ✅ 22. Bad `json_path` prints blanks | Small | Solved: an unresolvable path now fails the job with a clear message; an explicit `null` still resolves |
 | 16 | ✅ 24. Invalid orientation and fit accepted | Small | Solved: one shared validator normalizes case and rejects unknown values on every print path |
-| 17 | ✅ 37. Preview-only barcodes print blank | Small | Solved: "preview only" badge, design-time hint, print-time confirm |
+| 17 | ✅ 37. Preview-only barcodes print blank | Small | Solved (option b): all five types — UPC-E, ITF-14, Data Matrix, PDF417, Aztec — are drawn by the built-in engine, and the preview now renders through the same engine as print, so nothing is preview-only |
 | 18 | ✅ 39. Plain HTTP blocked in release builds | Small | Solved: cleartext patching already existed; the real bug was the patch script failing on CRLF build files (Windows) |
 | 19 | ✅ 40. Battery toggle shows false success | Small | Solved: permission declared, rejections surfaced, real state shown after the dialog |
 | 20 | ✅ 43. Queue stops after Android kills the app | Medium | Solved (option b): a restarted service has no Tauri core, so the worker can't run there — the notification now honestly says the queue is paused, and reopening the app resumes it with a visible toast |

@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   type TouchEvent as ReactTouchEvent,
@@ -16,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getTemplateError } from "@/lib/render/renderTemplate";
+import { useRenderedPages } from "@/lib/hooks/useRenderedPages";
 import { cn } from "@/lib/utils";
 import { CanvasPane } from "./CanvasPane";
 
@@ -122,9 +121,10 @@ export function CanvasWorkspace({
       ? fitZoom(areaWidth, pageWidth, areaHeight, pageHeight)
       : mode;
   const pct = Math.round(zoom * 100);
-  // While the template is momentarily invalid (an unclosed {{#each}}, say) the
-  // page below shows the raw source; this says why.
-  const error = useMemo(() => getTemplateError(html, data), [html, data]);
+  // The same render the print pipeline runs: the canvas shows the result,
+  // and while the template is momentarily invalid (an unclosed {{#each}},
+  // say) the page shows the raw source while `error` says why.
+  const { pages, error } = useRenderedPages(html, css, compiledCss, [data]);
 
   const isPreset = mode !== "fit" && ZOOM_PRESETS.includes(mode);
   const selectValue =
@@ -307,10 +307,7 @@ export function CanvasWorkspace({
       >
         <div className="m-auto">
           <CanvasPane
-            html={html}
-            css={css}
-            compiledCss={compiledCss}
-            data={data}
+            doc={pages[0] ?? ""}
             width={pageWidth}
             height={pageHeight}
             zoom={zoom}

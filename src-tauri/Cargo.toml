@@ -36,6 +36,12 @@ handlebars = "6"
 # drawn in render/barcode.rs, so neither crate's image/SVG features are needed.
 barcoders = { version = "2", default-features = false }
 qrcode = { version = "0.14", default-features = false }
+# Data Matrix, PDF417, Aztec and UPC-E encoders (ZXing port, Apache-2.0).
+# `encoders` alone is not enough: the format features hard-error without a
+# charset backend, so `encoding_rs` must ride along. `oned` gates UPC_E in
+# the multi-format writer. The BitMatrix output is turned into inline SVG in
+# render/barcode.rs — no image features needed.
+rxing = { version = "0.9", default-features = false, features = ["encoders", "oned", "aztec", "datamatrix", "pdf417", "encoding_rs"] }
 axum = { version = "0.8", features = ["ws"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
@@ -84,6 +90,12 @@ libc = "0.2"
 # regression test. The `test` feature is empty — it only gates the test
 # helpers, no runtime behavior changes.
 tauri = { version = "2", features = ["test"] }
+# Decode round-trip unit test in render/barcode.rs: every shipped symbology
+# must decode back to the template value. `svg_read` rasterizes the
+# renderer's SVG in-process via resvg, and `qrcode` + `decoders` enable the
+# readers the app's encoder-only rxing build lacks. Dev features only — the
+# app binary keeps the slim build.
+rxing = { version = "0.9", default-features = false, features = ["decoders", "qrcode", "svg_read"] }
 
 # Mobile only: no extra pairing dependencies. Pairing is a typed
 # 8-character code now; the camera QR scanner is gone

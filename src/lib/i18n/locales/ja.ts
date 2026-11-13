@@ -338,9 +338,7 @@ const ja: Translation = {
       "レンダリング時に組み立てられるクラス名は事前コンパイルできません。各分岐で完全なクラス名を記述してください（例: {{#if x}}bg-red-600{{else}}bg-green-600{{/if}}）。または " +
       'style="--c:{{color}}" class="bg-[var(--c)]" のようにCSS変数を使用してください。',
     barcode_err_required: "値を入力してください",
-    barcode_err_fixed: "{{label}}は現在、固定値のみ使用できます",
     barcode_err_field: "order.id のようなデータフィールドを入力してください",
-    barcode_err_gen: "このバーコードを生成できませんでした",
     barcode_err_quotes: "値に ' と \" の両方を含めることはできません",
     barcode_err_c39:
       "Code 39 で使用できるのは A-Z、0-9、-、.、スペース、/、+、%、$ のみです",
@@ -350,7 +348,11 @@ const ja: Translation = {
     barcode_err_ean8_check: "EAN-8 のチェックデジットが正しくありません",
     barcode_err_upca_len: "UPC-A はちょうど12桁の数字が必要です",
     barcode_err_upca_check: "UPC-A のチェックデジットが正しくありません",
+    barcode_err_upce: "UPC-E は 0 または 1 で始まる7〜8桁の数字が必要です",
+    barcode_err_upce_check: "UPC-E のチェックデジットが正しくありません",
     barcode_err_itf: "ITF は偶数桁の数字が必要です",
+    barcode_err_itf14: "ITF-14 は13または14桁の数字が必要です",
+    barcode_err_itf14_check: "ITF-14 のチェックデジットが正しくありません",
     barcode_err_codabar:
       "Codabar にはスタート/ストップ文字 A-D と数字が必要です",
     toast_loaded: "「{{name}}」を読み込みました",
@@ -412,12 +414,6 @@ const ja: Translation = {
     barcode_value: "値",
     barcode_field_example: "order.id",
     barcode_value_hint: "バーコードの値を入力",
-    barcode_fixed_hint: "この種類は固定値で挿入されます。",
-    barcode_preview_only: "プレビューのみ",
-    barcode_preview_only_tip:
-      "プレビューのみ：内蔵プリンターはこれを描画できません — 空白として印刷されます。",
-    barcode_preview_only_hint:
-      "プレビューのみ：内蔵プリンターはこれを描画できないため、空白として印刷されます。",
     barcode_per_print: "印刷ごと、CSVの行ごとに別のコードが付きます。",
     barcode_same: "すべての印刷で同じコードになります。",
     barcode_insert: "挿入",
@@ -518,12 +514,6 @@ const ja: Translation = {
     blocker_template: "印刷するにはテンプレートを選択してください。",
     blocker_copies: "部数は1以上にしてください。",
     blocker_loading: "プリンターとテンプレートを読み込んでいます…",
-    preview_only_title: "プレビュー専用のバーコード",
-    preview_only_body:
-      "このテンプレートは内蔵プリンターが描画できない{{types}}を使用しています。空白として印刷されます。",
-    preview_only_body_static:
-      "このテンプレートには内蔵プリンターが描画できないバーコードが含まれています。空白として印刷されます。",
-    preview_only_print_anyway: "印刷する",
     pages: "ページ数",
     pages_hint:
       "ページ数は1つのオブジェクトをページごとに繰り返します（配列の場合は要素数分印刷されます）。部数はジョブ全体を再送信します。",
