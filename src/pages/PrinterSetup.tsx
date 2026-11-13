@@ -891,6 +891,10 @@ export function PrinterSetupPage() {
   };
 
   const field = "space-y-1.5";
+  // In driver mode the OS queue is addressed by name, so the address is
+  // never dialled. Keep it — the row needs it if driver mode is switched
+  // back off — but mark it dormant so the field stops looking load-bearing.
+  const addressDormant = form.printer_type === "bluetooth" && form.via_driver;
   const addressLabelKey =
     form.printer_type === "system"
       ? "printers.address_name"
@@ -905,12 +909,14 @@ export function PrinterSetupPage() {
       : form.printer_type === "raw_tcp"
         ? "printers.hint_raw"
         : form.printer_type === "bluetooth"
-          ? // Android offers the bonded-device list below; the desktop has
-            // no list and now prints driverless, so its hint names the
-            // OS pairing step instead.
-            isAndroid()
-            ? "printers.hint_bluetooth"
-            : "printers.hint_bluetooth_desktop"
+          ? addressDormant
+            ? "printers.hint_bluetooth_driver"
+            : // Android offers the bonded-device list below; the desktop has
+              // no list and now prints driverless, so its hint names the
+              // OS pairing step instead.
+              isAndroid()
+              ? "printers.hint_bluetooth"
+              : "printers.hint_bluetooth_desktop"
           : null;
 
   // Item 15: a Windows queue whose print processor offers no PDF datatype
@@ -1315,6 +1321,10 @@ export function PrinterSetupPage() {
               <Input
                 id="printer-address"
                 value={form.address}
+                // Dormant, not disabled: the value is still saved, and the
+                // row dials it again the moment driver mode is switched off.
+                aria-disabled={addressDormant || undefined}
+                className={addressDormant ? "opacity-60" : undefined}
                 aria-describedby={addressDescribedBy}
                 aria-invalid={
                   showAddressIssue || formErrorIsAddress || undefined
