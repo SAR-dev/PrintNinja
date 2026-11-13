@@ -335,6 +335,48 @@ describe("Print page", () => {
     expect(await screen.findByText(/Printer is ready/)).toBeInTheDocument();
   });
 
+  it("shows a printing banner in the status slot while the job runs", async () => {
+    let finish: (v: unknown) => void = () => {};
+    const base = invoke.getMockImplementation() as (
+      cmd: string,
+      args?: unknown,
+    ) => Promise<unknown>;
+    invoke.mockImplementation((cmd: string, args?: unknown) =>
+      cmd === "print_html"
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : base(cmd, args),
+    );
+    renderPage();
+    const print = await screen.findByRole("button", { name: /^Print$/ });
+    await waitFor(() => expect(print).toBeEnabled());
+    fireEvent.click(print);
+    const banner = (
+      await screen.findAllByText("Printing…", { selector: "span" })
+    )[0].closest("[role=status]");
+    expect(banner).not.toBeNull();
+    expect(banner?.firstElementChild?.className).toMatch(/\bh-11\b/);
+    expect(screen.queryByText("Print sent")).toBeNull();
+    finish({ success: true, job_id: "9", duration_ms: 120 });
+    expect(await screen.findByText("Print sent")).toBeInTheDocument();
+    expect(screen.queryByText("Printing…", { selector: "span" })).toBeNull();
+  });
+
+  it("keeps the status banner the same height from ready to sent", async () => {
+    renderPage();
+    const print = await screen.findByRole("button", { name: /^Print$/ });
+    await waitFor(() => expect(print).toBeEnabled());
+    const ready = screen.getByText(/Printer is ready/).closest("[role=status]");
+    const fixed = (el: Element | null) =>
+      el?.firstElementChild?.className.match(/\bh-11\b/);
+    expect(fixed(ready)).toBeTruthy();
+    fireEvent.click(print);
+    await screen.findByText("Print sent");
+    const sent = screen.getByText("Print sent").closest("[role=status]");
+    expect(fixed(sent)).toBeTruthy();
+  });
+
   it("reports a finished print in the alert, with its timing, and shows no toast", async () => {
     renderPage();
     const print = await screen.findByRole("button", { name: /^Print$/ });
@@ -342,6 +384,9 @@ describe("Print page", () => {
     fireEvent.click(print);
     expect(await screen.findByText("Print sent")).toBeInTheDocument();
     expect(screen.queryByText("Printer is ready")).toBeNull();
+    // The banner stays one line; the stage timings open on request.
+    expect(screen.queryByTestId("timing-breakdown")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Details/ }));
     const timing = screen.getByTestId("timing-breakdown");
     expect(timing).toHaveTextContent("Total 0.120 s");
     expect(timing).toHaveTextContent("Render 0.090 s (75%)");
