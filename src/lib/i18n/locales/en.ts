@@ -292,14 +292,7 @@ const en = {
     helper_title: "Insert {{snippet}} at the cursor",
     barcode_types: "Barcode types:",
     barcode_more: "+{{count}} more",
-    sample_add: "Add Dataset",
-    sample_empty: "No datasets yet. Add one to preview and validate templates.",
-    sample_default_note: "{{name}} is set as default",
-    // Display name of the built-in fallback dataset. Its stored name
-    // stays "Sample Order" — only the display is translated (P38).
-    sample_order_name: "Sample Order",
-    sample_use: "Use dataset {{name}}",
-    sample_delete: "Delete dataset {{name}}",
+    sample_edit: "Edit sample data",
     sample_fields: "Fields:",
     sample_copy: "Copy to clipboard",
     sample_json: "View JSON",
@@ -365,15 +358,8 @@ const en = {
     toast_created_local: 'Template "{{name}}" created locally',
     toast_readme_too_big: "README exceeds 64 KiB",
     toast_showing_canvas: "Showing the canvas",
-    toast_dataset_deleted: "Dataset removed — save the template to apply",
     toast_delete_failed: "Delete failed: {{error}}",
-    toast_dataset_name_required: "Dataset name required",
-    toast_dataset_name_too_long:
-      "Dataset name must be {{max}} characters or fewer",
-    toast_dataset_name_exists: "A dataset with this name already exists",
     toast_invalid_json: "Invalid JSON",
-    toast_dataset_added:
-      'Dataset "{{name}}" added — save the template to keep it',
     toast_add_failed: "Add failed: {{error}}",
     toast_dataset_updated: "Dataset updated — save the template to keep it",
     toast_saved: "Saved to the server",
@@ -394,7 +380,6 @@ const en = {
       "This template has edits that were not saved. Continuing will lose them.",
     discard_confirm: "Discard changes",
     sheet_done: "Done",
-    sample_add_title: "Add Dataset",
     barcode_title: "Insert Barcode",
     barcode_type: "Type",
     barcode_from_data: "Read the value from a data field",
@@ -409,8 +394,6 @@ const en = {
     views_aria: "Designer views",
     editor_done: "Done",
 
-    sample_name_example: "e.g. Empty Order",
-    sample_edit_title: "Edit Dataset: {{name}}",
     sample_save: "Save",
     new_name_example: "My Template",
     new_create: "Create",

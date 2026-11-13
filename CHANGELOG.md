@@ -28,6 +28,11 @@ to-the-point bullets — a bold lead plus at most two lines of detail.
 - **The Designer error banner shows the engine's message.** It names
   the problem but, unlike the old JS engine's, does not point at a
   source line.
+- **One sample dataset per account.** The Designer's Sample data
+  section now holds a single shared dataset — no name, no adding or
+  deleting; its JSON is edited from one button. Accounts with older
+  multi-dataset rows keep them stored and synced; the Designer shows
+  "Sample Order" when present, otherwise the first in name order.
 
 ### Fixed
 

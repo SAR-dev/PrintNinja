@@ -30,7 +30,6 @@ import {
   SampleDataPanel,
   SAMPLE_ORDER_NAME,
   type Dataset,
-  DATASET_NAME_MAX,
 } from "@/components/designer/SampleDataPanel";
 import { ClassWarnings } from "@/components/designer/ClassWarnings";
 import { OfflinePrintHint } from "@/components/designer/OfflinePrintHint";
@@ -293,9 +292,9 @@ export function DesignerPage() {
   // their own html/css.
   const contentLoaded = useRef<Set<number>>(new Set());
 
-  // Sample datasets (variables). Persisted through the agent and
-  // synced like templates; the built-in Sample Order is the fallback
-  // when the cache holds none yet.
+  // Sample data (variables). The account has one dataset; it is persisted
+  // through the agent and synced like templates. The built-in fallback
+  // stands in until one is stored.
   const [datasets, setDatasets] = useState<
     Array<Dataset & { id?: number | null }>
   >([]);
@@ -304,12 +303,7 @@ export function DesignerPage() {
     try {
       const rows = (await agent("list_datasets", {})) ?? [];
       setDatasets(
-        rows.map((r) => ({
-          id: r.id,
-          name: r.name,
-          json: r.data_json,
-          isDefault: false,
-        })),
+        rows.map((r) => ({ id: r.id, name: r.name, json: r.data_json })),
       );
     } catch {
       /* web mode or backend unavailable: the fallback below applies */
@@ -328,55 +322,46 @@ export function DesignerPage() {
     return () => window.removeEventListener("sync:pulled", onPulled);
   }, [loadDatasets]);
 
-  // Add, edit and delete only change this local draft. `null` means no
-  // pending change, so the list shown is the saved one. Save writes the draft
-  // to the database; discarding the edits drops it.
-  const [draftDatasets, setDraftDatasets] = useState<Array<
-    Dataset & { id?: number | null }
-  > | null>(null);
-
+  // The built-in fallback stands in for the account's dataset until one
+  // is stored.
   const fallbackDataset: Dataset & { id?: number | null } = {
     name: SAMPLE_ORDER_NAME,
     json: JSON.stringify(DEFAULT_MOCK_DATA, null, 2),
-    isDefault: true,
   };
-  const withFallback = (list: Array<Dataset & { id?: number | null }>) =>
-    list.length > 0 ? list : [fallbackDataset];
-  const workingDatasets = withFallback(draftDatasets ?? datasets);
-  const visibleDatasets: Dataset[] = workingDatasets;
-  const datasetKey = (list: Array<Dataset & { id?: number | null }>) =>
-    JSON.stringify(list.map((d) => [d.id ?? null, d.name, d.json]));
-  const datasetsDirty =
-    draftDatasets !== null &&
-    datasetKey(withFallback(draftDatasets)) !==
-      datasetKey(withFallback(datasets));
 
-  /** Write the draft to the database: delete removed rows, create new ones,
-   * update edited ones. The untouched built-in fallback is never stored. */
-  const commitDatasets = async () => {
-    if (draftDatasets === null) return;
-    const keep = new Set(
-      draftDatasets.map((d) => d.id).filter((id) => id != null),
-    );
-    for (const row of datasets) {
-      if (row.id != null && !keep.has(row.id)) {
-        await agent("delete_dataset", { id: row.id });
-      }
+  // The single dataset the Designer shows and edits: "Sample Order" when
+  // present, otherwise the first in name order; the built-in fallback
+  // when the cache holds no rows yet. Other rows stay stored and synced
+  // but are not shown.
+  const activeDataset: Dataset & { id?: number | null } =
+    datasets.find((d) => d.name === SAMPLE_ORDER_NAME) ??
+    datasets[0] ??
+    fallbackDataset;
+
+  // A pending JSON edit only. `null` means no pending change, so the
+  // saved row is what the panel and the canvas see. Save writes the
+  // draft to the database; discarding the edit drops it.
+  const [draftDatasetJson, setDraftDatasetJson] = useState<string | null>(null);
+  const workingDatasetJson = draftDatasetJson ?? activeDataset.json;
+  const datasetsDirty =
+    draftDatasetJson !== null && draftDatasetJson !== activeDataset.json;
+
+  /** Write the draft JSON to the account's single dataset row: update it
+   * in place when it is stored, create it under the fixed name otherwise.
+   * Other rows are left alone. */
+  const commitDataset = async () => {
+    if (draftDatasetJson === null || draftDatasetJson === activeDataset.json) {
+      setDraftDatasetJson(null);
+      return;
     }
-    for (const d of draftDatasets) {
-      const saved = d.id != null ? datasets.find((x) => x.id === d.id) : null;
-      if (d.id == null) {
-        if (d.isDefault && d.json === fallbackDataset.json) continue;
-        await agent("save_dataset", {
-          req: { name: d.name, data_json: d.json },
-        });
-      } else if (saved && saved.json !== d.json) {
-        await agent("save_dataset", {
-          req: { id: d.id, name: d.name, data_json: d.json },
-        });
-      }
-    }
-    setDraftDatasets(null);
+    const d = activeDataset;
+    await agent("save_dataset", {
+      req:
+        d.id != null
+          ? { id: d.id, name: d.name, data_json: draftDatasetJson }
+          : { name: d.name, data_json: draftDatasetJson },
+    });
+    setDraftDatasetJson(null);
     await loadDatasets();
   };
 
@@ -561,9 +546,9 @@ export function DesignerPage() {
       });
       setSavedReadme(content.readme);
       try {
-        await commitDatasets();
+        await commitDataset();
       } catch (e) {
-        // The template is saved; the datasets stay in the draft to retry.
+        // The template is saved; the dataset edit stays in the draft to retry.
         notifyError(
           t("designer.toast_save_failed", { error: describeError(e) }),
         );
@@ -822,12 +807,6 @@ export function DesignerPage() {
       }
     }
   };
-  const [selectedDatasetName, setSelectedDatasetName] =
-    useState(SAMPLE_ORDER_NAME);
-  const [showDatasetDialog, setShowDatasetDialog] = useState(false);
-  const [datasetName, setDatasetName] = useState("");
-  const [datasetJson, setDatasetJson] = useState("{\n  \n}");
-  const [editingDataset, setEditingDataset] = useState<string | null>(null);
   const [editJson, setEditJson] = useState("");
   const [showEditDataset, setShowEditDataset] = useState(false);
 
@@ -986,34 +965,16 @@ export function DesignerPage() {
 
   const sampleData = useMemo<Record<string, unknown>>(() => {
     try {
-      const ds =
-        visibleDatasets.find((d) => d.name === selectedDatasetName) ??
-        visibleDatasets[0];
-      return JSON.parse(ds.json);
+      return JSON.parse(workingDatasetJson);
     } catch {
       return DEFAULT_MOCK_DATA as Record<string, unknown>;
     }
-  }, [visibleDatasets, selectedDatasetName]);
+  }, [workingDatasetJson]);
 
   const handleShowCanvas = () => {
     setActiveTab("canvas");
     notifySuccess(t("designer.toast_showing_canvas"));
   };
-
-  // Live check for the Add Dataset name: length cap and no duplicates.
-  const datasetNameError = (() => {
-    const n = datasetName.trim();
-    if (!n) return "";
-    if (n.length > DATASET_NAME_MAX) {
-      return t("designer.toast_dataset_name_too_long", {
-        max: DATASET_NAME_MAX,
-      });
-    }
-    const taken = workingDatasets.some(
-      (d) => d.name.trim().toLowerCase() === n.toLowerCase(),
-    );
-    return taken ? t("designer.toast_dataset_name_exists") : "";
-  })();
 
   // `canInsert`: the desktop editor is beside the panel, so a click inserts at
   // its cursor. A phone shows the panel on its own tab with no editor mounted,
@@ -1021,26 +982,10 @@ export function DesignerPage() {
   const renderSampleDataPanel = (canInsert: boolean) => (
     <SampleDataPanel
       onInsert={canInsert ? insertHelper : undefined}
-      datasets={visibleDatasets}
-      selectedName={selectedDatasetName}
-      onSelect={setSelectedDatasetName}
-      onAdd={() => {
-        setDatasetName("");
-        setDatasetJson("{\n  \n}");
-        setShowDatasetDialog(true);
-      }}
-      onEdit={(ds) => {
-        setEditingDataset(ds.name);
-        setEditJson(ds.json);
+      dataset={{ name: activeDataset.name, json: workingDatasetJson }}
+      onEdit={() => {
+        setEditJson(workingDatasetJson);
         setShowEditDataset(true);
-      }}
-      onDelete={(ds) => {
-        const next = workingDatasets.filter((d) => d.name !== ds.name);
-        setDraftDatasets(next);
-        if (selectedDatasetName === ds.name) {
-          setSelectedDatasetName(next[0]?.name ?? fallbackDataset.name);
-        }
-        notifySuccess(t("designer.toast_dataset_deleted"));
       }}
     />
   );
@@ -1525,49 +1470,28 @@ export function DesignerPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Dataset Dialog */}
-      <Dialog open={showDatasetDialog} onOpenChange={setShowDatasetDialog}>
+      {/* Edit the account's single sample dataset (JSON) */}
+      <Dialog open={showEditDataset} onOpenChange={setShowEditDataset}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("designer.sample_add_title")}</DialogTitle>
+            <DialogTitle>{t("designer.sample_edit")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="space-y-1">
-              <Label>{t("common.name")}</Label>
-              <Input
-                value={datasetName}
-                onChange={(e) => setDatasetName(e.target.value)}
-                placeholder={t("designer.sample_name_example")}
-                aria-invalid={datasetNameError ? true : undefined}
-              />
-              <div className="flex justify-between text-xs">
-                <span className="text-danger">{datasetNameError}</span>
-                <span
-                  className={
-                    datasetName.trim().length > DATASET_NAME_MAX
-                      ? "text-danger"
-                      : "text-muted-foreground"
-                  }
-                >
-                  {datasetName.trim().length}/{DATASET_NAME_MAX}
-                </span>
-              </div>
-            </div>
             <div className="space-y-1">
               <Label>{t("designer.sample_json_label")}</Label>
               <div className="rounded-md border overflow-hidden">
                 <CodeMirror
-                  value={datasetJson}
-                  height="160px"
+                  value={editJson}
+                  height="200px"
                   extensions={[json()]}
-                  onChange={setDatasetJson}
+                  onChange={setEditJson}
                   theme="light"
                   basicSetup={{ lintKeymap: true }}
                 />
               </div>
               {(() => {
                 try {
-                  JSON.parse(datasetJson);
+                  JSON.parse(editJson);
                   return null;
                 } catch (e) {
                   return (
@@ -1578,82 +1502,6 @@ export function DesignerPage() {
                 }
               })()}
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowDatasetDialog(false)}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              onClick={() => {
-                const name = datasetName.trim();
-                if (!name) {
-                  notifyError(t("designer.toast_dataset_name_required"));
-                  return;
-                }
-                if (datasetNameError) {
-                  notifyError(datasetNameError);
-                  return;
-                }
-                try {
-                  JSON.parse(datasetJson);
-                } catch {
-                  notifyError(t("designer.toast_invalid_json"));
-                  return;
-                }
-                setDraftDatasets([
-                  ...workingDatasets,
-                  { id: null, name, json: datasetJson, isDefault: false },
-                ]);
-                setSelectedDatasetName(name);
-                setShowDatasetDialog(false);
-                notifySuccess(t("designer.toast_dataset_added", { name }));
-              }}
-              disabled={datasetNameError !== ""}
-            >
-              {t("common.add")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Dataset Dialog */}
-      <Dialog open={showEditDataset} onOpenChange={setShowEditDataset}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {t("designer.sample_edit_title", {
-                name:
-                  editingDataset === SAMPLE_ORDER_NAME
-                    ? t("designer.sample_order_name")
-                    : editingDataset,
-              })}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="rounded-md border overflow-hidden">
-              <CodeMirror
-                value={editJson}
-                height="200px"
-                extensions={[json()]}
-                onChange={setEditJson}
-                theme="light"
-              />
-            </div>
-            {(() => {
-              try {
-                JSON.parse(editJson);
-                return null;
-              } catch (e) {
-                return (
-                  <p className="text-xs text-danger">
-                    {describeError(e).split("\n")[0]}
-                  </p>
-                );
-              }
-            })()}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditDataset(false)}>
@@ -1667,11 +1515,7 @@ export function DesignerPage() {
                   notifyError(t("designer.toast_invalid_json"));
                   return;
                 }
-                setDraftDatasets(
-                  workingDatasets.map((d) =>
-                    d.name === editingDataset ? { ...d, json: editJson } : d,
-                  ),
-                );
+                setDraftDatasetJson(editJson);
                 setShowEditDataset(false);
                 notifySuccess(t("designer.toast_dataset_updated"));
               }}
@@ -1805,7 +1649,7 @@ export function DesignerPage() {
         onConfirm={() => {
           const action = discardAction;
           setDiscardAction(null);
-          setDraftDatasets(null);
+          setDraftDatasetJson(null);
           action?.();
         }}
       />

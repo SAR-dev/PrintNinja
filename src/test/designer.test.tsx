@@ -1024,46 +1024,26 @@ describe("EditorPane", () => {
 });
 
 describe("SampleDataPanel", () => {
-  const datasets = [
-    {
-      name: "Sample Order",
-      json: '{"store":{"name":"A"},"items":[]}',
-      isDefault: true,
-    },
-    { name: "Empty", json: "{}", isDefault: false },
-  ];
+  const dataset = {
+    name: "Sample Order",
+    json: '{"store":{"name":"A"},"items":[]}',
+  };
   const props = () => ({
-    datasets,
-    selectedName: "Sample Order",
-    onSelect: vi.fn(),
-    onAdd: vi.fn(),
+    dataset,
     onEdit: vi.fn(),
-    onDelete: vi.fn(),
   });
 
-  it("picks the dataset the canvas uses, and lists its fields", () => {
-    const p = props();
-    render(<SampleDataPanel {...p} />);
-    expect(
-      screen.getByRole("radio", { name: "Use dataset Sample Order" }),
-    ).toBeChecked();
-    fireEvent.click(screen.getByRole("radio", { name: "Use dataset Empty" }));
-    expect(p.onSelect).toHaveBeenCalledWith("Empty");
-    // Variables are the dataset's paths, with the sample value beside them.
+  it("lists the dataset's variables with the sample value beside them", () => {
+    render(<SampleDataPanel {...props()} />);
     expect(screen.getByText("{{store.name}}")).toBeInTheDocument();
     expect(screen.getByText("A")).toBeInTheDocument();
   });
 
-  it("puts icon-only edit and delete buttons in the name's row", () => {
-    render(<SampleDataPanel {...props()} />);
-    // span -> label -> the flex row that also holds the buttons
-    const row = screen.getByText("Empty").parentElement?.parentElement;
-    const edit = screen.getAllByRole("button", { name: "Edit" })[1];
-    const del = screen.getByRole("button", { name: "Delete dataset Empty" });
-    expect(row).toContainElement(edit);
-    expect(row).toContainElement(del);
-    expect(edit).toHaveTextContent("");
-    expect(del).toHaveTextContent("");
+  it("offers to edit the account's single dataset", () => {
+    const p = props();
+    render(<SampleDataPanel {...p} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit sample data" }));
+    expect(p.onEdit).toHaveBeenCalled();
   });
 
   it("filters the variables", () => {
@@ -1089,22 +1069,6 @@ describe("SampleDataPanel", () => {
       "\n{{/each}}".length,
     );
     unmount();
-  });
-
-  it("adds, edits and deletes datasets, but never deletes the default one", () => {
-    const p = props();
-    render(<SampleDataPanel {...p} />);
-    fireEvent.click(screen.getByRole("button", { name: /Add Dataset/ }));
-    expect(p.onAdd).toHaveBeenCalled();
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[1]);
-    expect(p.onEdit).toHaveBeenCalledWith(datasets[1]);
-    expect(
-      screen.getByRole("button", { name: "Delete dataset Sample Order" }),
-    ).toBeDisabled();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Delete dataset Empty" }),
-    );
-    expect(p.onDelete).toHaveBeenCalledWith(datasets[1]);
   });
 });
 

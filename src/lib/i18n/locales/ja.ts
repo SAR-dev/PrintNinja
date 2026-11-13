@@ -294,15 +294,7 @@ const ja: Translation = {
     helper_title: "カーソル位置に {{snippet}} を挿入",
     barcode_types: "バーコードの種類:",
     barcode_more: "ほか{{count}}件",
-    sample_add: "データセットを追加",
-    sample_empty:
-      "データセットはまだありません。追加すると、テンプレートのプレビューと検証ができます。",
-    sample_default_note: "{{name}} がデフォルトに設定されています",
-    // 組み込みのデフォルトデータセットの表示名。保存名は
-    // 「Sample Order」のままなので、表示のみ翻訳する (P38)。
-    sample_order_name: "サンプル受注",
-    sample_use: "データセット {{name}} を使用",
-    sample_delete: "データセット {{name}} を削除",
+    sample_edit: "サンプルデータを編集",
     sample_fields: "フィールド:",
     sample_copy: "クリップボードにコピー",
     sample_json: "JSONを表示",
@@ -374,16 +366,8 @@ const ja: Translation = {
     toast_created_local: "テンプレート「{{name}}」をローカルに作成しました",
     toast_readme_too_big: "READMEが64 KiBを超えています",
     toast_showing_canvas: "キャンバスを表示しています",
-    toast_dataset_deleted:
-      "データセットを削除しました（テンプレートを保存すると反映されます）",
     toast_delete_failed: "削除に失敗しました: {{error}}",
-    toast_dataset_name_required: "データセット名を入力してください",
-    toast_dataset_name_too_long:
-      "データセット名は{{max}}文字以内にしてください",
-    toast_dataset_name_exists: "同じ名前のデータセットがすでにあります",
     toast_invalid_json: "JSONが正しくありません",
-    toast_dataset_added:
-      "データセット「{{name}}」を追加しました（テンプレートを保存すると確定します）",
     toast_add_failed: "追加に失敗しました: {{error}}",
     toast_dataset_updated:
       "データセットを更新しました（テンプレートを保存すると確定します）",
@@ -406,7 +390,6 @@ const ja: Translation = {
       "このテンプレートには保存されていない編集があります。続けると失われます。",
     discard_confirm: "変更を破棄",
     sheet_done: "完了",
-    sample_add_title: "データセットを追加",
     barcode_title: "バーコードを挿入",
     barcode_type: "種類",
     barcode_from_data: "データフィールドから値を読み取る",
@@ -421,8 +404,6 @@ const ja: Translation = {
     views_aria: "デザイナーのビュー",
     editor_done: "完了",
 
-    sample_name_example: "例: 空の注文",
-    sample_edit_title: "データセットを編集: {{name}}",
     sample_save: "保存",
     new_name_example: "マイテンプレート",
     new_create: "作成",

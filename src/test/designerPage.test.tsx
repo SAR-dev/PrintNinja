@@ -317,8 +317,8 @@ describe("Designer page layout on a phone", () => {
     openTab("Sample data");
     expect(await screen.findByText("Available helpers:")).toBeInTheDocument();
     expect(
-      screen.getByRole("radio", { name: "Use dataset Sample Order" }),
-    ).toBeChecked();
+      screen.getByRole("button", { name: "Edit sample data" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the sync bar in the page header area, outside the tabs", async () => {
@@ -516,7 +516,7 @@ describe("Designer page layout on desktop", () => {
     expect(controls.getByLabelText("Width (mm)")).toBeInTheDocument();
   });
 
-  it("shows the sample datasets in the controls column, open by default, beside the editor and canvas they drive", async () => {
+  it("shows the sample data in the controls column, open by default, beside the editor and canvas it drives", async () => {
     renderDesigner();
     await screen.findByTitle("Canvas preview");
     const controls = within(
@@ -526,8 +526,8 @@ describe("Designer page layout on desktop", () => {
       controls.getByRole("button", { name: "Sample data" }),
     ).toHaveAttribute("aria-expanded", "true");
     expect(
-      await controls.findByRole("radio", { name: "Use dataset Sample Order" }),
-    ).toBeChecked();
+      await controls.findByRole("button", { name: "Edit sample data" }),
+    ).toBeInTheDocument();
     // Not a tab in the code editor any more.
     expect(
       screen.queryByRole("tab", { name: "Sample data" }),
