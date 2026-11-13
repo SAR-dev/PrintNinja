@@ -283,6 +283,8 @@ const en = {
     template_error: "Template error:",
     canvas_preview: "Canvas preview",
     canvas_size: "{{w}} × {{h}} mm",
+    canvas_sample_note:
+      "Showing the {{name}} sample data — your sample data has none of this template's fields. Edit the sample data to preview your own values",
     page_n_of: "Page {{n}} of {{total}}",
     measuring_pages: "Measuring pages…",
     helpers_insert: "Click a helper to insert it at the cursor:",
