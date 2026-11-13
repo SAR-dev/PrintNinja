@@ -296,10 +296,7 @@ export function CanvasWorkspace({
           role="status"
           className="flex shrink-0 items-start gap-2 border-b border-info/30 bg-info-soft px-3 py-2 text-xs text-info"
         >
-          <Info
-            className="mt-0.5 h-3.5 w-3.5 shrink-0"
-            aria-hidden="true"
-          />
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span className="min-w-0 break-words">{sampleNote}</span>
         </div>
       )}
