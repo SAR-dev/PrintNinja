@@ -11,6 +11,8 @@ to-the-point bullets — a bold lead plus at most two lines of detail.
 
 ## Unreleased
 
+## [2026.1113.0] - 2026-11-13
+
 ### Changed
 
 - **Every barcode type now prints.** The five formerly preview-only
