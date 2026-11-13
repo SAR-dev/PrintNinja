@@ -353,6 +353,7 @@ const en = {
     toast_add_failed: "Add failed: {{error}}",
     toast_saved: "Saved to the server",
     toast_saved_published: "Saved — the published copy is updated",
+    toast_overwrote: "Overwrote the server copy",
     save_offline_title: "Offline — connect to save to the server",
     toast_save_failed: "Save failed: {{error}}",
     controls_expanded: "Designer controls",

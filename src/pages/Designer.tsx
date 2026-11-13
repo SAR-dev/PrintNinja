@@ -704,8 +704,9 @@ export function DesignerPage() {
       setRemoteId(result.remoteId);
       setPublishedAt(result.published ? result.updatedAt : null);
       setConflict(null);
-      // The canvas already holds these contents — the overwrite is
-      // visible in place, so no toast.
+      // The overwrite lands on the server — a new version no other
+      // screen shows, like a normal server save.
+      notifySuccess(t("designer.toast_overwrote"));
     } catch (e) {
       if (e instanceof TemplateConflictError) {
         notifyError(t("designer.toast_moved_again"));

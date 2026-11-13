@@ -50,6 +50,12 @@ test("print submits the whole form, including page range and grayscale", async (
     page.locator('iframe[title="Print preview"]').first(),
   ).toBeAttached({ timeout: 15_000 });
 
+  // Page range, grayscale and paper size sit in the Advanced options
+  // fold, which is closed by default.
+  const advanced = page.getByRole("button", { name: /Advanced options/ });
+  await expect(advanced).toHaveAttribute("aria-expanded", "false");
+  await advanced.click();
+
   await page.getByLabel("Page range").fill("1-3");
   await page.getByLabel("Grayscale").click();
   await page.getByRole("combobox", { name: "Paper size" }).click();
