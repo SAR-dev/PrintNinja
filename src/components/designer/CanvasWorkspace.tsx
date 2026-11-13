@@ -5,7 +5,7 @@ import {
   type TouchEvent as ReactTouchEvent,
   type TouchList as ReactTouchList,
 } from "react";
-import { AlertTriangle, ZoomIn, ZoomOut } from "lucide-react";
+import { AlertTriangle, Info, ZoomIn, ZoomOut } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,6 +76,8 @@ interface Props {
   data: Record<string, unknown>;
   pageWidthMm: number;
   pageHeightMm: number;
+  /** One-line note under the toolbar, e.g. that the canvas shows a pack's sample data. */
+  sampleNote?: string;
   /** Fill the height of the parent and scroll inside (desktop); otherwise a fixed minimum height. */
   fill?: boolean;
   className?: string;
@@ -89,6 +91,7 @@ export function CanvasWorkspace({
   data,
   pageWidthMm,
   pageHeightMm,
+  sampleNote,
   fill = false,
   className,
 }: Props) {
@@ -286,6 +289,15 @@ export function CanvasWorkspace({
             </strong>{" "}
             {error}
           </span>
+        </div>
+      )}
+      {sampleNote && (
+        <div
+          role="status"
+          className="flex shrink-0 items-start gap-2 border-b border-info/30 bg-info-soft px-3 py-2 text-xs text-info"
+        >
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 break-words">{sampleNote}</span>
         </div>
       )}
       {/* m-auto centres a small page and still lets a large one scroll to its left edge.
