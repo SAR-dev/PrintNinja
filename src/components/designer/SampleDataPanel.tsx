@@ -166,25 +166,21 @@ export function SampleDataPanel({ dataset, onEdit, onInsert }: Props) {
       {/* Variables: the dataset's paths, with sample values, click to insert */}
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-xs font-semibold">
+          <h3 className="flex items-baseline gap-1.5 text-xs font-semibold">
             {t("designer.sample_variables")}
-          </h3>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
-              {onInsert
-                ? t("designer.sample_click_insert")
-                : t("designer.sample_click_copy")}
+            <span className="font-normal tabular-nums text-muted-foreground">
+              {visible.length}
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 gap-1 px-2 text-xs"
-              onClick={onEdit}
-            >
-              <Pencil className="h-3 w-3" aria-hidden="true" />
-              {t("designer.sample_edit")}
-            </Button>
-          </div>
+          </h3>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 shrink-0 gap-1 px-2 text-xs"
+            onClick={onEdit}
+          >
+            <Pencil className="h-3 w-3" aria-hidden="true" />
+            {t("designer.sample_edit")}
+          </Button>
         </div>
         <div className="relative">
           <Search
@@ -199,40 +195,61 @@ export function SampleDataPanel({ dataset, onEdit, onInsert }: Props) {
             className="h-8 pl-7 text-xs"
           />
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          {onInsert
+            ? t("designer.sample_click_insert")
+            : t("designer.sample_click_copy")}
+        </p>
         {visible.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
+          <p className="py-4 text-center text-xs text-muted-foreground">
             {t("designer.sample_no_match")}
           </p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {groups.map(([group, list]) => (
-              <div key={group || "_root"} className="space-y-0.5">
+              <section key={group || "_root"} aria-label={group || undefined}>
                 {group && (
-                  <p className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    {group}
-                  </p>
+                  <h4 className="sticky top-0 z-10 flex items-center gap-2 bg-background py-1 text-[11px] font-medium text-muted-foreground">
+                    <span>{group}</span>
+                    <span
+                      className="h-px flex-1 bg-border"
+                      aria-hidden="true"
+                    />
+                    <span className="tabular-nums">{list.length}</span>
+                  </h4>
                 )}
-                {list.map((v) => (
-                  <button
-                    key={v.path}
-                    type="button"
-                    title={
-                      onInsert
-                        ? t("designer.sample_insert_title")
-                        : t("designer.sample_copy")
-                    }
-                    onClick={() => void applyVariable(v)}
-                    className="flex w-full items-baseline justify-between gap-2 rounded px-1.5 py-1 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:min-h-11"
-                  >
-                    <code className="shrink-0 font-mono text-xs">
-                      {`{{${v.path}}}`}
-                    </code>
-                    <span className="min-w-0 truncate text-xs text-muted-foreground">
-                      {v.kind === "list" ? `${v.preview} ↻` : v.preview}
-                    </span>
-                  </button>
-                ))}
-              </div>
+                <ul className="space-y-px">
+                  {list.map((v) => (
+                    <li key={v.path}>
+                      <button
+                        type="button"
+                        title={
+                          v.preview
+                            ? `${v.preview}\n${
+                                onInsert
+                                  ? t("designer.sample_insert_title")
+                                  : t("designer.sample_copy")
+                              }`
+                            : onInsert
+                              ? t("designer.sample_insert_title")
+                              : t("designer.sample_copy")
+                        }
+                        onClick={() => void applyVariable(v)}
+                        className="block w-full rounded-md px-2 py-1.5 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:min-h-11"
+                      >
+                        <code className="block break-all font-mono text-xs leading-snug text-foreground">
+                          {`{{${v.path}}}`}
+                        </code>
+                        {v.preview && (
+                          <span className="mt-0.5 line-clamp-2 break-words text-[11px] leading-snug text-muted-foreground">
+                            {v.kind === "list" ? `${v.preview} ↻` : v.preview}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
           </div>
         )}
