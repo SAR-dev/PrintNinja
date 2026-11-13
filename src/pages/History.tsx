@@ -325,7 +325,7 @@ export function HistoryPage() {
         n.delete(String(job.id));
         return n;
       });
-      notifySuccess(t("history.toast_deleted", { id: job.id }));
+      // The row disappears from the list — visible, no toast.
       setConfirm(null);
     } catch (e) {
       notifyError(
@@ -428,7 +428,7 @@ export function HistoryPage() {
     persistSaved(next);
     setSaveOpen(false);
     setSaveName("");
-    notifySuccess(t("history.toast_saved", { name }));
+    // The new entry appears in the saved-filters dropdown — visible.
   };
   const removeSaved = (name: string) => {
     const next = saved.filter((s) => s.name !== name);

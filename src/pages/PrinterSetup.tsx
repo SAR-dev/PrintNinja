@@ -6,7 +6,14 @@ import {
   supportedPrinterTypes,
 } from "@/lib/platform";
 import { TimeoutError, withTimeout } from "@/lib/withTimeout";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SetStateAction,
+} from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { PageHeader } from "@/components/PageHeader";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
@@ -201,7 +208,7 @@ export function PrinterSetupPage() {
       cancelled = true;
     };
   }, []);
-  const [form, setForm] = useState<LoosePrinterForm>({
+  const [form, setFormRaw] = useState<LoosePrinterForm>({
     name: "",
     printer_type: "ipp",
     address: "",
@@ -214,6 +221,14 @@ export function PrinterSetupPage() {
     skip_tls_verification: false,
     via_driver: false,
   });
+  // The one failing check from the last Save, as an i18n key, shown
+  // inline next to the failing field instead of a toast. Any edit to
+  // any field clears it — the person is already on top of it.
+  const [formErrorKey, setFormErrorKey] = useState<string | null>(null);
+  const setForm = (update: SetStateAction<LoosePrinterForm>) => {
+    setFormRaw(update);
+    setFormErrorKey(null);
+  };
 
   const blankForm: LoosePrinterForm = {
     name: "",
@@ -242,6 +257,7 @@ export function PrinterSetupPage() {
     setAdvancedOpen(false);
     setSignInOpen(false);
     setAddressTouched(false);
+    setFormErrorKey(null);
   };
 
   const openAdd = () => {
@@ -348,14 +364,11 @@ export function PrinterSetupPage() {
   // The three scans below back the dialog's single Rescan button. Run from
   // there they are quiet on success (the counts in the block say what was
   // found) and loud only on failure.
-  const refreshSystem = async (quiet = false) => {
+  const refreshSystem = async () => {
     setScanningSys(true);
     try {
       const list = await agent("enumerate_system_printers", {});
       setSystemPrinters(list ?? []);
-      if (!quiet) {
-        notifySuccess(t("printers.toast_found_system", { count: list.length }));
-      }
     } catch (e) {
       notifyError(
         t("printers.toast_discovery_failed", { error: describeError(e) }),
@@ -368,16 +381,13 @@ export function PrinterSetupPage() {
 
   // mDNS scan for the add panel: listens for IPP and JetDirect
   // advertisements via NsdManager on Android or mdns-sd on desktop.
-  const scanNetwork = async (quiet = false) => {
+  const scanNetwork = async () => {
     setScanningNet(true);
     try {
       const list = await agent("discover_network_printers", {
         timeout_secs: 8,
       });
       setNetworkPrinters(list ?? []);
-      if (!quiet && (!list || list.length === 0)) {
-        notifyInfo(t("printers.toast_no_network"));
-      }
     } catch (e) {
       notifyError(
         t("printers.toast_discovery_failed", { error: describeError(e) }),
@@ -389,33 +399,27 @@ export function PrinterSetupPage() {
 
   // Bonded-device listing for the add panel (Android only): the MAC of a
   // paired printer is the address a Bluetooth row stores.
-  const scanBluetooth = useCallback(
-    async (quiet = false) => {
-      setScanningBt(true);
-      try {
-        const list = await agent("list_bluetooth_devices", {});
-        setBtPrinters(list ?? []);
-        if (!quiet && (!list || list.length === 0)) {
-          notifyInfo(t("printers.toast_no_bluetooth"));
-        }
-      } catch (e) {
-        notifyError(
-          t("printers.toast_discovery_failed", { error: describeError(e) }),
-        );
-      } finally {
-        setScanningBt(false);
-      }
-    },
-    [t],
-  );
+  const scanBluetooth = useCallback(async () => {
+    setScanningBt(true);
+    try {
+      const list = await agent("list_bluetooth_devices", {});
+      setBtPrinters(list ?? []);
+    } catch (e) {
+      notifyError(
+        t("printers.toast_discovery_failed", { error: describeError(e) }),
+      );
+    } finally {
+      setScanningBt(false);
+    }
+  }, [t]);
 
   /** One Rescan for every source the dialog currently shows. */
   const rescanAll = () => {
     const jobs: Promise<void>[] = [];
-    if (!isAndroid()) jobs.push(refreshSystem(true));
-    jobs.push(scanNetwork(true));
+    if (!isAndroid()) jobs.push(refreshSystem());
+    jobs.push(scanNetwork());
     if (isAndroid() && form.printer_type === "bluetooth") {
-      jobs.push(scanBluetooth(true));
+      jobs.push(scanBluetooth());
     }
     void Promise.all(jobs);
   };
@@ -518,11 +522,8 @@ export function PrinterSetupPage() {
         notifyInfo(t("printers.toast_no_system"));
         return;
       }
-      let added = 0;
-      let skipped = 0;
       for (const sp of list) {
         if (printers.some((p) => p.name === sp.name)) {
-          skipped++;
           continue;
         }
         try {
@@ -536,7 +537,6 @@ export function PrinterSetupPage() {
               dpi: 203,
             },
           });
-          added++;
         } catch {
           // ignore duplicate / validation errors per-printer
         }
@@ -544,13 +544,8 @@ export function PrinterSetupPage() {
       await load();
       // refresh discovered list too
       setSystemPrinters(list);
-      if (added > 0)
-        notifySuccess(
-          `Added ${added} system printer(s)${skipped ? `, ${skipped} already existed` : ""}`,
-        );
-      else if (skipped)
-        notifyInfo(t("printers.toast_all_added", { count: skipped }));
-      else notifyInfo(t("printers.toast_none_new"));
+      // The table and the detected-devices block update with the new
+      // rows — the result is on screen, so no toast.
     } catch (e) {
       notifyError(t("printers.toast_scan_failed", { error: describeError(e) }));
     } finally {
@@ -567,7 +562,9 @@ export function PrinterSetupPage() {
         setAdvancedOpen(true);
       }
       setAddressTouched(true);
-      notifyError(t(parsed.messageKey));
+      // The message lands inline next to the failing field, not in a
+      // toast — the field is right here on screen.
+      setFormErrorKey(parsed.messageKey);
       return;
     }
     const req = parsed.req;
@@ -960,10 +957,40 @@ export function PrinterSetupPage() {
   const showAddressIssue =
     addressIssueKey !== null &&
     (addressIssueKey === "printers.err_bt_usb_port" || addressTouched);
+  // Where the last failed Save's message lives: one inline slot per
+  // field. Address-shape keys skip their slot when the live Bluetooth
+  // check is already showing the same problem — one message per field.
+  const formErrorIsAddress =
+    formErrorKey !== null &&
+    !showAddressIssue &&
+    (formErrorKey === "printers.err_address_required" ||
+      formErrorKey === "printers.err_ipp_url" ||
+      formErrorKey === "printers.err_raw_tcp" ||
+      formErrorKey === "printers.err_bluetooth" ||
+      formErrorKey === "printers.err_bt_usb_port");
+  const formErrorIsPaper =
+    formErrorKey?.startsWith("printers.err_paper") === true;
+  const formErrorIsDpi = formErrorKey?.startsWith("printers.err_dpi") === true;
+  // The gap field only exists for TSPL; a stored gap failing on another
+  // language has no slot, so it falls to the banner below.
+  const formErrorIsGap =
+    formErrorKey?.startsWith("printers.err_gap") === true &&
+    form.language === "tspl";
+  const formErrorIsName = formErrorKey === "printers.err_name_required";
+  // What no single field owns (unknown type / language, unparsable):
+  // one banner at the top of the form.
+  const formErrorBanner =
+    formErrorKey !== null &&
+    !formErrorIsAddress &&
+    !formErrorIsPaper &&
+    !formErrorIsDpi &&
+    !formErrorIsGap &&
+    !formErrorIsName;
   const addressDescribedBy =
     [
       addressHintKey ? "printer-address-hint" : null,
       showAddressIssue ? "printer-address-error" : null,
+      formErrorIsAddress ? "printer-address-submit-error" : null,
     ]
       .filter(Boolean)
       .join(" ") || undefined;
@@ -1120,16 +1147,39 @@ export function PrinterSetupPage() {
               />
             )}
 
+            {formErrorBanner && formErrorKey && (
+              <p
+                role="alert"
+                data-testid="printer-form-error"
+                className="text-xs text-destructive"
+              >
+                {t(formErrorKey)}
+              </p>
+            )}
             <div className={field}>
               <Label htmlFor="printer-name">{t("printers.form_name")}</Label>
               <Input
                 id="printer-name"
                 value={form.name}
                 placeholder={t("printers.form_name_example")}
+                aria-invalid={formErrorIsName || undefined}
+                aria-describedby={
+                  formErrorIsName ? "printer-name-error" : undefined
+                }
                 onChange={(e) =>
                   setForm((f) => ({ ...f, name: e.target.value }))
                 }
               />
+              {formErrorIsName && (
+                <p
+                  id="printer-name-error"
+                  role="alert"
+                  data-testid="printer-name-error"
+                  className="text-xs text-destructive"
+                >
+                  {t("printers.err_name_required")}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -1266,7 +1316,9 @@ export function PrinterSetupPage() {
                 id="printer-address"
                 value={form.address}
                 aria-describedby={addressDescribedBy}
-                aria-invalid={showAddressIssue || undefined}
+                aria-invalid={
+                  showAddressIssue || formErrorIsAddress || undefined
+                }
                 onBlur={() => setAddressTouched(true)}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, address: e.target.value }))
@@ -1288,6 +1340,16 @@ export function PrinterSetupPage() {
                   className="text-xs text-destructive"
                 >
                   {t(addressIssueKey)}
+                </p>
+              )}
+              {formErrorIsAddress && formErrorKey && (
+                <p
+                  id="printer-address-submit-error"
+                  role="alert"
+                  data-testid="printer-address-submit-error"
+                  className="text-xs text-destructive"
+                >
+                  {t(formErrorKey)}
                 </p>
               )}
             </div>
@@ -1504,6 +1566,10 @@ export function PrinterSetupPage() {
                       max="1000"
                       list="printer-paper-widths"
                       value={form.paper_width_mm}
+                      aria-invalid={formErrorIsPaper || undefined}
+                      aria-describedby={
+                        formErrorIsPaper ? "printer-paper-error" : undefined
+                      }
                       onChange={(e) =>
                         setForm((f) => ({
                           ...f,
@@ -1518,6 +1584,16 @@ export function PrinterSetupPage() {
                         </option>
                       ))}
                     </datalist>
+                    {formErrorIsPaper && formErrorKey && (
+                      <p
+                        id="printer-paper-error"
+                        role="alert"
+                        data-testid="printer-paper-error"
+                        className="text-xs text-destructive"
+                      >
+                        {t(formErrorKey)}
+                      </p>
+                    )}
                   </div>
                   <div className={field}>
                     <Label htmlFor="printer-dpi">{t("printers.dpi")}</Label>
@@ -1528,6 +1604,10 @@ export function PrinterSetupPage() {
                       max="2400"
                       list="printer-dpis"
                       value={form.dpi}
+                      aria-invalid={formErrorIsDpi || undefined}
+                      aria-describedby={
+                        formErrorIsDpi ? "printer-dpi-error" : undefined
+                      }
                       onChange={(e) =>
                         setForm((f) => ({ ...f, dpi: e.target.value }))
                       }
@@ -1537,6 +1617,16 @@ export function PrinterSetupPage() {
                       <option value="300" />
                       <option value="600" />
                     </datalist>
+                    {formErrorIsDpi && formErrorKey && (
+                      <p
+                        id="printer-dpi-error"
+                        role="alert"
+                        data-testid="printer-dpi-error"
+                        className="text-xs text-destructive"
+                      >
+                        {t(formErrorKey)}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1552,7 +1642,12 @@ export function PrinterSetupPage() {
                       max="50"
                       step="0.1"
                       value={form.label_gap_mm}
-                      aria-describedby="printer-label-gap-hint"
+                      aria-invalid={formErrorIsGap || undefined}
+                      aria-describedby={
+                        formErrorIsGap
+                          ? "printer-label-gap-hint printer-label-gap-error"
+                          : "printer-label-gap-hint"
+                      }
                       onChange={(e) =>
                         setForm((f) => ({
                           ...f,
@@ -1566,6 +1661,16 @@ export function PrinterSetupPage() {
                     >
                       {t("printers.label_gap_hint")}
                     </p>
+                    {formErrorIsGap && formErrorKey && (
+                      <p
+                        id="printer-label-gap-error"
+                        role="alert"
+                        data-testid="printer-label-gap-error"
+                        className="text-xs text-destructive"
+                      >
+                        {t(formErrorKey)}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
