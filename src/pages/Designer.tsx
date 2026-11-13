@@ -75,12 +75,7 @@ import { PanelLeftClose, QrCode, Save, SlidersHorizontal } from "lucide-react";
 import { notifySuccess, notifyError } from "@/lib/notify";
 import CodeMirror from "@uiw/react-codemirror";
 import { json } from "@codemirror/lang-json";
-import {
-  BARCODE_TYPES,
-  buildBarcodeSnippet,
-  isHelperSymbology,
-  isPreviewOnlySymbology,
-} from "@/lib/utils/barcode";
+import { BARCODE_TYPES, buildBarcodeSnippet } from "@/lib/utils/barcode";
 import {
   DEFAULT_TEMPLATE_HTML,
   DEFAULT_TEMPLATE_CSS,
@@ -971,7 +966,7 @@ export function DesignerPage() {
     const snippet = buildBarcodeSnippet(
       barcodeType,
       barcodeValue,
-      barcodeFromData && isHelperSymbology(barcodeType),
+      barcodeFromData,
     );
     if (!snippet.ok) {
       setBarcodeError(
@@ -982,9 +977,7 @@ export function DesignerPage() {
       );
       return;
     }
-    insertHelper(
-      snippet.kind === "static" ? "\n" + snippet.text : snippet.text,
-    );
+    insertHelper(snippet.text);
     setShowBarcodeDialog(false);
     setBarcodeValue("");
     setBarcodeError(null);
@@ -1471,8 +1464,7 @@ export function DesignerPage() {
               </Label>
               <Switch
                 id="barcode-from-data"
-                checked={barcodeFromData && isHelperSymbology(barcodeType)}
-                disabled={!isHelperSymbology(barcodeType)}
+                checked={barcodeFromData}
                 onCheckedChange={(on) => {
                   setBarcodeFromData(on);
                   setBarcodeError(null);
@@ -1481,14 +1473,14 @@ export function DesignerPage() {
             </div>
             <div className="space-y-1">
               <Label htmlFor="barcode-value">
-                {barcodeFromData && isHelperSymbology(barcodeType)
+                {barcodeFromData
                   ? t("designer.barcode_field")
                   : t("designer.barcode_value")}
               </Label>
               <Input
                 id="barcode-value"
                 placeholder={
-                  barcodeFromData && isHelperSymbology(barcodeType)
+                  barcodeFromData
                     ? t("designer.barcode_field_example")
                     : t("designer.barcode_value_hint")
                 }
@@ -1499,23 +1491,10 @@ export function DesignerPage() {
                 }}
               />
               <p className="text-xs text-muted-foreground">
-                {!isHelperSymbology(barcodeType)
-                  ? t("designer.barcode_fixed_hint")
-                  : barcodeFromData
-                    ? t("designer.barcode_per_print")
-                    : t("designer.barcode_same")}
+                {barcodeFromData
+                  ? t("designer.barcode_per_print")
+                  : t("designer.barcode_same")}
               </p>
-              {/* Design-time warning (MISSING_FEATURES #37): the preview
-                  draws these, the built-in print engine will not. */}
-              {isPreviewOnlySymbology(barcodeType) && (
-                <p
-                  id="barcode-preview-only-hint"
-                  role="alert"
-                  className="text-xs text-warning"
-                >
-                  {t("designer.barcode_preview_only_hint")}
-                </p>
-              )}
               {barcodeError && (
                 <p
                   id="barcode-error"

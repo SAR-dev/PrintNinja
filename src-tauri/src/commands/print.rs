@@ -386,6 +386,136 @@ fn design_document(page_html: &str, css: &str) -> String {
     }
 }
 
+/// Content-Security-Policy meta for the sandboxed preview iframe. Must stay
+/// byte-identical to `CSP_META` in `src/lib/render/renderTemplate.ts` so the
+/// Rust preview is as hardened as the JS one it replaces (V2.md §8.3).
+const PREVIEW_CSP_META: &str = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:\">";
+
+/// Replace the first `needle` in `html` with `replacement` — the JS preview
+/// uses `String.prototype.replace` with a string, which touches only the first
+/// match, so the Rust port must too.
+fn replace_first(html: &str, needle: &str, replacement: &str) -> Option<String> {
+    let idx = html.find(needle)?;
+    let mut out = String::with_capacity(html.len() + replacement.len());
+    out.push_str(&html[..idx]);
+    out.push_str(replacement);
+    out.push_str(&html[idx + needle.len()..]);
+    Some(out)
+}
+
+/// Inject the preview CSP meta, mirroring the JS `injectCsp`.
+fn inject_preview_csp(html: &str) -> String {
+    let lower = html.to_ascii_lowercase();
+    if lower.contains("http-equiv=\"content-security-policy\"")
+        || lower.contains("http-equiv='content-security-policy'")
+    {
+        return html.to_string();
+    }
+    if let Some(out) = replace_first(html, "</head>", &format!("{PREVIEW_CSP_META}\n</head>")) {
+        return out;
+    }
+    // `<head ...>` opening tag: insert the meta right after it.
+    if let Some(i) = html.find("<head") {
+        let after = &html[i + "<head".len()..];
+        let is_tag = after
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_whitespace() || c == '>');
+        if is_tag {
+            if let Some(close_rel) = after.find('>') {
+                let insert_at = i + "<head".len() + close_rel + 1;
+                let mut out = String::with_capacity(html.len() + PREVIEW_CSP_META.len());
+                out.push_str(&html[..insert_at]);
+                out.push('\n');
+                out.push_str(PREVIEW_CSP_META);
+                out.push_str(&html[insert_at..]);
+                return out;
+            }
+        }
+    }
+    if let Some(out) = replace_first(
+        html,
+        "<html",
+        &format!("<html>\n<head>{PREVIEW_CSP_META}</head>"),
+    ) {
+        return out;
+    }
+    format!("{PREVIEW_CSP_META}\n{html}")
+}
+
+/// Inject a `<style data-printninja>` block, mirroring the JS `injectStyles`.
+fn inject_preview_styles(html: &str, css: &str) -> String {
+    let style_tag = format!("<style data-printninja>{css}</style>");
+    if let Some(out) = replace_first(html, "</head>", &format!("{style_tag}\n</head>")) {
+        return out;
+    }
+    if let Some(out) = replace_first(html, "<body", &format!("{style_tag}\n<body")) {
+        return out;
+    }
+    if let Some(out) = replace_first(html, "<html", &format!("<html>\n{style_tag}")) {
+        return out;
+    }
+    format!("{style_tag}\n{html}")
+}
+
+/// Whether `body` is already a full HTML document (has a `<html>` tag), the
+/// same test the JS preview's `wrapDocument` runs before deciding to inject
+/// rather than nest.
+fn is_full_document(body: &str) -> bool {
+    body.find("<html").is_some_and(|i| {
+        body[i + "<html".len()..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_whitespace() || c == '>')
+    })
+}
+
+/// Wrap one rendered record in a complete preview document: the template's
+/// stylesheet inlined (base + compiled Tailwind + user CSS, via
+/// [`build_template_css`]) and the sandbox CSP injected. This is the Rust
+/// port of the JS preview's `wrapDocument` — the document is meant for a
+/// sandboxed iframe with no `allow-scripts` or `allow-same-origin`.
+fn preview_document(body: &str, css: &str, compiled_css: &str) -> String {
+    let styles = build_template_css(css, compiled_css);
+    if is_full_document(body) {
+        let doc = inject_preview_styles(body, &styles);
+        return inject_preview_csp(&doc);
+    }
+    format!(
+        "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"UTF-8\">\n{csp}\n<style data-printninja>{styles}</style>\n</head>\n<body>\n{body}\n</body>\n</html>",
+        csp = PREVIEW_CSP_META,
+    )
+}
+
+/// Render a template preview: one complete document per record, produced by
+/// the same engine and stylesheet assembly as the print path but wrapped for
+/// a sandboxed preview iframe (CSP injected). Replaces the JS
+/// `renderDesignPages`/`renderTemplate`.
+///
+/// A broken template is surfaced as `Err` with the engine's message instead
+/// of being hidden; the caller falls back to the raw source locally.
+#[tauri::command]
+pub async fn render_template_preview(
+    html: String,
+    css: String,
+    compiled_css: String,
+    records: Vec<serde_json::Value>,
+) -> Result<Vec<String>, String> {
+    let engine = TemplateEngine::new();
+    let mut pages = Vec::with_capacity(records.len());
+    for (idx, record) in records.iter().enumerate() {
+        let rendered = engine.render(&html, record).map_err(|e| {
+            if records.len() > 1 {
+                format!("Template render failed on record {}: {e}", idx + 1)
+            } else {
+                format!("Template render failed: {e}")
+            }
+        })?;
+        pages.push(preview_document(&rendered, &css, &compiled_css));
+    }
+    Ok(pages)
+}
+
 /// Build the final printable HTML: every record rendered at the design size
 /// and placed on the paper by the request's fit mode and margins.
 ///

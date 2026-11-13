@@ -18,7 +18,7 @@ For each printer, run all four jobs below and note pass/fail plus any anomalies 
 
 - A template with at least one barcode (Code 128 or QR) and one QR code.
 - Verify: the barcode is scannable by a phone camera or scanner; the QR code encodes the correct data.
-- Note: `datamatrix`, `pdf417` and `aztec` are preview-only and will not print (see MISSING_FEATURES item 37, solved).
+- Note: every barcode type prints now. If you add a Data Matrix, PDF417, Aztec, UPC-E or ITF-14, verify it with a scanner that supports that symbology — a phone camera usually cannot read them.
 
 ### 3. Image job
 

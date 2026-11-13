@@ -31,7 +31,7 @@ import { Switch } from "@/components/ui/switch";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { PrintPreview } from "@/components/PrintPreview";
 import { MM_TO_PX } from "@/lib/render/paginate";
-import { renderDesignPages } from "@/lib/render/renderTemplate";
+import { renderDesignPagesRust } from "@/lib/render/rustPreview";
 import { cn } from "@/lib/utils";
 import { formatSeconds } from "@/lib/timings";
 import type { PaperKey } from "@/lib/paperPresets";
@@ -829,17 +829,14 @@ function TemplateThumb({ tpl }: { tpl: TemplateListRow | null }) {
     let cancelled = false;
     // A tick later: the picker never blocks the first paint.
     const timer = window.setTimeout(() => {
-      try {
-        const pages = renderDesignPages(
-          tpl.html,
-          tpl.css,
-          [DEFAULT_MOCK_DATA],
-          tpl.compiled_css || null,
-        );
+      void renderDesignPagesRust(
+        tpl.html,
+        tpl.css,
+        [DEFAULT_MOCK_DATA],
+        tpl.compiled_css || null,
+      ).then(({ pages }) => {
         if (!cancelled) setDoc(pages[0] ?? null);
-      } catch {
-        if (!cancelled) setDoc(null);
-      }
+      });
     }, 60);
     return () => {
       cancelled = true;

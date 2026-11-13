@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { PrintPreview } from "@/components/PrintPreview";
 import { MarkdownPreview } from "@/components/ReadmeEditor";
-import { renderDesignPages } from "@/lib/render/renderTemplate";
+import { useRenderedPages } from "@/lib/hooks/useRenderedPages";
 
 type ViewerSection = "preview" | "sample" | "readme" | "code" | "details";
 
@@ -57,20 +57,11 @@ export function PhoneDesignerViewer(props: PhoneDesignerViewerProps) {
 
   // One pass of the renderer at the design's own size: the preview is the
   // design, not a print sheet, so paper equals design and margins are zero.
-  const previewPages = useMemo(
-    () =>
-      renderDesignPages(
-        props.debouncedHtml,
-        props.debouncedCss,
-        [props.sampleData],
-        props.compiledCss,
-      ),
-    [
-      props.debouncedHtml,
-      props.debouncedCss,
-      props.sampleData,
-      props.compiledCss,
-    ],
+  const { pages: previewPages } = useRenderedPages(
+    props.debouncedHtml,
+    props.debouncedCss,
+    props.compiledCss,
+    [props.sampleData],
   );
 
   const canSave =

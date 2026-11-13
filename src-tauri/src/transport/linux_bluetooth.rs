@@ -664,7 +664,13 @@ mod tests {
             .await
             .expect("the connect deadline must fire before any hang");
         let err = reached.expect_err("nothing answers at 00:00:00:00:00:00");
-        assert!(err.contains("Bluetooth printer"), "{err}");
+        // A kernel with a Bluetooth stack names the unreachable printer; a
+        // kernel with none at all (containers, CI images) says so instead.
+        // Both are the clean failure this test guards — never a hang.
+        assert!(
+            err.contains("Bluetooth printer") || err.contains("no Bluetooth support"),
+            "{err}"
+        );
     }
 
     /// A test never writes: `test` is reachability, and probe bytes on

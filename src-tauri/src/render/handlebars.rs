@@ -973,12 +973,13 @@ mod tests {
             engine.render("{{barcode \"ean13\" bad}}", &data).unwrap(),
             ""
         );
-        assert_eq!(
-            engine
-                .render("{{barcode \"datamatrix\" bad}}", &data)
-                .unwrap(),
-            ""
-        );
+        // Data Matrix used to be preview-only, when the Rust side rendered
+        // nothing for it; the print engine draws it now, and "123" is a
+        // valid 10x10 symbol.
+        let out = engine
+            .render("{{barcode \"datamatrix\" bad}}", &data)
+            .unwrap();
+        assert!(out.contains("<svg"), "{out}");
     }
 
     #[test]
