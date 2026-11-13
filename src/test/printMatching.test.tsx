@@ -143,7 +143,7 @@ describe("paper size mismatch warning", () => {
     ).toBeInTheDocument();
   });
 
-  it("sets the registered paper width from the warning", async () => {
+  it('opens the dialog from "Other…" to set a different width', async () => {
     invoke.mockImplementation(async (cmd: string) => {
       if (cmd === "get_printer") {
         return {
@@ -163,7 +163,7 @@ describe("paper size mismatch warning", () => {
     });
     renderPage();
     await screen.findByText(/this printer uses 80 mm paper/);
-    fireEvent.click(screen.getByRole("button", { name: "Set paper size" }));
+    fireEvent.click(screen.getByTestId("set-paper-size-other"));
     // Prefilled with the width the current print needs, not the
     // printer's registered 80 mm.
     const input = await screen.findByLabelText("Paper width (mm)");
@@ -181,6 +181,89 @@ describe("paper size mismatch warning", () => {
     // The dialog closes with the width saved; the warning on the card
     // clears — no toast for a result the screen already shows.
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+});
+
+describe("paper width, automated", () => {
+  const savedRow = (id: number, name: string, width: number | null) => ({
+    id,
+    name,
+    address: "usb:00" + id,
+    printer_type: "usb",
+    language: "escpos",
+    paper_width_mm: width,
+    dpi: null,
+  });
+  const mockRows = () =>
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "get_printer")
+        return args.id === 1
+          ? savedRow(1, "Thermal 80", 80)
+          : savedRow(2, "Front Desk", null);
+      if (cmd === "print_html")
+        return { success: true, job_id: "1", duration_ms: 50, timings: null };
+      return null;
+    });
+  const dismissed = (): string[] =>
+    JSON.parse(
+      localStorage.getItem("printninja-setting:paper_width_prompt_dismissed") ??
+        "[]",
+    );
+
+  it("fixes a mismatch in one tap, with no dialog", async () => {
+    mockRows();
+    renderPage();
+    await screen.findByText(/this printer uses 80 mm paper/);
+    fireEvent.click(screen.getByRole("button", { name: "Set to 100 mm" }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "update_printer",
+        expect.objectContaining({
+          id: 1,
+          req: expect.objectContaining({ paper_width_mm: 100 }),
+        }),
+      ),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("offers the sheet's width once for a saved printer with none", async () => {
+    mockRows();
+    renderPage();
+    await screen.findByText(/this printer uses 80 mm paper/);
+    await pickPrinter("Front Desk");
+    expect(
+      await screen.findByText(
+        "Front Desk has no paper width saved. This print uses a 100 mm sheet.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("paper-width-set"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "update_printer",
+        expect.objectContaining({
+          id: 2,
+          req: expect.objectContaining({ paper_width_mm: 100 }),
+        }),
+      ),
+    );
+  });
+
+  it("stops asking for a printer once dismissed", async () => {
+    mockRows();
+    const { unmount } = renderPage();
+    await screen.findByText(/this printer uses 80 mm paper/);
+    await pickPrinter("Front Desk");
+    fireEvent.click(await screen.findByTestId("paper-width-dismiss"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("paper-width-missing")).toBeNull(),
+    );
+    await waitFor(() => expect(dismissed()).toEqual(["front desk"]));
+    unmount();
+    usePrintStore.setState({ printerId: "Front Desk", templateId: "" });
+    renderPage();
+    await screen.findByRole("button", { name: /^Print$/ });
+    expect(screen.queryByTestId("paper-width-missing")).toBeNull();
   });
 });
 

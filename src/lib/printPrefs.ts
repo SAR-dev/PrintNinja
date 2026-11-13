@@ -78,3 +78,25 @@ export async function loadPrintAdvancedOpen(): Promise<boolean> {
 export async function savePrintAdvancedOpen(open: boolean): Promise<void> {
   await writeSetting(PRINT_ADVANCED_OPEN_KEY, open ? "true" : "false");
 }
+
+/**
+ * Saved printers the "no paper width saved" prompt was dismissed for
+ * (keyed by printer name, like the prefs map), so it asks once and then
+ * stays quiet. Stored as a JSON array; anything unreadable is "none".
+ */
+export const PAPER_WIDTH_DISMISSED_KEY = "paper_width_prompt_dismissed";
+
+export async function loadPaperWidthDismissed(): Promise<string[]> {
+  try {
+    const v = JSON.parse(
+      (await readSetting(PAPER_WIDTH_DISMISSED_KEY)) ?? "[]",
+    );
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function savePaperWidthDismissed(names: string[]): Promise<void> {
+  await writeSetting(PAPER_WIDTH_DISMISSED_KEY, JSON.stringify(names));
+}

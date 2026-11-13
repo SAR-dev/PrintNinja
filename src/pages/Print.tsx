@@ -62,8 +62,10 @@ import { notifyError } from "@/lib/notify";
 import { usePrintStore } from "@/lib/store/printStore";
 import {
   loadPrintAdvancedOpen,
+  loadPaperWidthDismissed,
   loadPrintPrefs,
   prefsKey,
+  savePaperWidthDismissed,
   savePrintAdvancedOpen,
   PRINT_PREFS_KEY,
   type PrintPrefsMap,
@@ -79,6 +81,7 @@ import { resolvePaper } from "@/lib/render/printLayout";
 import { derivePaperKey, PAPER_PRESETS } from "@/lib/paperPresets";
 import { PaperSizeFields } from "@/components/print/PaperSizeFields";
 import { PhonePrintFlow } from "@/components/print/PhonePrintFlow";
+import { PaperWidthNotice } from "@/components/print/PaperWidthNotice";
 import { FoldSection } from "@/components/printers/FoldSection";
 
 /** Fit mode → label key, for the Advanced fold's header summary. */
@@ -178,6 +181,19 @@ function PrintForm() {
   const [loading, setLoading] = useState(true);
   // Per-printer remembered choices (F3); persisted under PRINT_PREFS_KEY.
   const [printerPrefs, setPrinterPrefs] = useState<PrintPrefsMap>({});
+  // Printers whose "no paper width saved" prompt was dismissed (asked once).
+  const [paperPromptDismissed, setPaperPromptDismissed] = useState<string[]>(
+    [],
+  );
+  useEffect(() => {
+    let alive = true;
+    void loadPaperWidthDismissed().then((v) => {
+      if (alive) setPaperPromptDismissed(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
   // F3: the paper-width dialog, opened from the mismatch warning below.
   const [paperDlg, setPaperDlg] = useState(false);
   const [paperDlgValue, setPaperDlgValue] = useState("");
@@ -1066,14 +1082,10 @@ function PrintForm() {
     if (w > 1000) return "printers.err_paper_max";
     return null;
   };
-  const savePrinterPaperWidth = async () => {
-    const bad = paperDlgErrorKey();
-    if (bad) {
-      setPaperDlgError(bad);
-      return;
-    }
-    const w = Number(paperDlgValue.trim());
-    if (savedDbId == null) return;
+  // Writes a width onto the saved printer: the row is read first and updated
+  // with only the width changed. Shared by the dialog and the one-tap action.
+  const writePaperWidth = async (w: number): Promise<boolean> => {
+    if (savedDbId == null) return false;
     setPaperDlgBusy(true);
     try {
       const row = await agent("get_printer", { id: savedDbId });
@@ -1089,15 +1101,74 @@ function PrintForm() {
         },
       });
       await refreshSystemPrinters();
-      setPaperDlg(false);
-      // The mismatch warning on the card clears with the new width —
-      // the result is on screen, so no toast.
+      // The notice on the card clears with the new width — the result is
+      // on screen, so no toast.
+      return true;
     } catch (e) {
       notifyError(describeError(e));
+      return false;
     } finally {
       setPaperDlgBusy(false);
     }
   };
+  const savePrinterPaperWidth = async () => {
+    const bad = paperDlgErrorKey();
+    if (bad) {
+      setPaperDlgError(bad);
+      return;
+    }
+    if (await writePaperWidth(Number(paperDlgValue.trim()))) setPaperDlg(false);
+  };
+  // The one-tap action: the whole-mm width the current sheet needs (rounded
+  // up so it always fits), or null when that is not a valid width — then
+  // the dialog is the way to set one.
+  const neededWidth = Math.ceil(previewPaperW - 1e-6);
+  const oneTapWidth =
+    Number.isInteger(neededWidth) && neededWidth >= 1 && neededWidth <= 1000
+      ? neededWidth
+      : null;
+  const applyPaperWidth = () => {
+    if (oneTapWidth == null) openPaperSizeDialog();
+    else void writePaperWidth(oneTapWidth);
+  };
+  // A saved printer with no width yet: offer the sheet's width once.
+  const paperWidthMissing =
+    savedDbId != null &&
+    selectedPrinter != null &&
+    templateChosen &&
+    oneTapWidth != null &&
+    !(Number(printerPaperWidth) > 0) &&
+    !paperPromptDismissed.includes(prefsKey(selectedPrinter.name));
+  const dismissPaperPrompt = () => {
+    if (!selectedPrinter) return;
+    const next = [...paperPromptDismissed, prefsKey(selectedPrinter.name)];
+    setPaperPromptDismissed(next);
+    void savePaperWidthDismissed(next).catch(() => {});
+  };
+  // One element for both layouts: the mismatch warning wins over the
+  // "missing" prompt (they never both apply: one needs a saved width).
+  const paperNotice = paperMismatch ? (
+    <PaperWidthNotice
+      kind="mismatch"
+      message={paperMismatch}
+      width={oneTapWidth}
+      busy={paperDlgBusy}
+      onApply={savedDbId != null ? applyPaperWidth : undefined}
+      onOther={savedDbId != null ? openPaperSizeDialog : undefined}
+    />
+  ) : paperWidthMissing ? (
+    <PaperWidthNotice
+      kind="missing"
+      message={t("print.paper_width_missing", {
+        name: selectedPrinter?.name,
+        w: oneTapWidth,
+      })}
+      width={oneTapWidth}
+      busy={paperDlgBusy}
+      onApply={applyPaperWidth}
+      onDismiss={dismissPaperPrompt}
+    />
+  ) : null;
 
   // The small dialog both layouts open from the mismatch warning: one
   // number field, prefilled with the width the current print needs.
@@ -1437,14 +1508,13 @@ function PrintForm() {
           previewPaperW={previewPaperW}
           previewPaperH={previewPaperH}
           paperPreset={paperPreset}
-          paperMismatch={paperMismatch}
+          paperNotice={paperNotice}
           canPrint={canPrint}
           blocker={blocker}
           onPrint={() => void handlePrint(false)}
           onRetry={() => void handlePrint(true)}
           onSyncTemplates={handleSyncTemplates}
           onSpikeTest={handleSpikeTest}
-          onSetPaperWidth={savedDbId != null ? openPaperSizeDialog : undefined}
         />
         {paperSizeDialog}
       </>
@@ -1746,29 +1816,7 @@ function PrintForm() {
                     )}
                   </SelectContent>
                 </Select>
-                {paperMismatch && (
-                  <div className="mt-1.5 flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2">
-                    <p
-                      role="status"
-                      className="min-w-0 flex-1 text-xs text-warning"
-                    >
-                      {paperMismatch}
-                    </p>
-                    {/* Only a saved printer has a registered width to
-                        correct; OS printers warn, but nothing is editable. */}
-                    {savedDbId != null && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 shrink-0 px-2 text-xs"
-                        onClick={openPaperSizeDialog}
-                        data-testid="set-paper-size"
-                      >
-                        {t("print.paper_size_action")}
-                      </Button>
-                    )}
-                  </div>
-                )}
+                {paperNotice}
               </div>
               <div className={field}>
                 <Label htmlFor="print-template">{t("print.template")}</Label>
