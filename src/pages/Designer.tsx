@@ -85,6 +85,8 @@ import {
 } from "@/lib/templates/defaultTemplate";
 import { PackChooser } from "@/components/designer/PackChooser";
 import { PhoneDesignerViewer } from "@/components/designer/PhoneDesignerViewer";
+import { PACKS } from "@/lib/templates/packs";
+import { pickCanvasSample } from "@/lib/templates/mustacheCoverage";
 import { useCompiledCss } from "@/lib/templates/useCompiledCss";
 import { listTemplates } from "@/lib/templates/listTemplates";
 import { formatCss, formatHtml } from "@/lib/utils/format";
@@ -973,6 +975,22 @@ export function DesignerPage() {
     }
   }, [workingDatasetJson]);
 
+  // The canvas renders with the account's shared sample data. When that data
+  // covers none of the template's mustaches — a kitchen ticket opened
+  // against shipping-label data — the canvas would be all blanks, so it
+  // falls back to the pack sample data that fits this template, and says
+  // so. The moment the account data covers even one mustache it takes
+  // over again, so editing the sample data always wins.
+  const canvasSample = useMemo(
+    () =>
+      pickCanvasSample(
+        debouncedHtml,
+        sampleData,
+        PACKS.map((p) => ({ name: p.name, mockData: p.mockData })),
+      ),
+    [debouncedHtml, sampleData],
+  );
+
   const handleShowCanvas = () => {
     setActiveTab("canvas");
     notifySuccess(t("designer.toast_showing_canvas"));
@@ -1049,7 +1067,12 @@ export function DesignerPage() {
       html={debouncedHtml}
       css={debouncedCss}
       compiledCss={compiledCss}
-      data={sampleData}
+      data={canvasSample.data}
+      sampleNote={
+        canvasSample.packName
+          ? t("designer.canvas_sample_note", { name: canvasSample.packName })
+          : undefined
+      }
       pageWidthMm={pageWidth}
       pageHeightMm={pageHeight}
     />

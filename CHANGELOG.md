@@ -16,6 +16,13 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+### Fixed
+
+- **Templates preview with data that fits them.** When your sample data
+  has none of a template's fields — a kitchen ticket opened against
+  shipping-label data, say — the canvas now shows the template's own
+  sample data instead of a blank page, and says so in a note.
+
 ## [2026.1113.3] - 2026-11-13
 
 ### Changed
