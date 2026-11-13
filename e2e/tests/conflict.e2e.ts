@@ -173,12 +173,10 @@ test("F6 conflict: take server copy", async ({ browser }) => {
     timeout: 30_000,
   });
   await pageB.getByTestId(testids.saveConflictTakeServer).click();
-  await expect(pageB.getByText("Loaded the server copy")).toBeVisible({
-    timeout: 30_000,
-  });
-  // The editor now holds A's copy (re-indented on load); the dialog
-  // is gone and B's edit with it. CodeMirror applies the new document
-  // a beat after the dialog closes, so both reads poll.
+  // No toast: the canvas and editor re-render with the server copy —
+  // the result is on screen. The editor now holds A's copy (re-indented
+  // on load); the dialog is gone and B's edit with it. CodeMirror applies
+  // the new document a beat after the dialog closes, so both reads poll.
   await expect(pageB.getByTestId(testids.saveConflictDialog)).toBeHidden({
     timeout: 15_000,
   });

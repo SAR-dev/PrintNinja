@@ -361,6 +361,7 @@ const ja: Translation = {
     toast_add_failed: "追加に失敗しました: {{error}}",
     toast_saved: "サーバーに保存しました",
     toast_saved_published: "保存しました — 公開版も更新されました",
+    toast_overwrote: "サーバーのコピーを上書きしました",
     save_offline_title:
       "オフラインです。サーバーに保存するには接続してください",
     toast_save_failed: "保存に失敗しました: {{error}}",
