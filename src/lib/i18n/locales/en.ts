@@ -292,14 +292,7 @@ const en = {
     helper_title: "Insert {{snippet}} at the cursor",
     barcode_types: "Barcode types:",
     barcode_more: "+{{count}} more",
-    sample_add: "Add Dataset",
-    sample_empty: "No datasets yet. Add one to preview and validate templates.",
-    sample_default_note: "{{name}} is set as default",
-    // Display name of the built-in fallback dataset. Its stored name
-    // stays "Sample Order" — only the display is translated (P38).
-    sample_order_name: "Sample Order",
-    sample_use: "Use dataset {{name}}",
-    sample_delete: "Delete dataset {{name}}",
+    sample_edit: "Edit sample data",
     sample_fields: "Fields:",
     sample_copy: "Copy to clipboard",
     sample_json: "View JSON",
@@ -333,9 +326,7 @@ const en = {
       "Class names built at render time can't be precompiled. Write each full class name in every branch, e.g. {{#if x}}bg-red-600{{else}}bg-green-600{{/if}}, or use a CSS variable like " +
       'style="--c:{{color}}" class="bg-[var(--c)]".',
     barcode_err_required: "Value is required",
-    barcode_err_fixed: "{{label}} can only use a fixed value for now",
     barcode_err_field: "Enter a data field such as order.id",
-    barcode_err_gen: "Could not generate this barcode",
     barcode_err_quotes: "The value cannot contain both ' and \" characters",
     barcode_err_c39: "Code 39 only supports A-Z, 0-9, -, ., space, /, +, %, $",
     barcode_err_ean13_len: "EAN-13 requires exactly 13 digits",
@@ -344,7 +335,11 @@ const en = {
     barcode_err_ean8_check: "Invalid EAN-8 check digit",
     barcode_err_upca_len: "UPC-A requires exactly 12 digits",
     barcode_err_upca_check: "Invalid UPC-A check digit",
+    barcode_err_upce: "UPC-E requires 7 or 8 digits starting with 0 or 1",
+    barcode_err_upce_check: "Invalid UPC-E check digit",
     barcode_err_itf: "ITF requires an even number of digits",
+    barcode_err_itf14: "ITF-14 requires 13 or 14 digits",
+    barcode_err_itf14_check: "Invalid ITF-14 check digit",
     barcode_err_codabar: "Codabar requires start/stop letters A-D and digits",
     toast_loaded: 'Loaded "{{name}}"',
     toast_no_template: "No template selected",
@@ -363,15 +358,8 @@ const en = {
     toast_created_local: 'Template "{{name}}" created locally',
     toast_readme_too_big: "README exceeds 64 KiB",
     toast_showing_canvas: "Showing the canvas",
-    toast_dataset_deleted: "Dataset removed — save the template to apply",
     toast_delete_failed: "Delete failed: {{error}}",
-    toast_dataset_name_required: "Dataset name required",
-    toast_dataset_name_too_long:
-      "Dataset name must be {{max}} characters or fewer",
-    toast_dataset_name_exists: "A dataset with this name already exists",
     toast_invalid_json: "Invalid JSON",
-    toast_dataset_added:
-      'Dataset "{{name}}" added — save the template to keep it',
     toast_add_failed: "Add failed: {{error}}",
     toast_dataset_updated: "Dataset updated — save the template to keep it",
     toast_saved: "Saved to the server",
@@ -392,7 +380,6 @@ const en = {
       "This template has edits that were not saved. Continuing will lose them.",
     discard_confirm: "Discard changes",
     sheet_done: "Done",
-    sample_add_title: "Add Dataset",
     barcode_title: "Insert Barcode",
     barcode_type: "Type",
     barcode_from_data: "Read the value from a data field",
@@ -400,12 +387,6 @@ const en = {
     barcode_value: "Value",
     barcode_field_example: "order.id",
     barcode_value_hint: "Enter barcode value",
-    barcode_fixed_hint: "This type is inserted with a fixed value.",
-    barcode_preview_only: "preview only",
-    barcode_preview_only_tip:
-      "Preview only: built-in printers cannot draw this type — it prints as an empty space.",
-    barcode_preview_only_hint:
-      "Preview only: built-in printers cannot draw this type, so it will print as an empty space.",
     barcode_per_print: "Each print and each CSV row gets its own code.",
     barcode_same: "The same code on every print.",
     barcode_insert: "Insert",
@@ -413,8 +394,6 @@ const en = {
     views_aria: "Designer views",
     editor_done: "Done",
 
-    sample_name_example: "e.g. Empty Order",
-    sample_edit_title: "Edit Dataset: {{name}}",
     sample_save: "Save",
     new_name_example: "My Template",
     new_create: "Create",
@@ -502,12 +481,6 @@ const en = {
     blocker_template: "Choose a template to enable printing.",
     blocker_copies: "Copies must be at least 1.",
     blocker_loading: "Loading printers and templates…",
-    preview_only_title: "Preview-only barcodes",
-    preview_only_body:
-      "This template uses {{types}}, which built-in printers cannot draw. They will print as an empty space.",
-    preview_only_body_static:
-      "This template contains a barcode that built-in printers cannot draw. It will print as an empty space.",
-    preview_only_print_anyway: "Print anyway",
     pages: "Pages",
     pages_hint:
       "Pages repeats one object per page (an array prints its own length); Copies re-sends the whole job.",

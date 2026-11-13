@@ -42,6 +42,28 @@ const EMPTY_LISTS = new Set([
   "list_profiles",
 ]);
 const invoke = vi.fn(defaultImpl);
+/**
+ * The mock's stand-in for the Rust `render_template_preview`: one document
+ * per record. Unbalanced `{{#}}` blocks are a compile error, like the
+ * engine's, so the error-banner test can drive its fail and clear phases.
+ */
+function fakeRenderTemplatePreview(args: Record<string, unknown>): string[] {
+  const html = String(args["html"] ?? "");
+  const opens = html.match(/\{\{[#^]/g)?.length ?? 0;
+  const closes = html.match(/\{\{\/\w+\s*\}\}/g)?.length ?? 0;
+  if (opens !== closes) {
+    throw new Error(
+      "Template render failed: expected end block but found end of input",
+    );
+  }
+  const css = `${String(args["css"] ?? "")}${String(args["compiled_css"] ?? "")}`;
+  const records = Array.isArray(args["records"]) ? args["records"] : [];
+  const rows = records.length > 0 ? records : [null];
+  return rows.map(
+    () =>
+      `<!DOCTYPE html><html><head><style>${css}</style></head><body>${html}</body></html>`,
+  );
+}
 async function defaultImpl(...args: any[]): Promise<any> {
   const cmd = args[0] as string;
   if (EMPTY_LISTS.has(cmd)) return [];
@@ -56,6 +78,8 @@ async function defaultImpl(...args: any[]): Promise<any> {
       origin: "own",
       withdrawn: false,
     };
+  if (cmd === "render_template_preview")
+    return fakeRenderTemplatePreview(args[1] as Record<string, unknown>);
   return null;
 }
 vi.mock("@tauri-apps/api/core", async (importOriginal) => {
@@ -163,6 +187,14 @@ beforeAll(() => {
   Range.prototype.getClientRects = Range.prototype.getClientRects || noRects;
   Range.prototype.getBoundingClientRect =
     Range.prototype.getBoundingClientRect || (() => new DOMRect());
+});
+
+// A test that swaps the invoke implementation (e.g. "loads row content
+// directly…") can leak it into the next test. Reset to the standard
+// implementation before every test so the canvas and error-banner tests
+// always see the emulated render engine, whatever ran before them.
+beforeEach(() => {
+  invoke.mockImplementation(defaultImpl);
 });
 
 function renderDesigner() {
@@ -285,8 +317,8 @@ describe("Designer page layout on a phone", () => {
     openTab("Sample data");
     expect(await screen.findByText("Available helpers:")).toBeInTheDocument();
     expect(
-      screen.getByRole("radio", { name: "Use dataset Sample Order" }),
-    ).toBeChecked();
+      screen.getByRole("button", { name: "Edit sample data" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the sync bar in the page header area, outside the tabs", async () => {
@@ -484,7 +516,7 @@ describe("Designer page layout on desktop", () => {
     expect(controls.getByLabelText("Width (mm)")).toBeInTheDocument();
   });
 
-  it("shows the sample datasets in the controls column, open by default, beside the editor and canvas they drive", async () => {
+  it("shows the sample data in the controls column, open by default, beside the editor and canvas it drives", async () => {
     renderDesigner();
     await screen.findByTitle("Canvas preview");
     const controls = within(
@@ -494,8 +526,8 @@ describe("Designer page layout on desktop", () => {
       controls.getByRole("button", { name: "Sample data" }),
     ).toHaveAttribute("aria-expanded", "true");
     expect(
-      await controls.findByRole("radio", { name: "Use dataset Sample Order" }),
-    ).toBeChecked();
+      await controls.findByRole("button", { name: "Edit sample data" }),
+    ).toBeInTheDocument();
     // Not a tab in the code editor any more.
     expect(
       screen.queryByRole("tab", { name: "Sample data" }),
@@ -821,6 +853,8 @@ describe("Designer top row on desktop", () => {
         withdrawn: false,
       };
     }
+    if (cmd === "render_template_preview")
+      return fakeRenderTemplatePreview(args[1] as Record<string, unknown>);
     return null;
   };
 

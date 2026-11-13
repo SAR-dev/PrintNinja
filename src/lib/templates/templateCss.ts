@@ -52,24 +52,3 @@ export function buildTemplateCss(
   if (userCss && userCss.trim()) parts.push(userCss);
   return parts.join("\n");
 }
-
-/**
- * Inject a stylesheet into a full HTML document.
- *
- * A `<style>` tag is used rather than `<link rel="stylesheet">` because the
- * rendered document is printed from a temporary file and must not depend on
- * any external resource.
- */
-export function injectStyles(html: string, css: string): string {
-  const styleTag = `<style data-printninja>${css}</style>`;
-  if (html.includes("</head>")) {
-    return html.replace("</head>", `${styleTag}\n</head>`);
-  }
-  if (html.includes("<body")) {
-    return html.replace("<body", `${styleTag}\n<body`);
-  }
-  if (html.includes("<html")) {
-    return html.replace("<html", `<html>\n${styleTag}`);
-  }
-  return `${styleTag}\n${html}`;
-}

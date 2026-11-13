@@ -1,0 +1,242 @@
+{
+  "generated_by": "src/test/packRenders.test.ts (do not edit by hand)",
+  "packs": [
+    {
+      "id": "invoice",
+      "html": "<!DOCTYPE html>\n<html>\n<head><meta charset=\"UTF-8\"></head>\n<body class=\"p-6 text-xs font-sans text-slate-800\">\n  <div class=\"flex justify-between items-start border-b-2 border-slate-800 pb-4 mb-4\">\n    <div>\n      <h1 class=\"text-2xl font-bold tracking-tight\">INVOICE</h1>\n      <p class=\"text-[11px] text-slate-500 mt-1\">No. {{invoice.number}} · {{invoice.date}}</p>\n      {{#if invoice.due}}<p class=\"text-[10px] text-amber-600\">Due: {{invoice.due}}</p>{{/if}}\n    </div>\n    <div class=\"text-right\">\n      <p class=\"text-sm font-bold\">{{seller.name}}</p>\n      <p class=\"text-[10px] text-slate-600\">{{seller.address}}</p>\n      <p class=\"text-[10px] text-slate-600\">{{seller.email}}</p>\n      <p class=\"text-[10px] text-slate-600\">{{seller.phone}}</p>\n    </div>\n  </div>\n\n  <div class=\"grid grid-cols-2 gap-6 mb-6\">\n    <div>\n      <p class=\"text-[9px] uppercase tracking-widest font-semibold text-slate-500 mb-1\">Bill to</p>\n      <p class=\"text-[12px] font-semibold\">{{buyer.name}}</p>\n      <p class=\"text-[11px] text-slate-600\">{{buyer.address}}</p>\n      <p class=\"text-[10px] text-slate-500\">{{buyer.email}}</p>\n    </div>\n    <div class=\"text-right\">\n      <p class=\"text-[9px] uppercase tracking-widest font-semibold text-slate-500 mb-1\">Payment</p>\n      <p class=\"text-[11px]\">{{invoice.payment.method}}</p>\n      <p class=\"text-[10px] font-mono text-slate-600\">{{invoice.payment.ref}}</p>\n      {{#if invoice.tracking}}\n      <div class=\"mt-2\">\n        {{barcode \"code128\" invoice.tracking width=50 text=false}}\n        <p class=\"font-mono text-[9px] tracking-widest\">{{invoice.tracking}}</p>\n      </div>\n      {{/if}}\n    </div>\n  </div>\n\n  <table class=\"w-full text-[11px] mb-4\">\n    <thead>\n      <tr class=\"bg-slate-800 text-white\">\n        <th class=\"text-left py-2 px-2 font-semibold\">#</th>\n        <th class=\"text-left py-2 px-2 font-semibold\">Description</th>\n        <th class=\"text-center py-2 px-2 font-semibold\">Qty</th>\n        <th class=\"text-right py-2 px-2 font-semibold\">Unit</th>\n        <th class=\"text-right py-2 px-2 font-semibold\">Amount</th>\n      </tr>\n    </thead>\n    <tbody>\n      {{#each invoice.items}}\n      <tr class=\"border-b border-slate-200\">\n        <td class=\"py-2 px-2 text-slate-500\">{{@index}}</td>\n        <td class=\"py-2 px-2\">{{name}}</td>\n        <td class=\"py-2 px-2 text-center\">{{qty}}</td>\n        <td class=\"py-2 px-2 text-right\">{{currency price}}</td>\n        <td class=\"py-2 px-2 text-right font-medium\">{{currency total}}</td>\n      </tr>\n      {{/each}}\n    </tbody>\n  </table>\n\n  <div class=\"flex justify-end mb-6\">\n    <div class=\"w-56 space-y-1 text-[11px]\">\n      <div class=\"flex justify-between\">\n        <span class=\"text-slate-600\">Subtotal</span>\n        <span>{{currency invoice.subtotal}}</span>\n      </div>\n      {{#if invoice.discount}}\n      <div class=\"flex justify-between text-emerald-600\">\n        <span>Discount</span>\n        <span>-{{currency invoice.discount}}</span>\n      </div>\n      {{/if}}\n      <div class=\"flex justify-between\">\n        <span class=\"text-slate-600\">Tax</span>\n        <span>{{currency invoice.tax}}</span>\n      </div>\n      <div class=\"flex justify-between text-sm font-bold border-t-2 border-slate-800 pt-2\">\n        <span>Total</span>\n        <span>{{currency invoice.total}}</span>\n      </div>\n    </div>\n  </div>\n\n  {{#if invoice.notes}}\n  <div class=\"border-t border-slate-200 pt-3\">\n    <p class=\"text-[9px] uppercase tracking-widest font-semibold text-slate-500 mb-1\">Notes</p>\n    <p class=\"text-[11px] text-slate-600\">{{invoice.notes}}</p>\n  </div>\n  {{/if}}\n\n  <div class=\"text-center text-[9px] text-slate-400 mt-6 border-t border-dashed pt-3\">\n    <p>Thank you for your business!</p>\n  </div>\n</body>\n</html>",
+      "css": "@page { margin: 0; }\n* { box-sizing: border-box; }\nbody { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }",
+      "mockData": {
+        "seller": {
+          "name": "PrintNinja Ltd",
+          "address": "123 Main Street, Dhaka",
+          "email": "hello@printninja.app",
+          "phone": "+880 1700 000000"
+        },
+        "buyer": {
+          "name": "Acme Corp",
+          "address": "45 Business Ave, Gulshan",
+          "email": "accounts@acme.example",
+          "phone": "+880 1900 000002"
+        },
+        "invoice": {
+          "number": "INV-1042",
+          "date": "Oct 17, 2026",
+          "due": "Nov 16, 2026",
+          "tracking": "PN-7X9K-4242-BD",
+          "items": [
+            {
+              "name": "Green Tea (Medium)",
+              "qty": 2,
+              "price": 3.5,
+              "total": 7
+            },
+            {
+              "name": "Latte (Large)",
+              "qty": 1,
+              "price": 4.5,
+              "total": 4.5
+            },
+            {
+              "name": "Croissant (Butter)",
+              "qty": 3,
+              "price": 3,
+              "total": 9
+            },
+            {
+              "name": "Blueberry Muffin",
+              "qty": 2,
+              "price": 3.25,
+              "total": 6.5
+            }
+          ],
+          "subtotal": 27,
+          "tax": 2.7,
+          "discount": 2,
+          "total": 27.7,
+          "notes": "Payment due within 30 days. Thank you for your business!",
+          "payment": {
+            "method": "Bank Transfer",
+            "ref": "INV-1042 · A/C ···· 4242"
+          }
+        }
+      },
+      "needles": [
+        "Acme Corp",
+        "INV-1042",
+        "$27.70"
+      ]
+    },
+    {
+      "id": "receipt",
+      "html": "<!DOCTYPE html>\n<html>\n<head><meta charset=\"UTF-8\"></head>\n<body class=\"p-3 text-xs font-mono bg-white\">\n  <div class=\"text-center border-b border-dashed border-slate-400 pb-3 mb-3\">\n    <p class=\"text-sm font-bold tracking-widest uppercase\">{{store.name}}</p>\n    <p class=\"text-[10px] text-slate-500\">{{store.address}}</p>\n    <p class=\"text-[10px] text-slate-500\">{{store.phone}}</p>\n  </div>\n\n  <div class=\"flex justify-between text-[10px] text-slate-600 mb-2\">\n    <span>Order #{{order.id}}</span>\n    <span>{{order.date}}</span>\n  </div>\n  <div class=\"flex justify-between text-[10px] text-slate-600 mb-3\">\n    <span>Cashier: {{order.cashier}}</span>\n    <span>Terminal: {{order.terminal}}</span>\n  </div>\n\n  <table class=\"w-full text-[11px] mb-3\">\n    <thead>\n      <tr class=\"border-y border-slate-300\">\n        <th class=\"text-left py-1 font-semibold\">Item</th>\n        <th class=\"text-center py-1 font-semibold\">Qty</th>\n        <th class=\"text-right py-1 font-semibold\">Price</th>\n        <th class=\"text-right py-1 font-semibold\">Total</th>\n      </tr>\n    </thead>\n    <tbody>\n      {{#each order.items}}\n      <tr class=\"border-b border-dotted border-slate-200\">\n        <td class=\"py-1.5 pr-1\">{{name}}</td>\n        <td class=\"py-1.5 text-center\">{{qty}}</td>\n        <td class=\"py-1.5 text-right\">{{currency price}}</td>\n        <td class=\"py-1.5 text-right font-medium\">{{currency total}}</td>\n      </tr>\n      {{/each}}\n    </tbody>\n  </table>\n\n  <div class=\"space-y-1 text-[11px] mb-3\">\n    <div class=\"flex justify-between\">\n      <span class=\"text-slate-600\">Subtotal</span>\n      <span>{{currency order.subtotal}}</span>\n    </div>\n    {{#if order.discount}}\n    <div class=\"flex justify-between text-emerald-600\">\n      <span>Discount</span>\n      <span>-{{currency order.discount}}</span>\n    </div>\n    {{/if}}\n    <div class=\"flex justify-between\">\n      <span class=\"text-slate-600\">Tax</span>\n      <span>{{currency order.tax}}</span>\n    </div>\n    <div class=\"flex justify-between text-sm font-bold border-t border-slate-800 pt-2\">\n      <span>Total</span>\n      <span>{{currency order.total}}</span>\n    </div>\n  </div>\n\n  <div class=\"border-t border-dashed border-slate-300 pt-2 mb-3 text-center\">\n    <p class=\"text-[10px] text-slate-600\">Payment: {{order.payment.method}}</p>\n    <p class=\"text-[10px] font-mono text-slate-500\">{{order.payment.ref}}</p>\n    {{#if order.tracking}}\n    <div class=\"mt-2\">\n      {{barcode \"code128\" order.tracking width=60 text=false}}\n      <p class=\"font-mono text-[10px] tracking-widest\">{{order.tracking}}</p>\n    </div>\n    {{/if}}\n  </div>\n\n  <div class=\"text-center text-[10px] text-slate-400\">\n    <p>Thank you for your purchase!</p>\n    <p>Visit us again at {{store.name}}</p>\n  </div>\n</body>\n</html>",
+      "css": "@page { margin: 0; }\n* { box-sizing: border-box; }\nbody { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }",
+      "mockData": {
+        "store": {
+          "name": "PrintNinja Cafe",
+          "address": "123 Main Street, Dhaka",
+          "phone": "+880 1700 000000",
+          "email": "hello@printninja.app"
+        },
+        "order": {
+          "id": "1042",
+          "date": "Oct 17, 2026",
+          "cashier": "Aisha",
+          "terminal": "T1",
+          "tracking": "PN-7X9K-4242-BD",
+          "items": [
+            {
+              "name": "Green Tea (Medium)",
+              "qty": 2,
+              "price": 3.5,
+              "total": 7
+            },
+            {
+              "name": "Latte (Large)",
+              "qty": 1,
+              "price": 4.5,
+              "total": 4.5
+            },
+            {
+              "name": "Croissant (Butter)",
+              "qty": 1,
+              "price": 3,
+              "total": 3
+            },
+            {
+              "name": "Blueberry Muffin",
+              "qty": 2,
+              "price": 3.25,
+              "total": 6.5
+            }
+          ],
+          "subtotal": 21,
+          "tax": 2.1,
+          "discount": 1.5,
+          "total": 21.6,
+          "payment": {
+            "method": "Credit Card",
+            "ref": "VISA ···· 4242"
+          }
+        }
+      },
+      "needles": [
+        "PrintNinja Cafe",
+        "VISA ···· 4242",
+        "$21.60"
+      ]
+    },
+    {
+      "id": "shippingLabel",
+      "html": "<!DOCTYPE html>\n<html>\n<head><meta charset=\"UTF-8\"></head>\n<body class=\"p-4 text-xs font-sans\">\n  <!-- Label border -->\n  <div class=\"h-full flex flex-col justify-between\">\n    <div class=\"space-y-2\">\n      <div class=\"flex justify-between items-center border-b border-slate-300 pb-2\">\n        <span class=\"text-[10px] uppercase tracking-widest text-slate-500\">PrintNinja Logistics</span>\n        <span class=\"text-[10px] font-mono text-slate-600\">Order #{{order.id}}</span>\n      </div>\n\n      <div class=\"grid grid-cols-2 gap-3\">\n        <div class=\"bg-slate-100 rounded p-2\">\n          <p class=\"text-[9px] uppercase tracking-wider font-semibold text-slate-500 mb-1\">From</p>\n          <p class=\"text-[11px] font-medium\">{{store.name}}</p>\n          <p class=\"text-[10px] text-slate-600\">{{store.address}}</p>\n        </div>\n        <div class=\"bg-slate-50 rounded p-2\">\n          <p class=\"text-[9px] uppercase tracking-wider font-semibold text-slate-500 mb-1\">To</p>\n          <p class=\"text-[11px] font-bold\">{{customer.name}}</p>\n          <p class=\"text-[10px] text-slate-700\">{{customer.address}}</p>\n          <p class=\"text-[10px] text-slate-700\">{{customer.city}} {{customer.zip}}</p>\n          <p class=\"text-[10px] font-semibold text-slate-900\">{{customer.country}}</p>\n        </div>\n      </div>\n\n      <div class=\"bg-slate-100 rounded p-2\">\n        <p class=\"text-[9px] uppercase tracking-wider font-semibold text-slate-500 mb-1\">Contents</p>\n        <p class=\"text-[10px] text-slate-700\">\n          {{#each order.items}}{{name}} (×{{qty}}){{#unless @last}}, {{/unless}}{{/each}}\n        </p>\n      </div>\n    </div>\n\n    <div class=\"border-t border-slate-300 pt-2 text-center\">\n      {{barcode \"code128\" order.tracking width=70 text=false}}\n      <p class=\"font-mono text-base font-bold tracking-widest\">{{order.tracking}}</p>\n      <p class=\"text-[9px] text-slate-400 mt-1\">Tracking number</p>\n    </div>\n  </div>\n</body>\n</html>",
+      "css": "@page { margin: 0; }\n* { box-sizing: border-box; }\nbody { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }",
+      "mockData": {
+        "store": {
+          "name": "PrintNinja Cafe",
+          "address": "123 Main Street, Dhaka",
+          "email": "hello@printninja.app"
+        },
+        "customer": {
+          "name": "John Doe",
+          "address": "45 Oak Lane, Apt 2",
+          "city": "Gulshan",
+          "zip": "1212",
+          "country": "Bangladesh",
+          "email": "john@example.com"
+        },
+        "order": {
+          "id": "1042",
+          "date": "Oct 17, 2026",
+          "due": "Nov 16, 2026",
+          "customer": "Walk-in",
+          "cashier": "Aisha",
+          "terminal": "T1",
+          "tracking": "PN-7X9K-4242-BD",
+          "items": [
+            {
+              "name": "Green Tea (Medium)",
+              "qty": 2,
+              "price": 3.5,
+              "total": 7
+            },
+            {
+              "name": "Latte (Large)",
+              "qty": 1,
+              "price": 4.5,
+              "total": 4.5
+            },
+            {
+              "name": "Croissant (Butter)",
+              "qty": 1,
+              "price": 3,
+              "total": 3
+            },
+            {
+              "name": "Blueberry Muffin",
+              "qty": 2,
+              "price": 3.25,
+              "total": 6.5
+            }
+          ],
+          "subtotal": 21,
+          "tax": 2.1,
+          "discount": 1.5,
+          "total": 21.6,
+          "payment": {
+            "method": "Credit Card",
+            "ref": "VISA ···· 4242"
+          }
+        }
+      },
+      "needles": [
+        "John Doe",
+        "45 Oak Lane, Apt 2"
+      ]
+    },
+    {
+      "id": "deliverySlip",
+      "html": "<!DOCTYPE html>\n<html>\n<head><meta charset=\"UTF-8\"></head>\n<body class=\"p-4 text-xs font-sans\">\n  <div class=\"flex flex-col h-full justify-between\">\n    <div class=\"space-y-3\">\n      <div class=\"flex justify-between items-start border-b-2 border-slate-800 pb-2\">\n        <div>\n          <p class=\"text-sm font-bold tracking-widest uppercase\">Delivery Slip</p>\n          <p class=\"text-[10px] text-slate-500\">Order #{{order.id}} · {{order.date}}</p>\n        </div>\n        <div class=\"text-right\">\n          <p class=\"text-[10px] font-semibold text-slate-700\">{{store.name}}</p>\n          <p class=\"text-[10px] text-slate-500\">{{store.phone}}</p>\n        </div>\n      </div>\n\n      <div class=\"grid grid-cols-2 gap-3\">\n        <div class=\"border border-slate-200 rounded p-2\">\n          <p class=\"text-[9px] uppercase tracking-wider font-semibold text-slate-500 mb-1\">From</p>\n          <p class=\"text-[11px] font-medium\">{{store.name}}</p>\n          <p class=\"text-[10px] text-slate-600\">{{store.address}}</p>\n          <p class=\"text-[10px] text-slate-600\">{{store.phone}}</p>\n        </div>\n        <div class=\"border border-slate-800 rounded p-2 bg-slate-50\">\n          <p class=\"text-[9px] uppercase tracking-wider font-semibold text-slate-500 mb-1\">Deliver to</p>\n          <p class=\"text-[11px] font-bold\">{{customer.name}}</p>\n          <p class=\"text-[10px] text-slate-700\">{{customer.address}}</p>\n          <p class=\"text-[10px] text-slate-700\">{{customer.city}} {{customer.zip}}</p>\n          <p class=\"text-[10px] text-slate-700\">{{customer.phone}}</p>\n        </div>\n      </div>\n\n      <div class=\"border border-slate-200 rounded p-2\">\n        <p class=\"text-[9px] uppercase tracking-wider font-semibold text-slate-500 mb-1\">Contents</p>\n        <ul class=\"space-y-1\">\n          {{#each order.items}}\n          <li class=\"flex justify-between text-[11px]\">\n            <span>{{name}}</span>\n            <span class=\"font-mono text-slate-600\">×{{qty}}</span>\n          </li>\n          {{/each}}\n        </ul>\n        {{#if order.notes}}\n        <p class=\"text-[10px] text-slate-500 mt-2 border-t border-dotted pt-1\">Note: {{order.notes}}</p>\n        {{/if}}\n      </div>\n\n      {{#if order.courier}}\n      <div class=\"flex justify-between text-[10px] text-slate-600 bg-amber-50 rounded p-2\">\n        <span>Courier: <strong>{{order.courier}}</strong></span>\n        <span>COD: <strong>{{currency order.total}}</strong></span>\n      </div>\n      {{/if}}\n    </div>\n\n    <div class=\"border-t-2 border-slate-800 pt-3 text-center mt-3\">\n      {{barcode \"code128\" order.tracking width=70 text=false}}\n      <p class=\"font-mono text-sm font-bold tracking-widest\">{{order.tracking}}</p>\n      <p class=\"text-[9px] text-slate-400\">Tracking · Scan on delivery</p>\n    </div>\n  </div>\n</body>\n</html>",
+      "css": "@page { margin: 0; }\n* { box-sizing: border-box; }\nbody { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }",
+      "mockData": {
+        "store": {
+          "name": "PrintNinja Cafe",
+          "address": "123 Main Street, Dhaka",
+          "phone": "+880 1700 000000"
+        },
+        "customer": {
+          "name": "John Doe",
+          "address": "45 Oak Lane, Apt 2",
+          "city": "Gulshan",
+          "zip": "1212",
+          "country": "Bangladesh",
+          "phone": "+880 1800 000001"
+        },
+        "order": {
+          "id": "1042",
+          "date": "Oct 17, 2026",
+          "tracking": "PN-7X9K-4242-BD",
+          "courier": "Pathao",
+          "notes": "Leave at door if not home",
+          "items": [
+            {
+              "name": "Green Tea (Medium)",
+              "qty": 2
+            },
+            {
+              "name": "Latte (Large)",
+              "qty": 1
+            },
+            {
+              "name": "Blueberry Muffin",
+              "qty": 2
+            }
+          ],
+          "total": 21.6
+        }
+      },
+      "needles": [
+        "Leave at door if not home",
+        "Pathao"
+      ]
+    }
+  ]
+}

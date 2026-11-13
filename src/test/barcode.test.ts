@@ -3,147 +3,9 @@ import { t } from "i18next";
 import "@/lib/i18n";
 import {
   validateBarcode,
-  generateBarcodeSvg,
-  buildBarcodeHtml,
-  mmToPx,
-  snapModuleToDot,
   BARCODE_TYPES,
-  bcidFor,
-  labelFor,
   buildBarcodeSnippet,
-  isHelperSymbology,
-  isPreviewOnlySymbology,
-  findPreviewOnlyBarcodes,
-  PREVIEW_ONLY_SYMBOLOGIES,
-  PRINT_SYMBOLOGIES,
 } from "@/lib/utils/barcode";
-
-describe("generateBarcodeSvg", () => {
-  it("returns a real SVG element, not a data URI", () => {
-    const svg = generateBarcodeSvg({ type: "code128", value: "ABC123" });
-    expect(svg).toContain("<svg");
-    expect(svg).toContain("</svg>");
-    // The old bug produced a canvas data URI labelled as SVG.
-    expect(svg).not.toContain("data:image/svg+xml");
-    expect(svg).not.toContain("base64,");
-  });
-
-  it("renders every supported symbology without throwing", () => {
-    const values: Record<string, string> = {
-      code128: "ABC123",
-      code39: "ABC-123",
-      code93: "TEST93",
-      ean13: "4006381333931",
-      ean8: "96385074",
-      upca: "03600029145",
-      upce: "01234565",
-      itf: "1234",
-      itf14: "12345678901231",
-      codabar: "A12345B",
-      qr: "https://example.com",
-      datamatrix: "PrintNinja",
-      pdf417: "PN-1042",
-      aztec: "PN-1042",
-    };
-
-    for (const { value: type, bcid } of BARCODE_TYPES) {
-      const svg = generateBarcodeSvg({ type, value: values[type] });
-      expect(svg, `${type} (bcid=${bcid}) should render`).toContain("<svg");
-    }
-  });
-
-  it("returns an empty string for an unsupported symbology", () => {
-    expect(generateBarcodeSvg({ type: "nope", value: "x" })).toBe("");
-  });
-
-  it("omits the human-readable text when text=false", () => {
-    const withText = generateBarcodeSvg({ type: "code128", value: "ABC" });
-    const withoutText = generateBarcodeSvg({
-      type: "code128",
-      value: "ABC",
-      text: false,
-    });
-    expect(withoutText).not.toBe(withText);
-  });
-});
-
-describe("barcode geometry", () => {
-  // Regression: `width: 2` made bwip-js squeeze the whole symbol into 2 mm, so
-  // a long Code 128 came out as a tall, narrow, solid black block.
-  const viewBox = (svg: string) =>
-    svg
-      .match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/)!
-      .slice(1)
-      .map(Number);
-
-  it("draws a long Code 128 wider than it is tall", () => {
-    const svg = generateBarcodeSvg({
-      type: "code128",
-      value: "PN-7X9K-4242-BD",
-      text: false,
-    });
-    const [w, h] = viewBox(svg);
-    expect(w).toBeGreaterThan(h * 3);
-  });
-
-  it("keeps the bars apart instead of overlapping them", () => {
-    const svg = generateBarcodeSvg({
-      type: "code128",
-      value: "PN-7X9K-4242-BD",
-      text: false,
-    });
-    const strokeWidth = Number(svg.match(/stroke-width="([\d.]+)"/)![1]);
-    const xs = [...svg.matchAll(/M([\d.]+) [\d.]+L/g)].map((m) => Number(m[1]));
-    const gaps = xs
-      .slice(1)
-      .map((x, i) => x - xs[i])
-      .filter((g) => g > 0);
-    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(strokeWidth);
-  });
-
-  it("a longer value makes a wider symbol", () => {
-    const short = viewBox(
-      generateBarcodeSvg({ type: "code128", value: "AB", text: false }),
-    )[0];
-    const long = viewBox(
-      generateBarcodeSvg({
-        type: "code128",
-        value: "ABCDEFGHIJKL",
-        text: false,
-      }),
-    )[0];
-    expect(long).toBeGreaterThan(short);
-  });
-
-  it("draws a QR code as a square", () => {
-    const [w, h] = viewBox(
-      generateBarcodeSvg({
-        type: "qr",
-        value: "https://example.com/o/1",
-        text: false,
-      }),
-    );
-    expect(w).toBe(h);
-  });
-});
-
-describe("buildBarcodeHtml", () => {
-  it("embeds inline SVG with an explicit mm width", () => {
-    const html = buildBarcodeHtml({
-      type: "qr",
-      value: "https://example.com",
-      scaleToWidth: 40,
-    });
-    expect(html).toContain("<svg");
-    expect(html).toContain('width="40mm"');
-    // No external reference: printable HTML must be self-contained.
-    // (the SVG namespace URL is not a fetched resource)
-    expect(html).not.toContain("<img");
-    expect(html).not.toMatch(/src\s*=/);
-    expect(html).not.toContain("data:");
-    expect(html).not.toMatch(/url\(\s*http/);
-  });
-});
 
 describe("validateBarcode", () => {
   it("rejects empty values for every type", () => {
@@ -168,6 +30,39 @@ describe("validateBarcode", () => {
     expect(t(validateBarcode("ean13", "123") ?? "")).toContain("13 digits");
     expect(t(validateBarcode("ean8", "123") ?? "")).toContain("8 digits");
     expect(t(validateBarcode("upca", "123") ?? "")).toContain("12 digits");
+    expect(t(validateBarcode("upce", "123") ?? "")).toContain("digits");
+    expect(t(validateBarcode("itf14", "123") ?? "")).toContain("digits");
+  });
+
+  it("validates UPC-E the way rxing's writer does", () => {
+    // 7 digits (check computed by Rust) and 8 with a matching check.
+    expect(validateBarcode("upce", "0123456")).toBeNull();
+    expect(validateBarcode("upce", "01234565")).toBeNull();
+    // Wrong check digit (the true one is 5).
+    expect(t(validateBarcode("upce", "01234567") ?? "")).toContain(
+      "check digit",
+    );
+    // The number system must be 0 or 1, and 6 digits do not fit.
+    expect(t(validateBarcode("upce", "2123456") ?? "")).toContain("digits");
+    expect(t(validateBarcode("upce", "123456") ?? "")).toContain("digits");
+  });
+
+  it("validates ITF-14 as GTIN-14 (13 digits computed, 14 checked)", () => {
+    expect(validateBarcode("itf14", "0001234567890")).toBeNull();
+    expect(validateBarcode("itf14", "00012345678905")).toBeNull();
+    expect(t(validateBarcode("itf14", "00012345678906") ?? "")).toContain(
+      "check digit",
+    );
+  });
+
+  it("accepts the UPC-A check parity the Rust encoder uses", () => {
+    // Rust encodes UPC-A as EAN-13 with a leading 0, so the 11-digit body
+    // weights positions 1, 3, … (from the left) ×3. The old JS check had the
+    // parity inverted and rejected this perfectly valid value.
+    expect(validateBarcode("upca", "036000291452")).toBeNull();
+    expect(t(validateBarcode("upca", "036000291458") ?? "")).toContain(
+      "check digit",
+    );
   });
 
   it("enforces Code 39's restricted charset", () => {
@@ -210,69 +105,14 @@ describe("validateBarcode", () => {
   });
 });
 
-describe("dimension helpers", () => {
-  it("converts mm to px at 96 dpi", () => {
-    expect(mmToPx(25.4)).toBe(96);
-    expect(mmToPx(12.7)).toBe(48);
-  });
-
-  it("converts mm to dots at the printer dpi", () => {
-    expect(mmToPx(1, 203)).toBe(8);
-    expect(mmToPx(0.25, 203)).toBe(2);
-  });
-
-  it("snaps module widths to whole dots, minimum 1", () => {
-    // A fractional module width smears bars on thermal heads.
-    expect(snapModuleToDot(0.24, 203) % 1).toBe(0);
-    expect(snapModuleToDot(0.001, 203)).toBe(1);
-    expect(Number.isInteger(snapModuleToDot(0.3, 300))).toBe(true);
-  });
-
-  it("returns whole numbers for every dot width", () => {
-    for (const dpi of [203, 300, 600]) {
-      expect(Number.isInteger(snapModuleToDot(0.29, dpi))).toBe(true);
-    }
-  });
-});
-describe("bwip-js encoder name mapping", () => {
-  it("maps friendly ids to real bwip-js encoder names", () => {
-    // These three ids do NOT match bwip-js names and threw on insert.
-    expect(bcidFor("itf")).toBe("interleaved2of5");
-    expect(bcidFor("codabar")).toBe("rationalizedCodabar");
-    expect(bcidFor("aztec")).toBe("azteccode");
-  });
-
-  it("passes through ids that already match", () => {
-    expect(bcidFor("code128")).toBe("code128");
-    expect(bcidFor("ean13")).toBe("ean13");
-    expect(bcidFor("qr")).toBe("qrcode");
-    expect(bcidFor("datamatrix")).toBe("datamatrix");
-    expect(bcidFor("pdf417")).toBe("pdf417");
-  });
-
-  it("returns null for an unknown id", () => {
-    expect(bcidFor("nope")).toBeNull();
-    expect(generateBarcodeSvg({ type: "nope", value: "x" })).toBe("");
-  });
-
-  it("exposes a label for every id", () => {
-    for (const { value } of BARCODE_TYPES) {
-      expect(labelFor(value)).toBeTruthy();
-      expect(labelFor(value)).not.toBe(value);
-    }
-  });
-});
-
 describe("buildBarcodeSnippet", () => {
   it("inserts a helper call that reads a data field", () => {
     expect(buildBarcodeSnippet("code128", "order.id", true)).toEqual({
       ok: true,
-      kind: "helper",
       text: '{{barcode "code128" order.id}}',
     });
     expect(buildBarcodeSnippet("qr", " order.url ", true)).toEqual({
       ok: true,
-      kind: "helper",
       text: "{{qrcode order.url}}",
     });
   });
@@ -284,24 +124,20 @@ describe("buildBarcodeSnippet", () => {
     }
   });
 
-  it("refuses a data field for symbologies the print path cannot draw", () => {
-    const r = buildBarcodeSnippet("datamatrix", "order.id", true);
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.messageKey).toBe("designer.barcode_err_fixed");
-      expect(t(r.messageKey, r.messageParams)).toContain("Data Matrix");
-    }
+  it("uses the helper for every symbology, even 2D ones", () => {
+    expect(buildBarcodeSnippet("datamatrix", "order.id", true)).toEqual({
+      ok: true,
+      text: '{{barcode "datamatrix" order.id}}',
+    });
   });
 
   it("quotes a fixed value and still uses the helper", () => {
     expect(buildBarcodeSnippet("code128", "ABC-123", false)).toEqual({
       ok: true,
-      kind: "helper",
       text: '{{barcode "code128" "ABC-123"}}',
     });
     expect(buildBarcodeSnippet("qr", "https://example.com", false)).toEqual({
       ok: true,
-      kind: "helper",
       text: '{{qrcode "https://example.com"}}',
     });
   });
@@ -322,10 +158,11 @@ describe("buildBarcodeSnippet", () => {
     expect(buildBarcodeSnippet("code128", `a"b'c`, false).ok).toBe(false);
   });
 
-  it("keeps preview-only symbologies as a static SVG", () => {
-    const r = buildBarcodeSnippet("datamatrix", "PN-1042", false);
-    expect(r).toMatchObject({ ok: true, kind: "static" });
-    if (r.ok) expect(r.text).toContain("<svg");
+  it("inserts a helper call for a fixed 2D value, not a static SVG", () => {
+    expect(buildBarcodeSnippet("datamatrix", "PN-1042", false)).toEqual({
+      ok: true,
+      text: '{{barcode "datamatrix" "PN-1042"}}',
+    });
   });
 
   it("requires a value", () => {
@@ -333,69 +170,5 @@ describe("buildBarcodeSnippet", () => {
       ok: false,
       messageKey: "designer.barcode_err_required",
     });
-  });
-});
-
-describe("print symbologies", () => {
-  it("are all known to the Designer picker", () => {
-    for (const t of PRINT_SYMBOLOGIES) {
-      expect(
-        BARCODE_TYPES.some((b) => b.value === t),
-        t,
-      ).toBe(true);
-    }
-  });
-
-  it("treat QR as a helper type too", () => {
-    expect(isHelperSymbology("qr")).toBe(true);
-    expect(isHelperSymbology("datamatrix")).toBe(false);
-  });
-});
-
-describe("preview-only symbologies", () => {
-  it("is exactly the complement of the helper types", () => {
-    for (const { value } of BARCODE_TYPES) {
-      expect(isPreviewOnlySymbology(value), value).toBe(
-        !isHelperSymbology(value),
-      );
-    }
-  });
-
-  it("covers the three 2D types that print blank", () => {
-    for (const type of ["datamatrix", "pdf417", "aztec"]) {
-      expect(PREVIEW_ONLY_SYMBOLOGIES).toContain(type);
-    }
-  });
-});
-
-describe("findPreviewOnlyBarcodes", () => {
-  it("finds a preview-only helper call", () => {
-    const f = findPreviewOnlyBarcodes(
-      '<p>{{barcode "datamatrix" order.id}}</p>',
-    );
-    expect(f.types).toEqual(["Data Matrix"]);
-    expect(f.staticSvg).toBe(false);
-  });
-
-  it("accepts single quotes and extra whitespace", () => {
-    const f = findPreviewOnlyBarcodes("{{  barcode  'pdf417'  x  }}");
-    expect(f.types).toEqual(["PDF417"]);
-  });
-
-  it("ignores printable helper calls", () => {
-    const f = findPreviewOnlyBarcodes('{{barcode "code128" order.id}}');
-    expect(f).toEqual({ types: [], staticSvg: false });
-  });
-
-  it("finds a static SVG block from the insert dialog", () => {
-    const html = buildBarcodeHtml({ type: "aztec", value: "PN-1042" });
-    const f = findPreviewOnlyBarcodes(`<div>${html}</div>`);
-    expect(f.staticSvg).toBe(true);
-    expect(f.types).toEqual([]);
-  });
-
-  it("finds nothing in a plain template", () => {
-    const f = findPreviewOnlyBarcodes("<p>Hi {{store.name}}</p>");
-    expect(f).toEqual({ types: [], staticSvg: false });
   });
 });

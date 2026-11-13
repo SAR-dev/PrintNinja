@@ -1,193 +1,34 @@
-import { toSVG } from "bwip-js";
-
-export interface BarcodeOptions {
-  type: string;
-  value: string;
-  /** Bar height in mm (bwip-js `height`). */
-  height?: number;
-  /**
-   * Not passed to bwip-js. Its `width` is the width of the WHOLE symbol in mm,
-   * so `width: 2` squeezed every barcode into 2 mm and the bars overlapped into
-   * a solid black block. The printed size comes from `scaleToWidth`.
-   */
-  width?: number;
-  /** Render the human-readable text under the bars. */
-  text?: boolean;
-  /** Output width in mm; omit to let bwip-js decide. */
-  scaleToWidth?: number;
-}
-
 /**
- * Generate an inline SVG barcode.
+ * What the UI knows about barcodes.
  *
- * PLANNING.md 7.5 requires *inline SVG* so the rendered template needs no
- * scripts and no external image files.
- *
- * NOTE: the previous implementation drew onto a `<canvas>` and then called
- * `canvas.toDataURL("image/svg+xml")`. A canvas only ever holds raster
- * pixels, so that produced PNG bytes labelled as SVG — browsers refuse to
- * render it and the `<img>` showed a broken image. bwip-js has a real
- * `toSVG()`; use it.
+ * Every preview and every print is rendered by Rust (src-tauri/src/render/barcode.rs
+ * and src-tauri/src/commands/print.rs), so this file only carries the picker
+ * list, the value validation that mirrors the Rust encoders, and the snippet
+ * the Designer's Insert Barcode dialog inserts. Keep the symbology list in
+ * sync with `SYMBOLOGIES` in `barcode.rs`.
  */
-/** Matrix symbols are sized by their module grid; a bar height would stretch them. */
-const MATRIX_BCIDS = new Set(["qrcode", "datamatrix", "azteccode"]);
-
-export function generateBarcodeSvg(options: BarcodeOptions): string {
-  // Translate our friendly id into the real bwip-js encoder name.
-  const bcid = bcidFor(options.type);
-  if (!bcid) return "";
-
-  try {
-    return toSVG({
-      bcid,
-      text: options.value,
-      // Bar height in mm. Not for matrix symbols: a QR code with `height: 10`
-      // came out 150x85, a stretched rectangle that scanners cannot read.
-      ...(MATRIX_BCIDS.has(bcid) ? {} : { height: options.height || 10 }),
-      includetext: options.text !== false,
-      textxalign: "center",
-      scale: 3,
-      // Match the Rust renderer's QR error correction (medium) so the preview
-      // and the printed code hold the same data with the same damage tolerance.
-      ...(bcid === "qrcode" ? { eclevel: "M" } : {}),
-    });
-  } catch {
-    return "";
-  }
-}
-
-/**
- * Convert a number of millimetres to device-independent pixels using the
- * supplied DPI (default 96 CSS px per inch). Keeps bar modules on whole
- * pixels so thermal output is not blurry.
- */
-export function mmToPx(mm: number, dpi = 96): number {
-  return Math.round((mm / 25.4) * dpi);
-}
-
-/**
- * Snap a module width to a whole number of dots at the printer's DPI,
- * because a fractional module width renders as a smeared bar on thermal
- * heads (PLANNING.md 7.5).
- */
-export function snapModuleToDot(widthMm: number, dpi: number): number {
-  const dots = mmToPx(widthMm, dpi);
-  return Math.max(1, Math.round(dots));
-}
-
-/** Build a printable `<img>`/inline SVG block for a template. */
-export function buildBarcodeHtml(options: BarcodeOptions): string {
-  const svg = generateBarcodeSvg(options);
-  if (!svg) return "";
-
-  const widthMm = options.scaleToWidth ?? 40;
-  // bwip-js emits `<svg ...>` — inject the physical width right after the tag.
-  return `<div class="barcode" style="text-align:center;margin:2mm 0">
-${svg.replace(/^<svg/, `<svg width="${widthMm}mm"`)}
-</div>`;
-}
-
-/**
- * The symbologies the `{{barcode}}` helper supports.
- *
- * Print renders templates in Rust (src-tauri/src/render/barcode.rs), which
- * implements exactly this set, so the preview must not draw anything else or
- * it would show a barcode that never prints (REFACTORING.md decision #13).
- * Keep this list in sync with `SYMBOLOGIES` there.
- */
-export const PRINT_SYMBOLOGIES = [
-  "code128",
-  "code39",
-  "code93",
-  "ean13",
-  "ean8",
-  "upca",
-  "itf",
-  "codabar",
+export const BARCODE_TYPES = [
+  { value: "code128", label: "Code 128" },
+  { value: "code39", label: "Code 39" },
+  { value: "code93", label: "Code 93" },
+  { value: "ean13", label: "EAN-13" },
+  { value: "ean8", label: "EAN-8" },
+  { value: "upca", label: "UPC-A" },
+  { value: "upce", label: "UPC-E" },
+  { value: "itf", label: "ITF" },
+  { value: "itf14", label: "ITF-14" },
+  { value: "codabar", label: "Codabar" },
+  { value: "qr", label: "QR Code" },
+  { value: "datamatrix", label: "Data Matrix" },
+  { value: "pdf417", label: "PDF417" },
+  { value: "aztec", label: "Aztec" },
 ] as const;
-
-export function isPrintSymbology(type: string): boolean {
-  return (PRINT_SYMBOLOGIES as readonly string[]).includes(type);
-}
-
-const HELPER_MIN_MM = 5;
-const HELPER_MAX_MM = 200;
-export const DEFAULT_BARCODE_WIDTH_MM = 40;
-export const DEFAULT_QR_SIZE_MM = 25;
-
-/** A helper argument as text: strings and numbers are used, anything else is empty. */
-function helperText(value: unknown): string {
-  if (typeof value === "string") return value.trim();
-  if (typeof value === "number" || typeof value === "boolean")
-    return String(value);
-  return "";
-}
-
-function helperMm(value: unknown, fallback: number): number {
-  const mm = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(mm)) return fallback;
-  return Math.min(HELPER_MAX_MM, Math.max(HELPER_MIN_MM, mm));
-}
-
-/**
- * HTML for `{{barcode "code128" order.id width=50 text=false}}`.
- *
- * Returns "" for an unknown or preview-only symbology, an empty value, or a
- * value the symbology cannot hold, so one bad row prints an empty spot rather
- * than failing the whole render (the Rust helper does the same).
- */
-export function barcodeHelperHtml(
-  type: unknown,
-  value: unknown,
-  options: { width?: unknown; text?: unknown } = {},
-): string {
-  const kind = helperText(type);
-  const text = helperText(value);
-  if (!isPrintSymbology(kind) || validateBarcode(kind, text) !== null)
-    return "";
-
-  const showText =
-    options.text === undefined
-      ? true
-      : !(
-          options.text === false ||
-          options.text === 0 ||
-          String(options.text).toLowerCase() === "false"
-        );
-
-  return buildBarcodeHtml({
-    type: kind,
-    value: text,
-    text: showText,
-    scaleToWidth: helperMm(options.width, DEFAULT_BARCODE_WIDTH_MM),
-  });
-}
-
-/** HTML for `{{qrcode order.url size=30}}`; "" for an empty value. */
-export function qrcodeHelperHtml(
-  value: unknown,
-  options: { size?: unknown } = {},
-): string {
-  const text = helperText(value);
-  if (!text) return "";
-  return buildBarcodeHtml({
-    type: "qr",
-    value: text,
-    text: false,
-    scaleToWidth: helperMm(options.size, DEFAULT_QR_SIZE_MM),
-  });
-}
-
-/** True when a template can print `type` through `{{barcode}}` / `{{qrcode}}`. */
-export function isHelperSymbology(type: string): boolean {
-  return type === "qr" || isPrintSymbology(type);
-}
 
 /** A data path a template can read: `order.id`, `this.sku`, `sku`. */
 const FIELD_PATH = /^[A-Za-z_][\w]*(?:\.[A-Za-z_]\w*)*$/;
 
 export type BarcodeSnippet =
-  | { ok: true; text: string; kind: "helper" | "static" }
+  | { ok: true; text: string }
   | { ok: false; messageKey: string; messageParams?: Record<string, string> };
 
 /**
@@ -195,10 +36,11 @@ export type BarcodeSnippet =
  *
  * - `fromData`: `value` is a field path, giving `{{barcode "code128" order.id}}`,
  *   so every print (and every CSV row) gets its own code.
- * - otherwise `value` is fixed text. Symbologies that print through a helper
- *   still insert a helper call with a quoted literal, so the preview and the
- *   printed label come from the same renderer. The rest (Data Matrix, PDF417,
- *   Aztec, UPC-E, ITF-14) are preview-only in Rust, so they stay a static SVG.
+ * - otherwise `value` is fixed text, inserted as a quoted literal.
+ *
+ * Every symbology prints through the Rust `{{barcode}}` / `{{qrcode}}`
+ * helpers, so every snippet is a helper call — the preview and the printed
+ * label always come from the same renderer.
  */
 export function buildBarcodeSnippet(
   type: string,
@@ -207,33 +49,18 @@ export function buildBarcodeSnippet(
 ): BarcodeSnippet {
   const v = value.trim();
   if (!v) return { ok: false, messageKey: "designer.barcode_err_required" };
-  const helper = isHelperSymbology(type);
   const call = (arg: string) =>
     type === "qr" ? `{{qrcode ${arg}}}` : `{{barcode "${type}" ${arg}}}`;
 
   if (fromData) {
-    if (!helper) {
-      return {
-        ok: false,
-        messageKey: "designer.barcode_err_fixed",
-        messageParams: { label: labelFor(type) },
-      };
-    }
     if (!FIELD_PATH.test(v)) {
       return { ok: false, messageKey: "designer.barcode_err_field" };
     }
-    return { ok: true, kind: "helper", text: call(v) };
+    return { ok: true, text: call(v) };
   }
 
   const errorKey = validateBarcode(type, v);
   if (errorKey) return { ok: false, messageKey: errorKey };
-
-  if (!helper) {
-    const html = buildBarcodeHtml({ type, value: v, scaleToWidth: 40 });
-    return html
-      ? { ok: true, kind: "static", text: html }
-      : { ok: false, messageKey: "designer.barcode_err_gen" };
-  }
 
   // A Handlebars string literal can hold either quote, but not both.
   if (v.includes('"') && v.includes("'")) {
@@ -243,13 +70,16 @@ export function buildBarcodeSnippet(
     };
   }
   const literal = v.includes('"') ? `'${v}'` : `"${v}"`;
-  return { ok: true, kind: "helper", text: call(literal) };
+  return { ok: true, text: call(literal) };
 }
 
 export function validateBarcode(type: string, value: string): string | null {
   const v = value.trim();
 
   if (!v) return "designer.barcode_err_required";
+
+  const checkOk = (data: string, checkDigit: string) =>
+    eanupcCheckDigit(data) === Number(checkDigit);
 
   switch (type) {
     case "code128":
@@ -260,24 +90,39 @@ export function validateBarcode(type: string, value: string): string | null {
         : "designer.barcode_err_c39";
     case "ean13":
       if (!/^\d{13}$/.test(v)) return "designer.barcode_err_ean13_len";
-      return validateEanCheckDigit(v)
+      return checkOk(v.slice(0, 12), v[12])
         ? null
         : "designer.barcode_err_ean13_check";
     case "ean8":
       if (!/^\d{8}$/.test(v)) return "designer.barcode_err_ean8_len";
-      return validateEanCheckDigit(v)
+      return checkOk(v.slice(0, 7), v[7])
         ? null
         : "designer.barcode_err_ean8_check";
     case "upca":
       if (!/^\d{12}$/.test(v)) return "designer.barcode_err_upca_len";
-      return validateEanCheckDigit(v)
+      // Rust encodes UPC-A as EAN-13 with a leading 0, so the parity here is
+      // the EAN-13 one (odd positions ×3) — see eanupcCheckDigit.
+      return checkOk(v.slice(0, 11), v[11])
         ? null
         : "designer.barcode_err_upca_check";
+    case "upce":
+      // rxing's UPC-E writer: 7 digits (check computed) or 8 digits (check
+      // must pass), first digit the number system 0 or 1.
+      if (!/^[01]\d{6,7}$/.test(v)) return "designer.barcode_err_upce";
+      if (v.length === 8 && !checkOk(upceToUpca11(v.slice(0, 7)), v[7]))
+        return "designer.barcode_err_upce_check";
+      return null;
     case "itf":
       // ITF encodes digit pairs only, so it needs an even count.
       return /^\d+$/.test(v) && v.length % 2 === 0
         ? null
         : "designer.barcode_err_itf";
+    case "itf14":
+      // 13 digits (check computed by Rust) or 14 (check must match).
+      if (!/^\d{13,14}$/.test(v)) return "designer.barcode_err_itf14";
+      if (v.length === 14 && !checkOk(v.slice(0, 13), v[13]))
+        return "designer.barcode_err_itf14_check";
+      return null;
     case "codabar": {
       // Codabar = optional start letter A-D, digits, optional stop letter
       // A-D, and AT LEAST ONE of the letters must be present. Plain digits
@@ -297,92 +142,41 @@ export function validateBarcode(type: string, value: string): string | null {
   }
 }
 
-function validateEanCheckDigit(value: string): boolean {
-  const digits = value.split("").map(Number);
-  const check = digits.pop()!;
-  const sum = digits.reduce((acc, d, i) => acc + d * (i % 2 === 0 ? 1 : 3), 0);
-  return (10 - (sum % 10)) % 10 === check;
-}
-
-export const BARCODE_TYPES = [
-  { value: "code128", label: "Code 128", bcid: "code128" },
-  { value: "code39", label: "Code 39", bcid: "code39" },
-  { value: "code93", label: "Code 93", bcid: "code93" },
-  { value: "ean13", label: "EAN-13", bcid: "ean13" },
-  { value: "ean8", label: "EAN-8", bcid: "ean8" },
-  { value: "upca", label: "UPC-A", bcid: "upca" },
-  { value: "upce", label: "UPC-E", bcid: "upce" },
-  { value: "itf", label: "ITF", bcid: "interleaved2of5" },
-  { value: "itf14", label: "ITF-14", bcid: "itf14" },
-  { value: "codabar", label: "Codabar", bcid: "rationalizedCodabar" },
-  { value: "qr", label: "QR Code", bcid: "qrcode" },
-  { value: "datamatrix", label: "Data Matrix", bcid: "datamatrix" },
-  { value: "pdf417", label: "PDF417", bcid: "pdf417" },
-  { value: "aztec", label: "Aztec", bcid: "azteccode" },
-] as const;
-
 /**
- * Map our friendly symbology id to the bwip-js encoder name.
+ * The check digit of an EAN/UPC/GTIN body (the digits WITHOUT the check).
  *
- * Four ids do NOT match bwip-js encoder names, and passing them through
- * verbatim made `toSVG` throw `unknown encoder name` — so those options in
- * the Designer picker silently failed to insert:
- *   - itf     -> interleaved2of5
- *   - codabar -> rationalizedCodabar
- *   - aztec   -> azteccode
- *   - qr      -> qrcode
+ * The standard rule, independent of the total length: counting from the
+ * right, the digit immediately left of the check is ×3, then ×1, ×3, …
+ * That is the formula both encoders apply — `barcoders`' EAN-13 for
+ * ean13/ean8/upca (UPC-A rides as `0` + 12 digits) and rxing's
+ * `getStandardUPCEANChecksum` for UPC-E and ITF-14 — so a check digit this
+ * function rejects is one the Rust encoder will refuse too.
  */
-export function bcidFor(type: string): string | null {
-  return BARCODE_TYPES.find((t) => t.value === type)?.bcid ?? null;
-}
-
-/** Human-readable label for a symbology id. */
-export function labelFor(type: string): string {
-  return BARCODE_TYPES.find((t) => t.value === type)?.label ?? type;
-}
-
-/**
- * Symbologies the JS preview draws (bwip-js) but the Rust print engine
- * cannot: `{{barcode}}` renders them as an empty spot, and the Designer's
- * dialog keeps them a static SVG instead of a helper call.
- *
- * Derived from `BARCODE_TYPES`, so it tracks both that list and
- * `SYMBOLOGIES` in src-tauri/src/render/barcode.rs — the day a type
- * becomes printable it drops out of this list on its own.
- */
-export const PREVIEW_ONLY_SYMBOLOGIES: readonly string[] = BARCODE_TYPES.filter(
-  (t) => !isHelperSymbology(t.value),
-).map((t) => t.value);
-
-/** True when the built-in print engine cannot draw `type`. */
-export function isPreviewOnlySymbology(type: string): boolean {
-  return PREVIEW_ONLY_SYMBOLOGIES.includes(type);
-}
-
-export interface PreviewOnlyFindings {
-  /** Friendly labels of preview-only types used in `{{barcode ...}}` calls. */
-  types: string[];
-  /** A static SVG barcode block — the dialog's substitute for these types. */
-  staticSvg: boolean;
-}
-
-/**
- * The preview-only barcodes a template's HTML holds, so the Print page can
- * warn before sending a job that would come out blank:
- *
- * - `{{barcode "datamatrix" ...}}` — the Rust helper draws nothing for it;
- * - a `<div class="barcode" style=...>` block — the Designer dialog inserts
- *   a static SVG exactly for the types the print path cannot draw
- *   (the Rust helper's wrapper carries no style attribute).
- */
-export function findPreviewOnlyBarcodes(html: string): PreviewOnlyFindings {
-  const found = new Set<string>();
-  for (const m of html.matchAll(/\{\{\s*barcode\s+["']([A-Za-z0-9]+)["']/gi)) {
-    const type = m[1].toLowerCase();
-    if (isPreviewOnlySymbology(type)) found.add(labelFor(type));
+function eanupcCheckDigit(data: string): number {
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) {
+    sum += Number(data[i]) * ((data.length - 1 - i) % 2 === 0 ? 3 : 1);
   }
-  return {
-    types: [...found],
-    staticSvg: /<div\s+class="barcode"\s+style=/i.test(html),
-  };
+  return (10 - (sum % 10)) % 10;
+}
+
+/**
+ * The 11 data digits of the UPC-A form of a 7-digit UPC-E value, using the
+ * same expansion rxing (`convertUPCEtoUPCA`) applies before computing the
+ * check digit.
+ */
+function upceToUpca11(v: string): string {
+  const [n, x1, x2, x3, x4, x5, x6] = v.split("");
+  switch (x6) {
+    case "0":
+    case "1":
+    case "2":
+      return `${n}${x1}${x2}${x6}0000${x3}${x4}${x5}`;
+    case "3":
+      return `${n}${x1}${x2}${x3}00000${x4}${x5}`;
+    case "4":
+      return `${n}${x1}${x2}${x3}${x4}00000${x5}`;
+    default:
+      return `${n}${x1}${x2}${x3}${x4}${x5}0000${x6}`;
+  }
 }

@@ -178,9 +178,22 @@ beforeEach(() => {
     revision: 2,
     updatedAt: "2026-03-01T00:00:00Z",
   }));
-  invoke.mockImplementation(async (cmd: string) => {
+  invoke.mockImplementation(async (cmd: string, args?: any) => {
     if (cmd === "list_templates") return LIST;
     if (cmd === "cache_list_conflicted") return [];
+    // The preview's stand-in for the Rust engine: one document per record,
+    // the template's own CSS carried into the document (what the
+    // "keeps the template's own CSS" preview test asserts).
+    if (cmd === "render_template_preview") {
+      const html = String(args?.["html"] ?? "");
+      const css = `${String(args?.["css"] ?? "")}${String(args?.["compiled_css"] ?? "")}`;
+      const records = Array.isArray(args?.["records"]) ? args["records"] : [];
+      const rows = records.length > 0 ? records : [null];
+      return rows.map(
+        () =>
+          `<!DOCTYPE html><html><head><style>${css}</style></head><body>${html}</body></html>`,
+      );
+    }
     return null;
   });
 });
