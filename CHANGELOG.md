@@ -16,6 +16,19 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+### Changed
+
+- **A calmer Print page.** The print card now holds just the printer,
+  template, test data and copies. Orientation, paper size, margins and
+  the other fine-tuning options sit in an **Advanced options** section
+  that stays folded until you open it and remembers your choice.
+- **Fewer popups.** Confirmation toasts are gone wherever the screen
+  already shows the result — a saved setting, a removed row, copied
+  text. Errors and updates you can't see otherwise still notify you.
+- **Form mistakes point at the field.** Invalid printer details or
+  paper sizes now explain themselves right next to the input instead of
+  in a popup.
+
 ## [2026.1113.0] - 2026-11-13
 
 ### Changed

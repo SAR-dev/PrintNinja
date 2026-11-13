@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Upload } from "lucide-react";
-import { notifySuccess } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -79,10 +78,10 @@ export function AppearanceSettings() {
 
   useEffect(() => setName(appName), [appName]);
 
+  // No toast: the typed name stays in the field — the save is visible.
   const saveName = async () => {
     if (name.trim() === appName) return;
     await setAppName(name);
-    notifySuccess(t("settings_page.appearance_name_saved"));
   };
 
   const pickLogo = async (file: File) => {
@@ -93,8 +92,8 @@ export function AppearanceSettings() {
     }
     setLogoError("");
     try {
+      // No toast: the preview above swaps to the new logo.
       await setLogo(await readAsDataUrl(file));
-      notifySuccess(t("settings_page.appearance_logo_saved"));
     } catch {
       setLogoError(t("settings_page.appearance_logo_unreadable"));
     }
@@ -294,7 +293,6 @@ export function AppearanceSettings() {
                   variant="ghost"
                   onClick={async () => {
                     await setLogo(null);
-                    notifySuccess(t("settings_page.appearance_logo_removed"));
                   }}
                 >
                   {t("settings_page.appearance_remove_logo")}
@@ -317,7 +315,6 @@ export function AppearanceSettings() {
               onClick={async () => {
                 await setAppName(DEFAULT_APP_NAME);
                 await setLogo(null);
-                notifySuccess(t("settings_page.appearance_branding_reset"));
               }}
             >
               {t("settings_page.appearance_reset", { name: DEFAULT_APP_NAME })}

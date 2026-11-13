@@ -135,17 +135,30 @@ describe("Print page", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("shows layout options inline with no advanced section", async () => {
+  it("folds the layout options behind Advanced, closed by default", async () => {
     renderPage();
-    await screen.findByRole("button", { name: /^Print$/ });
-    // Everything lives in the default section: no toggle, no hiding.
-    expect(
-      screen.queryByRole("button", { name: /Advanced options/ }),
-    ).toBeNull();
+    const toggle = await screen.findByRole("button", {
+      name: /Advanced options/,
+    });
+    // Folded: the header shows the current values, the fields stay hidden.
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveTextContent(/Portrait/);
+    expect(screen.queryByLabelText("Page range")).toBeNull();
+    expect(screen.queryByRole("group", { name: /Margins/ })).toBeNull();
+    expect(screen.queryByLabelText("Paper size")).toBeNull();
+    expect(screen.queryByLabelText("Fit mode")).toBeNull();
+    // Opening exposes every moved field.
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByLabelText("Page range")).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /Margins/ })).toBeInTheDocument();
     expect(screen.getByLabelText("Paper size")).toBeInTheDocument();
     expect(screen.getByLabelText("Fit mode")).toBeInTheDocument();
+    expect(screen.getByLabelText("HTTP method")).toBeInTheDocument();
+    expect(screen.getByLabelText("Pages")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Send test page/ }),
+    ).toBeInTheDocument();
   });
 
   it("announces success, and failure with a retry", async () => {
@@ -263,6 +276,9 @@ describe("Print page", () => {
   });
   it("lets Template size be re-selected after a preset was chosen", async () => {
     renderPage();
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Advanced options/ }),
+    );
     const paper = await screen.findByRole("combobox", { name: "Paper size" });
     // Choose A4, then ask for the template size again: the override must
     // be cleared, not re-applied as a no-op.
@@ -298,6 +314,7 @@ describe("Print page", () => {
     renderPage();
     const print = await screen.findByRole("button", { name: /^Print$/ });
     await waitFor(() => expect(print).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Advanced options/ }));
     fireEvent.change(screen.getByLabelText("Pages"), {
       target: { value: "3" },
     });

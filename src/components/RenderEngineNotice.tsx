@@ -61,9 +61,7 @@ function Command({ text }: { text: string }) {
         className="absolute right-1 top-1 h-8 w-8"
         aria-label={t("engine.copy")}
         title={t("engine.copy")}
-        onClick={async () => {
-          if (await copyText(text)) notifySuccess(t("engine.copied"));
-        }}
+        onClick={() => void copyText(text)}
       >
         <Copy className="h-4 w-4" aria-hidden="true" />
       </Button>

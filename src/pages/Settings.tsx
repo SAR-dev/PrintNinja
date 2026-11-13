@@ -345,7 +345,7 @@ export function SettingsPage() {
       await writeSetting("browser-custom-path", path);
       savedChoiceRef.current = choice;
       savedPathRef.current = path;
-      notifySuccess(t("settings_page.toast_browser_saved"));
+      // The radio selection is the visible result; no toast.
       await recheckEngine();
     } catch (e) {
       notifyError(describeError(e));
@@ -444,7 +444,8 @@ export function SettingsPage() {
     loadFonts();
   }, [loadFonts]);
 
-  // Same behaviour for every numeric setting: validate, save, and say so.
+  // Same behaviour for every numeric setting: validate, then save. The
+  // typed value stays in the field — the save is visible, so no toast.
   const saveNumber = async (
     key: string,
     value: string,
@@ -459,11 +460,11 @@ export function SettingsPage() {
     }
     setErr("");
     await writeSetting(key, String(n));
-    notifySuccess(t("settings_page.toast_saved"));
   };
 
-  // One behavior for every background toggle: persist the key, ask the
-  // backend to re-apply autostart/tray without a restart, and say so.
+  // One behavior for every background toggle: persist the key and ask
+  // the backend to re-apply autostart/tray without a restart. The switch
+  // flipping is the visible result; no toast.
   const setBackgroundPref = async (
     key: string,
     value: boolean,
@@ -477,7 +478,6 @@ export function SettingsPage() {
       // Web preview or an old backend: the stored value still applies
       // at the next launch.
     }
-    notifySuccess(t("settings_page.toast_bg_saved"));
   };
 
   // A completed pull may bring another PC's fonts (or confirm a
@@ -545,7 +545,7 @@ export function SettingsPage() {
     await writeSetting("allowed_domains", normalized);
     if (normalized !== raw) setAllowedDomains(normalized);
     lastSavedDomains.current = normalized;
-    notifySuccess(t("settings_page.toast_domains_updated"));
+    // The list re-renders with the saved value — visible, so no toast.
   };
 
   const saveShareUrl = async () => {
@@ -556,10 +556,7 @@ export function SettingsPage() {
       return;
     }
     const current = await share.getServiceUrl();
-    if (next === current) {
-      notifySuccess(t("settings_page.toast_url_unchanged"));
-      return;
-    }
+    if (next === current) return;
     const hadSession = !!(await share.getSessionToken());
     await share.setServiceUrl(next);
     setShareUrl(next ?? "");
@@ -569,7 +566,8 @@ export function SettingsPage() {
       setShareUser(null);
       await share.endSession("signed_out");
     }
-    notifySuccess(t("settings_page.toast_url_saved"));
+    // The address shows in the field above (and a re-sign-in screen when
+    // the session is dropped) — visible, so no toast.
   };
 
   const doRegister = async () => {
@@ -1618,7 +1616,8 @@ export function SettingsPage() {
                   await writeSetting("allowed_domains", "");
                   lastSavedDomains.current = "";
                   setAllowAllOpen(false);
-                  notifySuccess(t("settings_page.toast_allow_all"));
+                  // The dialog closes and the list shows "allow all" —
+                  // the change is on screen, so no toast.
                 })();
               }}
             >

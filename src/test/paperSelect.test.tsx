@@ -118,6 +118,12 @@ const open = async (name: RegExp | string) => {
   fireEvent.click(await screen.findByRole("option", { name }));
   return paper;
 };
+// Paper and orientation live in the Advanced fold, closed by default.
+const openAdvanced = async () => {
+  fireEvent.click(
+    await screen.findByRole("button", { name: /Advanced options/ }),
+  );
+};
 const w = () => document.getElementById("paper-w") as HTMLInputElement | null;
 const h = () => document.getElementById("paper-h") as HTMLInputElement | null;
 
@@ -128,6 +134,7 @@ describe("Print page: paper size selection", () => {
 
   it("keeps Custom open when chosen from a preset", async () => {
     renderPage();
+    await openAdvanced();
     await open(/A4/);
     const paper = screen.getByRole("combobox", { name: "Paper size" });
     fireEvent.click(paper);
@@ -140,6 +147,7 @@ describe("Print page: paper size selection", () => {
 
   it("keeps the inputs open when the typed size matches a preset", async () => {
     renderPage();
+    await openAdvanced();
     await open(/Custom/);
     fireEvent.change(w()!, { target: { value: "210" } });
     fireEvent.change(h()!, { target: { value: "297" } });
@@ -149,6 +157,7 @@ describe("Print page: paper size selection", () => {
 
   it("keeps the inputs open when both are cleared", async () => {
     renderPage();
+    await openAdvanced();
     await open(/Custom/);
     fireEvent.change(w()!, { target: { value: "" } });
     fireEvent.change(h()!, { target: { value: "" } });
@@ -159,6 +168,7 @@ describe("Print page: paper size selection", () => {
 
   it("ignores zero and negative sizes instead of forcing 1", async () => {
     renderPage();
+    await openAdvanced();
     await open(/Custom/);
     fireEvent.change(w()!, { target: { value: "120" } });
     fireEvent.change(w()!, { target: { value: "0" } });
@@ -168,6 +178,7 @@ describe("Print page: paper size selection", () => {
 
   it("leaves Custom when a preset or Template size is picked", async () => {
     renderPage();
+    await openAdvanced();
     await open(/Custom/);
     await open(/A4/);
     expect(usePrintStore.getState().paperCustom).toBe(false);
@@ -177,6 +188,7 @@ describe("Print page: paper size selection", () => {
   it("shows the sheet that prints (orientation applied) in the note", async () => {
     usePrintStore.setState({ paperW: 210, paperH: 297 });
     renderPage();
+    await openAdvanced();
     const orientation = await screen.findByRole("combobox", {
       name: "Orientation",
     });
