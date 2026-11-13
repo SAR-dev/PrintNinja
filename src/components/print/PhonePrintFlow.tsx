@@ -90,7 +90,6 @@ interface PhonePrintFlowProps {
   previewPaperW: number;
   previewPaperH: number;
   paperPreset: PaperKey;
-  paperMismatch: string;
 
   canPrint: boolean;
   blocker: string;
@@ -98,9 +97,9 @@ interface PhonePrintFlowProps {
   onRetry: () => void;
   onSyncTemplates: () => void;
   onSpikeTest: () => void;
-  /** Present when the selected printer has an editable registered width:
-   * opens the paper-size dialog from the mismatch warning. */
-  onSetPaperWidth?: () => void;
+  /** The paper-width notice under the printer picker (mismatch warning or
+   * the one-time "no width saved" prompt), built by the Print page. */
+  paperNotice?: React.ReactNode;
 }
 
 /** Store fit values → their display key (the ids are kebab, keys are not). */
@@ -457,27 +456,7 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
                 )}
               </SelectContent>
             </Select>
-            {props.paperMismatch && (
-              <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2">
-                <p
-                  role="status"
-                  className="min-w-0 flex-1 text-xs text-warning"
-                >
-                  {props.paperMismatch}
-                </p>
-                {props.onSetPaperWidth && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 shrink-0 px-2 text-xs"
-                    onClick={props.onSetPaperWidth}
-                    data-testid="set-paper-size"
-                  >
-                    {t("print.paper_size_action")}
-                  </Button>
-                )}
-              </div>
-            )}
+            {props.paperNotice}
           </div>
 
           {/* Data: which data feeds the template. */}
