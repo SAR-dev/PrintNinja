@@ -515,6 +515,11 @@ const ja: Translation = {
     paper_mismatch_paper:
       "用紙は {{pw2}}×{{ph2}} mm です。このプリンターは {{pw}} mm の用紙です。",
     paper_size_action: "用紙サイズを設定",
+    paper_set_to: "{{w}} mm に設定",
+    paper_other: "その他…",
+    paper_not_now: "今はしない",
+    paper_width_missing:
+      "{{name}} には用紙幅が保存されていません。この印刷は {{w}} mm の用紙を使います。",
     paper_size_title: "{{name}} の用紙幅",
     paper_size_hint:
       "この印刷は {{w}} mm の用紙を使います。プリンターは {{cur}} mm として登録されています。実際に使う用紙の幅を入力してください。",

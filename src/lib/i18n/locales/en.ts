@@ -502,6 +502,11 @@ const en = {
     paper_mismatch_paper:
       "Paper is {{pw2}} × {{ph2}} mm; this printer uses {{pw}} mm paper.",
     paper_size_action: "Set paper size",
+    paper_set_to: "Set to {{w}} mm",
+    paper_other: "Other…",
+    paper_not_now: "Not now",
+    paper_width_missing:
+      "{{name}} has no paper width saved. This print uses a {{w}} mm sheet.",
     paper_size_title: "Paper width for {{name}}",
     paper_size_hint:
       "This print uses a {{w}} mm sheet; the printer is registered at {{cur}} mm. Enter the width of the paper the printer actually takes.",
