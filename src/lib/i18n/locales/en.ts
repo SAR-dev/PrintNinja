@@ -418,6 +418,7 @@ const en = {
   print: {
     title: "Print",
     printing: "Printing…",
+    printing_detail: "Sending to {{printer}}.",
     printer: "Printer",
     template: "Template",
     data_url: "Data URL",
@@ -446,6 +447,8 @@ const en = {
     rendered_on: "Rendered on {{peer}}",
     finished: "Finished in {{seconds}}.",
     failed_title: "Print failed",
+    details_show: "Details",
+    details_hide: "Hide",
     warnings_title: "Warnings",
     unknown_error: "Unknown error",
     pair_again_to_print: "Pair again to print.",

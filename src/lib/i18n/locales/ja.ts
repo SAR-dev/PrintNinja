@@ -428,6 +428,7 @@ const ja: Translation = {
   print: {
     title: "印刷",
     printing: "印刷中…",
+    printing_detail: "{{printer}}に送信しています。",
     printer: "プリンター",
     template: "テンプレート",
     data_url: "データURL",
@@ -456,6 +457,8 @@ const ja: Translation = {
     rendered_on: "{{peer}}でレンダリングしました",
     finished: "{{seconds}}で完了しました。",
     failed_title: "印刷に失敗しました",
+    details_show: "詳細",
+    details_hide: "閉じる",
     warnings_title: "注意",
     unknown_error: "不明なエラー",
     pair_again_to_print: "印刷するには再ペアリングしてください。",
