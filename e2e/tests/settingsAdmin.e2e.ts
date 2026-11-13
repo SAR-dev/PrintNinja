@@ -36,7 +36,10 @@ test("settings admin: brand, density, API port, trusted sources, logo", async ({
   // Brand name persists across reloads.
   await page.getByTestId(testids.settingsBrandName).fill("E2E Print Shop");
   await page.getByTestId(testids.settingsBrandName).press("Enter");
-  await expect(page.getByText("Name saved")).toBeVisible();
+  // No toast: the saved value stays in the field (and in the reload).
+  await expect(page.getByTestId(testids.settingsBrandName)).toHaveValue(
+    "E2E Print Shop",
+  );
   await page.reload();
   await expect(page.getByTestId(testids.settingsBrandName)).toHaveValue(
     "E2E Print Shop",

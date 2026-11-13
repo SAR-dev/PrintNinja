@@ -8,6 +8,15 @@ import { signedSeed } from "../support/fixtures";
 // stubs print_html, but the prefs are saved before the dispatch, so the
 // stub's null answer is irrelevant to what this spec pins.
 
+// Paper size lives in the Advanced options fold (closed by default,
+// open/closed state remembered in the print prefs).
+async function ensureAdvancedOpen(page: import("@playwright/test").Page) {
+  const toggle = page.getByRole("button", { name: /Advanced options/ });
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+  }
+}
+
 test("warns on paper mismatch and remembers each printer's choices", async ({
   browser,
 }) => {
@@ -61,6 +70,7 @@ test("warns on paper mismatch and remembers each printer's choices", async ({
   await page.getByRole("option", { name: "E2E Thermal 80" }).click();
   await page.getByRole("combobox", { name: "Template" }).click();
   await page.getByRole("option", { name: "Matching A4" }).click();
+  await ensureAdvancedOpen(page);
   await page.getByRole("combobox", { name: "Paper size" }).click();
   await page.getByRole("option", { name: /A4/ }).click();
   await expect(
@@ -92,6 +102,9 @@ test("warns on paper mismatch and remembers each printer's choices", async ({
     "Matching A4",
     { timeout: 20_000 },
   );
+  // The fold was opened before the restart; its state rides the same
+  // print prefs as the remembered paper size.
+  await ensureAdvancedOpen(page);
   await expect(page.getByRole("combobox", { name: "Paper size" })).toHaveText(
     "A4 (210 × 297 mm)",
   );

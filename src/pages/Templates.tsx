@@ -365,16 +365,9 @@ export function TemplatesPage() {
       // 1. Record the save on the server (idempotent), 2. put a local copy on
       // this PC with its CSS and README, marked read-only.
       await share.saveRemoteTemplate(serverTpl.id);
-      const result = await downloadToLocal(
-        serverTpl.id,
-        "saved",
-        serverTpl.owner_handle,
-      );
-      if (!result.created) {
-        notifySuccess(t("templates.toast_already_saved"));
-        return;
-      }
-      notifySuccess(t("templates.toast_saved_local", { name: result.name }));
+      await downloadToLocal(serverTpl.id, "saved", serverTpl.owner_handle);
+      // The list re-renders with the new row (or shows it was already
+      // saved) — visible, no toast.
       await loadMine();
     } catch (e) {
       notifyError(describeError(e), {
@@ -434,8 +427,7 @@ export function TemplatesPage() {
     }
     setSyncing(tpl.id);
     try {
-      const created = await cloneSavedTemplate(tpl);
-      notifySuccess(t("templates.toast_cloned", { name: created.name }));
+      await cloneSavedTemplate(tpl);
       await loadMine();
     } catch (e) {
       notifyError(describeError(e));

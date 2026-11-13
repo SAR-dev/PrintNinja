@@ -83,16 +83,12 @@ describe("Profile section", () => {
     );
   });
 
-  it("signs out in one click and says so", async () => {
+  it("signs out in one click", async () => {
     renderCard();
     fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(client.logout).toHaveBeenCalledOnce());
-    await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith(
-        "Signed out",
-        expect.anything(),
-      ),
-    );
+    // The card switches to its signed-out face — no toast for a result
+    // the screen already shows.
     expect(
       await screen.findByText(/You are not signed in/),
     ).toBeInTheDocument();

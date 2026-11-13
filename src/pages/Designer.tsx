@@ -416,8 +416,8 @@ export function DesignerPage() {
         }
       })();
     }
-    // Content now lives on the template row itself; nothing more to load.
-    notifySuccess(t("designer.toast_loaded", { name: tpl.name }));
+    // Content now lives on the template row itself; the canvas and the
+    // row update visibly, so the load stays quiet.
   };
 
   const dirty =
@@ -641,11 +641,10 @@ export function DesignerPage() {
           id,
           remote.published_at ?? remote.updated_at ?? null,
         );
-        notifySuccess(t("designer.toast_now_public"));
+        // The visibility switch flips to match — visible, no toast.
       } else {
         await share.unpublishRemoteTemplate(id);
         await persistPublish(id, null);
-        notifySuccess(t("designer.toast_now_private"));
       }
       window.dispatchEvent(new Event("sync:pulled"));
     } catch (e) {
@@ -678,7 +677,7 @@ export function DesignerPage() {
       setRemoteId(conflict.serverId);
       setPublishedAt(taken.updatedAt);
       setConflict(null);
-      notifySuccess(t("designer.toast_server_copy"));
+      // The canvas re-renders with the server copy — visible, no toast.
     } catch (e) {
       notifyError(describeError(e));
     } finally {
@@ -705,6 +704,8 @@ export function DesignerPage() {
       setRemoteId(result.remoteId);
       setPublishedAt(result.published ? result.updatedAt : null);
       setConflict(null);
+      // The overwrite lands on the server — a new version no other
+      // screen shows, like a normal server save.
       notifySuccess(t("designer.toast_overwrote"));
     } catch (e) {
       if (e instanceof TemplateConflictError) {
@@ -798,7 +799,8 @@ export function DesignerPage() {
       setTemplates((prev) => [...prev, tpl]);
       loadTemplate(tpl);
       setCurrentTemplateDbId(tpl.id);
-      notifySuccess(t("designer.toast_created_local", { name }));
+      // The new row appears in the list and the canvas opens on it —
+      // visible, no toast.
     } finally {
       setCreatingTemplate(false);
       if (!keepDialogOpen) {
@@ -960,7 +962,7 @@ export function DesignerPage() {
     setShowBarcodeDialog(false);
     setBarcodeValue("");
     setBarcodeError(null);
-    notifySuccess(t("designer.toast_barcode_inserted", { type: barcodeType }));
+    // The element lands on the canvas — visible, no toast.
   };
 
   const sampleData = useMemo<Record<string, unknown>>(() => {
@@ -1517,7 +1519,7 @@ export function DesignerPage() {
                 }
                 setDraftDatasetJson(editJson);
                 setShowEditDataset(false);
-                notifySuccess(t("designer.toast_dataset_updated"));
+                // The panel re-renders with the saved rows — visible.
               }}
             >
               {t("designer.sample_save")}
