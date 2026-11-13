@@ -57,7 +57,7 @@ import {
 } from "@/components/ui/select";
 import { notifySuccess, notifyError } from "@/lib/notify";
 import * as share from "@/lib/share/client";
-import { renderTemplate } from "@/lib/render/renderTemplate";
+import { renderTemplateRust } from "@/lib/render/rustPreview";
 import { compileTemplateCss } from "@/lib/templates/compileTemplateCss";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { downloadToLocal } from "@/lib/share/sync";
@@ -465,7 +465,7 @@ export function TemplatesPage() {
       const detail = await share.fetchRemoteTemplate(tpl.id);
       const { css: compiled } = await compileTemplateCss(detail.body ?? "");
       setPreviewHtml(
-        renderTemplate(
+        await renderTemplateRust(
           detail.body ?? "",
           detail.css ?? "",
           DEFAULT_MOCK_DATA as any,

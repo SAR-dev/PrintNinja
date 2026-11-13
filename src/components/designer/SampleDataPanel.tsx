@@ -1,15 +1,17 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Copy, Pencil, Search } from "lucide-react";
 import { notifySuccess } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 
 export interface Dataset {
+  /**
+   * Stored name. The account has one dataset, and the app always saves it
+   * under this fixed name, so the name never appears in the UI.
+   */
   name: string;
   json: string;
-  isDefault: boolean;
 }
 
 /** One variable a template can use, read from the chosen dataset. */
@@ -21,13 +23,10 @@ export interface Variable {
   preview: string;
 }
 
-/** Longest dataset name the Designer accepts. */
-export const DATASET_NAME_MAX = 15;
-
 /**
- * The built-in fallback dataset's stored name. It is sync data, so it
- * stays this exact string everywhere it is saved or compared; only its
- * display is translated (P38).
+ * The stored name of the account's single sample dataset. It is sync
+ * data, so it stays this exact string everywhere it is saved or
+ * compared.
  */
 export const SAMPLE_ORDER_NAME = "Sample Order";
 
@@ -99,47 +98,29 @@ function prettyJson(json: string): string {
 }
 
 interface Props {
-  datasets: Dataset[];
-  selectedName: string;
-  onSelect: (name: string) => void;
-  onAdd: () => void;
-  onEdit: (dataset: Dataset) => void;
-  onDelete: (dataset: Dataset) => void;
+  /** The account's single sample dataset. */
+  dataset: Dataset;
+  /** Open the JSON editor dialog. */
+  onEdit: () => void;
   /** Insert text at the editor's cursor. Without it a click copies the token. */
   onInsert?: (text: string, back?: number) => void;
 }
 
 /**
- * The sample datasets the canvas is rendered with, and the variables of the
- * chosen one. It controls what the canvas shows, so on desktop it is an
- * accordion section, and on a phone a tab.
+ * The account's single sample dataset: the variables it offers (click to
+ * insert or copy) and its raw JSON. The JSON is edited in a dialog the
+ * parent owns. On desktop the panel sits in an accordion section; on a
+ * phone it is a tab.
  */
-export function SampleDataPanel({
-  datasets,
-  selectedName,
-  onSelect,
-  onAdd,
-  onEdit,
-  onDelete,
-  onInsert,
-}: Props) {
+export function SampleDataPanel({ dataset, onEdit, onInsert }: Props) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [showJson, setShowJson] = useState(false);
 
-  // The built-in dataset keeps its stable stored name; only the display
-  // is translated (P38).
-  const displayName = (name: string) =>
-    name === SAMPLE_ORDER_NAME ? t("designer.sample_order_name") : name;
-
-  const selected =
-    datasets.find((d) => d.name === selectedName) ?? datasets[0] ?? null;
-
   const variables = useMemo<Variable[]>(() => {
-    if (!selected) return [];
     let found: Variable[] = [];
     try {
-      found = flattenVariables(JSON.parse(selected.json));
+      found = flattenVariables(JSON.parse(dataset.json));
     } catch {
       found = [];
     }
@@ -148,7 +129,7 @@ export function SampleDataPanel({
       (path): Variable => ({ path, kind: "value", preview: "" }),
     );
     return [...found, ...extras];
-  }, [selected]);
+  }, [dataset.json]);
 
   const q = query.trim().toLowerCase();
   const visible = q
@@ -182,189 +163,130 @@ export function SampleDataPanel({
 
   return (
     <div className="space-y-4">
-      {/* Datasets */}
+      {/* Variables: the dataset's paths, with sample values, click to insert */}
       <div className="space-y-2">
-        {datasets.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            {t("designer.sample_empty")}
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="flex items-baseline gap-1.5 text-xs font-semibold">
+            {t("designer.sample_variables")}
+            <span className="font-normal tabular-nums text-muted-foreground">
+              {visible.length}
+            </span>
+          </h3>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 shrink-0 gap-1 px-2 text-xs"
+            onClick={onEdit}
+          >
+            <Pencil className="h-3 w-3" aria-hidden="true" />
+            {t("designer.sample_edit")}
+          </Button>
+        </div>
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("designer.sample_filter")}
+            aria-label={t("designer.sample_filter")}
+            className="h-8 pl-7 text-xs"
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          {onInsert
+            ? t("designer.sample_click_insert")
+            : t("designer.sample_click_copy")}
+        </p>
+        {visible.length === 0 ? (
+          <p className="py-4 text-center text-xs text-muted-foreground">
+            {t("designer.sample_no_match")}
           </p>
         ) : (
-          datasets.map((ds) => {
-            const active = selected?.name === ds.name;
-            return (
-              <div
-                key={ds.name}
-                className={cn(
-                  "rounded-md border p-2 transition-colors",
-                  active ? "border-primary bg-accent/40" : "hover:bg-muted/50",
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
-                    <input
-                      type="radio"
-                      name="dataset"
-                      aria-label={t("designer.sample_use", {
-                        name: displayName(ds.name),
-                      })}
-                      checked={active}
-                      onChange={() => onSelect(ds.name)}
-                    />
+          <div className="space-y-3">
+            {groups.map(([group, list]) => (
+              <section key={group || "_root"} aria-label={group || undefined}>
+                {group && (
+                  <h4 className="sticky top-0 z-10 flex items-center gap-2 bg-background py-1 text-[11px] font-medium text-muted-foreground">
+                    <span>{group}</span>
                     <span
-                      className="min-w-0 flex-1 truncate text-sm font-medium"
-                      title={displayName(ds.name)}
-                    >
-                      {displayName(ds.name)}
-                    </span>
-                  </label>
-                  <div className="flex shrink-0 gap-0.5">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      aria-label={t("common.edit")}
-                      title={t("common.edit")}
-                      onClick={() => onEdit(ds)}
-                    >
-                      <Pencil className="h-3 w-3" aria-hidden="true" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      aria-label={t("designer.sample_delete", {
-                        name: displayName(ds.name),
-                      })}
-                      title={t("common.delete")}
-                      onClick={() => onDelete(ds)}
-                      disabled={ds.isDefault}
-                    >
-                      <Trash2 className="h-3 w-3" aria-hidden="true" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 w-full border-dashed text-xs"
-          onClick={onAdd}
-        >
-          <Plus className="h-3 w-3" />
-          {t("designer.sample_add")}
-        </Button>
-        {datasets.some((ds) => ds.isDefault) && (
-          <p className="text-xs text-muted-foreground">
-            {t("designer.sample_default_note", {
-              name: displayName(datasets.find((ds) => ds.isDefault)!.name),
-            })}
-          </p>
+                      className="h-px flex-1 bg-border"
+                      aria-hidden="true"
+                    />
+                    <span className="tabular-nums">{list.length}</span>
+                  </h4>
+                )}
+                <ul className="space-y-px">
+                  {list.map((v) => (
+                    <li key={v.path}>
+                      <button
+                        type="button"
+                        title={
+                          v.preview
+                            ? `${v.preview}\n${
+                                onInsert
+                                  ? t("designer.sample_insert_title")
+                                  : t("designer.sample_copy")
+                              }`
+                            : onInsert
+                              ? t("designer.sample_insert_title")
+                              : t("designer.sample_copy")
+                        }
+                        onClick={() => void applyVariable(v)}
+                        className="block w-full rounded-md px-2 py-1.5 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:min-h-11"
+                      >
+                        <code className="block break-all font-mono text-xs leading-snug text-foreground">
+                          {`{{${v.path}}}`}
+                        </code>
+                        {v.preview && (
+                          <span className="mt-0.5 line-clamp-2 break-words text-[11px] leading-snug text-muted-foreground">
+                            {v.kind === "list" ? `${v.preview} ↻` : v.preview}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Variables: the dataset's paths, with sample values, click to insert */}
-      {selected && (
-        <div className="space-y-2 border-t pt-3">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-xs font-semibold">
-              {t("designer.sample_variables")}
-            </h3>
-            <span className="text-xs text-muted-foreground">
-              {onInsert
-                ? t("designer.sample_click_insert")
-                : t("designer.sample_click_copy")}
-            </span>
-          </div>
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("designer.sample_filter")}
-              aria-label={t("designer.sample_filter")}
-              className="h-8 pl-7 text-xs"
-            />
-          </div>
-          {visible.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {t("designer.sample_no_match")}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {groups.map(([group, list]) => (
-                <div key={group || "_root"} className="space-y-0.5">
-                  {group && (
-                    <p className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                      {group}
-                    </p>
-                  )}
-                  {list.map((v) => (
-                    <button
-                      key={v.path}
-                      type="button"
-                      title={
-                        onInsert
-                          ? t("designer.sample_insert_title")
-                          : t("designer.sample_copy")
-                      }
-                      onClick={() => void applyVariable(v)}
-                      className="flex w-full items-baseline justify-between gap-2 rounded px-1.5 py-1 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:min-h-11"
-                    >
-                      <code className="shrink-0 font-mono text-xs">
-                        {`{{${v.path}}}`}
-                      </code>
-                      <span className="min-w-0 truncate text-xs text-muted-foreground">
-                        {v.kind === "list" ? `${v.preview} ↻` : v.preview}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Raw JSON: collapsed, wrapped (no sideways scroll), one scroll area */}
-      {selected && (
-        <div className="space-y-1 border-t pt-3 text-xs">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              aria-expanded={showJson}
-              onClick={() => setShowJson((s) => !s)}
-              className="cursor-pointer text-muted-foreground hover:text-foreground"
-            >
-              {showJson ? "▼" : "▶"} {t("designer.sample_json")}
-            </button>
-            {showJson && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 gap-1 px-2 text-xs"
-                onClick={() => {
-                  void copyToken(prettyJson(selected.json));
-                  notifySuccess(t("designer.copied_json"));
-                }}
-              >
-                <Copy className="h-3 w-3" aria-hidden="true" />
-                {t("designer.sample_copy_json")}
-              </Button>
-            )}
-          </div>
+      <div className="space-y-1 border-t pt-3 text-xs">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            aria-expanded={showJson}
+            onClick={() => setShowJson((s) => !s)}
+            className="cursor-pointer text-muted-foreground hover:text-foreground"
+          >
+            {showJson ? "▼" : "▶"} {t("designer.sample_json")}
+          </button>
           {showJson && (
-            <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono text-xs">
-              {prettyJson(selected.json)}
-            </pre>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 gap-1 px-2 text-xs"
+              onClick={() => {
+                void copyToken(prettyJson(dataset.json));
+                notifySuccess(t("designer.copied_json"));
+              }}
+            >
+              <Copy className="h-3 w-3" aria-hidden="true" />
+              {t("designer.sample_copy_json")}
+            </Button>
           )}
         </div>
-      )}
+        {showJson && (
+          <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono text-xs">
+            {prettyJson(dataset.json)}
+          </pre>
+        )}
+      </div>
     </div>
   );
 }

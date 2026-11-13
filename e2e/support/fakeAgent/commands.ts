@@ -422,6 +422,30 @@ const implemented: Record<string, Handler> = {
       .listTemplates()
       .find((t) => t["id"] === Number(req["id"] ?? 0));
   },
+  // Template preview: the e2e browser has no Rust print engine, so this
+  // returns one document per record showing the template source, escaped
+  // and clipped to one page. Specs assert the preview surfaces are
+  // populated and can see the template's text — never the engine's exact
+  // layout, which the Rust integration tests (src-tauri/tests) cover. A
+  // null stub here pushes every preview onto the raw-source fallback,
+  // whose multi-page iframes break the strict getByTitle("Canvas preview")
+  // locators (page 2 is titled "Canvas preview 2", a substring match).
+  render_template_preview: (args) => {
+    const html = String(args["html"] ?? "");
+    const records = Array.isArray(args["records"]) ? args["records"] : [];
+    const list = records.length > 0 ? records : [null];
+    const escaped = html
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    const doc =
+      '<!DOCTYPE html><html><head><meta charset="UTF-8">' +
+      "<style>html,body{margin:0;padding:0}</style></head><body>" +
+      '<div style="height:80px;overflow:hidden">' +
+      `<pre style="white-space:pre-wrap;margin:0">${escaped}</pre>` +
+      "</div></body></html>";
+    return list.map(() => doc);
+  },
   // Printers are device-local rows (never synced); profiles resolve
   // them by current name, so renames and deletes leave dormancy.
   list_printers: () => cache.library.listPrinters(),

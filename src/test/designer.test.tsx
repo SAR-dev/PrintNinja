@@ -35,7 +35,6 @@ import {
   isDesignerLayout,
 } from "@/components/designer/LayoutToggle";
 import { usePersistentState } from "@/lib/hooks/usePersistentState";
-import { getTemplateError } from "@/lib/render/renderTemplate";
 
 beforeAll(() => {
   (globalThis as any).ResizeObserver = class {
@@ -64,6 +63,19 @@ vi.mock("@/lib/render/paginate", async (importActual) => ({
   ...(await importActual<typeof import("@/lib/render/paginate")>()),
   measureContentHeightPx: async () => measured.height,
 }));
+
+// The canvas renders through the Rust engine over IPC; only the JS-side
+// behaviour (debounce, error surfacing) is under test, so the command is mocked.
+// Tests that care set their own behaviour; by default the engine succeeds so
+// that any CanvasWorkspace render (zoom maths, layout, …) has a document.
+const invokeMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/invoke", () => ({
+  invoke: (...args: unknown[]) => invokeMock(...args),
+}));
+beforeEach(() => {
+  invokeMock.mockReset();
+  invokeMock.mockResolvedValue(["<html><body></body></html>"]);
+});
 
 beforeEach(() => {
   measured.height = 0;
@@ -641,16 +653,17 @@ describe("ClassWarnings", () => {
 });
 
 describe("CanvasPane", () => {
+  // The pane is presentational: it shows one already-rendered document
+  // (produced by `useRenderedPages` from the Rust engine), so the tests feed
+  // it a ready document instead of template + sample data.
   const base = {
-    html: "<p>Hi {{store.name}}</p>",
-    css: "",
-    compiledCss: "",
+    doc: "<html><body><p>Hi Ninja Mart</p></body></html>",
     width: 302,
     height: 756,
   };
 
-  it("renders the template with the sample data into a sandboxed frame", async () => {
-    render(<CanvasPane {...base} data={{ store: { name: "Ninja Mart" } }} />);
+  it("renders the document into a sandboxed frame", async () => {
+    render(<CanvasPane {...base} />);
     const frame = (await screen.findByTitle(
       "Canvas preview",
     )) as HTMLIFrameElement;
@@ -659,7 +672,7 @@ describe("CanvasPane", () => {
   });
 
   it("holds a loading state until the page count is measured", async () => {
-    render(<CanvasPane {...base} data={{}} />);
+    render(<CanvasPane {...base} />);
     // First paint: skeleton, not a premature single page.
     expect(screen.getByTestId("canvas-loading")).toBeInTheDocument();
     expect(screen.queryByTitle("Canvas preview")).toBeNull();
@@ -668,14 +681,17 @@ describe("CanvasPane", () => {
     expect(screen.queryByTestId("canvas-loading")).toBeNull();
   });
 
-  it("re-renders when the sample data changes and sizes the page from width and height", async () => {
-    const { rerender } = render(
-      <CanvasPane {...base} data={{ store: { name: "One" } }} />,
-    );
+  it("holds a loading state while no document has rendered yet", () => {
+    render(<CanvasPane {...base} doc="" />);
+    expect(screen.getByTestId("canvas-loading")).toBeInTheDocument();
+    expect(screen.queryByTitle("Canvas preview")).toBeNull();
+  });
+
+  it("re-renders when the document changes and sizes the page from width and height", async () => {
+    const { rerender } = render(<CanvasPane {...base} />);
     rerender(
       <CanvasPane
-        {...base}
-        data={{ store: { name: "Two" } }}
+        doc="<html><body><p>Hi Two</p></body></html>"
         width={100}
         height={200}
       />,
@@ -689,9 +705,7 @@ describe("CanvasPane", () => {
   });
 
   it("scales the page instead of resizing it, so zooming never reflows the template", async () => {
-    render(
-      <CanvasPane {...base} data={{}} width={400} height={800} zoom={0.5} />,
-    );
+    render(<CanvasPane {...base} width={400} height={800} zoom={0.5} />);
     const frame = await screen.findByTitle("Canvas preview");
     // The page keeps its true size and is scaled; the box around it takes the scaled size.
     expect(frame.parentElement).toHaveStyle({
@@ -707,7 +721,7 @@ describe("CanvasPane", () => {
 
   it("shows content taller than the page as further pages, not a scrollbar", async () => {
     measured.height = 2000; // 756 px pages: 3 of them
-    render(<CanvasPane {...base} data={{}} zoom={0.5} />);
+    render(<CanvasPane {...base} zoom={0.5} />);
     await waitFor(() =>
       expect(screen.getAllByTitle(/Canvas preview/)).toHaveLength(3),
     );
@@ -735,7 +749,7 @@ describe("CanvasPane", () => {
 
   it("is one page, with no page label, when the content fits", async () => {
     measured.height = 500;
-    render(<CanvasPane {...base} data={{}} />);
+    render(<CanvasPane {...base} />);
     await new Promise((r) => setTimeout(r, 300));
     expect(screen.getAllByTitle(/Canvas preview/)).toHaveLength(1);
     expect(screen.queryByText(/Page \d+ of/)).toBeNull();
@@ -1010,46 +1024,26 @@ describe("EditorPane", () => {
 });
 
 describe("SampleDataPanel", () => {
-  const datasets = [
-    {
-      name: "Sample Order",
-      json: '{"store":{"name":"A"},"items":[]}',
-      isDefault: true,
-    },
-    { name: "Empty", json: "{}", isDefault: false },
-  ];
+  const dataset = {
+    name: "Sample Order",
+    json: '{"store":{"name":"A"},"items":[]}',
+  };
   const props = () => ({
-    datasets,
-    selectedName: "Sample Order",
-    onSelect: vi.fn(),
-    onAdd: vi.fn(),
+    dataset,
     onEdit: vi.fn(),
-    onDelete: vi.fn(),
   });
 
-  it("picks the dataset the canvas uses, and lists its fields", () => {
-    const p = props();
-    render(<SampleDataPanel {...p} />);
-    expect(
-      screen.getByRole("radio", { name: "Use dataset Sample Order" }),
-    ).toBeChecked();
-    fireEvent.click(screen.getByRole("radio", { name: "Use dataset Empty" }));
-    expect(p.onSelect).toHaveBeenCalledWith("Empty");
-    // Variables are the dataset's paths, with the sample value beside them.
+  it("lists the dataset's variables with the sample value beside them", () => {
+    render(<SampleDataPanel {...props()} />);
     expect(screen.getByText("{{store.name}}")).toBeInTheDocument();
     expect(screen.getByText("A")).toBeInTheDocument();
   });
 
-  it("puts icon-only edit and delete buttons in the name's row", () => {
-    render(<SampleDataPanel {...props()} />);
-    // span -> label -> the flex row that also holds the buttons
-    const row = screen.getByText("Empty").parentElement?.parentElement;
-    const edit = screen.getAllByRole("button", { name: "Edit" })[1];
-    const del = screen.getByRole("button", { name: "Delete dataset Empty" });
-    expect(row).toContainElement(edit);
-    expect(row).toContainElement(del);
-    expect(edit).toHaveTextContent("");
-    expect(del).toHaveTextContent("");
+  it("offers to edit the account's single dataset", () => {
+    const p = props();
+    render(<SampleDataPanel {...p} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit sample data" }));
+    expect(p.onEdit).toHaveBeenCalled();
   });
 
   it("filters the variables", () => {
@@ -1076,42 +1070,12 @@ describe("SampleDataPanel", () => {
     );
     unmount();
   });
-
-  it("adds, edits and deletes datasets, but never deletes the default one", () => {
-    const p = props();
-    render(<SampleDataPanel {...p} />);
-    fireEvent.click(screen.getByRole("button", { name: /Add Dataset/ }));
-    expect(p.onAdd).toHaveBeenCalled();
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[1]);
-    expect(p.onEdit).toHaveBeenCalledWith(datasets[1]);
-    expect(
-      screen.getByRole("button", { name: "Delete dataset Sample Order" }),
-    ).toBeDisabled();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Delete dataset Empty" }),
-    );
-    expect(p.onDelete).toHaveBeenCalledWith(datasets[1]);
-  });
 });
 
 // Phase 3: layout toggle, remembered state, icon rail, click-to-insert, error banner.
-describe("getTemplateError", () => {
-  it("is null for a template that renders", () => {
-    expect(getTemplateError("<p>{{name}}</p>", { name: "x" })).toBeNull();
-  });
-
-  it("reports an unclosed block as a single line", () => {
-    const msg = getTemplateError("<table>{{#each items}}<tr></tr>", {});
-    expect(msg).toBeTruthy();
-    expect(msg).not.toContain("\n");
-  });
-
-  it("reports a half-typed tag", () => {
-    expect(getTemplateError("<p>{{order.</p>", {})).toBeTruthy();
-  });
-});
-
 describe("CanvasWorkspace error banner", () => {
+  beforeEach(() => invokeMock.mockReset());
+
   const base = {
     css: "",
     compiledCss: "",
@@ -1120,13 +1084,26 @@ describe("CanvasWorkspace error banner", () => {
     pageHeightMm: 150,
   };
 
-  it("shows an alert while the template is invalid, and not otherwise", () => {
+  it("shows an alert while the Rust engine reports a failure, and not otherwise", async () => {
+    invokeMock.mockResolvedValue(["<html><body>ok</body></html>"]);
     const { rerender } = render(<CanvasWorkspace {...base} html="<p>ok</p>" />);
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    // The debounced render lands; a successful render shows no banner.
+    await waitFor(() => expect(invokeMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+
+    invokeMock.mockRejectedValue(
+      new Error("Template render failed: unclosed block"),
+    );
     rerender(<CanvasWorkspace {...base} html="{{#each items}}<p>" />);
-    expect(screen.getByRole("alert")).toHaveTextContent(/Template error/);
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/Template error/),
+    );
+
+    invokeMock.mockResolvedValue(["<html><body>fixed</body></html>"]);
     rerender(<CanvasWorkspace {...base} html="<p>fixed</p>" />);
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });
 });
 

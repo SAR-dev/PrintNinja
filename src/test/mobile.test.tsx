@@ -819,9 +819,10 @@ describe("phone Designer page", () => {
     await screen.findByTestId("designer-phone-sections");
     fireEvent.click(screen.getByTestId("designer-phone-sections"));
     fireEvent.click(await screen.findByRole("option", { name: "Sample data" }));
-    // The dataset panel is on screen, with the built-in fallback dataset.
+    // The sample data panel is on screen, with the built-in fallback
+    // dataset.
     expect(
-      screen.getByRole("radio", { name: "Use dataset Sample Order" }),
+      screen.getByRole("button", { name: "Edit sample data" }),
     ).toBeInTheDocument();
     // The phone keeps one Save: the sticky one, disabled until something
     // changes.
