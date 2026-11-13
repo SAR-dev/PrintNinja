@@ -1,6 +1,6 @@
 [package]
 name = "printninja"
-version = "2026.1113.3"
+version = "2026.1113.4"
 description = "Cross-platform silent print app"
 authors = ["PrintNinja"]
 edition = "2021"
