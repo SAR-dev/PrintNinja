@@ -942,6 +942,23 @@ describe("Add / edit dialog layout", () => {
       );
     });
 
+    it("marks the address dormant in driver mode, but still fillable", async () => {
+      const panel = await openAdd();
+      await pickConnection(panel, "Bluetooth");
+      const input = within(panel).getByLabelText("Bluetooth MAC or COM port");
+      fireEvent.change(input, { target: { value: "A4:77:17:22:33:44" } });
+      fireEvent.click(within(panel).getByRole("checkbox", { name: /driver/i }));
+      // The OS queue is addressed by name, so the field dims and the hint
+      // says what the address is still for.
+      expect(input).toHaveAttribute("aria-disabled", "true");
+      const hint = await within(panel).findByText(/Not used in driver mode/);
+      expect(hint).toHaveAttribute("id", "printer-address-hint");
+      // It is dormant, not disabled: the value is kept and can still be
+      // changed, because the row dials it if driver mode comes back off.
+      fireEvent.change(input, { target: { value: "COM7" } });
+      expect(input).toHaveValue("COM7");
+    });
+
     it("shows the raw-wire note, never the Android one, on desktop", async () => {
       const panel = await openAdd();
       await pickConnection(panel, "Bluetooth");

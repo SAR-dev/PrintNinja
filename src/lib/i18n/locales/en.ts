@@ -643,6 +643,8 @@ const en = {
       "For example A4:77:17:22:33:44 — the MAC of a paired device (the list below offers them)",
     hint_bluetooth_desktop:
       "Pair the printer in your OS Bluetooth settings first, then enter its MAC — for example A4:77:17:22:33:44. No driver needed. Windows: the printer's COM port (for example COM7) works too",
+    hint_bluetooth_driver:
+      "Not used in driver mode — jobs go to the OS queue under the printer's name. Keep it filled in: it is what the row dials if you switch back to direct printing",
     gdi_warning_title: "Driver may be GDI-only (no PDF datatype)",
     gdi_warning:
       "{{name}}'s print queue does not offer a PDF datatype, so its driver may be GDI-only: PDF jobs sent to it may not print. If that happens, add the same physical printer by its network address (Wi-Fi / LAN → IPP, or Raw TCP 9100 if the device reads PDF) instead of this system queue.",

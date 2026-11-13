@@ -16,6 +16,13 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+### Changed
+
+- **The Bluetooth address explains itself in driver mode.** When a printer
+  prints through the OS driver, the address field is dimmed and notes that it
+  is not used — jobs go to the queue under the printer's name — while keeping
+  the value for the day you switch back to direct printing.
+
 ## [2026.1113.2] - 2026-11-13
 
 ### Changed
