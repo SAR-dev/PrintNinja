@@ -16,6 +16,8 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+## [2026.1113.1] - 2026-11-13
+
 ### Changed
 
 - **A calmer Print page.** The print card now holds just the printer,
