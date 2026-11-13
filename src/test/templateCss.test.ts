@@ -157,7 +157,7 @@ describe("renderDesignPagesRust", () => {
     expect(invokeMock).toHaveBeenCalledWith("render_template_preview", {
       html: "<p>{{n}}</p>",
       css: "",
-      compiledCss: "",
+      compiled_css: "",
       records: [{ n: 1 }],
     });
     expect(pages).toEqual(["<html><body>1</body></html>"]);

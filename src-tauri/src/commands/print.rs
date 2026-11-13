@@ -494,7 +494,7 @@ fn preview_document(body: &str, css: &str, compiled_css: &str) -> String {
 ///
 /// A broken template is surfaced as `Err` with the engine's message instead
 /// of being hidden; the caller falls back to the raw source locally.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn render_template_preview(
     html: String,
     css: String,
