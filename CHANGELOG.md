@@ -16,6 +16,8 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+## [2026.1113.3] - 2026-11-13
+
 ### Changed
 
 - **The Bluetooth address explains itself in driver mode.** When a printer
