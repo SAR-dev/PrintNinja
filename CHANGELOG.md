@@ -16,6 +16,18 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+### Changed
+
+- **Paper width fixes itself in one tap.** When a label is wider than
+  the printer's saved paper width, the warning now offers to set the
+  saved width to the label's — one click, no dialog. A printer without a
+  saved width gets a one-time offer to register its width from the
+  template.
+- **One calm line for print status.** Ready, sending, sent and failed
+  all take the same single line, so the form no longer jumps when a
+  print starts or ends. Timings, the full error and every warning open
+  in place behind "Details".
+
 ## [2026.1113.1] - 2026-11-13
 
 ### Changed
