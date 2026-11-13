@@ -1107,6 +1107,37 @@ describe("CanvasWorkspace error banner", () => {
   });
 });
 
+describe("CanvasWorkspace sample note", () => {
+  const base = {
+    html: "<p>{{ticket.number}}</p>",
+    css: "",
+    compiledCss: "",
+    data: {},
+    pageWidthMm: 80,
+    pageHeightMm: 120,
+  };
+
+  it("shows the note while the canvas falls back to a pack's sample data", async () => {
+    // The note is a plain string the page passes down; this only checks the
+    // canvas renders it. (Key parity and interpolation are i18n's job.)
+    render(
+      <CanvasWorkspace
+        {...base}
+        sampleNote="Showing the Kitchen Ticket sample data — edit the sample data to preview your own values"
+      />,
+    );
+    const note = await screen.findByRole("status");
+    expect(note).toHaveTextContent(/Kitchen Ticket sample data/);
+  });
+
+  it("shows no note when the account sample data is used", async () => {
+    render(<CanvasWorkspace {...base} />);
+    // Wait past the "measuring pages" skeleton (it is a status role too).
+    await screen.findByTitle("Canvas preview");
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
 describe("LayoutToggle", () => {
   it("marks the current layout and reports a change", () => {
     const onChange = vi.fn();

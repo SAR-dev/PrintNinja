@@ -285,6 +285,8 @@ const ja: Translation = {
     template_error: "テンプレートエラー:",
     canvas_preview: "キャンバスプレビュー",
     canvas_size: "{{w}} × {{h}} mm",
+    canvas_sample_note:
+      "「{{name}}」のサンプルデータを表示しています。あなたのサンプルデータにはこのテンプレートのフィールドが含まれていないためです。サンプルデータを変更すると、自分の値でプレビューできます",
     page_n_of: "{{n}} / {{total}} ページ",
     measuring_pages: "ページを計測しています…",
     helpers_insert: "ヘルパーをクリックすると、カーソル位置に挿入されます:",
