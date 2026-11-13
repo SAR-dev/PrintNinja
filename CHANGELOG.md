@@ -16,6 +16,8 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+## [2026.1113.2] - 2026-11-13
+
 ### Changed
 
 - **Paper width fixes itself in one tap.** When a label is wider than
