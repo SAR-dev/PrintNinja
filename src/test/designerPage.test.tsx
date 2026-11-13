@@ -56,7 +56,7 @@ function fakeRenderTemplatePreview(args: Record<string, unknown>): string[] {
       "Template render failed: expected end block but found end of input",
     );
   }
-  const css = `${String(args["css"] ?? "")}${String(args["compiledCss"] ?? "")}`;
+  const css = `${String(args["css"] ?? "")}${String(args["compiled_css"] ?? "")}`;
   const records = Array.isArray(args["records"]) ? args["records"] : [];
   const rows = records.length > 0 ? records : [null];
   return rows.map(

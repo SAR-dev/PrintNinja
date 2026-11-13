@@ -92,7 +92,7 @@ export async function renderDesignPagesRust(
     const res = await invoke<unknown>("render_template_preview", {
       html,
       css,
-      compiledCss: compiledCss ?? "",
+      compiled_css: compiledCss ?? "",
       records,
     });
     // The command's contract is a list of documents; anything else (a stale

@@ -186,7 +186,7 @@ beforeEach(() => {
     // "keeps the template's own CSS" preview test asserts).
     if (cmd === "render_template_preview") {
       const html = String(args?.["html"] ?? "");
-      const css = `${String(args?.["css"] ?? "")}${String(args?.["compiledCss"] ?? "")}`;
+      const css = `${String(args?.["css"] ?? "")}${String(args?.["compiled_css"] ?? "")}`;
       const records = Array.isArray(args?.["records"]) ? args["records"] : [];
       const rows = records.length > 0 ? records : [null];
       return rows.map(
