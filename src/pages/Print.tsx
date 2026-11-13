@@ -30,10 +30,13 @@ import {
   XCircle,
   RefreshCw,
   TriangleAlert,
+  ChevronDown,
+  Loader2,
 } from "lucide-react";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { TimingBreakdown } from "@/components/TimingBreakdown";
 import { formatSeconds } from "@/lib/timings";
+import { cn } from "@/lib/utils";
 import { useSystemPrinters } from "@/lib/hooks/useSystemPrinters";
 import {
   fetchPcPrinters,
@@ -59,8 +62,10 @@ import { notifyError } from "@/lib/notify";
 import { usePrintStore } from "@/lib/store/printStore";
 import {
   loadPrintAdvancedOpen,
+  loadPaperWidthDismissed,
   loadPrintPrefs,
   prefsKey,
+  savePaperWidthDismissed,
   savePrintAdvancedOpen,
   PRINT_PREFS_KEY,
   type PrintPrefsMap,
@@ -76,6 +81,7 @@ import { resolvePaper } from "@/lib/render/printLayout";
 import { derivePaperKey, PAPER_PRESETS } from "@/lib/paperPresets";
 import { PaperSizeFields } from "@/components/print/PaperSizeFields";
 import { PhonePrintFlow } from "@/components/print/PhonePrintFlow";
+import { PaperWidthNotice } from "@/components/print/PaperWidthNotice";
 import { FoldSection } from "@/components/printers/FoldSection";
 
 /** Fit mode → label key, for the Advanced fold's header summary. */
@@ -94,6 +100,75 @@ const FIT_MODE_LABELS = {
  * pair — a PDF printer — says so on the form (the `pdfNeedsPair`
  * blocker) instead of a redirect.
  */
+const BANNER_TONES = {
+  neutral: "border-border bg-muted text-foreground",
+  success: "border-success/30 bg-success-soft text-success",
+  danger: "border-danger/30 bg-danger-soft text-danger",
+  warning: "border-warning/30 bg-warning-soft text-warning",
+} as const;
+
+/**
+ * The Print page's one status slot. Every state (ready, sent, failed,
+ * warned) is the same fixed-height single line, so the form below never
+ * jumps when the state changes; whatever does not fit on the line (stage
+ * timings, the full error, every warning) opens in place, and only when
+ * the person asks for it.
+ */
+function StatusBanner({
+  tone,
+  role,
+  icon,
+  summary,
+  title,
+  actions,
+  details,
+}: {
+  tone: keyof typeof BANNER_TONES;
+  role: "status" | "alert";
+  icon: React.ReactNode;
+  summary: React.ReactNode;
+  title?: string;
+  actions?: React.ReactNode;
+  details?: React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  return (
+    <div role={role} className={cn("rounded-lg border", BANNER_TONES[tone])}>
+      <div className="flex h-11 items-center gap-3 px-4">
+        {icon}
+        <p className="min-w-0 flex-1 truncate text-sm" title={title}>
+          {summary}
+        </p>
+        {actions}
+        {details && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0 gap-1 px-2 text-current hover:text-current"
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? t("print.details_hide") : t("print.details_show")}
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 transition-transform",
+                open && "rotate-180",
+              )}
+              aria-hidden="true"
+            />
+          </Button>
+        )}
+      </div>
+      {details && open && (
+        <div className="space-y-2 border-t border-current/15 px-4 py-3">
+          {details}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PrintPage() {
   return <PrintForm />;
 }
@@ -106,6 +181,19 @@ function PrintForm() {
   const [loading, setLoading] = useState(true);
   // Per-printer remembered choices (F3); persisted under PRINT_PREFS_KEY.
   const [printerPrefs, setPrinterPrefs] = useState<PrintPrefsMap>({});
+  // Printers whose "no paper width saved" prompt was dismissed (asked once).
+  const [paperPromptDismissed, setPaperPromptDismissed] = useState<string[]>(
+    [],
+  );
+  useEffect(() => {
+    let alive = true;
+    void loadPaperWidthDismissed().then((v) => {
+      if (alive) setPaperPromptDismissed(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
   // F3: the paper-width dialog, opened from the mismatch warning below.
   const [paperDlg, setPaperDlg] = useState(false);
   const [paperDlgValue, setPaperDlgValue] = useState("");
@@ -994,14 +1082,10 @@ function PrintForm() {
     if (w > 1000) return "printers.err_paper_max";
     return null;
   };
-  const savePrinterPaperWidth = async () => {
-    const bad = paperDlgErrorKey();
-    if (bad) {
-      setPaperDlgError(bad);
-      return;
-    }
-    const w = Number(paperDlgValue.trim());
-    if (savedDbId == null) return;
+  // Writes a width onto the saved printer: the row is read first and updated
+  // with only the width changed. Shared by the dialog and the one-tap action.
+  const writePaperWidth = async (w: number): Promise<boolean> => {
+    if (savedDbId == null) return false;
     setPaperDlgBusy(true);
     try {
       const row = await agent("get_printer", { id: savedDbId });
@@ -1017,15 +1101,74 @@ function PrintForm() {
         },
       });
       await refreshSystemPrinters();
-      setPaperDlg(false);
-      // The mismatch warning on the card clears with the new width —
-      // the result is on screen, so no toast.
+      // The notice on the card clears with the new width — the result is
+      // on screen, so no toast.
+      return true;
     } catch (e) {
       notifyError(describeError(e));
+      return false;
     } finally {
       setPaperDlgBusy(false);
     }
   };
+  const savePrinterPaperWidth = async () => {
+    const bad = paperDlgErrorKey();
+    if (bad) {
+      setPaperDlgError(bad);
+      return;
+    }
+    if (await writePaperWidth(Number(paperDlgValue.trim()))) setPaperDlg(false);
+  };
+  // The one-tap action: the whole-mm width the current sheet needs (rounded
+  // up so it always fits), or null when that is not a valid width — then
+  // the dialog is the way to set one.
+  const neededWidth = Math.ceil(previewPaperW - 1e-6);
+  const oneTapWidth =
+    Number.isInteger(neededWidth) && neededWidth >= 1 && neededWidth <= 1000
+      ? neededWidth
+      : null;
+  const applyPaperWidth = () => {
+    if (oneTapWidth == null) openPaperSizeDialog();
+    else void writePaperWidth(oneTapWidth);
+  };
+  // A saved printer with no width yet: offer the sheet's width once.
+  const paperWidthMissing =
+    savedDbId != null &&
+    selectedPrinter != null &&
+    templateChosen &&
+    oneTapWidth != null &&
+    !(Number(printerPaperWidth) > 0) &&
+    !paperPromptDismissed.includes(prefsKey(selectedPrinter.name));
+  const dismissPaperPrompt = () => {
+    if (!selectedPrinter) return;
+    const next = [...paperPromptDismissed, prefsKey(selectedPrinter.name)];
+    setPaperPromptDismissed(next);
+    void savePaperWidthDismissed(next).catch(() => {});
+  };
+  // One element for both layouts: the mismatch warning wins over the
+  // "missing" prompt (they never both apply: one needs a saved width).
+  const paperNotice = paperMismatch ? (
+    <PaperWidthNotice
+      kind="mismatch"
+      message={paperMismatch}
+      width={oneTapWidth}
+      busy={paperDlgBusy}
+      onApply={savedDbId != null ? applyPaperWidth : undefined}
+      onOther={savedDbId != null ? openPaperSizeDialog : undefined}
+    />
+  ) : paperWidthMissing ? (
+    <PaperWidthNotice
+      kind="missing"
+      message={t("print.paper_width_missing", {
+        name: selectedPrinter?.name,
+        w: oneTapWidth,
+      })}
+      width={oneTapWidth}
+      busy={paperDlgBusy}
+      onApply={applyPaperWidth}
+      onDismiss={dismissPaperPrompt}
+    />
+  ) : null;
 
   // The small dialog both layouts open from the mismatch warning: one
   // number field, prefilled with the width the current print needs.
@@ -1365,14 +1508,13 @@ function PrintForm() {
           previewPaperW={previewPaperW}
           previewPaperH={previewPaperH}
           paperPreset={paperPreset}
-          paperMismatch={paperMismatch}
+          paperNotice={paperNotice}
           canPrint={canPrint}
           blocker={blocker}
           onPrint={() => void handlePrint(false)}
           onRetry={() => void handlePrint(true)}
           onSyncTemplates={handleSyncTemplates}
           onSpikeTest={handleSpikeTest}
-          onSetPaperWidth={savedDbId != null ? openPaperSizeDialog : undefined}
         />
         {paperSizeDialog}
       </>
@@ -1455,116 +1597,162 @@ function PrintForm() {
           </div>
         ))}
 
-      {/* The one place a print's outcome is reported. Idle is one
-          truncated line; the full card is for results with something
-          to say, so the form starts higher on a phone. */}
+      {/* The one place a print's outcome is reported: a single banner
+          of constant height in every state (see StatusBanner), so the
+          form below never moves when a print starts, ends or fails. */}
       {(store.status === "idle" || store.status === "queued") && (
-        <div
+        <StatusBanner
+          tone="success"
           role="status"
-          className="flex items-center gap-3 rounded-lg border border-success/30 bg-success-soft px-4 py-2 text-success"
-        >
-          <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
-          <p className="min-w-0 flex-1 truncate text-sm">
-            {t("print.ready_title")} —{" "}
-            {store.printerId
-              ? t("print.ready_detail", { printer: store.printerId })
-              : t("print.ready_empty")}
-          </p>
-        </div>
+          icon={
+            <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
+          }
+          summary={
+            <>
+              {t("print.ready_title")} —{" "}
+              {store.printerId
+                ? t("print.ready_detail", { printer: store.printerId })
+                : t("print.ready_empty")}
+            </>
+          }
+        />
+      )}
+      {/* Printing keeps the slot (same height, so nothing moves) and
+          says so, instead of leaving it empty until the result lands. */}
+      {store.status === "printing" && (
+        <StatusBanner
+          tone="neutral"
+          role="status"
+          icon={
+            <Loader2
+              className="h-5 w-5 shrink-0 animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+          }
+          summary={
+            <>
+              <span className="font-medium">{t("print.printing")}</span>
+              {store.printerId &&
+                ` ${t("print.printing_detail", { printer: store.printerId })}`}
+            </>
+          }
+        />
       )}
       {store.status === "success" && (
-        <div
-          role="status"
-          className="flex items-center gap-3 rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-success"
-        >
-          <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
-          <div className="min-w-0 flex-1 space-y-1">
-            <p className="text-sm font-medium">{t("print.sent")}</p>
-            {store.renderedBy && (
-              <p className="text-xs">
-                {t("print.rendered_on", { peer: store.renderedBy })}
-              </p>
-            )}
-            {printedVia && (
-              <p data-testid="print-printed-via" className="text-xs">
-                {t("print.printed_via", { pc: printedVia })}
-              </p>
-            )}
-            {store.timings ? (
-              <TimingBreakdown timings={store.timings} />
+        <StatusBanner
+          tone={store.warnings.length > 0 ? "warning" : "success"}
+          role={store.warnings.length > 0 ? "alert" : "status"}
+          icon={
+            store.warnings.length > 0 ? (
+              <TriangleAlert className="h-5 w-5 shrink-0" aria-hidden="true" />
             ) : (
-              <p className="text-xs">
-                {t("print.finished", {
-                  seconds: formatSeconds(store.durationMs),
-                })}
-              </p>
-            )}
-          </div>
-        </div>
+              <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
+            )
+          }
+          summary={
+            <>
+              <span className="font-medium">{t("print.sent")}</span>
+              {" · "}
+              {store.timings
+                ? `${t("common.total")} ${formatSeconds(store.timings.total_ms)}`
+                : t("print.finished", {
+                    seconds: formatSeconds(store.durationMs),
+                  })}
+              {store.renderedBy &&
+                ` · ${t("print.rendered_on", { peer: store.renderedBy })}`}
+              {printedVia && (
+                <span data-testid="print-printed-via">
+                  {" · "}
+                  {t("print.printed_via", { pc: printedVia })}
+                </span>
+              )}
+              {store.warnings.length > 0 &&
+                ` · ${t("print.warnings_title")}: ${store.warnings[0]}`}
+            </>
+          }
+          details={
+            store.timings || store.warnings.length > 0 ? (
+              <>
+                {store.warnings.length > 0 && (
+                  <div data-testid="print-warnings" className="space-y-1">
+                    <p className="text-sm font-medium">
+                      {t("print.warnings_title")}
+                    </p>
+                    {store.warnings.map((w) => (
+                      <p key={w} className="break-words text-xs">
+                        {w}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {store.timings && <TimingBreakdown timings={store.timings} />}
+              </>
+            ) : undefined
+          }
+        />
       )}
       {store.status === "failed" && (
-        <div
+        <StatusBanner
+          tone="danger"
           role="alert"
-          className="flex items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-danger"
-        >
-          <XCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
-          <div className="min-w-0 flex-1 space-y-1">
-            <p className="text-sm font-medium">{t("print.failed_title")}</p>
-            <p className="break-words text-xs">
+          icon={<XCircle className="h-5 w-5 shrink-0" aria-hidden="true" />}
+          title={store.error || t("print.unknown_error")}
+          summary={
+            <>
+              <span className="font-medium">{t("print.failed_title")}</span>
+              {" — "}
               {store.error || t("print.unknown_error")}
-            </p>
-            {/* Sync refreshes this phone only: it can heal a stale
-                revision, never a template missing on the PC — whose
-                message now names the PC. */}
-            {remoteCode === "template_stale" && (
+            </>
+          }
+          actions={
+            <>
+              {/* Sync refreshes this phone only: it can heal a stale
+                  revision, never a template missing on the PC — whose
+                  message now names the PC. */}
+              {remoteCode === "template_stale" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  data-testid="print-sync-templates"
+                  onClick={handleSyncTemplates}
+                >
+                  {t("print.sync_templates")}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
-                data-testid="print-sync-templates"
-                onClick={handleSyncTemplates}
+                className="shrink-0"
+                onClick={() => void handlePrint(true)}
+                disabled={!canPrint}
               >
-                {t("print.sync_templates")}
+                {t("print.retry")}
               </Button>
-            )}
-            {store.timings && <TimingBreakdown timings={store.timings} />}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void handlePrint(true)}
-            disabled={!canPrint}
-          >
-            {t("print.retry")}
-          </Button>
-        </div>
-      )}
-      {/* Non-fatal warnings ride on both outcomes: the print went out,
-          but the output may be wrong (PDF on a raw wire, GDI-only
-          queue). The text comes from the backend, in the backend's
-          language, like the error lines. */}
-      {store.warnings.length > 0 && (
-        <div
-          role="alert"
-          data-testid="print-warnings"
-          className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning-soft px-4 py-3 text-warning"
-        >
-          <TriangleAlert
-            className="mt-0.5 h-5 w-5 shrink-0"
-            aria-hidden="true"
-          />
-          <div className="min-w-0 flex-1 space-y-1">
-            <p className="text-sm font-medium">{t("print.warnings_title")}</p>
-            {store.warnings.map((w) => (
-              <p key={w} className="break-words text-xs">
-                {w}
+            </>
+          }
+          details={
+            <>
+              <p className="break-words text-xs">
+                {store.error || t("print.unknown_error")}
               </p>
-            ))}
-          </div>
-        </div>
+              {store.warnings.length > 0 && (
+                <div data-testid="print-warnings" className="space-y-1">
+                  <p className="text-sm font-medium">
+                    {t("print.warnings_title")}
+                  </p>
+                  {store.warnings.map((w) => (
+                    <p key={w} className="break-words text-xs">
+                      {w}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {store.timings && <TimingBreakdown timings={store.timings} />}
+            </>
+          }
+        />
       )}
-      {/* While printing the buttons say so and disable: no separate
-          progress box — it duplicated the button state below the fold. */}
-
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(340px,420px)_1fr]">
         {/* Left: choose and print */}
         <div className="space-y-4">
@@ -1628,29 +1816,7 @@ function PrintForm() {
                     )}
                   </SelectContent>
                 </Select>
-                {paperMismatch && (
-                  <div className="mt-1.5 flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2">
-                    <p
-                      role="status"
-                      className="min-w-0 flex-1 text-xs text-warning"
-                    >
-                      {paperMismatch}
-                    </p>
-                    {/* Only a saved printer has a registered width to
-                        correct; OS printers warn, but nothing is editable. */}
-                    {savedDbId != null && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 shrink-0 px-2 text-xs"
-                        onClick={openPaperSizeDialog}
-                        data-testid="set-paper-size"
-                      >
-                        {t("print.paper_size_action")}
-                      </Button>
-                    )}
-                  </div>
-                )}
+                {paperNotice}
               </div>
               <div className={field}>
                 <Label htmlFor="print-template">{t("print.template")}</Label>

@@ -418,6 +418,7 @@ const en = {
   print: {
     title: "Print",
     printing: "Printing…",
+    printing_detail: "Sending to {{printer}}.",
     printer: "Printer",
     template: "Template",
     data_url: "Data URL",
@@ -446,6 +447,8 @@ const en = {
     rendered_on: "Rendered on {{peer}}",
     finished: "Finished in {{seconds}}.",
     failed_title: "Print failed",
+    details_show: "Details",
+    details_hide: "Hide",
     warnings_title: "Warnings",
     unknown_error: "Unknown error",
     pair_again_to_print: "Pair again to print.",
@@ -499,6 +502,11 @@ const en = {
     paper_mismatch_paper:
       "Paper is {{pw2}} × {{ph2}} mm; this printer uses {{pw}} mm paper.",
     paper_size_action: "Set paper size",
+    paper_set_to: "Set to {{w}} mm",
+    paper_other: "Other…",
+    paper_not_now: "Not now",
+    paper_width_missing:
+      "{{name}} has no paper width saved. This print uses a {{w}} mm sheet.",
     paper_size_title: "Paper width for {{name}}",
     paper_size_hint:
       "This print uses a {{w}} mm sheet; the printer is registered at {{cur}} mm. Enter the width of the paper the printer actually takes.",
