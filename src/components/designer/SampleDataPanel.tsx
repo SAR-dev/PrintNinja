@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, Pencil, Search } from "lucide-react";
-import { notifySuccess } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -153,11 +152,10 @@ export function SampleDataPanel({ dataset, onEdit, onInsert }: Props) {
   const applyVariable = async (v: Variable) => {
     const { text, back } = variableSnippet(v);
     if (onInsert) {
+      // The token lands in the element's content — visible, no toast.
       onInsert(text, back);
-      notifySuccess(t("designer.inserted_token", { token: text }));
     } else {
       await copyToken(text);
-      notifySuccess(t("designer.copied_token", { token: text }));
     }
   };
 
@@ -273,7 +271,6 @@ export function SampleDataPanel({ dataset, onEdit, onInsert }: Props) {
               className="h-6 gap-1 px-2 text-xs"
               onClick={() => {
                 void copyToken(prettyJson(dataset.json));
-                notifySuccess(t("designer.copied_json"));
               }}
             >
               <Copy className="h-3 w-3" aria-hidden="true" />

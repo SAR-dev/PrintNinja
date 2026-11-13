@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { notifySuccess, notifyError } from "@/lib/notify";
+import { notifyError } from "@/lib/notify";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -79,8 +79,8 @@ export function ProfileCard() {
     setBusy(true);
     try {
       await share.logout();
+      // The card switches to its signed-out face — visible, no toast.
       setAccount({ kind: "signed_out" });
-      notifySuccess(t("settings_page.toast_signed_out"));
     } catch (e) {
       notifyError(describeError(e));
     } finally {

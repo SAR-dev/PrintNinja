@@ -102,6 +102,12 @@ const pickPaperPreset = async (name: string) => {
   fireEvent.click(screen.getByRole("combobox", { name: "Paper size" }));
   fireEvent.click(await screen.findByRole("option", { name }));
 };
+// Paper size lives in the Advanced fold, closed by default.
+const openAdvanced = async () => {
+  fireEvent.click(
+    await screen.findByRole("button", { name: /Advanced options/ }),
+  );
+};
 const printedPrefs = (): Record<string, unknown> =>
   JSON.parse(localStorage.getItem("printninja-setting:print_prefs") ?? "{}");
 
@@ -128,6 +134,7 @@ describe("paper size mismatch warning", () => {
   it("names the explicit paper, not the template, when a preset is set", async () => {
     renderPage();
     await screen.findByRole("button", { name: /^Print$/ });
+    await openAdvanced();
     await pickPaperPreset("A4 (210 × 297 mm)");
     expect(
       await screen.findByText(
@@ -171,7 +178,9 @@ describe("paper size mismatch warning", () => {
         }),
       ),
     );
-    expect(vi.mocked(toast.success)).toHaveBeenCalled();
+    // The dialog closes with the width saved; the warning on the card
+    // clears — no toast for a result the screen already shows.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 });
 
@@ -181,6 +190,7 @@ describe("per-printer remembered choices", () => {
     const print = await screen.findByRole("button", { name: /^Print$/ });
     await waitFor(() => expect(print).toBeEnabled());
     await pickTemplate("A4 sheet");
+    await openAdvanced();
     await pickPaperPreset("A4 (210 × 297 mm)");
     fireEvent.click(print);
     expect(await screen.findByText("Print sent")).toBeInTheDocument();
@@ -230,6 +240,7 @@ describe("per-printer remembered choices", () => {
     // Front Desk: the wider template on an explicit A4 sheet.
     await pickPrinter("Front Desk");
     await pickTemplate("A4 sheet");
+    await openAdvanced();
     await pickPaperPreset("A4 (210 × 297 mm)");
     fireEvent.click(print);
     await waitFor(() =>

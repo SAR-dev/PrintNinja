@@ -1,4 +1,4 @@
-import { readSetting } from "@/lib/settings";
+import { readSetting, writeSetting } from "@/lib/settings";
 
 /**
  * Per-printer print preferences (F3 – smart printer/template matching).
@@ -61,4 +61,20 @@ export function parsePrintPrefs(raw: string | null): PrintPrefsMap {
 
 export async function loadPrintPrefs(): Promise<PrintPrefsMap> {
   return parsePrintPrefs(await readSetting(PRINT_PREFS_KEY));
+}
+
+/**
+ * Global (not per-printer) state of the print page's Advanced fold,
+ * remembered so the person's choice survives navigation. Stored as a
+ * plain "true"/"false" setting; anything else (corrupt, missing) reads
+ * as closed — the fold defaults to folded.
+ */
+export const PRINT_ADVANCED_OPEN_KEY = "print_advanced_open";
+
+export async function loadPrintAdvancedOpen(): Promise<boolean> {
+  return (await readSetting(PRINT_ADVANCED_OPEN_KEY)) === "true";
+}
+
+export async function savePrintAdvancedOpen(open: boolean): Promise<void> {
+  await writeSetting(PRINT_ADVANCED_OPEN_KEY, open ? "true" : "false");
 }

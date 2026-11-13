@@ -109,6 +109,12 @@ const pickPaperPreset = async (name: string) => {
   fireEvent.click(screen.getByRole("combobox", { name: "Paper size" }));
   fireEvent.click(await screen.findByRole("option", { name }));
 };
+// Page range and paper size live in the Advanced fold, closed by default.
+const openAdvanced = async () => {
+  fireEvent.click(
+    await screen.findByRole("button", { name: /Advanced options/ }),
+  );
+};
 
 const failNow = () =>
   act(() => {
@@ -152,6 +158,7 @@ describe("changing the template or printer", () => {
   it("clears a page range typed for another template", async () => {
     renderPage();
     await screen.findByRole("button", { name: /^Print$/ });
+    await openAdvanced();
     fireEvent.change(document.getElementById("page-range")!, {
       target: { value: "2-3" },
     });
@@ -163,6 +170,7 @@ describe("changing the template or printer", () => {
   it("keeps the page range when the same template is picked again", async () => {
     renderPage();
     await screen.findByRole("button", { name: /^Print$/ });
+    await openAdvanced();
     fireEvent.change(document.getElementById("page-range")!, {
       target: { value: "2-3" },
     });
@@ -173,6 +181,7 @@ describe("changing the template or printer", () => {
   it("does not carry one printer's paper to a printer with no memory", async () => {
     renderPage();
     await screen.findByRole("button", { name: /^Print$/ });
+    await openAdvanced();
     await pickPaperPreset("A4 (210 × 297 mm)");
     expect(usePrintStore.getState().paperW).toBe(210);
     await pickPrinter("Front Desk");
@@ -183,6 +192,7 @@ describe("changing the template or printer", () => {
   it("restores a remembered printer's template and paper, Custom included", async () => {
     renderPage();
     await screen.findByRole("button", { name: /^Print$/ });
+    await openAdvanced();
     await pickPrinter("Front Desk");
     await pickTemplate("A4 sheet");
     act(() => usePrintStore.getState().setPaper(150, 150));
