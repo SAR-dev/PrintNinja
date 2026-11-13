@@ -16,6 +16,8 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+## [2026.1113.4] - 2026-11-13
+
 ### Fixed
 
 - **Templates preview with data that fits them.** When your sample data
