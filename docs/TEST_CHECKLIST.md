@@ -30,7 +30,7 @@ For each printer, run all four jobs below and note pass/fail plus any anomalies 
 
 - A template with many lines (e.g. 50+ line items) to produce a multi-page or very long single-page job.
 - Verify: all pages/lines print, no data is dropped mid-job, the printer does not jam or stop early.
-- Note: on Bluetooth, large jobs may hit buffer limits (see MISSING_FEATURES item 3).
+- Note: on Bluetooth, large jobs may hit buffer limits; if a printer drops or garbles data, note it here.
 
 ## Suggested printers to test
 
