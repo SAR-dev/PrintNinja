@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { notifyError } from "@/lib/notify";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
+import { SignedInSessions } from "@/components/SignedInSessions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SessionExpiredError } from "@/lib/api/errors";
@@ -162,7 +163,10 @@ export function ProfileCard() {
           )}
 
           {account.kind === "signed_in" && (
-            <ChangePasswordForm busy={busy} setBusy={setBusy} />
+            <>
+              <ChangePasswordForm busy={busy} setBusy={setBusy} />
+              <SignedInSessions busy={busy} setBusy={setBusy} />
+            </>
           )}
 
           {account.kind === "unreachable" && (

@@ -150,5 +150,9 @@ export function createProfileRepository(db: DbClient): ProfileRepository {
       });
       return rows.map(toView);
     },
+
+    async countByOwner(ownerId: string): Promise<number> {
+      return db.printerProfile.count({ where: { ownerId } });
+    },
   };
 }

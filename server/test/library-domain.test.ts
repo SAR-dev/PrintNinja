@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ForbiddenError,
   NotFoundError,
+  QuotaExceededError,
   RevisionConflictError,
   RevisionRequiredError,
 } from "../src/domain/errors.js";
@@ -9,8 +10,16 @@ import type {
   DatasetRepository,
   ProfileRepository,
 } from "../src/domain/libraryPorts.js";
-import { deleteDataset, putDataset } from "../src/domain/datasets.js";
-import { deleteProfile, putProfile } from "../src/domain/profiles.js";
+import {
+  DATASETS_PER_USER_MAX,
+  deleteDataset,
+  putDataset,
+} from "../src/domain/datasets.js";
+import {
+  deleteProfile,
+  PROFILES_PER_USER_MAX,
+  putProfile,
+} from "../src/domain/profiles.js";
 import { createFakeLibraryRepos } from "./fakes/library.js";
 
 const OWNER_ID = "owner-1";
@@ -133,6 +142,34 @@ describe("putDataset", () => {
       putDataset(r, { id: "d2", name: "O", dataJson: nested }, OWNER_ID),
     ).rejects.toThrow(/nested/i);
   });
+
+  it("caps datasets per user on create, leaving updates and other owners alone", async () => {
+    const r = repos();
+    for (let i = 0; i < DATASETS_PER_USER_MAX; i += 1) {
+      await putDataset(
+        r,
+        { id: `d${i}`, name: `D${i}`, dataJson: "{}" },
+        OWNER_ID,
+      );
+    }
+    await expect(
+      putDataset(r, { id: "d-over", name: "Over", dataJson: "{}" }, OWNER_ID),
+    ).rejects.toBeInstanceOf(QuotaExceededError);
+    // Rows that already exist stay editable at the cap.
+    const updated = await putDataset(
+      r,
+      { id: "d0", name: "D0 renamed", dataJson: '{"a":1}', ifRevision: 1 },
+      OWNER_ID,
+    );
+    expect(updated.status).toBe(200);
+    // The cap is per user: another owner starts fresh.
+    const other = await putDataset(
+      r,
+      { id: "d-other", name: "Other", dataJson: "{}" },
+      OTHER_ID,
+    );
+    expect(other.status).toBe(201);
+  });
 });
 
 describe("putProfile", () => {
@@ -231,6 +268,60 @@ describe("putProfile", () => {
         OWNER_ID,
       ),
     ).rejects.toThrow(/cap/i);
+  });
+
+  it("caps profiles per user on create, leaving updates and other owners alone", async () => {
+    const r = repos();
+    const templateId = "aaaaaaaa-1111-4111-8111-111111111111";
+    for (let i = 0; i < PROFILES_PER_USER_MAX; i += 1) {
+      await putProfile(
+        r,
+        {
+          id: `p${i}`,
+          templateId,
+          printerName: `printer-${i}`,
+          settingsJson: "{}",
+        },
+        OWNER_ID,
+      );
+    }
+    await expect(
+      putProfile(
+        r,
+        {
+          id: "p-over",
+          templateId,
+          printerName: "printer-x",
+          settingsJson: "{}",
+        },
+        OWNER_ID,
+      ),
+    ).rejects.toBeInstanceOf(QuotaExceededError);
+    // Rows that already exist stay editable at the cap.
+    const updated = await putProfile(
+      r,
+      {
+        id: "p0",
+        templateId,
+        printerName: "printer-0",
+        settingsJson: '{"a":2}',
+        ifRevision: 1,
+      },
+      OWNER_ID,
+    );
+    expect(updated.status).toBe(200);
+    // The cap is per user: another owner starts fresh.
+    const other = await putProfile(
+      r,
+      {
+        id: "p-other",
+        templateId,
+        printerName: "printer-0",
+        settingsJson: "{}",
+      },
+      OTHER_ID,
+    );
+    expect(other.status).toBe(201);
   });
 });
 

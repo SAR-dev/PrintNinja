@@ -354,6 +354,29 @@ export async function changePassword(
   });
 }
 
+/** One row of the signed-in devices list. */
+export type RemoteSession =
+  paths["/v2/auth/sessions"]["get"]["responses"][200]["content"]["application/json"]["items"][number];
+
+/** The account's live sessions, most recently used first; the calling
+ * session carries `current: true`. */
+export async function listSessions(): Promise<{ items: RemoteSession[] }> {
+  return callApi<{ items: RemoteSession[] }>(apiDeps(), {
+    method: "GET",
+    path: "/v2/auth/sessions",
+  });
+}
+
+/** End one session by id (a lost device). 404 when the id is unknown
+ * or belongs to another account. Revoking the current session is a
+ * logout: the next call 401s and the app signs out. */
+export async function revokeSession(id: string): Promise<{ revoked: number }> {
+  return callApi<{ revoked: number }>(apiDeps(), {
+    method: "DELETE",
+    path: `/v2/auth/sessions/${encodeURIComponent(id)}`,
+  });
+}
+
 /** A template as the v2 service stores it. `published_at` is null when
  * private (v1 used an empty string); every existing falsy check keeps
  * working unchanged. */

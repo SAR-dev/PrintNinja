@@ -34,6 +34,8 @@ export interface DatasetRepository {
    * number, atomically. Returns the owner id, or null when missing. */
   deleteWithTombstone(id: string): Promise<{ ownerId: string } | null>;
   listByOwner(ownerId: string): Promise<DatasetView[]>;
+  /** Rows owned by ownerId, for the per-user create quota. */
+  countByOwner(ownerId: string): Promise<number>;
 }
 
 export interface ProfileView {
@@ -126,4 +128,6 @@ export interface ProfileRepository {
   update(input: ProfileWrite, expectedRevision: number): Promise<ProfileView>;
   deleteWithTombstone(id: string): Promise<{ ownerId: string } | null>;
   listByOwner(ownerId: string): Promise<ProfileView[]>;
+  /** Rows owned by ownerId, for the per-user create quota. */
+  countByOwner(ownerId: string): Promise<number>;
 }
