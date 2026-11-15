@@ -137,13 +137,28 @@ async function checkRoute(
   shotName: string,
 ) {
   await expect(page.getByRole("main")).toBeVisible({ timeout: 15_000 });
-  // The mocked release is newer than the app and carries an APK: the
-  // badge renders on Android and links straight to that file.
+  // The mocked release is newer than the app and carries an APK. The
+  // badge follows the platform the browser reports: an Android user
+  // agent links straight to the APK and says how to install it, any
+  // other platform opens the release page. (mobile-pixel7 reports the
+  // Pixel 7's Android UA; mobile-small sets only viewport and touch, so
+  // it keeps Playwright's desktop UA — and the desktop badge.)
+  const android = await page.evaluate(() =>
+    /Android/i.test(navigator.userAgent),
+  );
   const badge = page.getByRole("link", {
     name: `Update to ${MOCK_RELEASE_TAG}`,
   });
   await expect(badge).toBeVisible({ timeout: 15_000 });
-  await expect(badge).toHaveAttribute("href", MOCK_RELEASE_APK_URL);
+  await expect(badge).toHaveAttribute(
+    "href",
+    android ? MOCK_RELEASE_APK_URL : MOCK_RELEASE_URL,
+  );
+  await expect(badge).toHaveAccessibleName(
+    android
+      ? /^Update to .+ — download the APK, then open it to install$/
+      : /^Update to .+ \(opens the release page\)$/,
+  );
   // Let debounced previews and share polling settle before measuring.
   await page.waitForTimeout(1000);
 

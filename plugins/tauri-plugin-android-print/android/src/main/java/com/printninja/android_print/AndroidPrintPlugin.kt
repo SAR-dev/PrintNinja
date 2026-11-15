@@ -1988,7 +1988,7 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
             val intent =
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                        .putExtra(Settings.EXTRA_PACKAGE_NAME, activity.packageName)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)
                 } else {
                     Intent(
                         Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
