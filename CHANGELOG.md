@@ -16,6 +16,8 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+## [2026.1115.0] - 2026-11-15
+
 ### Added
 
 - **See and end your signed-in devices.** Settings → Profile now lists
