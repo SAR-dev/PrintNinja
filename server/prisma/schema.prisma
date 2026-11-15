@@ -36,11 +36,14 @@ model User {
 }
 
 model Session {
-  tokenHash String   @id @map("token_hash") // SHA-256 hex of the opaque token
-  userId    String   @map("user_id")
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String   @id @map("token_hash") // SHA-256 hex of the opaque token
+  publicId    String   @unique @default(uuid()) @map("public_id") // opaque handle for the sessions API; never the token or its hash
+  userId      String   @map("user_id")
+  deviceLabel String   @default("") @map("device_label") // short OS-family label derived from the User-Agent at sign-in
+  lastUsedAt  DateTime @default(now()) @map("last_used_at") // bumped at most every few minutes while authenticated
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])

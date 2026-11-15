@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { HandleTakenError } from "../../src/domain/errors.js";
 import type {
   Clock,
@@ -14,6 +15,9 @@ import type {
 // Behaviour matches the contracts in domain/ports.ts, including the
 // duplicate-handle race mapping. Anything slower or more real (a file database,
 // argon2) belongs in test/integration/.
+
+/** Shared fake epoch, same as the library/template fakes. */
+const BASE_MS = new Date("2026-10-20T00:00:00Z").getTime();
 
 export function createFakeUsers(): UserRepository & {
   byId: Map<string, UserRecord>;
@@ -54,9 +58,22 @@ export function createFakeSessions(users: {
   byId: Map<string, UserRecord>;
 }): SessionRepository {
   const byHash = new Map<string, SessionRecord>();
+  let tick = 0;
+  // Store wall time from the shared fake epoch, so rows line up with
+  // createFakeClock(2026-10-20) and each row gets a distinct instant.
+  const now = () => new Date(BASE_MS + tick++ * 1000);
   return {
     async create(input) {
-      const session: SessionRecord = { ...input };
+      const timestamp = now();
+      const session: SessionRecord = {
+        tokenHash: input.tokenHash,
+        publicId: randomUUID(),
+        userId: input.userId,
+        deviceLabel: input.deviceLabel,
+        lastUsedAt: timestamp,
+        createdAt: timestamp,
+        expiresAt: input.expiresAt,
+      };
       byHash.set(session.tokenHash, session);
       return session;
     },
@@ -104,6 +121,31 @@ export function createFakeSessions(users: {
         }
       }
       return count;
+    },
+    async listForUser(userId) {
+      // Mirrors the Prisma order: last-used desc, then created desc.
+      return [...byHash.values()]
+        .filter((session) => session.userId === userId)
+        .sort(
+          (a, b) =>
+            b.lastUsedAt.getTime() - a.lastUsedAt.getTime() ||
+            b.createdAt.getTime() - a.createdAt.getTime(),
+        );
+    },
+    async deleteByPublicId(userId, publicId) {
+      for (const [hash, session] of byHash) {
+        if (session.userId === userId && session.publicId === publicId) {
+          byHash.delete(hash);
+          return true;
+        }
+      }
+      return false;
+    },
+    async touch(tokenHash, lastUsedAt) {
+      const session = byHash.get(tokenHash);
+      if (session) {
+        session.lastUsedAt = lastUsedAt;
+      }
     },
   };
 }

@@ -2,6 +2,7 @@ import {
   ForbiddenError,
   NotFoundError,
   PayloadTooLargeError,
+  QuotaExceededError,
   RevisionConflictError,
   RevisionRequiredError,
   ValidationError,
@@ -12,6 +13,10 @@ import type { DatasetRepository, DatasetView } from "./libraryPorts.js";
  * would let multi-byte text past the budget — see P10). */
 export const DATASET_JSON_MAX_BYTES = 262_144;
 export const DATASET_NAME_MAX_BYTES = 200;
+/** Per-user row cap on create, like FONTS_PER_USER_MAX: one buggy or
+ * hostile client cannot grow sample_datasets without bound. Updates
+ * never count, so existing rows stay editable at the cap. */
+export const DATASETS_PER_USER_MAX = 500;
 /** Nesting budget: a 256 KiB deeply-nested array would blow the sync
  * estimator's recursion and each reader's stack. 32 is far beyond any
  * real template context shape. */
@@ -115,6 +120,12 @@ export async function putDataset(
   const { name, dataJson } = checkWrite(input);
   const existing = await repos.datasets.findById(input.id);
   if (!existing) {
+    const count = await repos.datasets.countByOwner(ownerId);
+    if (count >= DATASETS_PER_USER_MAX) {
+      throw new QuotaExceededError(
+        `at most ${DATASETS_PER_USER_MAX} datasets per user`,
+      );
+    }
     const dataset = await repos.datasets.create({
       id: input.id,
       ownerId,

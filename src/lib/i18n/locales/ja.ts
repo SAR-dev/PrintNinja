@@ -175,6 +175,8 @@ const ja: Translation = {
     reprint_body: "同じジョブをもう一度プリンターに送信します。",
     reprint_confirm: "再印刷",
     update_available: "{{version}}に更新（リリースページを開きます）",
+    update_android_apk:
+      "{{version}}に更新 — APKをダウンロードして、開いてインストールしてください",
     reprint_none: "再印刷できるジョブはまだありません。",
     reprint_failed: "直前のジョブを再印刷できませんでした。",
     reprint_done: "ジョブ #{{id}} の再印刷をキューに追加しました",
@@ -726,7 +728,7 @@ const ja: Translation = {
     lang_cpcl: "CPCL（ラベル）",
     lang_raster: "ラスター",
     lang_android_hint:
-      "Androidはレシート・ラベル言語（ESC/POS、ZPL、TSPL）を本体で印刷します。これらは偽プリンターでのみ検証済みで、実機での検証は未完了です。CPCL・ラスターは現在提供していません。",
+      "Androidはレシート・ラベル言語（ESC/POS、ZPL、TSPL）を本体で印刷します。PCが必要なのはPDFだけです。これらは偽プリンターでのみ検証済みで、実機での検証は未完了です。CPCL・ラスターも本体で印刷できますが、現在提供していません。",
     lang_rawwire_hint:
       "USBとBluetoothはプリンターコマンドをデバイスへ直接送るため、PDFは選べません。プリンターが話す言語を選ぶか、ドライバーモードをオンにしてOSのキュー経由でPDFを印刷してください。",
     err_bt_usb_port:
@@ -941,6 +943,12 @@ const ja: Translation = {
       "無効の場合、Dozeやアプリのスタンバイにより印刷が遅延することがあります。システム画面が開きます。自動では変更されず、選択はあなた次第です。",
     background_allowed: "許可済み",
     background_not_allowed: "未許可",
+    background_notifications: "通知",
+    background_notifications_hint:
+      "通知が許可されると、バックグラウンドサービスの通知が表示されます。",
+    background_allow_notifications: "通知を許可",
+    background_open_notification_settings: "通知の設定を開く",
+    background_notifications_toast_granted: "通知を許可しました",
     background_working: "処理しています…",
     background_request: "除外をリクエスト",
     background_refresh: "状態を更新",
@@ -956,6 +964,16 @@ const ja: Translation = {
     change_password_done: "パスワードを変更しました",
     change_password_revoked:
       "パスワードを変更しました。他の{{count}}件のセッションをサインアウトしました",
+    sessions_title: "サインイン中のデバイス",
+    sessions_hint:
+      "ここに表示されるセッションはすべて終了できます。現在のデバイスを取り消すと、そのデバイスはサインアウトします。",
+    sessions_current: "このデバイス",
+    sessions_last_used: "最終使用 {{when}}",
+    sessions_revoke: "取り消す",
+    sessions_revoked: "セッションを終了しました",
+    sessions_empty: "セッションがありません",
+    sessions_loading: "読み込み中…",
+    sessions_retry: "再試行",
     fonts: "フォント",
     api: "API",
     deep_links: "ディープリンク",

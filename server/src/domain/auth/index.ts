@@ -4,13 +4,18 @@ export { loginUser } from "./login.js";
 export type { LoginInput, LoginResult } from "./login.js";
 export { changePassword } from "./password.js";
 export {
+  DEVICE_LABEL_MAX,
+  deviceLabelFromUserAgent,
+  listUserSessions,
   logoutUser,
   MAX_SESSIONS_PER_USER,
   purgeExpiredSessions,
   revokeOtherSessions,
+  revokeSession,
+  SESSION_TOUCH_INTERVAL_MS,
   validateSession,
 } from "./session.js";
-export type { SessionResult } from "./session.js";
+export type { SessionResult, SessionView } from "./session.js";
 export {
   HANDLE_MAX_LENGTH,
   HANDLE_MIN_LENGTH,

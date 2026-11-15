@@ -1,5 +1,6 @@
 import {
   ForbiddenError,
+  QuotaExceededError,
   RemoteReferenceError,
   RevisionConflictError,
   RevisionRequiredError,
@@ -16,6 +17,11 @@ import {
   findRemoteRefs,
   type RemoteRefIssue,
 } from "./shared.js";
+
+/** Per-user row cap on create, like FONTS_PER_USER_MAX: one buggy or
+ * hostile client cannot grow templates without bound. Updates never
+ * count, so existing rows stay editable at the cap. */
+export const TEMPLATES_PER_USER_MAX = 1000;
 
 export interface PutTemplateInput {
   id: string;
@@ -73,6 +79,12 @@ export async function putTemplate(
 
   const existing = await repos.templates.findById(input.id);
   if (!existing) {
+    const count = await repos.templates.countByOwner(ownerId);
+    if (count >= TEMPLATES_PER_USER_MAX) {
+      throw new QuotaExceededError(
+        `at most ${TEMPLATES_PER_USER_MAX} templates per user`,
+      );
+    }
     const template = await repos.templates.create(
       {
         id: input.id,

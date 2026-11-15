@@ -113,4 +113,16 @@ class ServiceContractTest {
         assertFalse(PrintNinjaService.needsNotificationPermission(33, true))
         assertFalse(PrintNinjaService.needsNotificationPermission(32, false))
     }
+
+    // The prompt is recoverable, once: Android offers it again while a
+    // rationale remains (or before it was ever shown); after that it
+    // auto-denies silently and only the settings screen can help — the
+    // Settings → Background row routes on this answer.
+    @Test
+    fun theNotificationPromptIsOfferedUntilAndroidStopsOfferingIt() {
+        assertTrue(PrintNinjaService.canPromptNotification(false, false))
+        assertTrue(PrintNinjaService.canPromptNotification(false, true))
+        assertTrue(PrintNinjaService.canPromptNotification(true, true))
+        assertFalse(PrintNinjaService.canPromptNotification(true, false))
+    }
 }

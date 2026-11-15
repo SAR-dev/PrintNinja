@@ -119,7 +119,7 @@ Every new template starts from a **starter pack** — Receipt, Delivery Slip, In
 
 ## Print from your phone
 
-Phones are small and Android cannot make every printer language — ESC/POS, ZPL and TSPL print on the phone itself, while CPCL and raster still need a PC. So PrintNinja lets a phone borrow a PC on the same Wi-Fi.
+Phones are small, but Android makes every thermal printer language itself — ESC/POS, ZPL, TSPL, CPCL and raster all print on the phone; only PDF needs a PC. So PrintNinja still lets a phone borrow a PC on the same Wi-Fi, for PDF and for Print via PC.
 
 **Pair a phone with a PC**
 
@@ -194,7 +194,7 @@ Other options include `url` (a data URL), `test=1`, `orientation`, `fit` and `pr
 - LAN scan finds IPP and raw printers on the network over mDNS; a discovered printer is added in one tap
 - On Android, the Add dialog also lists your paired Bluetooth printers (bonded devices) with the same one-tap Fill and Add
 - USB through the Windows spooler or a CUPS raw queue (directly on Android); Bluetooth directly on Windows, Linux and Android — pair it in the OS settings and enter its MAC, no driver needed (Windows can print through the device's COM port instead). Per printer you can switch to **Print through the OS driver**: jobs then go to the installed Windows/CUPS queue of the same name, and PrintNinja never switches between the two paths on its own
-- Printer languages: PDF, ESC/POS, ZPL, TSPL, CPCL and raster (Android prints ESC/POS, ZPL and TSPL on the device itself; CPCL and raster need a paired PC)
+- Printer languages: PDF, ESC/POS, ZPL, TSPL, CPCL and raster (Android prints every language on the device itself; only PDF needs a paired PC)
 - Status checks before a raw job is sent, and timeouts so a stuck printer never hangs a job
 
 **Templates and sharing**

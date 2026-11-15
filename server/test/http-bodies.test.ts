@@ -31,6 +31,7 @@ describe("nullish bodies", () => {
       tokenHash,
       userId: user.id,
       expiresAt: new Date("2027-01-01T00:00:00Z"),
+      deviceLabel: "Test device",
     });
     const { template } = await putTemplate(
       { templates: deps.templates },

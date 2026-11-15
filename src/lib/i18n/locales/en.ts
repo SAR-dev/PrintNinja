@@ -172,6 +172,8 @@ const en = {
     reprint_body: "This sends the same job to the printer again.",
     reprint_confirm: "Reprint",
     update_available: "Update to {{version}} (opens the release page)",
+    update_android_apk:
+      "Update to {{version}} — download the APK, then open it to install",
     reprint_none: "There are no jobs to reprint yet.",
     reprint_failed: "Could not reprint the last job.",
     reprint_done: "Queued reprint of job #{{id}}",
@@ -710,7 +712,7 @@ const en = {
     lang_cpcl: "CPCL (label)",
     lang_raster: "Raster",
     lang_android_hint:
-      "Android prints receipt and label languages itself (ESC/POS, ZPL, TSPL), verified against a fake head only — unverified on a real one. CPCL and raster are not offered yet.",
+      "Android prints receipt and label languages on the device itself (ESC/POS, ZPL, TSPL); only PDF needs a paired PC — verified against a fake head only, unverified on a real one. CPCL and raster print on the device too, but are not offered yet.",
     lang_rawwire_hint:
       "USB and Bluetooth send printer commands straight to the device, so PDF is not offered. Pick the language your printer speaks, or turn on driver mode to print PDF through the OS queue.",
     err_bt_usb_port:
@@ -923,6 +925,12 @@ const en = {
       "Otherwise Doze and app standby defer prints. Opens the system screen; your choice, never automatic.",
     background_allowed: "allowed",
     background_not_allowed: "not allowed",
+    background_notifications: "Notifications",
+    background_notifications_hint:
+      "Android hides the background service notification until notifications are allowed for the app.",
+    background_allow_notifications: "Allow notifications",
+    background_open_notification_settings: "Open notification settings",
+    background_notifications_toast_granted: "Notifications allowed",
     background_working: "Working…",
     background_request: "Request exemption",
     background_refresh: "Refresh status",
@@ -938,6 +946,16 @@ const en = {
     change_password_done: "Password changed",
     change_password_revoked:
       "Password changed — {{count}} other session(s) signed out",
+    sessions_title: "Signed-in devices",
+    sessions_hint:
+      "Every session here can be ended. Revoking the current device signs it out.",
+    sessions_current: "This device",
+    sessions_last_used: "Last used {{when}}",
+    sessions_revoke: "Revoke",
+    sessions_revoked: "Session ended",
+    sessions_empty: "No sessions found",
+    sessions_loading: "Loading…",
+    sessions_retry: "Retry",
     fonts: "Fonts",
     api: "API",
     deep_links: "Deep Links",

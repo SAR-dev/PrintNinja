@@ -5,6 +5,8 @@ import type { AuthDeps, UserRecord } from "../../domain/ports.js";
 declare module "fastify" {
   interface FastifyRequest {
     authUser?: UserRecord;
+    /** Public id of the session behind the request (requireAuth). */
+    authSessionId?: string;
   }
 }
 
@@ -18,8 +20,9 @@ export function requireAuth(deps: AuthDeps) {
   return async (request: FastifyRequest, _reply: FastifyReply) => {
     const header = request.headers.authorization ?? "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-    const { user } = await validateSession(deps, token);
+    const { user, session } = await validateSession(deps, token);
     request.authUser = user;
+    request.authSessionId = session.publicId;
   };
 }
 

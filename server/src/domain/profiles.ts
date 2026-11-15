@@ -2,6 +2,7 @@ import {
   ForbiddenError,
   NotFoundError,
   PayloadTooLargeError,
+  QuotaExceededError,
   RevisionConflictError,
   RevisionRequiredError,
   ValidationError,
@@ -15,6 +16,10 @@ import type {
 /** Mirror the schema char caps in bytes: multibyte input must not pass. */
 export const PRINTER_NAME_MAX_BYTES = 100;
 export const SETTINGS_JSON_MAX_BYTES = 65_536;
+/** Per-user row cap on create, like FONTS_PER_USER_MAX: one buggy or
+ * hostile client cannot grow printer_profiles without bound. Updates
+ * never count, so existing rows stay editable at the cap. */
+export const PROFILES_PER_USER_MAX = 500;
 
 export interface PutProfileInput {
   id: string;
@@ -102,6 +107,12 @@ export async function putProfile(
   };
   const existing = await repos.profiles.findById(input.id);
   if (!existing) {
+    const count = await repos.profiles.countByOwner(ownerId);
+    if (count >= PROFILES_PER_USER_MAX) {
+      throw new QuotaExceededError(
+        `at most ${PROFILES_PER_USER_MAX} profiles per user`,
+      );
+    }
     const profile = await repos.profiles.create(write);
     return { profile, status: 201, replayed: false };
   }

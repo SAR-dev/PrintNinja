@@ -143,7 +143,8 @@ and which transports exist.
   context) and the device thresholds the pixels to 1-bit dots before the
   encoder. Those languages are not yet verified on a real head (PLAN §4,
   D4.1), so the printer form offers only the QA'd ones and labels them
-  accordingly; CPCL and raster still need a paired PC (PDF only). PDF
+  accordingly; CPCL and raster encode on the device as well and are held
+  back by the same gate — only PDF still needs a paired PC. PDF
 *input* jobs (an existing document instead of a template) rasterise on
 the device — the platform's own PDFium port (`PdfRenderer`) renders the
 first page and thresholds it, so no engine binary goes into the APK —

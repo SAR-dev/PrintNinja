@@ -406,6 +406,29 @@ pub struct GrantedResponse {
     pub granted: bool,
 }
 
+/// What `notificationPermissionState` resolves with: whether Android
+/// allows notifications, and whether the system prompt may still be
+/// shown (false routes the Settings button to the app's notification
+/// settings screen instead of asking into a silent auto-deny).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationPermissionStateResponse {
+    pub granted: bool,
+    pub can_ask_again: bool,
+}
+
+/// What `requestNotificationPermission` resolves with: `granted` is the
+/// answer at the moment the dialog fired (the prompt is system UI and
+/// the real answer arrives later, read back as state), `opened_settings`
+/// is true when the system would not prompt and the app's notification
+/// settings screen was opened instead.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationPermissionResponse {
+    pub granted: bool,
+    pub opened_settings: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -602,6 +625,28 @@ mod tests {
     fn granted_response_parses_the_object_kotlin_sends() {
         let r: GrantedResponse = serde_json::from_str(r#"{"granted":false}"#).unwrap();
         assert!(!r.granted);
+    }
+
+    #[test]
+    fn notification_permission_state_parses_the_object_kotlin_sends() {
+        let r: NotificationPermissionStateResponse =
+            serde_json::from_str(r#"{"granted":true,"canAskAgain":false}"#).unwrap();
+        assert!(r.granted);
+        assert!(!r.can_ask_again);
+        // The camelCase wire keys are the contract: a snake_case key is
+        // an unknown field here, so the missing camelCase one must fail
+        // the decode rather than silently default.
+        let wrong: Result<NotificationPermissionStateResponse, _> =
+            serde_json::from_str(r#"{"granted":true,"can_ask_again":true}"#);
+        assert!(wrong.is_err());
+    }
+
+    #[test]
+    fn notification_permission_response_parses_the_object_kotlin_sends() {
+        let r: NotificationPermissionResponse =
+            serde_json::from_str(r#"{"granted":false,"openedSettings":true}"#).unwrap();
+        assert!(!r.granted);
+        assert!(r.opened_settings);
     }
 
     #[test]

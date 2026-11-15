@@ -64,4 +64,14 @@ impl<R: Runtime> AndroidPrint<R> {
     pub fn is_battery_exemption_granted(&self) -> crate::Result<bool> {
         self.unavailable("isBatteryExemptionGranted")
     }
+
+    pub fn notification_permission_state(
+        &self,
+    ) -> crate::Result<NotificationPermissionStateResponse> {
+        self.unavailable("notificationPermissionState")
+    }
+
+    pub fn request_notification_permission(&self) -> crate::Result<NotificationPermissionResponse> {
+        self.unavailable("requestNotificationPermission")
+    }
 }

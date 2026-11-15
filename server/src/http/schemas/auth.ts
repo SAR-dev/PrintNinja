@@ -43,6 +43,21 @@ export const userSchema = z.object({
   created_at: z.string().datetime(),
 });
 
+/** One row of the signed-in devices list (GET /v2/auth/sessions). */
+export const sessionSchema = z.object({
+  id: z.string().uuid(),
+  device_label: z.string(),
+  /** True for the session making the request. */
+  current: z.boolean(),
+  created_at: z.string().datetime(),
+  last_used_at: z.string().datetime(),
+  expires_at: z.string().datetime(),
+});
+
+export const sessionListResponse = z.object({
+  items: z.array(sessionSchema),
+});
+
 export const authResponse = z.object({
   token: z.string().min(1),
   expires_at: z.string().datetime(),
@@ -51,4 +66,6 @@ export const authResponse = z.object({
 
 export type AuthCredentials = z.infer<typeof authCredentials>;
 export type UserResponse = z.infer<typeof userSchema>;
+export type SessionResponse = z.infer<typeof sessionSchema>;
+export type SessionListResponse = z.infer<typeof sessionListResponse>;
 export type AuthResponse = z.infer<typeof authResponse>;

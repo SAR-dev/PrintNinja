@@ -87,7 +87,9 @@ pnpm build
 
 The update badge e2e fixture intercepts `api.github.com`; after changing
 `VITE_UPDATE_API`, point that fixture at the new host too
-(`e2e/tests/mobile.mobile.e2e.ts`).
+(`e2e/tests/mobile.mobile.e2e.ts`). On Android the badge only appears
+when the release's `assets` list includes an `.apk` — it links straight
+to that file — so the fixture ships one too.
 
 ## Scheduled and ops jobs
 

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { isAndroid } from "@/lib/android/platform";
+import type { NotificationPermissionState } from "@/lib/android/background";
 
 /** Android-only background controls. Desktop uses tray settings
  * instead (rendered beside this, never together). */
@@ -13,17 +14,22 @@ export function isAndroidBackground(): boolean {
 interface AndroidBackgroundControlsProps {
   running: boolean | null;
   exempt: boolean | null;
+  /** null until the first state read lands. */
+  notif: NotificationPermissionState | null;
   busy: boolean;
   onRefresh: () => void;
   onRequestExemption: () => void;
+  onRequestNotifications: () => void;
 }
 
 export function AndroidBackgroundControls({
   running,
   exempt,
+  notif,
   busy,
   onRefresh,
   onRequestExemption,
+  onRequestNotifications,
 }: AndroidBackgroundControlsProps) {
   const { t } = useTranslation();
   useEffect(() => {
@@ -58,6 +64,41 @@ export function AndroidBackgroundControls({
               : t("settings_page.background_stopped")}
         </Badge>
       </div>
+      <div
+        className="flex items-center justify-between gap-2"
+        data-testid="settings-notifications-row"
+      >
+        <div>
+          <p className="text-sm font-medium">
+            {t("settings_page.background_notifications")}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t("settings_page.background_notifications_hint")}
+          </p>
+        </div>
+        <Badge variant={notif?.granted ? "success" : "secondary"}>
+          {notif == null
+            ? "…"
+            : notif.granted
+              ? t("settings_page.background_allowed")
+              : t("settings_page.background_not_allowed")}
+        </Badge>
+      </div>
+      {notif != null && !notif.granted && (
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={onRequestNotifications}
+            data-testid="settings-notification-permission"
+          >
+            {notif.canAskAgain
+              ? t("settings_page.background_allow_notifications")
+              : t("settings_page.background_open_notification_settings")}
+          </Button>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="text-sm font-medium">

@@ -108,6 +108,13 @@ export function createFakeLibraryRepos(): {
         .filter((d) => d.ownerId === ownerId)
         .sort((a, b) => (a.name < b.name ? -1 : 1));
     },
+    async countByOwner(ownerId) {
+      let count = 0;
+      for (const dataset of store.datasets.values()) {
+        if (dataset.ownerId === ownerId) count += 1;
+      }
+      return count;
+    },
   };
 
   const profiles: ProfileRepository = {
@@ -170,6 +177,13 @@ export function createFakeLibraryRepos(): {
       return [...store.profiles.values()]
         .filter((p) => p.ownerId === ownerId)
         .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+    },
+    async countByOwner(ownerId) {
+      let count = 0;
+      for (const profile of store.profiles.values()) {
+        if (profile.ownerId === ownerId) count += 1;
+      }
+      return count;
     },
   };
 

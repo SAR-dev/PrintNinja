@@ -17,6 +17,8 @@ const client = vi.hoisted(() => ({
   fetchMe: vi.fn(),
   logout: vi.fn(),
   changePassword: vi.fn(),
+  listSessions: vi.fn(),
+  revokeSession: vi.fn(),
   onSessionStarted: vi.fn((cb: () => void) => {
     window.addEventListener("printninja:session-started", cb);
     return () => window.removeEventListener("printninja:session-started", cb);
@@ -41,6 +43,8 @@ beforeEach(() => {
     created_at: "2026-03-01T10:00:00.000Z",
   });
   client.logout.mockResolvedValue(undefined);
+  client.listSessions.mockResolvedValue({ items: [] });
+  client.revokeSession.mockResolvedValue({ revoked: 1 });
   vi.mocked(toast.success).mockClear();
   vi.mocked(toast.error).mockClear();
 });

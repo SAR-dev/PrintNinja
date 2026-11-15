@@ -12,6 +12,7 @@ import type {
   TemplateRepository,
   TemplateView,
   TemplateWrite,
+  VersionCreatedBy,
   VersionWrite,
 } from "../../domain/templatePorts.js";
 import { toPage } from "../../domain/pagination.js";
@@ -108,7 +109,7 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
               ...(version.note !== undefined ? { note: version.note } : {}),
             },
           });
-          await pruneAutosaves(tx, created.id);
+          await pruneOldVersions(tx, created.id);
           return { ...created, _count: { versions: 1 } };
         });
         return toView(template);
@@ -197,7 +198,7 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
               ...(version.note !== undefined ? { note: version.note } : {}),
             },
           });
-          await pruneAutosaves(tx, input.id);
+          await pruneOldVersions(tx, input.id);
           return {
             ...updated,
             _count: { versions: updated._count.versions + 1 },
@@ -314,6 +315,10 @@ export function createTemplateRepository(db: DbClient): TemplateRepository {
         }),
       ]);
       return toPage(rows.map(toSummary), total, query);
+    },
+
+    async countByOwner(ownerId: string): Promise<number> {
+      return db.template.count({ where: { ownerId } });
     },
 
     async incrementUseCount(id: string, by: number): Promise<boolean> {
@@ -440,25 +445,41 @@ export async function bumpSeq(
   return row.nextSeq;
 }
 
-/** Autosaves beyond the newest 50 per template are deleted when a new
- * version is added; manual and restore versions are never pruned. */
-async function pruneAutosaves(
+/** Version history bounded per template, pruned whenever a version is
+ * appended. All three sources are client-reachable writes — PUT with
+ * version.createdBy, the restore endpoint — so without caps a buggy or
+ * hostile client could grow template_versions forever. Autosaves keep
+ * the newest 50 (unchanged); manual and restore snapshots keep the
+ * newest 100 each. Pruning takes oldest-first, so the head (the newest
+ * versionNo) always survives. */
+const VERSIONS_KEPT: Array<{ createdBy: VersionCreatedBy; keep: number }> = [
+  { createdBy: "autosave", keep: 50 },
+  { createdBy: "manual", keep: 100 },
+  { createdBy: "restore", keep: 100 },
+];
+
+async function pruneOldVersions(
   tx: Prisma.TransactionClient,
   templateId: string,
 ): Promise<void> {
-  const count = await tx.templateVersion.count({
-    where: { templateId, createdBy: "autosave" },
-  });
-  if (count > 50) {
-    const oldest = await tx.templateVersion.findMany({
-      where: { templateId, createdBy: "autosave" },
-      orderBy: { versionNo: "asc" },
-      take: count - 50,
-      select: { versionNo: true },
+  for (const { createdBy, keep } of VERSIONS_KEPT) {
+    const count = await tx.templateVersion.count({
+      where: { templateId, createdBy },
     });
-    await tx.templateVersion.deleteMany({
-      where: { templateId, versionNo: { in: oldest.map((v) => v.versionNo) } },
-    });
+    if (count > keep) {
+      const oldest = await tx.templateVersion.findMany({
+        where: { templateId, createdBy },
+        orderBy: { versionNo: "asc" },
+        take: count - keep,
+        select: { versionNo: true },
+      });
+      await tx.templateVersion.deleteMany({
+        where: {
+          templateId,
+          versionNo: { in: oldest.map((v) => v.versionNo) },
+        },
+      });
+    }
   }
 }
 

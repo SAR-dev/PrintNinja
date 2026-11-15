@@ -266,3 +266,78 @@ describe("v2 endpoint contracts", () => {
     );
   });
 });
+
+describe("signed-in devices", () => {
+  it("labels sessions from the User-Agent and revokes one by id", async () => {
+    const reg = await app.inject({
+      method: "POST",
+      url: "/v2/auth/register",
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36",
+      },
+      payload: { handle: "ivan", password: "password123" },
+    });
+    expect(reg.statusCode).toBe(201);
+    const t1 = (reg.json() as AuthBody).token;
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/v2/auth/login",
+      headers: {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131",
+      },
+      payload: { handle: "ivan", password: "password123" },
+    });
+    expect(second.statusCode).toBe(200);
+    const t2 = (second.json() as AuthBody).token;
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/v2/auth/sessions",
+      headers: { authorization: `Bearer ${t2}` },
+    });
+    expect(list.statusCode).toBe(200);
+    const items = (
+      list.json() as {
+        items: { id: string; device_label: string; current: boolean }[];
+      }
+    ).items;
+    expect(items).toHaveLength(2);
+    expect(items.map((item) => item.device_label).sort()).toEqual([
+      "Android",
+      "Windows",
+    ]);
+    expect(items.find((item) => item.current)?.device_label).toBe("Windows");
+
+    const otherId = items.find((item) => !item.current)?.id ?? "";
+    const revoke = await app.inject({
+      method: "DELETE",
+      url: `/v2/auth/sessions/${otherId}`,
+      headers: { authorization: `Bearer ${t2}` },
+    });
+    expect(revoke.statusCode).toBe(200);
+
+    // The row is gone from the real database and the token is dead.
+    expect(
+      await stack.db.session.findFirst({ where: { publicId: otherId } }),
+    ).toBeNull();
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/v2/auth/me",
+          headers: { authorization: `Bearer ${t1}` },
+        })
+      ).statusCode,
+    ).toBe(401);
+
+    // A retried revoke of the now-missing id answers 404, not 200.
+    const again = await app.inject({
+      method: "DELETE",
+      url: `/v2/auth/sessions/${otherId}`,
+      headers: { authorization: `Bearer ${t2}` },
+    });
+    expect(again.statusCode).toBe(404);
+  });
+});
