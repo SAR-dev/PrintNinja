@@ -21,7 +21,13 @@ export interface UserRecord {
 
 export interface SessionRecord {
   tokenHash: string;
+  /** Opaque id for the sessions API. Never the token or its hash. */
+  publicId: string;
   userId: string;
+  /** Short label from the User-Agent at sign-in ("Android", "Windows"). */
+  deviceLabel: string;
+  lastUsedAt: Date;
+  createdAt: Date;
   expiresAt: Date;
 }
 
@@ -46,6 +52,7 @@ export interface SessionRepository {
     tokenHash: string;
     userId: string;
     expiresAt: Date;
+    deviceLabel: string;
   }): Promise<SessionRecord>;
   /** The session with its user, for request authentication. */
   findWithUser(
@@ -67,6 +74,15 @@ export interface SessionRepository {
    * per-user session growth from devices that log in but never log out.
    */
   deleteOldestForUser(userId: string, keepNewest: number): Promise<number>;
+  /** The user's live sessions (expiry checked by the caller), newest
+   * last-used first — the signed-in devices list. */
+  listForUser(userId: string): Promise<SessionRecord[]>;
+  /** Deletes one session by its public id, scoped to the owner (a
+   * foreign or unknown id deletes nothing and reports false). */
+  deleteByPublicId(userId: string, publicId: string): Promise<boolean>;
+  /** Records a use for the last-used column; called at most once per
+   * touch interval per session, so it is one cheap UPDATE. */
+  touch(tokenHash: string, lastUsedAt: Date): Promise<void>;
 }
 
 export interface PasswordHasher {

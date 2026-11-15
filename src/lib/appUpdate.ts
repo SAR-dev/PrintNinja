@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isAndroid } from "@/lib/platform";
 
 /**
  * Manual update check (no auto-download, no Tauri updater): compare the
@@ -7,7 +8,8 @@ import { useEffect, useState } from "react";
  */
 
 /**
- * Where releases live. Any host answering `{tag_name, html_url}` on
+ * Where releases live. Any host answering `{tag_name, html_url}` (plus
+ * `assets`, read for the Android APK link) on
  * `GET {api}/repos/{repo}/releases/latest` works, so only the base
  * changes, e.g. `VITE_UPDATE_API=https://ghe.example.com/api/v3` plus
  * `VITE_UPDATE_REPO=owner/PrintNinja` moves the badge off github.com.
@@ -29,6 +31,10 @@ export interface UpdateInfo {
   version: string;
   /** Release page to open for a manual update. */
   url: string;
+  /** Direct link to the release's .apk asset, when it attaches one —
+   * the only file a phone can install. Absent means the release has
+   * no APK (or the host does not report assets). */
+  apkUrl?: string;
 }
 
 /** "v3.2.0" -> "3.2.0". */
@@ -86,7 +92,13 @@ function readCache(): UpdateInfo | null {
     const entry = JSON.parse(raw) as Partial<CacheEntry>;
     if (typeof entry.version !== "string" || typeof entry.url !== "string")
       return null;
-    return { version: entry.version, url: entry.url };
+    return {
+      version: entry.version,
+      url: entry.url,
+      // Older caches predate the asset check: no apkUrl, so the
+      // Android gate below stays closed until the next fetch.
+      ...(typeof entry.apkUrl === "string" ? { apkUrl: entry.apkUrl } : {}),
+    };
   } catch {
     return null;
   }
@@ -103,6 +115,33 @@ function writeCache(info: UpdateInfo): void {
   }
 }
 
+/**
+ * The release's first APK asset link, when it attaches one. Releases
+ * ship `PrintNinja_<version>_aarch64.apk` (ci.yml renames before
+ * upload); a forge that reports no assets answers null and the Android
+ * badge stays hidden — pointing a phone at a release with nothing to
+ * install is the bug this check closes (MISSING_FEATURES item 45).
+ */
+export function findApkAsset(assets: unknown): string | null {
+  if (!Array.isArray(assets)) return null;
+  for (const asset of assets) {
+    if (typeof asset !== "object" || asset === null) continue;
+    const { name, browser_download_url } = asset as {
+      name?: unknown;
+      browser_download_url?: unknown;
+    };
+    if (
+      typeof name === "string" &&
+      /\.apk$/i.test(name) &&
+      typeof browser_download_url === "string" &&
+      browser_download_url
+    ) {
+      return browser_download_url;
+    }
+  }
+  return null;
+}
+
 /** Latest published release, or null when it cannot be determined. Never throws. */
 export async function fetchLatestRelease(
   signal?: AbortSignal,
@@ -116,10 +155,16 @@ export async function fetchLatestRelease(
     const body = (await res.json()) as {
       tag_name?: unknown;
       html_url?: unknown;
+      assets?: unknown;
     };
     if (typeof body.tag_name !== "string" || typeof body.html_url !== "string")
       return null;
-    return { version: normalizeVersion(body.tag_name), url: body.html_url };
+    const apkUrl = findApkAsset(body.assets);
+    return {
+      version: normalizeVersion(body.tag_name),
+      url: body.html_url,
+      ...(apkUrl ? { apkUrl } : {}),
+    };
   } catch {
     // Offline, DNS, CORS, timeout, abort: an update check never blocks the UI.
     return null;
@@ -132,11 +177,17 @@ export async function fetchLatestRelease(
  * release that has since been superseded, and showing that older "next"
  * version instead of the newest one is exactly the staleness to avoid.
  * Failures stay silent and keep the cached paint as the offline fallback.
+ *
+ * On Android `available` also requires an APK asset: a phone updates by
+ * downloading the APK and opening it, so a release with nothing to
+ * install gets no badge there (MISSING_FEATURES item 45). Desktop keeps
+ * the release page regardless of assets.
  */
 export function useUpdateCheck(): {
   available: boolean;
   version: string;
   url: string;
+  apkUrl: string;
 } {
   const [info, setInfo] = useState<UpdateInfo | null>(() => readCache());
 
@@ -172,10 +223,12 @@ export function useUpdateCheck(): {
     };
   }, []);
 
+  const usable = info != null && (!isAndroid() || info.apkUrl != null);
   return {
-    available: info != null,
-    version: info?.version ?? "",
-    url: info?.url ?? "",
+    available: usable,
+    version: usable ? (info?.version ?? "") : "",
+    url: usable ? (info?.url ?? "") : "",
+    apkUrl: usable ? (info?.apkUrl ?? "") : "",
   };
 }
 

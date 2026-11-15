@@ -366,6 +366,114 @@ describe("docs gating", () => {
     ).toBe(401);
   });
 
+  it("GET /v2/auth/sessions lists devices and DELETE /:id revokes one", async () => {
+    app = await buildApp({
+      config: testConfig({ docsEnabled: false }),
+      deps: fakeDeps(),
+    });
+    const android = {
+      "content-type": "application/json",
+      "user-agent":
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36",
+    };
+    const windows = {
+      "content-type": "application/json",
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131",
+    };
+    const first = await app.inject({
+      method: "POST",
+      url: "/v2/auth/register",
+      headers: android,
+      payload: { handle: "bo", password: "password123" },
+    });
+    const t1 = (first.json() as { token: string }).token;
+    const second = await app.inject({
+      method: "POST",
+      url: "/v2/auth/login",
+      headers: windows,
+      payload: { handle: "bo", password: "password123" },
+    });
+    const t2 = (second.json() as { token: string }).token;
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/v2/auth/sessions",
+      headers: { authorization: `Bearer ${t2}` },
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.headers["cache-control"]).toBe("no-store");
+    const items = (
+      list.json() as {
+        items: { id: string; device_label: string; current: boolean }[];
+      }
+    ).items;
+    expect(items).toHaveLength(2);
+    expect(items.map((item) => item.device_label)).toEqual([
+      "Windows",
+      "Android",
+    ]);
+    expect(items.filter((item) => item.current)).toHaveLength(1);
+    expect(items.find((item) => item.current)?.device_label).toBe("Windows");
+    // Public ids are opaque uuids — never the token or its hash.
+    for (const item of items) {
+      expect(item.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
+    }
+    expect(list.body).not.toContain(t1);
+    expect(list.body).not.toContain(t2);
+
+    // An unknown id answers 404; so does a foreign account's.
+    const unknown = await app.inject({
+      method: "DELETE",
+      url: "/v2/auth/sessions/11111111-1111-4111-8111-111111111111",
+      headers: { authorization: `Bearer ${t2}` },
+    });
+    expect(unknown.statusCode).toBe(404);
+
+    // Revoking the other device kills only that token.
+    const otherId = items.find((item) => !item.current)?.id ?? "";
+    const revoke = await app.inject({
+      method: "DELETE",
+      url: `/v2/auth/sessions/${otherId}`,
+      headers: { authorization: `Bearer ${t2}` },
+    });
+    expect(revoke.statusCode).toBe(200);
+    expect(revoke.json()).toEqual({ revoked: 1 });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/v2/auth/me",
+          headers: { authorization: `Bearer ${t2}` },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/v2/auth/me",
+          headers: { authorization: `Bearer ${t1}` },
+        })
+      ).statusCode,
+    ).toBe(401);
+
+    // Anonymous requests can neither list nor revoke.
+    expect(
+      (await app.inject({ method: "GET", url: "/v2/auth/sessions" }))
+        .statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/v2/auth/sessions/${otherId}`,
+        })
+      ).statusCode,
+    ).toBe(401);
+  });
+
   it("PUT /v2/auth/password changes the password and revokes the rest", async () => {
     app = await buildApp({
       config: testConfig({ docsEnabled: false }),

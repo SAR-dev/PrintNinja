@@ -41,7 +41,7 @@ Pick 3–4 models that cover the main printer languages and connection types:
 | Epson TM-T82 (or similar) | ESC/POS | USB or raw TCP | Most common receipt printer |
 | Zebra ZT411 (or similar) | ZPL | USB or raw TCP | Most common label printer |
 | TSC TE244 (or similar) | TSPL | USB or raw TCP | Popular in Asia; TSPL-specific quirks |
-| A CPCL-capable receipt printer | CPCL | USB or raw TCP | CPCL is less common; needs a PC to render on Android |
+| A CPCL-capable receipt printer | CPCL | USB or raw TCP | CPCL is less common; renders on the device but is not offered on Android yet (QA gate), so test it on desktop or through a paired PC |
 
 ## How to run the test
 

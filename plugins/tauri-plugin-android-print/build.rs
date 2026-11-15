@@ -7,6 +7,8 @@ const COMMANDS: &[&str] = &[
     "is_background_service_running",
     "request_battery_exemption",
     "is_battery_exemption_granted",
+    "notification_permission_state",
+    "request_notification_permission",
 ];
 
 fn main() {

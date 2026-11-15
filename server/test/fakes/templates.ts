@@ -90,19 +90,28 @@ export function createFakeTemplateRepos(users: {
     store.seqs.set(userId, next);
     return next;
   };
-  const pruneAutosaves = (templateId: string): void => {
+  const pruneOldVersions = (templateId: string): void => {
     const stored = store.templates.get(templateId);
     if (!stored) {
       return;
     }
-    const autosaves = stored.versions
-      .filter((v) => v.createdBy === "autosave")
-      .sort((a, b) => a.versionNo - b.versionNo);
-    if (autosaves.length > 50) {
-      const drop = new Set(
-        autosaves.slice(0, autosaves.length - 50).map((v) => v.versionNo),
-      );
-      stored.versions = stored.versions.filter((v) => !drop.has(v.versionNo));
+    // Mirrors pruneOldVersions in infra/db/templates.ts: autosaves keep
+    // the newest 50, manual and restore snapshots the newest 100 each.
+    const kept: Array<{ createdBy: string; keep: number }> = [
+      { createdBy: "autosave", keep: 50 },
+      { createdBy: "manual", keep: 100 },
+      { createdBy: "restore", keep: 100 },
+    ];
+    for (const { createdBy, keep } of kept) {
+      const matching = stored.versions
+        .filter((v) => v.createdBy === createdBy)
+        .sort((a, b) => a.versionNo - b.versionNo);
+      if (matching.length > keep) {
+        const drop = new Set(
+          matching.slice(0, matching.length - keep).map((v) => v.versionNo),
+        );
+        stored.versions = stored.versions.filter((v) => !drop.has(v.versionNo));
+      }
     }
   };
 
@@ -255,7 +264,7 @@ export function createFakeTemplateRepos(users: {
         ],
       };
       store.templates.set(stored.id, stored);
-      pruneAutosaves(stored.id);
+      pruneOldVersions(stored.id);
       return toView(stored);
     },
 
@@ -291,7 +300,7 @@ export function createFakeTemplateRepos(users: {
           ...(version.label !== undefined ? { label: version.label } : {}),
           ...(version.note !== undefined ? { note: version.note } : {}),
         });
-        pruneAutosaves(stored.id);
+        pruneOldVersions(stored.id);
       }
       return toView(stored);
     },
@@ -419,6 +428,14 @@ export function createFakeTemplateRepos(users: {
         )
         .sort(sortFor(query.sort));
       return paginate(rows, query);
+    },
+
+    async countByOwner(ownerId) {
+      let count = 0;
+      for (const template of store.templates.values()) {
+        if (template.ownerId === ownerId) count += 1;
+      }
+      return count;
     },
 
     async incrementUseCount(id, by) {

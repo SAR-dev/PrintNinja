@@ -146,5 +146,9 @@ export function createDatasetRepository(db: DbClient): DatasetRepository {
       });
       return rows.map(toView);
     },
+
+    async countByOwner(ownerId: string): Promise<number> {
+      return db.sampleDataset.count({ where: { ownerId } });
+    },
   };
 }

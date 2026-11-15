@@ -36,6 +36,12 @@ const MOCK_RELEASE_VERSION = `${Number(head) + 1}.${tail.join(".") || "0"}`;
 const MOCK_RELEASE_TAG = `v${MOCK_RELEASE_VERSION}`;
 const MOCK_RELEASE_URL =
   "https://github.com/SAR-dev/PrintNinja/releases/tag/" + MOCK_RELEASE_TAG;
+// Android only shows the update badge when the release attaches an APK
+// (item 45), and links straight to that file — the fixture must ship one.
+const MOCK_RELEASE_APK_URL =
+  "https://github.com/SAR-dev/PrintNinja/releases/download/" +
+  MOCK_RELEASE_TAG +
+  `/PrintNinja_${MOCK_RELEASE_VERSION}_aarch64.apk`;
 
 const ROUTES = [
   "/templates",
@@ -76,6 +82,8 @@ test.beforeEach(async ({ context }) => {
   });
   // Pin the update check to a newer release: the badge renders
   // deterministically (and gets tap-target/axe/screenshot coverage).
+  // The asset list must include an APK — a phone shows no badge without
+  // one (MISSING_FEATURES item 45).
   await context.route("https://api.github.com/**", (route) =>
     route.fulfill({
       status: 200,
@@ -83,6 +91,19 @@ test.beforeEach(async ({ context }) => {
       body: JSON.stringify({
         tag_name: MOCK_RELEASE_TAG,
         html_url: MOCK_RELEASE_URL,
+        assets: [
+          {
+            name: `PrintNinja_${MOCK_RELEASE_VERSION}_aarch64.apk`,
+            browser_download_url: MOCK_RELEASE_APK_URL,
+          },
+          {
+            name: `PrintNinja_${MOCK_RELEASE_VERSION}_aarch64.aab`,
+            browser_download_url: MOCK_RELEASE_APK_URL.replace(
+              /\.apk$/,
+              ".aab",
+            ),
+          },
+        ],
       }),
     }),
   );
@@ -116,12 +137,28 @@ async function checkRoute(
   shotName: string,
 ) {
   await expect(page.getByRole("main")).toBeVisible({ timeout: 15_000 });
-  // The mocked release is newer than the app: the badge links to it.
+  // The mocked release is newer than the app and carries an APK. The
+  // badge follows the platform the browser reports: an Android user
+  // agent links straight to the APK and says how to install it, any
+  // other platform opens the release page. (mobile-pixel7 reports the
+  // Pixel 7's Android UA; mobile-small sets only viewport and touch, so
+  // it keeps Playwright's desktop UA — and the desktop badge.)
+  const android = await page.evaluate(() =>
+    /Android/i.test(navigator.userAgent),
+  );
   const badge = page.getByRole("link", {
     name: `Update to ${MOCK_RELEASE_TAG}`,
   });
   await expect(badge).toBeVisible({ timeout: 15_000 });
-  await expect(badge).toHaveAttribute("href", MOCK_RELEASE_URL);
+  await expect(badge).toHaveAttribute(
+    "href",
+    android ? MOCK_RELEASE_APK_URL : MOCK_RELEASE_URL,
+  );
+  await expect(badge).toHaveAccessibleName(
+    android
+      ? /^Update to .+ — download the APK, then open it to install$/
+      : /^Update to .+ \(opens the release page\)$/,
+  );
   // Let debounced previews and share polling settle before measuring.
   await page.waitForTimeout(1000);
 
