@@ -285,6 +285,18 @@ class PrintNinjaService : Service() {
             sdkInt >= 33 && !granted
 
         /**
+         * Whether the system may still show the permission prompt: either
+         * it was never shown (nothing to remember, so no rationale is
+         * expected yet), or it was shown and Android still offers a
+         * rationale — asking again then produces the dialog. Once a prompt
+         * has been shown and no rationale remains, further requests
+         * auto-deny silently, so the app's notification settings screen is
+         * the only route left. Pure so the contract test can pin it.
+         */
+        fun canPromptNotification(askedBefore: Boolean, showRationale: Boolean): Boolean =
+            !askedBefore || showRationale
+
+        /**
          * Re-posts the pinned notification once the user has granted the
          * notification permission. The service kept running while it was
          * denied, so only the notification needs to be shown again.

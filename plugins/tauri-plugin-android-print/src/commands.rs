@@ -66,3 +66,20 @@ pub(crate) async fn is_battery_exemption_granted<R: Runtime>(
 ) -> Result<bool> {
     app.android_print().is_battery_exemption_granted()
 }
+
+/// Both notification-permission commands settle immediately on the
+/// Kotlin side (the prompt is system UI and the answer is read back as
+/// state), so neither needs `spawn_blocking`.
+#[command]
+pub(crate) async fn notification_permission_state<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<NotificationPermissionStateResponse> {
+    app.android_print().notification_permission_state()
+}
+
+#[command]
+pub(crate) async fn request_notification_permission<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<NotificationPermissionResponse> {
+    app.android_print().request_notification_permission()
+}

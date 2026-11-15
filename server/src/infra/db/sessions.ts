@@ -11,6 +11,7 @@ export function createSessionRepository(db: DbClient): SessionRepository {
       tokenHash: string;
       userId: string;
       expiresAt: Date;
+      deviceLabel: string;
     }): Promise<SessionRecord> {
       const session = await db.session.create({ data: input });
       return toRecord(session);
@@ -70,17 +71,47 @@ export function createSessionRepository(db: DbClient): SessionRepository {
       });
       return result.count;
     },
+
+    async listForUser(userId: string): Promise<SessionRecord[]> {
+      const rows = await db.session.findMany({
+        where: { userId },
+        orderBy: [{ lastUsedAt: "desc" }, { createdAt: "desc" }],
+      });
+      return rows.map(toRecord);
+    },
+
+    async deleteByPublicId(userId: string, publicId: string): Promise<boolean> {
+      const result = await db.session.deleteMany({
+        where: { userId, publicId },
+      });
+      return result.count > 0;
+    },
+
+    async touch(tokenHash: string, lastUsedAt: Date): Promise<void> {
+      await db.session.updateMany({
+        where: { tokenHash },
+        data: { lastUsedAt },
+      });
+    },
   };
 }
 
 function toRecord(session: {
   tokenHash: string;
+  publicId: string;
   userId: string;
+  deviceLabel: string;
+  lastUsedAt: Date;
+  createdAt: Date;
   expiresAt: Date;
 }): SessionRecord {
   return {
     tokenHash: session.tokenHash,
+    publicId: session.publicId,
     userId: session.userId,
+    deviceLabel: session.deviceLabel,
+    lastUsedAt: session.lastUsedAt,
+    createdAt: session.createdAt,
     expiresAt: session.expiresAt,
   };
 }

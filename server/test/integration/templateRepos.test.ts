@@ -545,6 +545,32 @@ for (const name of ["fake", "prisma"] as const) {
         expect(list.items.some((v) => v.versionNo === 2)).toBe(false);
         expect(list.items.some((v) => v.versionNo === 1)).toBe(true);
       });
+
+      it("prunes manual snapshots past 100 but keeps the newest and the head", async () => {
+        const id = randomUUID();
+        await be.templates.create(write(id, owner), version);
+        for (let i = 0; i < 100; i += 1) {
+          const rev = (await be.templates.findById(id))?.revision ?? 1;
+          await be.templates.update(
+            { ...write(id, owner), body: `<div>m${i}</div>` },
+            rev,
+            { createdBy: "manual" },
+          );
+        }
+
+        const list = await be.templates.listVersions(id, {
+          page: 1,
+          pageSize: 200,
+        });
+        // 101 manual rows existed (version 1 plus 100 updates); the
+        // oldest went and the newest 100 — head included — stayed.
+        expect(list.total).toBe(100);
+        expect(list.items.filter((v) => v.createdBy === "manual")).toHaveLength(
+          100,
+        );
+        expect(list.items.some((v) => v.versionNo === 1)).toBe(false);
+        expect(list.items.some((v) => v.versionNo === 101)).toBe(true);
+      });
     });
   });
 }

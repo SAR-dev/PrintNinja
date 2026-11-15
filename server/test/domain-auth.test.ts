@@ -9,12 +9,16 @@ import {
 } from "./fakes/index.js";
 import {
   changePassword,
+  DEVICE_LABEL_MAX,
+  deviceLabelFromUserAgent,
+  listUserSessions,
   loginUser,
   logoutUser,
   MAX_SESSIONS_PER_USER,
   purgeExpiredSessions,
   registerUser,
   revokeOtherSessions,
+  revokeSession,
   validateSession,
 } from "../src/domain/auth/index.js";
 import {
@@ -309,6 +313,7 @@ describe("purgeExpiredSessions", () => {
       tokenHash: "expired-hash",
       userId: user.id,
       expiresAt: new Date("2020-01-01T00:00:00Z"),
+      deviceLabel: "Test device",
     });
 
     expect(await purgeExpiredSessions(d)).toBe(1);
@@ -322,5 +327,146 @@ describe("purgeExpiredSessions", () => {
     await registered(d);
 
     expect(await purgeExpiredSessions(d)).toBe(0);
+  });
+});
+
+describe("deviceLabelFromUserAgent", () => {
+  it("names the platform family when the User-Agent is recognizable", () => {
+    expect(
+      deviceLabelFromUserAgent(
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120 Mobile Safari/537.36",
+      ),
+    ).toBe("Android");
+    expect(
+      deviceLabelFromUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131",
+      ),
+    ).toBe("Windows");
+    expect(
+      deviceLabelFromUserAgent(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      ),
+    ).toBe("macOS");
+    // iOS says "like Mac OS X" — the device family wins over the hint.
+    expect(
+      deviceLabelFromUserAgent(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15",
+      ),
+    ).toBe("iOS");
+    expect(
+      deviceLabelFromUserAgent("Mozilla/5.0 (X11; Linux x86_64) Chrome/131"),
+    ).toBe("Linux");
+  });
+
+  it("falls back to a bounded excerpt and never returns empty", () => {
+    expect(deviceLabelFromUserAgent(undefined)).toBe("Unknown device");
+    expect(deviceLabelFromUserAgent("   ")).toBe("Unknown device");
+    expect(deviceLabelFromUserAgent("curl/8.5.0")).toBe("curl/8.5.0");
+    expect(deviceLabelFromUserAgent("device ".repeat(100))).toHaveLength(
+      DEVICE_LABEL_MAX,
+    );
+  });
+});
+
+describe("listUserSessions and revokeSession", () => {
+  it("labels sessions at sign-in and marks only the caller current", async () => {
+    const d = deps();
+    const first = await registerUser(
+      d,
+      { handle: "Alice", password: PASSWORD },
+      { userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8)" },
+    );
+    const second = await loginUser(
+      d,
+      { handle: "Alice", password: PASSWORD },
+      { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+    );
+    const secondSession = await d.sessions.findWithUser(
+      d.tokens.hash(second.token),
+    );
+
+    const list = await listUserSessions(
+      d,
+      first.user.id,
+      secondSession?.session.publicId ?? "",
+    );
+    expect(list).toHaveLength(2);
+    // Most recently used first: the login just happened.
+    expect(list[0]?.deviceLabel).toBe("Windows");
+    expect(list[0]?.current).toBe(true);
+    expect(list[1]?.deviceLabel).toBe("Android");
+    expect(list[1]?.current).toBe(false);
+    // Neither the tokens nor their hashes appear in the view.
+    const wire = JSON.stringify(list);
+    expect(wire).not.toContain(first.token);
+    expect(wire).not.toContain(second.token);
+    expect(wire).not.toContain(d.tokens.hash(first.token));
+  });
+
+  it("drops expired sessions from the list", async () => {
+    const d = deps();
+    const { user, token } = await registered(d);
+    await d.sessions.create({
+      tokenHash: "dead-hash",
+      userId: user.id,
+      expiresAt: new Date("2020-01-01T00:00:00Z"),
+      deviceLabel: "Old phone",
+    });
+    const session = await d.sessions.findWithUser(d.tokens.hash(token));
+
+    const list = await listUserSessions(
+      d,
+      user.id,
+      session?.session.publicId ?? "",
+    );
+    expect(list.map((s) => s.deviceLabel)).toEqual(["Unknown device"]);
+  });
+
+  it("revokes one session by id, scoped to the owner", async () => {
+    const d = deps();
+    const first = await registered(d);
+    const second = await loginUser(d, { handle: "Alice", password: PASSWORD });
+    const secondSession = await d.sessions.findWithUser(
+      d.tokens.hash(second.token),
+    );
+    const secondId = secondSession?.session.publicId ?? "";
+
+    // Unknown and empty ids report false, deleting nothing.
+    await expect(revokeSession(d, first.user.id, "nope")).resolves.toBe(false);
+    await expect(revokeSession(d, first.user.id, "")).resolves.toBe(false);
+
+    // Another user's session id is indistinguishable from unknown.
+    await expect(revokeSession(d, "someone-else", secondId)).resolves.toBe(
+      false,
+    );
+    await expect(validateSession(d, second.token)).resolves.toBeTruthy();
+
+    // The owner revokes it: that token dies, the caller survives.
+    await expect(revokeSession(d, first.user.id, secondId)).resolves.toBe(true);
+    await expect(validateSession(d, second.token)).rejects.toBeInstanceOf(
+      UnauthorizedError,
+    );
+    await expect(validateSession(d, first.token)).resolves.toBeTruthy();
+  });
+
+  it("moves last-used at most once per touch interval", async () => {
+    const d = deps();
+    const { token } = await registered(d);
+    const hash = d.tokens.hash(token);
+    const initial = (await d.sessions.findWithUser(hash))?.session.lastUsedAt;
+    expect(initial?.toISOString()).toBe("2026-10-20T00:00:00.000Z");
+
+    // Same instant: within the interval, no write.
+    await validateSession(d, token);
+    expect((await d.sessions.findWithUser(hash))?.session.lastUsedAt).toEqual(
+      initial,
+    );
+
+    // Past the interval: the stamp moves to the new now.
+    d.clock = createFakeClock(new Date("2026-10-20T00:06:00Z"));
+    await validateSession(d, token);
+    expect(
+      (await d.sessions.findWithUser(hash))?.session.lastUsedAt.toISOString(),
+    ).toBe("2026-10-20T00:06:00.000Z");
   });
 });

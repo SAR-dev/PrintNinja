@@ -1,4 +1,5 @@
 import type { UserRecord } from "../domain/ports.js";
+import type { SessionView } from "../domain/auth/session.js";
 import type {
   TemplateSummaryView,
   TemplateView,
@@ -17,7 +18,11 @@ import type {
   VersionResponse,
   VersionSummaryResponse,
 } from "./schemas/templates.js";
-import type { AuthResponse, UserResponse } from "./schemas/auth.js";
+import type {
+  AuthResponse,
+  SessionResponse,
+  UserResponse,
+} from "./schemas/auth.js";
 
 // Domain object to response shape. Dates
 // leave the service as RFC 3339 UTC with Z (P16: no local-time text).
@@ -26,6 +31,18 @@ export function toUserResponse(user: UserRecord): UserResponse {
     id: user.id,
     handle: user.handle,
     created_at: user.createdAt.toISOString(),
+  };
+}
+
+/** One signed-in devices row. The token and its hash never leave. */
+export function toSessionResponse(view: SessionView): SessionResponse {
+  return {
+    id: view.id,
+    device_label: view.deviceLabel,
+    current: view.current,
+    created_at: view.createdAt.toISOString(),
+    last_used_at: view.lastUsedAt.toISOString(),
+    expires_at: view.expiresAt.toISOString(),
   };
 }
 

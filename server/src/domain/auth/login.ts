@@ -1,6 +1,6 @@
 import { InvalidCredentialsError } from "../errors.js";
 import type { AuthDeps, UserRecord } from "../ports.js";
-import { MAX_SESSIONS_PER_USER } from "./session.js";
+import { deviceLabelFromUserAgent, MAX_SESSIONS_PER_USER } from "./session.js";
 import { handleKey } from "./shared.js";
 
 // Argon2id hash of a random string, generated once with production
@@ -30,6 +30,7 @@ export interface LoginResult {
 export async function loginUser(
   deps: AuthDeps,
   input: LoginInput,
+  context?: { userAgent?: string },
 ): Promise<LoginResult> {
   const user = await deps.users.findByHandleKey(handleKey(input.handle));
   // Dummy hash with production parameters: verifying a wrong password
@@ -57,7 +58,12 @@ export async function loginUser(
   const expiresAt = new Date(
     deps.clock.now().getTime() + deps.sessionTtlDays * 86_400_000,
   );
-  await deps.sessions.create({ tokenHash, userId: record.id, expiresAt });
+  await deps.sessions.create({
+    tokenHash,
+    userId: record.id,
+    expiresAt,
+    deviceLabel: deviceLabelFromUserAgent(context?.userAgent),
+  });
   // Devices log in far more often than they log out; without a cap one
   // user accumulates a session row per login until the TTL purge.
   await deps.sessions.deleteOldestForUser(record.id, MAX_SESSIONS_PER_USER);

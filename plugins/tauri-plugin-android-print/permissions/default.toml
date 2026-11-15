@@ -9,4 +9,6 @@ permissions = [
   "allow-is-background-service-running",
   "allow-request-battery-exemption",
   "allow-is-battery-exemption-granted",
+  "allow-notification-permission-state",
+  "allow-request-notification-permission",
 ]

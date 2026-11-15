@@ -45,6 +45,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::is_background_service_running,
             commands::request_battery_exemption,
             commands::is_battery_exemption_granted,
+            commands::notification_permission_state,
+            commands::request_notification_permission,
         ])
         .setup(|app, api| {
             #[cfg(mobile)]

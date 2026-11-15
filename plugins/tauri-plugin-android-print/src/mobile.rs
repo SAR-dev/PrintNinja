@@ -318,4 +318,18 @@ impl<R: Runtime> AndroidPrint<R> {
             .map_err(crate::Error::from)?;
         Ok(res.granted)
     }
+
+    pub fn notification_permission_state(
+        &self,
+    ) -> crate::Result<NotificationPermissionStateResponse> {
+        self.0
+            .run_mobile_plugin("notificationPermissionState", ())
+            .map_err(crate::Error::from)
+    }
+
+    pub fn request_notification_permission(&self) -> crate::Result<NotificationPermissionResponse> {
+        self.0
+            .run_mobile_plugin("requestNotificationPermission", ())
+            .map_err(crate::Error::from)
+    }
 }
