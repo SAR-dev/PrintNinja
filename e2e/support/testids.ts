@@ -16,6 +16,14 @@ export const testids = {
   authHandle: "auth-handle",
   /** Password field on the sign-in form. */
   authPassword: "auth-password",
+  /** "Forgot your password?" link on the sign-in form. */
+  authForgotPassword: "auth-forgot-password",
+  /** Recovery code field on the password reset form. */
+  authRecoveryCode: "auth-recovery-code",
+  /** A recovery code the server just handed out, shown once. */
+  recoveryCode: "recovery-code",
+  /** "I have saved it" button under a freshly shown recovery code. */
+  recoveryContinue: "recovery-continue",
   /** The application shell once the gate is open. */
   shellApp: "shell-app",
   /** The sync-state chip in the shell (one wrapper, badge inside varies). */

@@ -29,6 +29,12 @@ test("F1 sign up, sign in, case-duplicate, sign out, sign in again", async ({
     .getByRole("button", { name: "New here? Create an account" })
     .click();
   await page.getByRole("button", { name: "Create account" }).click();
+  // The new account's recovery code is shown once; the app opens only
+  // after the person confirms they saved it.
+  await expect(page.getByTestId(testids.recoveryCode)).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.getByTestId(testids.recoveryContinue).click();
   await expect(page.getByTestId(testids.shellApp)).toBeVisible({
     timeout: 15_000,
   });
@@ -73,6 +79,93 @@ test("F1 sign up, sign in, case-duplicate, sign out, sign in again", async ({
   await page.getByTestId(testids.authHandle).fill(handle);
   await page.getByTestId(testids.authPassword).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByTestId(testids.shellApp)).toBeVisible({
+    timeout: 15_000,
+  });
+});
+
+// F2: a forgotten password. Register and read the one-time recovery
+// code, sign out, reset with it, and check the old password and the old
+// code are dead while the new password and the replacement code work.
+test("F2 forgot password: reset with the recovery code", async ({
+  browser,
+}) => {
+  const { apiUrl } = readStackState();
+  const handle = `F2User${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+  const password = "password123";
+  const newPassword = "a-brand-new-password";
+  const codeShape = /^([A-Z2-9]{5}-){3}[A-Z2-9]{5}$/;
+  const seeded = await pc(browser);
+  const page = await seeded.context.newPage();
+  await page.goto("/");
+  await expect(page.getByTestId(testids.signinForm)).toBeVisible({
+    timeout: 15_000,
+  });
+
+  // Register and read the code off the screen.
+  await page.getByTestId(testids.authUrl).fill(apiUrl);
+  await page.getByTestId(testids.authHandle).fill(handle);
+  await page.getByTestId(testids.authPassword).fill(password);
+  await page
+    .getByRole("button", { name: "New here? Create an account" })
+    .click();
+  await page.getByRole("button", { name: "Create account" }).click();
+  const firstCode =
+    (await page.getByTestId(testids.recoveryCode).textContent())?.trim() ?? "";
+  expect(firstCode).toMatch(codeShape);
+  await page.getByTestId(testids.recoveryContinue).click();
+  await expect(page.getByTestId(testids.shellApp)).toBeVisible({
+    timeout: 15_000,
+  });
+
+  // Sign out, then reset the password with the code.
+  await page.getByTestId(testids.topbarProfile).click();
+  await page.getByTestId(testids.profileSignOut).click();
+  await expect(page.getByTestId(testids.signinForm)).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.getByTestId(testids.authForgotPassword).click();
+  await page.getByTestId(testids.authHandle).fill(handle);
+  await page.getByTestId(testids.authRecoveryCode).fill(firstCode);
+  await page.getByTestId(testids.authPassword).fill(newPassword);
+  await page
+    .getByRole("button", { name: "Reset password", exact: true })
+    .click();
+
+  // A replacement code is shown; the reset signs nobody in.
+  await expect(page.getByTestId(testids.recoveryCode)).toBeVisible({
+    timeout: 15_000,
+  });
+  const secondCode =
+    (await page.getByTestId(testids.recoveryCode).textContent())?.trim() ?? "";
+  expect(secondCode).toMatch(codeShape);
+  expect(secondCode).not.toBe(firstCode);
+  await page.getByTestId(testids.recoveryContinue).click();
+  await expect(page.getByTestId(testids.signinForm)).toBeVisible();
+  await expect(page.getByTestId(testids.shellApp)).toHaveCount(0);
+
+  // The first code was single-use: it no longer resets anything.
+  await page.getByTestId(testids.authForgotPassword).click();
+  await page.getByTestId(testids.authHandle).fill(handle);
+  await page.getByTestId(testids.authRecoveryCode).fill(firstCode);
+  await page.getByTestId(testids.authPassword).fill("another-new-password");
+  await page
+    .getByRole("button", { name: "Reset password", exact: true })
+    .click();
+  await expect(page.getByText("Invalid handle or recovery code")).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.getByRole("button", { name: "Back to sign in" }).click();
+
+  // The old password is dead, the new one opens the app.
+  await page.getByTestId(testids.authHandle).fill(handle);
+  await page.getByTestId(testids.authPassword).fill(password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByText("Invalid handle or password")).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.getByTestId(testids.authPassword).fill(newPassword);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByTestId(testids.shellApp)).toBeVisible({
     timeout: 15_000,
   });
