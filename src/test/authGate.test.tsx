@@ -403,6 +403,62 @@ describe("sign-in gate", () => {
     expect(localStorage.getItem("printninja-guest-handle")).toBe("guest-ana");
   });
 
+  it("toggles password visibility on sign in and on register", async () => {
+    renderGate();
+    const field = await screen.findByLabelText("Password");
+    expect(field).toHaveAttribute("type", "password");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+    expect(field).toHaveAttribute("type", "text");
+    // Toggling does not touch what was typed.
+    fireEvent.change(field, { target: { value: "hunter2hunter2" } });
+    expect(field).toHaveValue("hunter2hunter2");
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide password" }));
+    expect(field).toHaveAttribute("type", "password");
+
+    // Switching to register starts hidden again, even if it was left showing.
+    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+    fireEvent.click(screen.getByRole("button", { name: /create an account/i }));
+    const registerField = screen.getByLabelText("Password");
+    expect(registerField).toHaveAttribute("type", "password");
+    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+    expect(registerField).toHaveAttribute("type", "text");
+  });
+
+  it("suggests a random handle as the placeholder on sign in and register", async () => {
+    renderGate();
+    const signInHandle = await screen.findByLabelText("Handle");
+    const suggestion = /^e\.g\. [a-z]+_[a-z]+\d{2}$/;
+    expect(signInHandle.getAttribute("placeholder")).toMatch(suggestion);
+    // It is only a hint: nothing is filled in, and submitting still needs a handle.
+    expect(signInHandle).toHaveValue("");
+
+    fireEvent.click(screen.getByRole("button", { name: /create an account/i }));
+    expect(screen.getByLabelText("Handle").getAttribute("placeholder")).toMatch(
+      suggestion,
+    );
+  });
+
+  it("suggests a random handle as the placeholder for guests", async () => {
+    renderGate();
+    await screen.findByLabelText("Password");
+    fireEvent.click(screen.getByRole("button", { name: "Continue as guest" }));
+    const guestHandle = screen.getByTestId("auth-guest-handle");
+    expect(guestHandle.getAttribute("placeholder")).toMatch(
+      /^e\.g\. [a-z]+_[a-z]+\d{2}$/,
+    );
+    expect(guestHandle).toHaveValue("");
+
+    // The suggestion is stable when going back and forth.
+    const before = guestHandle.getAttribute("placeholder");
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue as guest" }));
+    expect(
+      screen.getByTestId("auth-guest-handle").getAttribute("placeholder"),
+    ).toBe(before);
+  });
+
   it("skips sign-in at startup for a returning guest", async () => {
     localStorage.setItem("printninja-guest-mode", "true");
     renderGate();

@@ -57,7 +57,10 @@ const ja: Translation = {
     server_address_invalid:
       "http:// または https:// から始まる完全なサーバーアドレスを入力してください。",
     handle: "ハンドル",
+    handle_placeholder: "例: {{example}}",
     password: "パスワード",
+    show_password: "パスワードを表示",
+    hide_password: "パスワードを非表示",
     password_hint: "8文字以上で入力してください。",
     handle_invalid: "ハンドルは1〜32文字の英数字、_、- で入力してください。",
     password_short: "パスワードは8文字以上にしてください。",
@@ -70,7 +73,7 @@ const ja: Translation = {
     switch_to_sign_in: "アカウントをお持ちの方はこちら: サインイン",
     continue_as_guest: "ゲストとして続ける",
     guest_handle: "お名前",
-    guest_handle_placeholder: "例: アイシャ",
+    guest_handle_placeholder: "例: {{example}}",
     guest_handle_required: "ゲストとして続けるには名前を入力してください。",
     guest_hint:
       "アカウントなしでWi-Fi経由でPCとペアリングします。サーバーを使うときは設定からいつでもサインインできます。",

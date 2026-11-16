@@ -10,7 +10,9 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { usePrefs } from "@/lib/prefs/PrefsProvider";
+import { randomHandle } from "@/lib/randomHandle";
 import * as share from "@/lib/share/client";
 import { normalizeServiceUrl } from "@/lib/share/session";
 
@@ -41,6 +43,10 @@ export function SignInScreen({
   const [handle, setHandle] = useState("");
   const [password, setPassword] = useState("");
   const [guestHandle, setGuestHandle] = useState("");
+  // Example handles for the placeholders. Picked once per mount so they
+  // don't change while the person types or switches between steps.
+  const [handleExample] = useState(() => randomHandle());
+  const [guestExample] = useState(() => randomHandle());
   // The name field lives on its own step: the sign-in form shows only
   // the entry button, and clicking it swaps the card to ask for the
   // handle before continuing.
@@ -135,7 +141,9 @@ export function SignInScreen({
                   autoCapitalize="none"
                   spellCheck={false}
                   autoFocus
-                  placeholder={t("auth.guest_handle_placeholder")}
+                  placeholder={t("auth.guest_handle_placeholder", {
+                    example: guestExample,
+                  })}
                   value={guestHandle}
                   onChange={(e) => setGuestHandle(e.target.value)}
                   disabled={busy}
@@ -233,6 +241,9 @@ export function SignInScreen({
                 autoCapitalize="none"
                 spellCheck={false}
                 autoFocus={!!initialUrl}
+                placeholder={t("auth.handle_placeholder", {
+                  example: handleExample,
+                })}
                 value={handle}
                 onChange={(e) => setHandle(e.target.value)}
                 disabled={busy}
@@ -241,10 +252,11 @@ export function SignInScreen({
 
             <div className="space-y-1.5">
               <Label htmlFor="auth-password">{t("auth.password")}</Label>
-              <Input
+              <PasswordInput
+                // Remount on mode switch so the field goes back to hidden.
+                key={mode}
                 id="auth-password"
                 data-testid="auth-password"
-                type="password"
                 autoComplete={registering ? "new-password" : "current-password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
