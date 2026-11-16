@@ -147,7 +147,7 @@ fn read_batch(conn: &Connection, batch_id: i64) -> AppResult<BatchSummary> {
 
 /// Creates a batch from existing job rows and wakes the worker that
 /// prints the clones.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn create_batch(
     db: State<DbState>,
     queue: State<PrintQueue>,
