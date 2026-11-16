@@ -348,7 +348,10 @@ mod tests {
 
     #[test]
     fn notify_on_reads_the_stored_mode() {
-        assert_eq!(read_notify_on(&db_with_notify_on(Some("failures"))), "failures");
+        assert_eq!(
+            read_notify_on(&db_with_notify_on(Some("failures"))),
+            "failures"
+        );
         assert_eq!(read_notify_on(&db_with_notify_on(Some("all"))), "all");
         assert_eq!(read_notify_on(&db_with_notify_on(Some("never"))), "never");
     }
