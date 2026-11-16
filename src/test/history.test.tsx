@@ -170,7 +170,9 @@ describe("History page", () => {
     expect(
       invoke.mock.calls.filter((c) => c[0] === "create_batch"),
     ).toHaveLength(0);
-    fireEvent.click(within(dialog).getByRole("button", { name: "Print as batch" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Print as batch" }),
+    );
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("create_batch", { job_ids: [1, 3] }),
     );

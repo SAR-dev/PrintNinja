@@ -12,9 +12,10 @@ describe("NotifyOnSettings", () => {
   it("defaults to notifying on failures only", () => {
     render(<NotifyOnSettings />);
     expect(screen.getByTestId("settings-notify-on")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("settings-notify-on-failures"),
-    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("settings-notify-on-failures")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     expect(screen.getByTestId("settings-notify-on-all")).toHaveAttribute(
       "aria-checked",
       "false",

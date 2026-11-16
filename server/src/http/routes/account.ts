@@ -233,11 +233,10 @@ export async function accountRoutes(
       if (!request.authUser) {
         throw new UnauthorizedError();
       }
-      const page = await listFonts(
-        { fonts: deps.fonts },
-        request.authUser.id,
-        { page: request.query.page, pageSize: request.query.page_size },
-      );
+      const page = await listFonts({ fonts: deps.fonts }, request.authUser.id, {
+        page: request.query.page,
+        pageSize: request.query.page_size,
+      });
       return { ...page, items: page.items.map(toFont) };
     },
   );

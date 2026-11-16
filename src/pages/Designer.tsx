@@ -776,9 +776,7 @@ export function DesignerPage() {
                 page_w_mm: taken.page_w_mm,
                 page_h_mm: taken.page_h_mm,
                 orientation:
-                  taken.page_w_mm > taken.page_h_mm
-                    ? "landscape"
-                    : "portrait",
+                  taken.page_w_mm > taken.page_h_mm ? "landscape" : "portrait",
               }
             : t,
         ),
@@ -1845,7 +1843,7 @@ export function DesignerPage() {
         }
         description={
           t("designer.history_confirm_body") +
-            (dirty ? t("designer.history_confirm_dirty") : "")
+          (dirty ? t("designer.history_confirm_dirty") : "")
         }
         confirmLabel={t("designer.history_restore")}
         cancelLabel={t("common.cancel")}

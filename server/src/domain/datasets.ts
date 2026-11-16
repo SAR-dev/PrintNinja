@@ -194,8 +194,7 @@ export async function listDatasets(
 ): Promise<Page<DatasetView>> {
   const rows = (await repos.datasets.listByOwner(ownerId)).sort(
     (a, b) =>
-      b.updatedAt.getTime() - a.updatedAt.getTime() ||
-      a.id.localeCompare(b.id),
+      b.updatedAt.getTime() - a.updatedAt.getTime() || a.id.localeCompare(b.id),
   );
   const start = (query.page - 1) * query.pageSize;
   return toPage(rows.slice(start, start + query.pageSize), rows.length, query);
