@@ -5,6 +5,14 @@ export type Density = "comfortable" | "compact";
 /** The user's theme choice; "system" resolves against the OS preference. */
 export type Theme = "light" | "dark" | "system";
 
+/**
+ * Whether a finished background print job posts a result notification
+ * (item 41, Android). "failures" — the default — tells you only when a
+ * job failed; "all" tells you every time one finishes; "never" stays
+ * silent.
+ */
+export type NotifyOn = "failures" | "all" | "never";
+
 export const DEFAULT_APP_NAME = "PrintNinja";
 export const MAX_APP_NAME_LENGTH = 40;
 export const MAX_LOGO_BYTES = 256 * 1024;
@@ -20,6 +28,7 @@ export const SETTING_KEYS = {
   theme: "ui_theme",
   appName: "brand_name",
   logo: "brand_logo",
+  notifyOn: "notify_on",
 } as const;
 
 export function parseDensity(value: string | null | undefined): Density {
@@ -29,6 +38,11 @@ export function parseDensity(value: string | null | undefined): Density {
 /** Unknown or empty values fall back to the light default. */
 export function parseTheme(value: string | null | undefined): Theme {
   return value === "dark" || value === "system" ? value : "light";
+}
+
+/** Unknown or empty values fall back to the "failures" default. */
+export function parseNotifyOn(value: string | null | undefined): NotifyOn {
+  return value === "all" || value === "never" ? value : "failures";
 }
 
 /** The concrete theme that goes on <html>: "system" follows the OS. */

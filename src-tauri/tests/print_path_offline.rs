@@ -104,15 +104,17 @@ fn the_renderer_refuses_remote_references() {
 }
 
 /// A reprint replays the HTML stored on the original job, so it needs no
-/// template, no version and no network.
+/// template, no version and no network. The row copy a reprint is defined
+/// once in the batch module (a reprint is the one-job form of a batch
+/// clone), so the guard looks there.
 #[test]
 fn reprint_replays_the_rendered_html_of_the_original_job() {
-    let history = include_str!("../src/commands/history.rs");
+    let batch = include_str!("../src/commands/batch.rs");
     // The implementation, not the `#[tauri::command]` wrapper around it.
-    let start = history
-        .find("fn reprint_job_conn")
-        .expect("reprint_job_conn exists");
-    let body = &history[start..];
+    let start = batch
+        .find("fn clone_job_as_queued")
+        .expect("clone_job_as_queued exists");
+    let body = &batch[start..];
     let end = body[1..].find("\n}").map(|i| i + 1).unwrap_or(body.len());
     let body = &body[..end];
 

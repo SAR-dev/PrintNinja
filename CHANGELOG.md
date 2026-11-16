@@ -16,6 +16,27 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+### Added
+
+- **See and restore template versions.** The designer's History panel
+  lists every version your template has had — manual saves, autosaves
+  and earlier restorations — and brings any of them back with one
+  click. If the server copy has moved on, it asks before overwriting.
+
+- **Print a selection as one batch.** In History, select any jobs and
+  choose "Print as batch": they are re-queued in the order you picked
+  and printed one after another as a single batch.
+
+- **Ask the sync server directly for your library.** Datasets, printer
+  profiles, fonts and account settings can now be read and listed over
+  the API with paging, so tools that integrate with the server no
+  longer need to rebuild everything from the sync stream.
+
+- **Know when a background print finished on Android.** A notification
+  now tells you when a queued print job finishes or fails while the app
+  is in the background — failures only, every job, or never, your
+  choice in Settings → Background — and tapping it opens History.
+
 ### Fixed
 
 - **Deep links now open on the phone.** `printninja://` links from a

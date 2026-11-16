@@ -1,4 +1,4 @@
-import { Plus, Save } from "lucide-react";
+import { History, Plus, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,10 @@ interface Props {
   /** The action running right now, so controls disable while it runs. */
   pending: "save" | "visibility" | null;
   onVisibilityChange: (makePublic: boolean) => void;
+  /** Opens the version history sheet. Offered once the template is on the
+   * server — versions live there, and a read-only saved copy has none to
+   * show (the history is owner-only). */
+  onHistory?: () => void;
 }
 
 /** A thin vertical rule between toolbar groups. */
@@ -76,6 +80,7 @@ export function DesignerToolbar({
   readOnly = false,
   pending,
   onVisibilityChange,
+  onHistory,
 }: Props) {
   const { t } = useTranslation();
   const busy = pending != null;
@@ -227,6 +232,21 @@ export function DesignerToolbar({
         ))}
       {!noTemplate || (layout && onLayoutChange) ? <Divider /> : null}
       <div className="flex items-center gap-2">
+        {/* Versions live on the server, so the entry point needs a remote
+            id; a read-only saved copy's history is owner-only and stays
+            hidden rather than erroring. */}
+        {onHistory && remoteId && !readOnly && !noTemplate && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onHistory}
+            disabled={busy}
+            data-testid="designer-history"
+          >
+            <History className="h-4 w-4" aria-hidden="true" />
+            {t("designer.history")}
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"

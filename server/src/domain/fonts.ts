@@ -9,6 +9,7 @@ import {
   ValidationError,
 } from "./errors.js";
 import type { FontRepository, FontView, UploadedFont } from "./libraryPorts.js";
+import { toPage, type Page } from "./pagination.js";
 
 /**
  * Fonts (REFACTORING.md question 21, answered): private to the owner,
@@ -167,4 +168,37 @@ export async function deleteFont(
     throw new ForbiddenError();
   }
   await repos.fonts.deleteWithTombstone(id);
+}
+
+/** Reads one of the owner's font rows (metadata; the file bytes live
+ * behind GET /v2/fonts/:id/file). Another owner's row is a 403, not a
+ * 404, so existence never leaks. */
+export async function getFont(
+  repos: { fonts: FontRepository },
+  id: string,
+  ownerId: string,
+): Promise<FontView> {
+  const existing = await repos.fonts.findById(id);
+  if (!existing) {
+    throw new NotFoundError();
+  }
+  if (existing.ownerId !== ownerId) {
+    throw new ForbiddenError();
+  }
+  return existing;
+}
+
+/** The owner's font rows, newest change first (id breaks ties), paged. */
+export async function listFonts(
+  repos: { fonts: FontRepository },
+  ownerId: string,
+  query: { page: number; pageSize: number },
+): Promise<Page<FontView>> {
+  const rows = (await repos.fonts.listByOwner(ownerId)).sort(
+    (a, b) =>
+      b.updatedAt.getTime() - a.updatedAt.getTime() ||
+      a.id.localeCompare(b.id),
+  );
+  const start = (query.page - 1) * query.pageSize;
+  return toPage(rows.slice(start, start + query.pageSize), rows.length, query);
 }

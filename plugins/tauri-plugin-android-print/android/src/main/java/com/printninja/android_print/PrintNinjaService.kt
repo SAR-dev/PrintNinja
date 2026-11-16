@@ -1,6 +1,7 @@
 package com.printninja.android_print
 
 import android.app.Activity
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,7 +9,9 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -156,11 +159,17 @@ class PrintNinjaService : Service() {
     companion object {
         const val CHANNEL_ID = "printninja-print-service"
         const val NOTIFICATION_ID = 1
+        /** One-shot job-result notifications (item 41): their own channel
+         *  so the user can silence results without killing the service. */
+        const val JOB_CHANNEL_ID = "printninja-print-jobs"
+        /** One slot: the newest result replaces the previous one. */
+        const val JOB_NOTIFICATION_ID = 2
         const val ACTION_STOP = "com.printninja.android_print.STOP_SERVICE"
         const val ACTION_CLOSE = "com.printninja.android_print.CLOSE_APP"
         private const val REQUEST_OPEN = 1
         private const val REQUEST_OPEN_ACTION = 3
         private const val REQUEST_CLOSE = 4
+        private const val REQUEST_OPEN_HISTORY = 5
         private const val CLOSE_DELAY_MS = 300L
 
         /** The app's activity, so Close can finish it. Weak: never leaks it. */
@@ -253,6 +262,68 @@ class PrintNinjaService : Service() {
         }
 
         /**
+         * Title and body for the one-shot job-result notification
+         * (item 41). `kind` is "success" or "failure", `subject` the
+         * job's name (its template) and `detail` the failure's reason.
+         * Split out so the contract test can pin the wording without an
+         * Android [Context], like [notificationText].
+         */
+        fun jobNotificationText(
+            kind: String,
+            subject: String?,
+            detail: String?,
+        ): Pair<String, String> =
+            if (kind == "success") {
+                "Print finished" to
+                    (subject?.let { "$it was printed." } ?: "Your print job finished.")
+            } else {
+                "Print failed" to when {
+                    subject != null && detail != null -> "$subject: $detail"
+                    subject != null -> "$subject could not be printed."
+                    detail != null -> detail
+                    else -> "A print job failed. Open History for details."
+                }
+            }
+
+        /**
+         * Posts the one-shot notification for one finished background
+         * print job (item 41). Unlike the pinned service notification it
+         * is dismissible, and tapping it opens History through the app's
+         * own `printninja://` deep link. The worker calls it after every
+         * queued job; the `notify_on` setting decides whether a call
+         * happens at all. Best-effort by contract: a denied notification
+         * permission or a channel failure degrades to silence, never to
+         * a crash in the worker.
+         */
+        fun postJobNotification(
+            context: Context,
+            kind: String,
+            subject: String?,
+            detail: String?,
+        ) {
+            try {
+                if (Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS,
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) return
+                ensureJobChannel(context)
+                val manager =
+                    context.getSystemService(NotificationManager::class.java) ?: return
+                manager.notify(
+                    JOB_NOTIFICATION_ID,
+                    buildJobNotification(context, kind, subject, detail),
+                )
+            } catch (e: Exception) {
+                android.util.Log.w(
+                    "PrintNinjaService",
+                    "could not post job notification: ${e.message}",
+                )
+            }
+        }
+
+        /**
          * Title and body for the pinned notification: the live API
          * address while the server runs, the print-queue text while the
          * worker runs, and an honest "paused" text when Android
@@ -327,6 +398,55 @@ class PrintNinjaService : Service() {
                     },
                 )
             }
+        }
+
+        private fun ensureJobChannel(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val manager = context.getSystemService(NotificationManager::class.java)
+            if (manager.getNotificationChannel(JOB_CHANNEL_ID) == null) {
+                manager.createNotificationChannel(
+                    NotificationChannel(
+                        JOB_CHANNEL_ID,
+                        "Print results",
+                        // default, not LOW: a failure should be heard,
+                        // unlike the ambient service badge.
+                        NotificationManager.IMPORTANCE_DEFAULT,
+                    ).apply {
+                        description = "A print job in the queue finished or failed."
+                    },
+                )
+            }
+        }
+
+        private fun buildJobNotification(
+            context: Context,
+            kind: String,
+            subject: String?,
+            detail: String?,
+        ): Notification {
+            // Tapping opens History (solution d of the item): the app's
+            // own deep link, handled exactly like an external one.
+            val open = PendingIntent.getActivity(
+                context, REQUEST_OPEN_HISTORY,
+                Intent(Intent.ACTION_VIEW, Uri.parse("printninja://open/history")),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val (title, text) = jobNotificationText(kind, subject, detail)
+            return NotificationCompat.Builder(context, JOB_CHANNEL_ID)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                .setSmallIcon(context.applicationInfo.icon)
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .setCategory(
+                    if (kind == "success") {
+                        NotificationCompat.CATEGORY_STATUS
+                    } else {
+                        NotificationCompat.CATEGORY_ERROR
+                    },
+                )
+                .build()
         }
 
         private fun buildNotification(context: Context): Notification {

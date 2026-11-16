@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pageSchema } from "./templates.js";
 
 export const uuidParams = z.object({
   id: z.string().uuid(),
@@ -39,3 +40,6 @@ export const profileSchema = z.object({
   /** Format: date-time */
   updated_at: z.string().datetime(),
 });
+
+export const datasetPageSchema = pageSchema(datasetSchema);
+export const profilePageSchema = pageSchema(profileSchema);

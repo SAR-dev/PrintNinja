@@ -16,11 +16,14 @@
 //! duplicate labels, so the person decides with a retry.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+use tauri::AppHandle;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
+
+use tauri_plugin_android_print::{AndroidPrintExt, JobNotificationRequest};
 
 use crate::commands::print::{run_claimed_job, JobRenderer};
 use crate::db::DbState;
@@ -43,6 +46,10 @@ pub struct Worker {
     queue: PrintQueue,
     cache_dir: PathBuf,
     in_flight: Arc<Semaphore>,
+    /// The app's handle, set by [`spawn`] so a finished job can post its
+    /// result notification (item 41). Empty in tests that build a worker
+    /// directly — the notification hook simply no-ops then.
+    app: Arc<OnceLock<AppHandle>>,
 }
 
 impl Worker {
@@ -52,6 +59,7 @@ impl Worker {
             queue,
             cache_dir,
             in_flight: Arc::new(Semaphore::new(MAX_IN_FLIGHT)),
+            app: Arc::new(OnceLock::new()),
         })
     }
 
@@ -111,6 +119,10 @@ impl Worker {
                 if let Some(batch_id) = batch_of(&worker.db, job_id) {
                     let _ = update_batch_progress(&worker.db, batch_id);
                 }
+                // Item 41: the finished job tells the user in the
+                // notification shade (best-effort; `notify_on` decides
+                // whether anything is posted at all).
+                notify_job_finished(&worker, job_id);
             });
             claimed += 1;
         }
@@ -142,8 +154,11 @@ impl Worker {
 
 /// Spawn the production worker: fail rows a dead process left running, then
 /// consume the queue for the life of the app.
-pub fn spawn(db: DbState, queue: PrintQueue, cache_dir: PathBuf) {
+pub fn spawn(app: AppHandle, db: DbState, queue: PrintQueue, cache_dir: PathBuf) {
     let worker = Worker::new(db, queue, cache_dir);
+    // The finished-job notification (item 41) needs the app handle; set it
+    // before the first drain so no job can finish without a way to tell.
+    let _ = worker.app.set(app);
     tauri::async_runtime::spawn(async move {
         match worker.recover_interrupted() {
             Ok(0) => {}
@@ -225,6 +240,138 @@ fn batch_of(db: &DbState, job_id: i64) -> Option<i64> {
         )
         .ok()
         .flatten()
+}
+
+/// Post the one-shot result notification for a finished job (item 41).
+///
+/// The `print_jobs` row plus its template name is the payload; the
+/// `notify_on` setting decides whether anything is posted at all
+/// (`"failures"` — the default — posts only failures, `"all"` posts both,
+/// `"never"` nothing). Best-effort by contract: any problem here is logged
+/// at debug level and never surfaces — a notification must not be able to
+/// disturb the queue.
+fn notify_job_finished(worker: &Worker, job_id: i64) {
+    let Some(app) = worker.app.get() else {
+        return; // no app handle: tests and the pre-spawn window
+    };
+    let Some(guard) = worker.db.lock().ok() else {
+        return;
+    };
+    let row: Option<(String, Option<String>, Option<String>)> = guard
+        .connection()
+        .query_row(
+            "SELECT j.status, t.name, j.error
+             FROM print_jobs j
+             LEFT JOIN templates t ON t.id = j.template_id
+             WHERE j.id = ?1",
+            [job_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .ok();
+    drop(guard);
+    let Some((status, subject, error)) = row else {
+        return;
+    };
+    if status == "cancelled" {
+        return; // the user chose to stop it; that is not a result
+    }
+    let failed = status == "failed";
+    let mode = read_notify_on(&worker.db);
+    if failed && mode == "never" {
+        return;
+    }
+    if !failed && mode != "all" {
+        return;
+    }
+    let request = JobNotificationRequest {
+        kind: if failed { "failure" } else { "success" }.to_string(),
+        subject,
+        detail: failed.then_some(error).flatten(),
+    };
+    if let Err(e) = app.android_print().post_job_notification(request) {
+        tracing::debug!(job_id, error = %e, "job result notification not posted");
+    }
+}
+
+/// The `notify_on` setting: `"failures"` (the default) posts only
+/// failures, `"all"` posts every finished job, `"never"` posts nothing.
+/// Anything unreadable or unknown reads as the default.
+fn read_notify_on(db: &DbState) -> &'static str {
+    let value: Option<String> = match db.lock().ok() {
+        Some(guard) => guard
+            .connection()
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'notify_on'",
+                [],
+                |r| r.get(0),
+            )
+            .ok(),
+        None => return "failures",
+    };
+    match value.as_deref() {
+        Some("all") => "all",
+        Some("never") => "never",
+        _ => "failures",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    fn db_with_notify_on(value: Option<&str>) -> DbState {
+        let database = crate::db::Database::open("sqlite::memory:").expect("db");
+        let state = Arc::new(Mutex::new(database));
+        if let Some(v) = value {
+            state
+                .lock()
+                .unwrap()
+                .connection()
+                .execute(
+                    "INSERT INTO settings (key, value) VALUES ('notify_on', ?1)",
+                    [v],
+                )
+                .unwrap();
+        }
+        state
+    }
+
+    #[test]
+    fn notify_on_defaults_to_failures_when_unstored_or_unknown() {
+        assert_eq!(read_notify_on(&db_with_notify_on(None)), "failures");
+        assert_eq!(
+            read_notify_on(&db_with_notify_on(Some("bogus"))),
+            "failures"
+        );
+    }
+
+    #[test]
+    fn notify_on_reads_the_stored_mode() {
+        assert_eq!(read_notify_on(&db_with_notify_on(Some("failures"))), "failures");
+        assert_eq!(read_notify_on(&db_with_notify_on(Some("all"))), "all");
+        assert_eq!(read_notify_on(&db_with_notify_on(Some("never"))), "never");
+    }
+
+    #[test]
+    fn a_worker_without_an_app_handle_notifies_nothing() {
+        // No app handle was ever set: the hook is a no-op, even for a
+        // row that exists and wants notifying.
+        let db = db_with_notify_on(Some("all"));
+        {
+            let guard = db.lock().unwrap();
+            guard
+                .connection()
+                .execute(
+                    "INSERT INTO print_jobs (id, status, error) VALUES (1, 'failed', 'x')",
+                    [],
+                )
+                .unwrap();
+        }
+        let worker = Worker::new(db, crate::queue::PrintQueue::new(), PathBuf::from("."));
+        // Must not panic and must not block: there is no way to notify.
+        notify_job_finished(&worker, 1);
+    }
 }
 
 /// Move a batch's counters and end state with the jobs that finished.

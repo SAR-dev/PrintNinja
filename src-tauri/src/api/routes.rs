@@ -120,6 +120,7 @@ pub fn router_with_state(
         .route("/v1/jobs", get(list_jobs))
         .route("/v1/jobs/{id}", get(get_job).delete(cancel_job))
         .route("/v1/jobs/{id}/retry", post(retry_job))
+        .route("/v1/batches", post(create_batch))
         .route("/v1/metrics", get(metrics))
         .route("/v1/metrics/prometheus", get(metrics_prometheus))
         .route("/v1/openapi.json", get(openapi))
@@ -1126,6 +1127,33 @@ async fn retry_job(
 
     Ok(Json(
         json!({ "job_id": id.to_string(), "status": "queued" }),
+    ))
+}
+
+#[derive(Deserialize)]
+struct BatchRequest {
+    job_ids: Vec<i64>,
+}
+
+/// Group existing jobs into one batch: one `batches` row, each job
+/// cloned into it as a `queued` row, then the worker prints them one by
+/// one (item 18). `201` with the batch row; `404` when any job id is
+/// missing, `400` for an empty list.
+async fn create_batch(
+    State(state): State<ApiState>,
+    Json(req): Json<BatchRequest>,
+) -> Result<(StatusCode, Json<Value>), ApiRejection> {
+    let summary = {
+        let guard = state.db.lock().map_err(ApiRejection::from)?;
+        crate::commands::batch::create_batch_conn(guard.connection(), &req.job_ids)?
+    };
+
+    // Every clone is a `queued` row; wake the worker that prints them.
+    state.queue.kick();
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::to_value(&summary).unwrap()),
     ))
 }
 

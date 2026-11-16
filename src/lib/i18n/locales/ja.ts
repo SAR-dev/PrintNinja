@@ -273,6 +273,28 @@ const ja: Translation = {
       "コミュニティから保存したコピーの公開設定は変更できません。",
     reason_unsaved_visibility: "公開するには、先に保存してください。",
     only_local: "このコンピューターのみ",
+    history: "履歴",
+    history_title: "バージョン履歴",
+    history_description:
+      "このテンプレートの保存済みコピーを新しい順に表示します。復元すると、古いコピーが新しいバージョンとして書き戻されます。",
+    history_version: "バージョン {{n}}",
+    history_current: "現在",
+    history_by_manual: "手動保存",
+    history_by_autosave: "自動保存",
+    history_by_restore: "復元",
+    history_restore: "復元",
+    history_restored: "バージョン {{n}} を復元しました",
+    history_empty:
+      "バージョンはまだありません。サーバーに保存すると表示されます。",
+    history_only_local:
+      "先にテンプレートを保存してください。バージョン履歴はサーバーに保存されます。",
+    history_loading: "バージョンを読み込み中…",
+    history_retry: "再試行",
+    history_load_more: "古いバージョンを読み込む",
+    history_confirm_title: "バージョン {{n}} を復元しますか？",
+    history_confirm_body:
+      "テンプレートの本文と CSS がそのバージョンのコピーに置き換わり、新しいバージョンとしてサーバーに保存されます。",
+    history_confirm_dirty: "保存していない変更は破棄されます。",
     visibility_public: "公開",
     visibility_private: "非公開",
     visibility_toggle: "テンプレートの公開設定: {{state}}",
@@ -763,6 +785,11 @@ const ja: Translation = {
     source_batch: "バッチ",
     source_test: "テスト",
     all_jobs: "すべてのジョブ",
+    bulk_batch: "バッチとして印刷",
+    bulk_batch_body:
+      "選択した各ジョブが選択順で1つのバッチとして再キューに追加され、1枚ずつ印刷されます。",
+    bulk_batch_done: "バッチ #{{id}} を作成しました — {{count}}件をキューに追加",
+    bulk_batch_title: "{{count}}件のジョブを1つのバッチとして印刷しますか？",
     bulk_clear: "選択を解除",
     bulk_done: "{{count}}件のジョブを{{verb}}",
     bulk_partial: "{{count}}件のジョブを{{verb}}。{{failed}}件は失敗しました。",
@@ -821,6 +848,7 @@ const ja: Translation = {
     selected_count: "{{count}}件を選択中",
     settings_title: "設定",
     source_url: "送信元URL",
+    toast_batch_failed: "バッチを作成できませんでした: {{error}}",
     toast_delete_failed: "ジョブ #{{id}} を削除できませんでした: {{error}}",
     toast_exported: "{{count}}件のジョブをエクスポートしました",
     toast_nothing: "エクスポートするものがありません",
@@ -952,6 +980,18 @@ const ja: Translation = {
     background_working: "処理しています…",
     background_request: "除外をリクエスト",
     background_refresh: "状態を更新",
+    notify_on: "印刷結果の通知",
+    notify_on_failures: "失敗時のみ",
+    notify_on_failures_hint:
+      "バックグラウンドの印刷ジョブが失敗したときに知らせます。",
+    notify_on_all: "完了するたびに",
+    notify_on_all_hint:
+      "バックグラウンドの印刷ジョブが完了したときに、成功・失敗のいずれでも知らせます。",
+    notify_on_never: "通知しない",
+    notify_on_never_hint:
+      "通知を出さず、結果は履歴で確認します。",
+    notify_on_note:
+      "アプリがバックグラウンドのときに印刷キューが実行したジョブに適用されます。通知をタップすると履歴が開きます。",
     change_password_title: "パスワードを変更",
     change_password_current: "現在のパスワード",
     change_password_new: "新しいパスワード",

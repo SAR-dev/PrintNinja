@@ -8,6 +8,7 @@ import {
   Clock,
   Download,
   Eye,
+  Layers,
   Loader2,
   type LucideIcon,
   MoreHorizontal,
@@ -135,6 +136,7 @@ export function HistoryPage() {
   const [confirm, setConfirm] = useState<
     | { kind: "bulk-reprint" }
     | { kind: "bulk-retry" }
+    | { kind: "bulk-batch" }
     | { kind: "reprint"; job: HistoryJob }
     | { kind: "retry"; job: HistoryJob }
     | { kind: "delete"; job: HistoryJob }
@@ -312,6 +314,28 @@ export function HistoryPage() {
         }),
       );
     setSelected(new Set());
+  };
+
+  // Group the selection into one batch: the backend clones each job into
+  // the batch as a queued row (item 18), so the list re-fetch is how the
+  // new rows appear.
+  const runBatch = async () => {
+    const jobIds = selectedJobs.map((j) => j.id);
+    setBusy(true);
+    try {
+      const batch = await agent("create_batch", { job_ids: jobIds });
+      const jobs = await agent("list_jobs", {});
+      useHistoryStore.getState().setJobs(jobs ?? []);
+      setConfirm(null);
+      notifySuccess(
+        t("history.bulk_batch_done", { id: batch.id, count: batch.total }),
+      );
+    } catch (e) {
+      notifyError(t("history.toast_batch_failed", { error: describeError(e) }));
+    } finally {
+      setBusy(false);
+      setSelected(new Set());
+    }
   };
 
   const confirmDelete = async (job: HistoryJob) => {
@@ -1097,6 +1121,14 @@ export function HistoryPage() {
           </Button>
           <Button
             size="sm"
+            variant="outline"
+            onClick={() => setConfirm({ kind: "bulk-batch" })}
+          >
+            <Layers className="h-4 w-4" aria-hidden="true" />
+            {t("history.bulk_batch")}
+          </Button>
+          <Button
+            size="sm"
             variant="ghost"
             onClick={() => setSelected(new Set())}
           >
@@ -1148,6 +1180,15 @@ export function HistoryPage() {
         onConfirm={() =>
           runBulk(retryOne, selectedFailed, "history.bulk_verb_retry")
         }
+      />
+      <ConfirmDialog
+        open={confirm?.kind === "bulk-batch"}
+        onOpenChange={(o) => !o && setConfirm(null)}
+        title={t("history.bulk_batch_title", { count: selectedJobs.length })}
+        description={t("history.bulk_batch_body")}
+        confirmLabel={t("history.bulk_batch")}
+        busy={busy}
+        onConfirm={runBatch}
       />
       <ConfirmDialog
         open={confirm?.kind === "reprint"}

@@ -72,6 +72,18 @@ beforeEach(() => {
       ];
     if (cmd === "reprint_job") return job({ id: 100 + args.id });
     if (cmd === "retry_job") return job({ id: args.id, status: "queued" });
+    if (cmd === "create_batch")
+      return {
+        id: 500,
+        template_id: 3,
+        printer_id: 1,
+        total: args.job_ids.length,
+        done: 0,
+        failed: 0,
+        mode: "per_record",
+        status: "queued",
+        created_at: "2026-01-02 10:00:00",
+      };
     if (cmd === "delete_job") return null;
     return null;
   });
@@ -140,6 +152,27 @@ describe("History page", () => {
       expect(
         invoke.mock.calls.filter((c) => c[0] === "reprint_job"),
       ).toHaveLength(2),
+    );
+  });
+
+  it("asks before batching a selection, then groups it and refetches the list", async () => {
+    renderPage();
+    await screen.findByText("#2");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select row 1" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select row 3" }));
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Print as batch/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText("Print 2 job(s) as one batch?"),
+    ).toBeInTheDocument();
+    // Nothing sent until confirmed.
+    expect(
+      invoke.mock.calls.filter((c) => c[0] === "create_batch"),
+    ).toHaveLength(0);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Print as batch" }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("create_batch", { job_ids: [1, 3] }),
     );
   });
 
