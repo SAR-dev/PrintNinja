@@ -303,6 +303,19 @@ impl<R: Runtime> AndroidPrint<R> {
             .map_err(Into::into)
     }
 
+    /// Post the one-shot result notification for one finished
+    /// background print job (item 41). The Kotlin side is best-effort —
+    /// a denied notification permission resolves empty — so this only
+    /// errors when the plugin round trip itself fails.
+    pub fn post_job_notification(
+        &self,
+        request: JobNotificationRequest,
+    ) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin("postJobNotification", request)
+            .map_err(Into::into)
+    }
+
     pub fn request_battery_exemption(&self) -> crate::Result<bool> {
         let res: GrantedResponse = self
             .0

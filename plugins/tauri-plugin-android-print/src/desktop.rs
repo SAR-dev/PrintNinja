@@ -53,6 +53,16 @@ impl<R: Runtime> AndroidPrint<R> {
         Ok(())
     }
 
+    /// Desktop has no notification shade; the job's outcome is simply
+    /// dropped so the caller (which is platform-agnostic) succeeds
+    /// everywhere, like the API server state.
+    pub fn post_job_notification(
+        &self,
+        _request: JobNotificationRequest,
+    ) -> crate::Result<()> {
+        Ok(())
+    }
+
     pub fn open_bluetooth_settings(&self) -> crate::Result<()> {
         self.unavailable("openBluetoothSettings")
     }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pageSchema } from "./templates.js";
 
 export const settingKeyParams = z.object({
   key: z.string().min(1).max(64),
@@ -37,3 +38,6 @@ export const fontSchema = z.object({
   /** Format: date-time */
   updated_at: z.string().datetime(),
 });
+
+export const settingPageSchema = pageSchema(settingSchema);
+export const fontPageSchema = pageSchema(fontSchema);

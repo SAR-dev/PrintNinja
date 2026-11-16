@@ -9,6 +9,7 @@ import {
   AndroidBackgroundControls,
   isAndroidBackground,
 } from "@/components/BackgroundAndroid";
+import { NotifyOnSettings } from "@/components/NotifyOnSettings";
 import { parseSection, type SettingsSection } from "@/lib/setup/checklist";
 import { agent } from "@/lib/agent/commands";
 import { useFlashField } from "@/lib/hooks/useFlashField";
@@ -1071,6 +1072,10 @@ export function SettingsPage() {
                       )}
                     </CardContent>
                   </Card>
+                  {/* Item 41: when finished background jobs notify.
+                      Android-only — the desktop has no notification
+                      shade, so the setting would never apply. */}
+                  {isAndroidBackground() && <NotifyOnSettings />}
                 </TabsContent>
 
                 <TabsContent value="share" className="mt-0 space-y-4">

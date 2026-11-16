@@ -457,6 +457,15 @@ class ApiServerStateArgs {
     var address: String? = null
 }
 
+/** One finished background print job, for the one-shot result
+ *  notification (item 41; see PrintNinjaService). */
+@InvokeArg
+class JobNotificationArgs {
+    var kind: String? = null
+    var subject: String? = null
+    var detail: String? = null
+}
+
 @TauriPlugin
 class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
     private val tag = TAG
@@ -1861,6 +1870,30 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
         // Ask when the server starts, so the prompt has context. Off the
         // calling thread: it waits for the user's answer.
         if (args.running) ioPool.execute { ensureNotificationPermission() }
+    }
+
+    /**
+     * Posts the one-shot result notification for one finished
+     * background print job (item 41). The worker calls this after every
+     * queued job; the `notify_on` setting decides whether a call happens
+     * at all. Best-effort by contract: a denied permission resolves
+     * empty, never errors.
+     */
+    @Command
+    fun postJobNotification(invoke: Invoke) {
+        val args = invoke.parseArgs(JobNotificationArgs::class.java)
+        // `kind` names the result ("success" or "failure"); a call without
+        // one is a no-op, like every other failure on this best-effort
+        // path.
+        args.kind?.let { kind ->
+            PrintNinjaService.postJobNotification(
+                activity,
+                kind,
+                args.subject,
+                args.detail,
+            )
+        }
+        invoke.resolve()
     }
 
     private fun grantedNotifications(): Boolean =

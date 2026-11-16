@@ -1,9 +1,11 @@
 import {
   ForbiddenError,
+  NotFoundError,
   PayloadTooLargeError,
   ValidationError,
 } from "./errors.js";
 import type { SettingRepository, SettingView } from "./libraryPorts.js";
+import { toPage, type Page } from "./pagination.js";
 
 /** Mirror the schema char cap in bytes. */
 export const SETTING_VALUE_MAX_BYTES = 65_536;
@@ -82,4 +84,37 @@ export async function deleteSetting(
     throw new ForbiddenError();
   }
   await repos.settings.deleteWithTombstone(ownerId, key);
+}
+
+/** Reads one of the owner's account preferences. An unknown key is a
+ * 400 like on write (it can never be stored); a known key the owner has
+ * not set is a 404. */
+export async function getSetting(
+  repos: { settings: SettingRepository },
+  ownerId: string,
+  key: string,
+): Promise<SettingView> {
+  if (!isAllowedSettingKey(key)) {
+    throw new ValidationError(`Unknown setting '${key}'`, [
+      { path: "key", message: "Not an account preference" },
+    ]);
+  }
+  const view = await repos.settings.findByKey(ownerId, key);
+  if (!view) {
+    throw new NotFoundError();
+  }
+  return view;
+}
+
+/** The owner's account preferences, by key, paged. */
+export async function listSettings(
+  repos: { settings: SettingRepository },
+  ownerId: string,
+  query: { page: number; pageSize: number },
+): Promise<Page<SettingView>> {
+  const rows = (await repos.settings.listByOwner(ownerId)).sort((a, b) =>
+    a.key.localeCompare(b.key),
+  );
+  const start = (query.page - 1) * query.pageSize;
+  return toPage(rows.slice(start, start + query.pageSize), rows.length, query);
 }

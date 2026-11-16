@@ -12,6 +12,7 @@ import type {
   ProfileView,
   ProfileWrite,
 } from "./libraryPorts.js";
+import { toPage, type Page } from "./pagination.js";
 
 /** Mirror the schema char caps in bytes: multibyte input must not pass. */
 export const PRINTER_NAME_MAX_BYTES = 100;
@@ -149,4 +150,35 @@ export async function deleteProfile(
     throw new ForbiddenError();
   }
   await repos.profiles.deleteWithTombstone(id);
+}
+
+/** Reads one of the owner's printer profiles. Another owner's row is a
+ * 403, not a 404, so existence never leaks. */
+export async function getProfile(
+  repos: { profiles: ProfileRepository },
+  id: string,
+  ownerId: string,
+): Promise<ProfileView> {
+  const existing = await repos.profiles.findById(id);
+  if (!existing) {
+    throw new NotFoundError();
+  }
+  if (existing.ownerId !== ownerId) {
+    throw new ForbiddenError();
+  }
+  return existing;
+}
+
+/** The owner's profiles, newest change first (id breaks ties), paged. */
+export async function listProfiles(
+  repos: { profiles: ProfileRepository },
+  ownerId: string,
+  query: { page: number; pageSize: number },
+): Promise<Page<ProfileView>> {
+  const rows = (await repos.profiles.listByOwner(ownerId)).sort(
+    (a, b) =>
+      b.updatedAt.getTime() - a.updatedAt.getTime() || a.id.localeCompare(b.id),
+  );
+  const start = (query.page - 1) * query.pageSize;
+  return toPage(rows.slice(start, start + query.pageSize), rows.length, query);
 }
