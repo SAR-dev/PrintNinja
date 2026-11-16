@@ -123,9 +123,9 @@ Phones are small, but Android makes every thermal printer language itself — ES
 
 **Pair a phone with a PC**
 
-1. On the PC, open **Automation → Phones** and turn sharing on. One switch does everything, including starting the local server.
+1. On the PC, open **Devices** and turn sharing on. One switch does everything, including starting the local server.
 2. The PC shows an 8-character code. It expires after about 90 seconds; ask for a new one if it runs out.
-3. On the phone, open **Automation → PC** (the same tab, named for what you pair with) and type the code. The phone finds the PC on its own (an mDNS scan of the LAN, shown as **Nearby PCs**), or you can type the PC's address.
+3. On the phone, open **Connect to PC** (the phone name of the same Devices page) and type the code. The phone finds the PC on its own (an mDNS scan of the LAN, shown as **Nearby PCs**), or you can type the PC's address.
 4. Both devices must be signed in to the same account on the same server.
 
 **Let someone borrow your PC without an account.** On the PC, choose **Invite guest** and pick how long the invite lasts (24 hours by default), how many times it can be used, and whether the guest may print or only render. The guest enters a name, taps **Continue as guest** on the sign-in screen and types the code. Guests can use templates by name, but can never read or change them.
