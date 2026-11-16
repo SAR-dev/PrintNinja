@@ -4,19 +4,26 @@ import { z } from "zod";
 import {
   handleKey,
   changePassword,
+  listUserSessions,
   loginUser,
   logoutUser,
   registerUser,
   revokeOtherSessions,
+  revokeSession,
 } from "../../domain/auth/index.js";
 import type { AuthDeps } from "../../domain/ports.js";
-import { UnauthorizedError } from "../../domain/errors.js";
-import { toAuthResponse, toUserResponse } from "../mappers.js";
+import { NotFoundError, UnauthorizedError } from "../../domain/errors.js";
+import {
+  toAuthResponse,
+  toSessionResponse,
+  toUserResponse,
+} from "../mappers.js";
 import { bearerToken, requireAuth } from "../plugins/auth.js";
 import {
   authCredentials,
   authResponse,
   changePasswordBody,
+  sessionListResponse,
   userSchema,
 } from "../schemas/auth.js";
 import { errorBody } from "../schemas/error.js";
@@ -36,6 +43,13 @@ export interface AuthRouteOptions {
  * spray every account. The limiter runs at preHandler so the body is
  * parsed — validation failures (400) never consume the budget.
  */
+
+/** The User-Agent behind a sign-in, for the session's device label. */
+function userAgentOf(request: FastifyRequest): string | undefined {
+  const value = request.headers["user-agent"];
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export async function authRoutes(
   app: FastifyInstance,
   options: AuthRouteOptions,
@@ -72,7 +86,9 @@ export async function authRoutes(
       },
     },
     async (request, reply) => {
-      const result = await registerUser(deps, request.body);
+      const result = await registerUser(deps, request.body, {
+        userAgent: userAgentOf(request),
+      });
       // Tokens must never sit in a cache.
       return reply
         .header("Cache-Control", "no-store")
@@ -97,7 +113,9 @@ export async function authRoutes(
       },
     },
     async (request, reply) => {
-      const result = await loginUser(deps, request.body);
+      const result = await loginUser(deps, request.body, {
+        userAgent: userAgentOf(request),
+      });
       // Tokens must never sit in a cache.
       return reply
         .header("Cache-Control", "no-store")
@@ -151,6 +169,69 @@ export async function authRoutes(
         bearerToken(request),
       );
       return reply.header("Cache-Control", "no-store").send({ revoked });
+    },
+  );
+
+  typed.get(
+    "/v2/auth/sessions",
+    {
+      preHandler: [requireAuth(deps)],
+      schema: {
+        description:
+          "List the account's signed-in sessions, most recently used first. The calling session is marked current.",
+        response: {
+          200: sessionListResponse,
+          401: errorBody,
+          429: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!request.authUser || !request.authSessionId) {
+        throw new UnauthorizedError();
+      }
+      const sessions = await listUserSessions(
+        deps,
+        request.authUser.id,
+        request.authSessionId,
+      );
+      return reply
+        .header("Cache-Control", "no-store")
+        .send({ items: sessions.map(toSessionResponse) });
+    },
+  );
+
+  typed.delete(
+    "/v2/auth/sessions/:id",
+    {
+      preHandler: [requireAuth(deps)],
+      schema: {
+        description:
+          "End one session by id (a lost device). Unknown or foreign ids answer 404; revoking the calling session works like a logout.",
+        params: z.object({ id: z.string().min(1).max(100) }),
+        response: {
+          200: z.object({ revoked: z.number() }),
+          401: errorBody,
+          404: errorBody,
+          429: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!request.authUser) {
+        throw new UnauthorizedError();
+      }
+      const revoked = await revokeSession(
+        deps,
+        request.authUser.id,
+        request.params.id,
+      );
+      if (!revoked) {
+        // Missing or another account's: indistinguishable, so ids
+        // cannot be probed across accounts.
+        throw new NotFoundError();
+      }
+      return reply.header("Cache-Control", "no-store").send({ revoked: 1 });
     },
   );
 

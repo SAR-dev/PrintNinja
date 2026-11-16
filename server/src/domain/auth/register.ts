@@ -1,6 +1,6 @@
 import { HandleTakenError } from "../errors.js";
 import type { AuthDeps, UserRecord } from "../ports.js";
-import { MAX_SESSIONS_PER_USER } from "./session.js";
+import { deviceLabelFromUserAgent, MAX_SESSIONS_PER_USER } from "./session.js";
 import { assertValidHandle, assertValidPassword, handleKey } from "./shared.js";
 
 export interface RegisterInput {
@@ -24,6 +24,7 @@ export interface RegisterResult {
 export async function registerUser(
   deps: AuthDeps,
   input: RegisterInput,
+  context?: { userAgent?: string },
 ): Promise<RegisterResult> {
   assertValidHandle("handle", input.handle);
   assertValidPassword("password", input.password);
@@ -50,7 +51,12 @@ export async function registerUser(
   const expiresAt = new Date(
     deps.clock.now().getTime() + deps.sessionTtlDays * 86_400_000,
   );
-  await deps.sessions.create({ tokenHash, userId: user.id, expiresAt });
+  await deps.sessions.create({
+    tokenHash,
+    userId: user.id,
+    expiresAt,
+    deviceLabel: deviceLabelFromUserAgent(context?.userAgent),
+  });
   await deps.sessions.deleteOldestForUser(user.id, MAX_SESSIONS_PER_USER);
 
   return { user, token, expiresAt };

@@ -16,6 +16,41 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+### Fixed
+
+- **Deep links now open on the phone.** `printninja://` links from a
+  browser or another app now open the app on Android — opening a page,
+  a template, or a pre-filled Print screen — the same as they already
+  did on the desktop.
+
+## [2026.1115.0] - 2026-11-15
+
+### Added
+
+- **See and end your signed-in devices.** Settings → Profile now lists
+  every signed-in session with its device and last use, and lets you end
+  one — a lost laptop, say — without signing out your other devices.
+
+### Changed
+
+- **Only PDF needs a paired PC.** The README and the Android printer
+  hint no longer imply CPCL and raster need a computer — they print on
+  the phone too (still listed as not offered yet), so nobody pairs a PC
+  they don't need.
+- **Template history is kept to the newest 100 saved versions per
+  template** (autosaves were already kept to 50), and accounts get
+  limits of 1,000 templates, 500 sample datasets and 500 printer
+  profiles.
+
+### Fixed
+
+- **Declining notifications no longer hides them forever.** Background
+  settings now show whether notifications are allowed and can ask again,
+  or open Android's notification settings when the prompt won't come back.
+- **The Android update badge no longer points at a release with nothing
+  to install.** It appears only when the release includes an APK, links
+  straight to it and says to download it, then open it to install.
+
 ## [2026.1113.4] - 2026-11-13
 
 ### Fixed

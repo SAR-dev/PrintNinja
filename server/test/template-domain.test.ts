@@ -23,6 +23,7 @@ import {
   ForbiddenError,
   NotFoundError,
   OwnTemplateSavedError,
+  QuotaExceededError,
   RateLimitedError,
   RemoteReferenceError,
   PayloadTooLargeError,
@@ -31,6 +32,7 @@ import {
   TemplateNameTakenError,
   ValidationError,
 } from "../src/domain/errors.js";
+import { TEMPLATES_PER_USER_MAX } from "../src/domain/templates/put.js";
 import type {
   SavedRepository,
   TemplateRepository,
@@ -248,6 +250,30 @@ describe("putTemplate", () => {
     await expect(
       putTemplate(r, write({ version: { note: "n".repeat(2001) } }), OWNER_ID),
     ).rejects.toBeInstanceOf(PayloadTooLargeError);
+  });
+
+  it("caps templates per user on create, leaving updates and other owners alone", async () => {
+    const r = repos();
+    for (let i = 0; i < TEMPLATES_PER_USER_MAX; i += 1) {
+      await putTemplate(r, write({ id: `t${i}`, name: `T${i}` }), OWNER_ID);
+    }
+    await expect(
+      putTemplate(r, write({ id: "t-over", name: "Over" }), OWNER_ID),
+    ).rejects.toBeInstanceOf(QuotaExceededError);
+    // Rows that already exist stay editable at the cap.
+    const updated = await putTemplate(
+      r,
+      write({ id: "t0", name: "T0", body: "<div>y</div>", ifRevision: 1 }),
+      OWNER_ID,
+    );
+    expect(updated.status).toBe(200);
+    // The cap is per user: another owner starts fresh.
+    const other = await putTemplate(
+      r,
+      write({ id: "t-other", name: "Other" }),
+      OTHER_ID,
+    );
+    expect(other.status).toBe(201);
   });
 });
 

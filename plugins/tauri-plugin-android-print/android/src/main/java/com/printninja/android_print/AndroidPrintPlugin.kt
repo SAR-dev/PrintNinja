@@ -25,6 +25,7 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -1869,26 +1870,35 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
 
-    /** Asked at most once per app process: a declined prompt is not repeated on every start. */
-    @Volatile
-    private var askedNotifications = false
-
     /**
-     * Android 13+ hides a foreground service's notification until the
-     * user allows notifications, so the pinned API address would never
-     * show. Ask once, wait for the answer (the plugin cannot receive the
-     * grant callback, so it polls like [awaitBluetoothConnect]), then
-     * re-post the notification so it appears without restarting the server.
+     * Whether the system prompt has ever been shown for this install.
+     * Persisted, not per-process (the old flag): a declined prompt must
+     * not re-fire on every launch — silently auto-denying while a 60 s
+     * poll waits for an answer that cannot come — and the Settings row
+     * needs the same memory to know when to route to the settings
+     * screen instead of asking again.
      */
-    private fun ensureNotificationPermission() {
-        if (!PrintNinjaService.needsNotificationPermission(
-                Build.VERSION.SDK_INT,
-                grantedNotifications(),
-            ) || askedNotifications
-        ) {
-            return
-        }
-        askedNotifications = true
+    private fun notificationAsked(): Boolean =
+        activity.getSharedPreferences("printninja_permissions", Context.MODE_PRIVATE)
+            .getBoolean("notification_permission_asked", false)
+
+    private fun markNotificationAsked() {
+        activity.getSharedPreferences("printninja_permissions", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("notification_permission_asked", true)
+            .apply()
+    }
+
+    /** True while the system may still show the permission dialog. */
+    private fun canPromptNotification(): Boolean =
+        PrintNinjaService.canPromptNotification(
+            notificationAsked(),
+            activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS),
+        )
+
+    /** Fires the one-time system prompt; the answer arrives by polling. */
+    private fun askNotificationPermission() {
+        markNotificationAsked()
         activity.runOnUiThread {
             ActivityCompat.requestPermissions(
                 activity,
@@ -1896,6 +1906,15 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 9752,
             )
         }
+    }
+
+    /**
+     * Waits (bounded) for the user's answer — the plugin never receives
+     * the grant callback — and re-posts the pinned notification the
+     * moment the user allows, so it appears without restarting the
+     * server. Caller runs this off the main thread.
+     */
+    private fun awaitNotificationAnswer() {
         val deadline = android.os.SystemClock.elapsedRealtime() + 60_000
         while (android.os.SystemClock.elapsedRealtime() < deadline) {
             try {
@@ -1909,6 +1928,80 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 return
             }
         }
+    }
+
+    /**
+     * Android 13+ hides a foreground service's notification until the
+     * user allows notifications, so the pinned API address would never
+     * show. Ask once per install (a decline is remembered, so the
+     * prompt is not re-fired into auto-denial on every start), wait for
+     * the answer, then re-post the notification so it appears without
+     * restarting the server. The recovery path after a decline is the
+     * Settings → Background row, which re-asks or opens the app's
+     * notification settings ([requestNotificationPermission]).
+     */
+    private fun ensureNotificationPermission() {
+        if (!PrintNinjaService.needsNotificationPermission(
+                Build.VERSION.SDK_INT,
+                grantedNotifications(),
+            ) || notificationAsked()
+        ) {
+            return
+        }
+        askNotificationPermission()
+        awaitNotificationAnswer()
+    }
+
+    /**
+     * The permission state Settings shows: whether Android has allowed
+     * notifications, and whether the system prompt may still be shown
+     * (otherwise the caller's button opens the settings screen instead
+     * of asking into a silent auto-deny).
+     */
+    @Command
+    fun notificationPermissionState(invoke: Invoke) {
+        invoke.resolve(
+            JSObject()
+                .put("granted", grantedNotifications())
+                .put("canAskAgain", canPromptNotification()),
+        )
+    }
+
+    /**
+     * Asks for the notification permission, or opens the app's
+     * notification settings when the system will not prompt again.
+     * Settles at once: the prompt is system UI, the plugin never
+     * receives the grant callback, and a JS-side state read on
+     * visibilitychange picks up the real answer when the dialog is
+     * dismissed. Only the bounded wait that re-posts the service
+     * notification runs in the background.
+     */
+    @Command
+    fun requestNotificationPermission(invoke: Invoke) {
+        if (grantedNotifications()) {
+            invoke.resolve(JSObject().put("granted", true).put("openedSettings", false))
+            return
+        }
+        if (!canPromptNotification()) {
+            // API 24/25 have no dedicated notification settings screen:
+            // the app's own settings page is where notifications toggle.
+            val intent =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)
+                } else {
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:${activity.packageName}"),
+                    )
+                }
+            activity.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            invoke.resolve(JSObject().put("granted", false).put("openedSettings", true))
+            return
+        }
+        askNotificationPermission()
+        ioPool.execute { awaitNotificationAnswer() }
+        invoke.resolve(JSObject().put("granted", false).put("openedSettings", false))
     }
 
     @Command
