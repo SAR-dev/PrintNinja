@@ -55,7 +55,10 @@ const en = {
     server_address_invalid:
       "Enter the full server address, starting with http:// or https://.",
     handle: "Handle",
+    handle_placeholder: "e.g. {{example}}",
     password: "Password",
+    show_password: "Show password",
+    hide_password: "Hide password",
     password_hint: "At least 8 characters.",
     handle_invalid: "A handle is 1 to 32 letters, numbers, _ or -.",
     password_short: "The password must be at least 8 characters.",
@@ -68,7 +71,7 @@ const en = {
     switch_to_sign_in: "Already have an account? Sign in",
     continue_as_guest: "Continue as guest",
     guest_handle: "Your name",
-    guest_handle_placeholder: "e.g. Aisha",
+    guest_handle_placeholder: "e.g. {{example}}",
     guest_handle_required: "Enter a name to continue as a guest.",
     guest_hint:
       "Pair with a PC over Wi-Fi without an account. Sign in anytime from Settings to use the server.",
