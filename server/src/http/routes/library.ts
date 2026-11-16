@@ -219,8 +219,7 @@ export async function libraryRoutes(
     {
       preHandler: [requireAuth(deps)],
       schema: {
-        description:
-          "List the user's printer profiles, newest change first.",
+        description: "List the user's printer profiles, newest change first.",
         querystring: pageQuery,
         response: {
           200: profilePageSchema,

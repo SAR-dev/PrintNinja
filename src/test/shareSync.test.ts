@@ -369,8 +369,18 @@ describe("restoreTemplateVersion", () => {
       .mockResolvedValue({ ...REMOTE, revision: 9 });
     client.fetchRemoteTemplate.mockResolvedValue({ ...REMOTE, revision: 8 });
     await restoreTemplateVersion(local({ remote_id: REMOTE.id }), 3);
-    expect(client.restoreRemoteTemplateVersion).toHaveBeenNthCalledWith(1, REMOTE.id, 3, 4);
-    expect(client.restoreRemoteTemplateVersion).toHaveBeenNthCalledWith(2, REMOTE.id, 3, 8);
+    expect(client.restoreRemoteTemplateVersion).toHaveBeenNthCalledWith(
+      1,
+      REMOTE.id,
+      3,
+      4,
+    );
+    expect(client.restoreRemoteTemplateVersion).toHaveBeenNthCalledWith(
+      2,
+      REMOTE.id,
+      3,
+      8,
+    );
   });
 
   it("reports a concurrent edit as a conflict instead of overwriting it", async () => {

@@ -70,7 +70,10 @@ export function VersionHistoryPanel({
 
   if (loading) {
     return (
-      <p className="flex items-center gap-2 p-4 text-sm text-muted-foreground" role="status">
+      <p
+        className="flex items-center gap-2 p-4 text-sm text-muted-foreground"
+        role="status"
+      >
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
         {t("designer.history_loading")}
       </p>
@@ -81,7 +84,11 @@ export function VersionHistoryPanel({
     return (
       <div className="space-y-3 p-4">
         <p className="text-sm text-danger">{error}</p>
-        <Button variant="outline" size="sm" onClick={() => void load(page, false)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void load(page, false)}
+        >
           {t("designer.history_retry")}
         </Button>
       </div>
@@ -114,7 +121,9 @@ export function VersionHistoryPanel({
                     {t("designer.history_version", { n: v.version_no })}
                   </span>
                   {isCurrent ? (
-                    <Badge variant="outline">{t("designer.history_current")}</Badge>
+                    <Badge variant="outline">
+                      {t("designer.history_current")}
+                    </Badge>
                   ) : null}
                   <Badge variant="secondary">
                     {t(`designer.history_by_${v.created_by}`)}

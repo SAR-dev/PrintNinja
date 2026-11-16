@@ -164,12 +164,17 @@ describe("reads (item 28)", () => {
       total: number;
       has_more: boolean;
     };
-    expect(page).toMatchObject({ page: 1, page_size: 20, total: 2, has_more: false });
-    expect(page.items.map((s) => s.key)).toEqual([
-      "brand_name",
-      "ui_density",
-    ]);
-    expect(page.items[1]).toMatchObject({ key: "ui_density", value: "compact" });
+    expect(page).toMatchObject({
+      page: 1,
+      page_size: 20,
+      total: 2,
+      has_more: false,
+    });
+    expect(page.items.map((s) => s.key)).toEqual(["brand_name", "ui_density"]);
+    expect(page.items[1]).toMatchObject({
+      key: "ui_density",
+      value: "compact",
+    });
 
     const own = await app.inject({
       method: "GET",

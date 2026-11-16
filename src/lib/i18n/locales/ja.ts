@@ -788,7 +788,8 @@ const ja: Translation = {
     bulk_batch: "バッチとして印刷",
     bulk_batch_body:
       "選択した各ジョブが選択順で1つのバッチとして再キューに追加され、1枚ずつ印刷されます。",
-    bulk_batch_done: "バッチ #{{id}} を作成しました — {{count}}件をキューに追加",
+    bulk_batch_done:
+      "バッチ #{{id}} を作成しました — {{count}}件をキューに追加",
     bulk_batch_title: "{{count}}件のジョブを1つのバッチとして印刷しますか？",
     bulk_clear: "選択を解除",
     bulk_done: "{{count}}件のジョブを{{verb}}",
@@ -988,8 +989,7 @@ const ja: Translation = {
     notify_on_all_hint:
       "バックグラウンドの印刷ジョブが完了したときに、成功・失敗のいずれでも知らせます。",
     notify_on_never: "通知しない",
-    notify_on_never_hint:
-      "通知を出さず、結果は履歴で確認します。",
+    notify_on_never_hint: "通知を出さず、結果は履歴で確認します。",
     notify_on_note:
       "アプリがバックグラウンドのときに印刷キューが実行したジョブに適用されます。通知をタップすると履歴が開きます。",
     change_password_title: "パスワードを変更",

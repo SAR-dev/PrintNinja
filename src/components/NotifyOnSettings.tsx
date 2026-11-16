@@ -2,11 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SETTING_KEYS, parseNotifyOn, type NotifyOn } from "@/lib/prefs/prefs";
-import {
-  readCachedSetting,
-  readSetting,
-  writeSetting,
-} from "@/lib/settings";
+import { readCachedSetting, readSetting, writeSetting } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
 /**
@@ -53,7 +49,9 @@ export function NotifyOnSettings() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">{t("settings_page.notify_on")}</CardTitle>
+        <CardTitle className="text-base">
+          {t("settings_page.notify_on")}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <div

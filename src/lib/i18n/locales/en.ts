@@ -970,8 +970,7 @@ const en = {
     notify_on_all_hint:
       "Tell me when a background print job finishes, either way.",
     notify_on_never: "Never",
-    notify_on_never_hint:
-      "Stay silent; check History for the results.",
+    notify_on_never_hint: "Stay silent; check History for the results.",
     notify_on_note:
       "Applies to jobs the print queue runs while the app is in the background. Tapping a notification opens History.",
     change_password_title: "Change password",
