@@ -315,6 +315,37 @@ fn read_notify_on(db: &DbState) -> &'static str {
     }
 }
 
+/// Move a batch's counters and end state with the jobs that finished.
+///
+/// `done` counts records that reached a terminal state, `failed` the
+/// failures among them; when nothing is left to run the batch ends
+/// `success`, or `failed` when any record failed. A cancelled batch stays
+/// `cancelled` — the guard keeps finished jobs from resurrecting it.
+fn update_batch_progress(db: &DbState, batch_id: i64) -> AppResult<()> {
+    let guard = db
+        .lock()
+        .map_err(|_| crate::error::AppError::Internal("DB lock poisoned".into()))?;
+    guard.connection().execute(
+        "UPDATE batches SET
+            done = (SELECT COUNT(*) FROM print_jobs
+                     WHERE batch_id = ?1 AND status IN ('success', 'failed', 'cancelled')),
+            failed = (SELECT COUNT(*) FROM print_jobs
+                       WHERE batch_id = ?1 AND status = 'failed'),
+            status = CASE
+                WHEN (SELECT COUNT(*) FROM print_jobs
+                       WHERE batch_id = ?1 AND status IN ('queued', 'printing')) > 0
+                    THEN 'printing'
+                WHEN (SELECT COUNT(*) FROM print_jobs
+                       WHERE batch_id = ?1 AND status = 'failed') > 0
+                    THEN 'failed'
+                ELSE 'success'
+            END
+         WHERE id = ?1 AND status != 'cancelled'",
+        [batch_id],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -375,35 +406,4 @@ mod tests {
         // Must not panic and must not block: there is no way to notify.
         notify_job_finished(&worker, 1);
     }
-}
-
-/// Move a batch's counters and end state with the jobs that finished.
-///
-/// `done` counts records that reached a terminal state, `failed` the
-/// failures among them; when nothing is left to run the batch ends
-/// `success`, or `failed` when any record failed. A cancelled batch stays
-/// `cancelled` — the guard keeps finished jobs from resurrecting it.
-fn update_batch_progress(db: &DbState, batch_id: i64) -> AppResult<()> {
-    let guard = db
-        .lock()
-        .map_err(|_| crate::error::AppError::Internal("DB lock poisoned".into()))?;
-    guard.connection().execute(
-        "UPDATE batches SET
-            done = (SELECT COUNT(*) FROM print_jobs
-                     WHERE batch_id = ?1 AND status IN ('success', 'failed', 'cancelled')),
-            failed = (SELECT COUNT(*) FROM print_jobs
-                       WHERE batch_id = ?1 AND status = 'failed'),
-            status = CASE
-                WHEN (SELECT COUNT(*) FROM print_jobs
-                       WHERE batch_id = ?1 AND status IN ('queued', 'printing')) > 0
-                    THEN 'printing'
-                WHEN (SELECT COUNT(*) FROM print_jobs
-                       WHERE batch_id = ?1 AND status = 'failed') > 0
-                    THEN 'failed'
-                ELSE 'success'
-            END
-         WHERE id = ?1 AND status != 'cancelled'",
-        [batch_id],
-    )?;
-    Ok(())
 }
