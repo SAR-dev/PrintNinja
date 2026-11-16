@@ -16,6 +16,13 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+### Changed
+
+- **Phone pairing has its own Devices page.** Pairing phones with this PC,
+  guest invites and "Print via PC" moved out of the Automation page onto a
+  new Devices page (behind More on phones). Old links to the old tab still
+  open it.
+
 ## [2026.1116.0] - 2026-11-16
 
 ### Added

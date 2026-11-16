@@ -65,7 +65,7 @@ export function PcStatusBanner() {
       </div>
       {unpaired ? (
         <Link
-          to="/automation?tab=phones"
+          to="/devices"
           data-testid="pc-down-open"
           className="shrink-0 underline underline-offset-2 [@media(pointer:coarse)]:flex [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:items-center"
         >

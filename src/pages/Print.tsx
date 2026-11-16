@@ -1975,7 +1975,7 @@ function PrintForm() {
                     {blocker}{" "}
                     {pcUnpaired && (
                       <Link
-                        to="/automation?tab=phones"
+                        to="/devices"
                         className="underline underline-offset-2"
                       >
                         {t("shell.pc_pair_again")}

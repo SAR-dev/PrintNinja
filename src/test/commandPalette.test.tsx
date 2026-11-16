@@ -141,7 +141,7 @@ describe("CommandPalette search coverage", () => {
       [
         "pair",
         "Allow phones on this Wi-Fi to use this PC",
-        "/automation?tab=phones&field=devices-share",
+        "/devices?field=devices-share",
       ],
       [
         "trusted",

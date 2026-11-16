@@ -273,7 +273,7 @@ describe("PcStatusBanner", () => {
     expect(banner).toHaveTextContent("Studio PC removed this phone.");
     const again = screen.getByTestId("pc-down-open");
     expect(again).toHaveTextContent("Pair again");
-    expect(again.getAttribute("href")).toBe("/automation?tab=phones");
+    expect(again.getAttribute("href")).toBe("/devices");
     expect(screen.queryByTestId("pc-down-retry")).toBeNull();
     expect(screen.queryByTestId("pc-down-details")).toBeNull();
   });

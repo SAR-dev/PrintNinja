@@ -35,6 +35,7 @@ const en = {
     settings: "Settings",
     templates: "Templates",
     automation: "Automation",
+    devices: "Devices",
     connect_pc: "Connect to PC",
     more: "More",
     more_title: "More",
@@ -871,7 +872,8 @@ const en = {
     print: "Send a template to a printer.",
     printers: "Connect and test printers.",
     history: "Review, reprint, and export print jobs.",
-    automation: "Run the local API, try it out, and connect phones and apps.",
+    automation: "Run the local API, try it out, and manage deep links.",
+    devices: "Pair phones with this PC and manage device sharing.",
     settings: "Configure the app, background behavior, sharing, and data.",
   },
   settings_page: {
@@ -1156,7 +1158,7 @@ const en = {
     // Phone pairing (PLAN §6): three numbered steps, one visible at a time,
     // plus the always-on status line.
     devices_pair_step_pc:
-      "On your computer, open PrintNinja → Phones and turn on sharing.",
+      "On your computer, open PrintNinja → Devices and turn on sharing.",
     devices_pair_step_code: "Type the 8-letter code shown there.",
     devices_pair_step_done: "Connected to {{name}}.",
     devices_status_connected: "Connected to {{name}}",
@@ -1494,8 +1496,6 @@ const en = {
     tabs_aria: "Automation sections",
     tab_server: "API server",
     tab_explorer: "Try the API",
-    tab_phones: "Phones",
-    tab_computer: "PC",
     tab_links: "Deep links",
     server_title: "Local API server",
     open_explorer: "Try the API",
@@ -1584,7 +1584,7 @@ const en = {
     endpoint_claim_desc:
       "Fully public but knowledge-gated: the 8-character owner code (open 90 s window) or a guest invite, plus this caller's identity. Returns the per-device token.",
     claim_warning:
-      "This pairs a device with this PC — it appears in the Phones tab, where it can be removed again.",
+      "This pairs a device with this PC — it appears on the Devices page, where it can be removed again.",
     example_claim: "Example: claim body",
   },
   errors: {

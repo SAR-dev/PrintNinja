@@ -1,29 +1,19 @@
-import { Link2, Play, Server, Smartphone } from "lucide-react";
+import { Link2, Play, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { ApiServerPanel } from "@/components/automation/ApiServerPanel";
 import { TrustedSourcesPanel } from "@/components/automation/TrustedSourcesPanel";
-import { DevicesCard } from "@/components/DevicesCard";
-import { PrintViaPcCard } from "@/components/PrintViaPcCard";
 import { PageHeader } from "@/components/PageHeader";
 import { useFlashField } from "@/lib/hooks/useFlashField";
-import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
-import { isAndroid } from "@/lib/platform";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiExplorerPanel } from "@/pages/ApiExplorer";
 
-export const AUTOMATION_TABS = [
-  "server",
-  "explorer",
-  "phones",
-  "links",
-] as const;
+export const AUTOMATION_TABS = ["server", "explorer", "links"] as const;
 export type AutomationTab = (typeof AUTOMATION_TABS)[number];
 
-/** Unknown or missing `?tab=` lands on the default: phones on Android
- * (pairing and Print via PC live there), server everywhere else. */
+/** Unknown or missing `?tab=` lands on the default: server. */
 export function defaultAutomationTab(): AutomationTab {
-  return isAndroid() ? "phones" : "server";
+  return "server";
 }
 
 export function parseAutomationTab(raw: string | null): AutomationTab {
@@ -33,16 +23,14 @@ export function parseAutomationTab(raw: string | null): AutomationTab {
 }
 
 /**
- * Everything that lets another program or device drive PrintNinja, in
- * one page: the local API server, a console to try it, phones that
- * borrow this PC to render, and which `printninja://` links skip the
- * confirmation sheet. Each switch lives in exactly one tab.
+ * Everything that lets another program drive PrintNinja, in one page:
+ * the local API server, a console to try it, and which `printninja://`
+ * links skip the confirmation sheet. Phones that borrow this PC to
+ * render live on the Devices page (see PHONE_AND_PC_SHARING.md).
+ * Each switch lives in exactly one tab.
  */
 export function AutomationPage() {
   const { t } = useTranslation();
-  // A phone has no automations to configure; here the page is the
-  // pairing screen, so it is named for that (PLAN §6).
-  const isPhone = useMediaQuery(PHONE_QUERY);
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = parseAutomationTab(searchParams.get("tab"));
   // Palette deep-link (`?tab=&field=`): the control lives in a tab that
@@ -51,7 +39,7 @@ export function AutomationPage() {
   const openTab = (next: AutomationTab) => {
     const params = new URLSearchParams(searchParams);
     // The default tab owns the bare URL, so shared and bookmarked links
-    // stay clean on either platform.
+    // stay clean.
     if (next === defaultAutomationTab()) params.delete("tab");
     else params.set("tab", next);
     // A flash target belongs to the tab the link opened, not the next one.
@@ -66,21 +54,13 @@ export function AutomationPage() {
   }> = [
     { key: "server", label: t("automation.tab_server"), icon: Server },
     { key: "explorer", label: t("automation.tab_explorer"), icon: Play },
-    // A phone pairs with a computer here; a PC lists its phones.
-    {
-      key: "phones",
-      label: isAndroid()
-        ? t("automation.tab_computer")
-        : t("automation.tab_phones"),
-      icon: Smartphone,
-    },
     { key: "links", label: t("automation.tab_links"), icon: Link2 },
   ];
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title={t(isPhone ? "nav.connect_pc" : "nav.automation")}
+        title={t("nav.automation")}
         description={t("pages.automation")}
       />
       <Tabs
@@ -109,10 +89,6 @@ export function AutomationPage() {
         </TabsContent>
         <TabsContent value="explorer" className="mt-0 space-y-4">
           <ApiExplorerPanel onOpenServer={() => openTab("server")} />
-        </TabsContent>
-        <TabsContent value="phones" className="mt-0 space-y-4">
-          <DevicesCard />
-          <PrintViaPcCard />
         </TabsContent>
         <TabsContent value="links" className="mt-0 space-y-4">
           <TrustedSourcesPanel />

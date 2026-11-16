@@ -5,6 +5,7 @@ import {
   Printer,
   Send,
   Settings,
+  Smartphone,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -68,10 +69,16 @@ export const NAV_GROUPS: NavGroup[] = [
         shortcut: "r",
       },
       {
+        path: "/devices",
+        icon: Smartphone,
+        labelKey: "nav.devices",
+        phoneLabelKey: "nav.connect_pc",
+        shortcut: "n",
+      },
+      {
         path: "/automation",
         icon: Workflow,
         labelKey: "nav.automation",
-        phoneLabelKey: "nav.connect_pc",
         shortcut: "a",
       },
       {

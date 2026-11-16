@@ -171,9 +171,9 @@ describe("phone shell", () => {
 
     fireEvent.click(within(bar).getByRole("button", { name: "More" }));
     const dialog = await screen.findByRole("dialog");
-    // On a phone the Automation page is the pairing screen, so it is
-    // named for what it does there (PLAN §6).
-    for (const name of ["Designer", "Connect to PC", "Settings"])
+    // Connect to PC is the phone name of the /devices page, which now
+    // also carries the PC-side pairing UI.
+    for (const name of ["Designer", "Connect to PC", "Automation", "Settings"])
       expect(within(dialog).getByRole("link", { name })).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("link", { name: "Designer" }));
     await waitFor(() =>
