@@ -37,6 +37,7 @@ const ja: Translation = {
     settings: "設定",
     templates: "テンプレート",
     automation: "自動化",
+    devices: "デバイス",
     connect_pc: "PCに接続",
     more: "その他",
     more_title: "その他",
@@ -888,8 +889,8 @@ const ja: Translation = {
     print: "テンプレートをプリンターに送信します。",
     printers: "プリンターの接続とテストを行います。",
     history: "印刷ジョブの確認、再印刷、エクスポートができます。",
-    automation:
-      "ローカルAPIの起動と試用、スマートフォンやアプリとの連携を行います。",
+    automation: "ローカルAPIの起動と試用、デープリンクの管理を行います。",
+    devices: "スマートフォンをこのPCにペアリングし、デバイス共有を管理します。",
     settings: "アプリ、バックグラウンド動作、共有、データを設定します。",
   },
   settings_page: {
@@ -1183,7 +1184,7 @@ const ja: Translation = {
     devices_pair_again: "もう一度ペアリング",
     // スマホペアリング (PLAN §6): 番号付き3ステップを1つずつ表示 + 常時表示ステータス行。
     devices_pair_step_pc:
-      "PCで PrintNinja を開き、「スマホ」タブで共有をオンにしてください。",
+      "PCで PrintNinja を開き、「デバイス」ページで共有をオンにしてください。",
     devices_pair_step_code: "そこに表示される8文字のコードを入力してください。",
     devices_pair_step_done: "{{name}} に接続しました。",
     devices_status_connected: "{{name}} に接続済み",
@@ -1529,8 +1530,6 @@ const ja: Translation = {
     tabs_aria: "自動化のセクション",
     tab_server: "APIサーバー",
     tab_explorer: "APIを試す",
-    tab_phones: "スマートフォン",
-    tab_computer: "PC",
     tab_links: "ディープリンク",
     server_title: "ローカルAPIサーバー",
     open_explorer: "APIを試す",
@@ -1623,7 +1622,7 @@ const ja: Translation = {
     endpoint_claim_desc:
       "完全公開ですが知識で保護されています：8文字のオーナーコード（90秒のウィンドウ）またはゲスト招待と、この呼び出し元の情報を送ります。デバイスごとのトークンを返します。",
     claim_warning:
-      "このPCとデバイスがペアリングされます。スマートフォンタブに表示され、そこから削除できます。",
+      "このPCとデバイスがペアリングされます。デバイスページに表示され、そこから削除できます。",
     example_claim: "例: 利用ボディ",
   },
   errors: {

@@ -16,7 +16,11 @@ describe("automation search index", () => {
   it("only points at tabs the Automation page has", () => {
     const tabs = AUTOMATION_TABS as readonly string[];
     for (const e of AUTOMATION_TAB_ENTRIES) expect(tabs).toContain(e.tab);
-    for (const e of AUTOMATION_SEARCH_ENTRIES) expect(tabs).toContain(e.tab);
+    for (const e of AUTOMATION_SEARCH_ENTRIES) {
+      // Entries with a path point at a standalone page instead of a tab.
+      if (e.path) continue;
+      expect(tabs).toContain(e.tab);
+    }
   });
 
   it("covers every tab", () => {

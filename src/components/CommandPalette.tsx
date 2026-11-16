@@ -21,6 +21,7 @@ import { NAV_ITEMS } from "@/lib/shell/nav";
 import {
   AUTOMATION_SEARCH_ENTRIES,
   AUTOMATION_TAB_ENTRIES,
+  automationEntryTarget,
 } from "@/lib/shell/automationSearch";
 import { SETTING_SEARCH_ENTRIES } from "@/lib/shell/settingsSearch";
 import { isAndroid } from "@/lib/platform";
@@ -216,10 +217,7 @@ export function CommandPalette({
               className={GROUP}
             >
               {AUTOMATION_TAB_ENTRIES.map((entry) => {
-                const label =
-                  entry.tab === "phones" && isAndroid()
-                    ? t("automation.tab_computer")
-                    : t(entry.labelKey);
+                const label = t(entry.labelKey);
                 return (
                   <Command.Item
                     key={`automation-tab:${entry.tab}`}
@@ -240,19 +238,15 @@ export function CommandPalette({
               ).map((entry) => {
                 const label = t(entry.labelKey);
                 const tabLabel = t(
-                  `automation.tab_${entry.tab === "phones" && isAndroid() ? "computer" : entry.tab}`,
+                  entry.sectionLabelKey ?? `automation.tab_${entry.tab}`,
                 );
                 return (
                   <Command.Item
-                    key={`automation:${entry.tab}:${entry.field}`}
+                    key={`automation:${entry.tab ?? entry.path}:${entry.field}`}
                     value={`automation ${tabLabel} ${label}`}
                     keywords={entry.keywords}
                     onSelect={() =>
-                      run(() =>
-                        onNavigate(
-                          `/automation?tab=${entry.tab}&field=${entry.field}`,
-                        ),
-                      )
+                      run(() => onNavigate(automationEntryTarget(entry)))
                     }
                     className={ITEM}
                   >

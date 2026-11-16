@@ -67,7 +67,7 @@ type TestState =
   | { state: "error"; message: string };
 
 /**
- * Automation → Phones tab: shared rendering (see docs/architecture/PHONE_AND_PC_SHARING.md#what-travels-and-what-never-does).
+ * Devices page (/devices): shared rendering (see docs/architecture/PHONE_AND_PC_SHARING.md#what-travels-and-what-never-does).
  *
  * One direction only: a phone asks a PC to make its PDFs. So each device
  * shows just its own half. The PC opens a 30-second pairing window and

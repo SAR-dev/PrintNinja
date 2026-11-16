@@ -32,6 +32,9 @@ const HistoryPage = lazy(() =>
 const AutomationPage = lazy(() =>
   import("./pages/Automation").then((m) => ({ default: m.AutomationPage })),
 );
+const DevicesPage = lazy(() =>
+  import("./pages/Devices").then((m) => ({ default: m.DevicesPage })),
+);
 const SettingsPage = lazy(() =>
   import("./pages/Settings").then((m) => ({ default: m.SettingsPage })),
 );
@@ -78,6 +81,22 @@ export function SettingsRoute() {
     return <Navigate to="/automation" replace />;
   }
   return <SettingsPage />;
+}
+
+/**
+ * The Phones tab left the Automation page for the Devices page. Old
+ * links and bookmarks to `/automation?tab=phones` keep working by
+ * redirecting.
+ */
+export function AutomationRoute() {
+  const [params] = useSearchParams();
+  if (params.get("tab") === "phones") {
+    // Palette deep links (`&field=`) keep their flash target.
+    const next = new URLSearchParams(params);
+    next.delete("tab");
+    return <Navigate to={`/devices${next.size ? `?${next}` : ""}`} replace />;
+  }
+  return <AutomationPage />;
 }
 
 /**
@@ -257,7 +276,8 @@ function AppContent() {
             <Route path="/pair" element={<PairRoute />} />
             <Route path="/printers" element={<PrinterSetupPage />} />
             <Route path="/history" element={<HistoryPage />} />
-            <Route path="/automation" element={<AutomationPage />} />
+            <Route path="/automation" element={<AutomationRoute />} />
+            <Route path="/devices" element={<DevicesPage />} />
             <Route
               path="/api-explorer"
               element={<Navigate to="/automation?tab=explorer" replace />}

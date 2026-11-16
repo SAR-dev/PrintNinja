@@ -24,7 +24,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 
 /**
- * Automation → PC tab (Android only): "Print via PC" (ARCHITECTURE §9).
+ * Devices page (/devices, Android only): "Print via PC" (ARCHITECTURE §9).
  * The desktop prints locally, so nothing renders there.
  *
  * On, the print dialog sends the job to the chosen paired PC instead of

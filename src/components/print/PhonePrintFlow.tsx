@@ -776,10 +776,7 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
           >
             {props.blocker}{" "}
             {props.pcUnpaired && (
-              <Link
-                to="/automation?tab=phones"
-                className="underline underline-offset-2"
-              >
+              <Link to="/devices" className="underline underline-offset-2">
                 {t("shell.pc_pair_again")}
               </Link>
             )}

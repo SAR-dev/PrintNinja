@@ -250,7 +250,7 @@ function ShellIndicators({ status }: { status: ShellStatus }) {
         ))}
       {sharing && (
         <Link
-          to="/automation?tab=phones"
+          to="/devices"
           title={t("shell.sharing_on")}
           aria-label={t("shell.sharing_on")}
           data-testid="sharing-indicator"
@@ -261,7 +261,7 @@ function ShellIndicators({ status }: { status: ShellStatus }) {
       )}
       {viaPc && (
         <Link
-          to="/automation?tab=phones"
+          to="/devices"
           title={t("shell.via_pc_on")}
           aria-label={t("shell.via_pc_on")}
           data-testid="via-pc-indicator"

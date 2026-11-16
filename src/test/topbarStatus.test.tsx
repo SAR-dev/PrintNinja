@@ -106,7 +106,7 @@ describe("top-bar badges for switches that change behaviour", () => {
     be.render = { enabled: true, running: true, lan_access: true };
     renderShell();
     const link = await screen.findByTestId("sharing-indicator");
-    expect(link).toHaveAttribute("href", "/automation?tab=phones");
+    expect(link).toHaveAttribute("href", "/devices");
     expect(link).toHaveAccessibleName(/shared with phones/i);
   });
 
@@ -133,7 +133,7 @@ describe("top-bar badges for switches that change behaviour", () => {
       await writeSetting("print_via_pc", "true");
     });
     const badge = await screen.findByTestId("via-pc-indicator");
-    expect(badge).toHaveAttribute("href", "/automation?tab=phones");
+    expect(badge).toHaveAttribute("href", "/devices");
     await waitFor(() =>
       expect(within(nav()).queryByText("Printers")).toBeNull(),
     );

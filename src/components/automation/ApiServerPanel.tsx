@@ -111,7 +111,7 @@ export function ApiServerPanel({
 
   /** The share switch lives with the phones it governs (DevicesCard):
    * this panel stages nothing — Start binds whatever the bind switch
-   * says, and sharing is toggled live from the phones tab. */
+   * says, and sharing is toggled live from the Devices page. */
 
   /** Opens the share service's demo page — a plain-HTML mirror of the
    * Print page that drives this very API server from a browser. Only

@@ -807,7 +807,7 @@ describe("unpaired phone on the Print page", () => {
       expect(screen.getByText("Pair again to print.")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Pair again" })).toHaveAttribute(
         "href",
-        "/automation?tab=phones",
+        "/devices",
       );
     } finally {
       ua.mockRestore();
