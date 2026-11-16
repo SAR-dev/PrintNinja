@@ -9,10 +9,6 @@ PrintNinja is a label and receipt printing app. This guide lists what it **canno
 The biggest things to know:
 
 - **No printer has been tested on real hardware** (item 7). Output has only been checked against simulated printers.
-- **Background print failures on Android are silent** (item 41). Nothing tells you a job failed until you open History.
-- **The server has no read or list endpoints for datasets, profiles, fonts and settings** (item 28).
-- **Batch printing is half-built** (item 18): the table, worker and History column exist, but nothing creates a batch.
-- **The version-history screen does not exist** (item 34), although the README promises it.
 
 ## Open work, in priority order
 
@@ -22,11 +18,7 @@ This is the main list: everything still open, highest priority first. Printer it
 | --- | --- | --- | --- | --- |
 | 1 | 7. Test on real printers | Printers | High | Nothing else matters if real printers do not work; the checklist is in `docs/TEST_CHECKLIST.md`, not yet run on hardware |
 | 2 | 4. TSPL density, speed, gapless media | Printers | Medium | Common label printers print too light or fail on gapless rolls |
-| 3 | 41. No background job notification | Android | Medium | Failures are invisible |
-| 4 | 47. Phone-to-PC traffic is not encrypted | Android | Medium | Plain HTTP on the local network; the architecture doc calls pinned encryption a planned hardening |
-| 5 | 28. No read or list endpoints | Server | Medium | Integrations need a full sync cache without it |
-| 6 | 18. Batch printing entry point | Backend | Medium | Worker, metrics and History column already exist |
-| 7 | 34. Version history screen | Screens | Medium | Promised in the README, and the API is ready |
+| 3 | 47. Phone-to-PC traffic is not encrypted | Android | Medium | Plain HTTP on the local network; the architecture doc calls pinned encryption a planned hardening |
 
 ## How to read the tags
 
@@ -75,21 +67,7 @@ These are **not planned**. They were looked at and accepted.
 
 These are small or medium jobs that can be picked up without a big project. The tag is the **effort**: **Small** is under a day, **Medium** is one to five days.
 
-## Backend (the Rust app)
-
-**18. \[Medium\] Batch printing is half-built.** *Problem:* the database table, the worker, the metrics and the History screen (a "batch" column and filter) all exist, but **nothing ever creates a batch**. The column is always empty, the filter matches nothing, and the metric always reads 0. *Solutions:* (a) **Recommended:** add `POST /v1/batches` (and a matching app command) that takes a list of print requests, inserts one `batches` row and queues each job with its `batch_id`. (b) Add a "Print selected" button in History or on a template's data list that calls it. (c) If batches are not wanted soon, hide the column, filter and metric until they are.
-
-## Sync server
-
-**28. \[Medium\] Datasets, profiles, fonts and settings cannot be read or listed directly.** *Problem:* their API only supports writing and deleting. Reads work only through the sync stream, so "list my datasets" needs a full sync cache. *Solutions:* (a) **Recommended:** add paged `GET` list and `GET /{id}` endpoints, copying the `pageSchema` pattern from templates. (b) Add ETag support so clients can cache cheaply. (c) Update the OpenAPI document.
-
-## Frontend (the screens)
-
-**34. \[Medium\] Version history has no screen.** *Problem:* the README promises "version history with diff and restore". The server already has endpoints to list, view and restore versions, but nothing in the app can show them. *Solutions:* (a) **Recommended:** add a "History" side panel in the designer that lists versions from `GET /v2/templates/{id}/versions`, with a Restore button. (b) Add a diff view (two versions side by side or as changed fields). (c) Ship list and restore first and the diff later. (d) If it will not be built soon, remove the claim from the README.
-
 ## Android
-
-**41. \[Medium\] No notification when a background job succeeds or fails.** *Problem:* the only notification is the pinned "service is running" line. A job that fails in the background (printer offline, PC asleep, render timeout) is invisible until you reopen the app and read History. *Solutions:* (a) **Recommended:** post a notification on failure (and optionally success) from the worker, through the Android plugin or a Tauri notification plugin. (b) Add a setting: "Notify on: failures only / all / never". (c) Show the count of waiting jobs in the pinned notification. (d) Tapping a notification opens History on that job.
 
 **47. \[Medium\] Phone-to-PC traffic is not encrypted.** *Problem:* pairing, shared rendering and Print via PC use plain HTTP on the local network, and the pairing code is an introduction, not proof of identity (`docs/architecture/PHONE_AND_PC_SHARING.md`). Anyone on the same network who can read the traffic can see print data and the device token. Release builds already allow this on purpose (see the cleartext patch in `scripts/patch-android-signing.mjs`). *Solutions:* (a) **Recommended:** TLS with a self-signed certificate made on the PC and pinned by the phone during pairing, so the pairing code also vouches for the certificate. (b) Keep plain HTTP but sign each request with a key exchanged at pairing, which stops tampering but not reading. (c) Document that pairing should only be used on a trusted network, and keep (a) for later.
 

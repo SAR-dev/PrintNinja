@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { History, MoreHorizontal, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +24,7 @@ export function DesignerOverflowMenu({
   busy,
   dirty = false,
   onVisibilityChange,
+  onHistory,
 }: {
   onNew: () => void;
   published: boolean;
@@ -33,6 +34,9 @@ export function DesignerOverflowMenu({
   /** Unsaved edits: the toggle waits for Save, like the desktop toolbar. */
   dirty?: boolean;
   onVisibilityChange: (v: boolean) => void;
+  /** Opens the version history. Offered once the template is on the server,
+   * like the desktop toolbar; a read-only saved copy's history is hidden. */
+  onHistory?: () => void;
 }) {
   const { t } = useTranslation();
   // The state stays visible next to the menu; the actions hide inside.
@@ -64,6 +68,16 @@ export function DesignerOverflowMenu({
             <Plus className="h-4 w-4" aria-hidden="true" />
             {t("designer.newTemplate")}
           </DropdownMenuItem>
+          {onHistory && remoteId && !readOnly && (
+            <DropdownMenuItem
+              onSelect={onHistory}
+              disabled={busy}
+              data-testid="designer-history-menu"
+            >
+              <History className="h-4 w-4" aria-hidden="true" />
+              {t("designer.history")}
+            </DropdownMenuItem>
+          )}
           {readOnly ? (
             // No hover on a phone, so the reason is printed under the item.
             <>

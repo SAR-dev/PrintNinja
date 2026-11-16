@@ -472,6 +472,58 @@ export async function fetchRemoteTemplate(id: string): Promise<RemoteTemplate> {
   }
 }
 
+// --- Version history --------------------------------------------------------
+
+/** One row of a template's version history, newest first. */
+export type RemoteTemplateVersionSummary =
+  paths["/v2/templates/{id}/versions"]["get"]["responses"][200]["content"]["application/json"]["items"][number];
+
+/** One page of version history. */
+export type RemoteTemplateVersionPage =
+  paths["/v2/templates/{id}/versions"]["get"]["responses"][200]["content"]["application/json"];
+
+/** One version with its body and CSS. */
+export type RemoteTemplateVersion =
+  paths["/v2/templates/{id}/versions/{n}"]["get"]["responses"][200]["content"]["application/json"];
+
+/** List a template's versions, newest first, one page. */
+export async function fetchRemoteTemplateVersions(
+  id: string,
+  page = 1,
+  pageSize = 20,
+): Promise<RemoteTemplateVersionPage> {
+  return callApi<RemoteTemplateVersionPage>(apiDeps(), {
+    method: "GET",
+    path: `/v2/templates/${id}/versions?page=${page}&page_size=${pageSize}`,
+  });
+}
+
+/** One version with its body and CSS. */
+export async function fetchRemoteTemplateVersion(
+  id: string,
+  versionNo: number,
+): Promise<RemoteTemplateVersion> {
+  return callApi<RemoteTemplateVersion>(apiDeps(), {
+    method: "GET",
+    path: `/v2/templates/${id}/versions/${versionNo}`,
+  });
+}
+
+/** Copy a version's body and CSS into the template as a new revision.
+ * `ifRevision` is the revision this PC last synced — the same guard a
+ * save sends, so a restore never clobbers a newer copy silently. */
+export async function restoreRemoteTemplateVersion(
+  id: string,
+  versionNo: number,
+  ifRevision?: number,
+): Promise<RemoteTemplate> {
+  return callApi<RemoteTemplate>(apiDeps(), {
+    method: "POST",
+    path: `/v2/templates/${id}/versions/${versionNo}/restore`,
+    body: ifRevision === undefined ? undefined : { if_revision: ifRevision },
+  });
+}
+
 /** A community template as the v2 service lists it. */
 export type CommunitySummary =
   paths["/v2/community/templates"]["get"]["responses"][200]["content"]["application/json"]["items"][number];

@@ -115,6 +115,18 @@ export interface HistoryJob {
   printed_by: string | null;
 }
 
+export interface BatchSummary {
+  id: number;
+  template_id: number | null;
+  printer_id: number | null;
+  total: number;
+  done: number;
+  failed: number;
+  mode: "single_job" | "per_record";
+  status: "queued" | "printing" | "success" | "failed" | "cancelled";
+  created_at: string;
+}
+
 export interface ApplyReport {
   applied_upserts: number;
   applied_deletes: number;

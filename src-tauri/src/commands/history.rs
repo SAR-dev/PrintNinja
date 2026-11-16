@@ -182,36 +182,10 @@ pub fn get_job_conn(conn: &Connection, id: i64) -> AppResult<PrintJob> {
 
 pub fn reprint_job_conn(conn: &Connection, id: i64) -> AppResult<PrintJob> {
     // Reprint must clone the ORIGINAL job so the exact template version,
-    // settings and copies are reproduced (PLANNING.md 4). Read the original
-    // first: a missing one is a 404, and `INSERT .. SELECT` with no row
-    // would otherwise silently clone nothing.
-    let sql = format!("{} WHERE id = ?1", SELECT_JOB_COLUMNS);
-    let _original = conn.query_row(&sql, [id], map_job).map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => AppError::NotFound(format!("Job {} not found", id)),
-        other => other.into(),
-    })?;
-
-    // Clone the row itself — including its stored input payload
-    // (`data_json`) and its document (`pdf_data`), which the worker
-    // replays when it prints the clone (P3). The fresh row is `queued`;
-    // nothing but the worker prints it. `template_revision` carries (same
-    // template prints); `printed_by` stays NULL — the clone prints
-    // locally, not through the PC.
-    conn.execute(
-        "INSERT INTO print_jobs
-            (batch_id, record_index, template_id, printer_id,
-             source, source_url, status, error, copies, settings_json, rendered_html,
-             idempotency_key, is_test, data_json, requested_by_device_id, template_revision,
-             pdf_data)
-         SELECT NULL, NULL, template_id, printer_id,
-                source, source_url, 'queued', NULL, copies, settings_json, rendered_html,
-                NULL, is_test, data_json, requested_by_device_id, template_revision,
-                pdf_data
-         FROM print_jobs WHERE id = ?1",
-        [id],
-    )?;
-
-    let new_id = conn.last_insert_rowid();
+    // settings and copies are reproduced (PLANNING.md 4). The clone lives
+    // in the batch module — a batch job is the same row-to-row copy with
+    // a `batch_id` — so there is one place the copy is defined (P3).
+    let new_id = crate::commands::batch::clone_job_as_queued(conn, id, None, None)?;
     let sql = format!("{} WHERE id = ?1", SELECT_JOB_COLUMNS);
     Ok(conn.query_row(&sql, [new_id], map_job)?)
 }

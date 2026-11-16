@@ -20,6 +20,7 @@ import {
   fetchRemoteTemplate,
   putRemoteTemplate,
   RemoteTemplateNotFoundError,
+  restoreRemoteTemplateVersion,
   unpublishTemplate,
   type RemoteTemplate,
 } from "./client";
@@ -323,12 +324,8 @@ export async function overwriteWithMine(
   );
 }
 
-/**
- * Resolve a save conflict by taking the server's copy: fetch it, write
- * it over the local cache, and mark the row synced. The caller reloads
- * its editor from the returned content.
- */
-export async function takeServerCopy(template: TemplateRow): Promise<{
+/** The content a server-side copy holds, ready for the editor. */
+export interface RemoteCopy {
   html: string;
   css: string;
   name: string;
@@ -338,10 +335,20 @@ export async function takeServerCopy(template: TemplateRow): Promise<{
   page_h_mm: number;
   revision: number;
   updatedAt: string;
-}> {
-  const serverId = template.server_id ?? template.remote_id;
-  if (!serverId) throw new Error("This template is not on the server yet");
-  const remote = await fetchRemoteTemplate(serverId);
+  /** Null when the copy is private — the visibility badge must not lie. */
+  publishedAt: string | null;
+}
+
+/**
+ * Write a copy the server just accepted over the local cache and mark
+ * the row synced at its revision. Shared by `takeServerCopy` (the
+ * current copy) and `restoreTemplateVersion` (a historical one): in
+ * both cases the server is the one that moved, so the cache follows it.
+ */
+async function writeRemoteCopy(
+  template: TemplateRow,
+  remote: RemoteTemplate,
+): Promise<RemoteCopy> {
   const html = remote.body ?? "";
   const compiled = await compiledFields(html);
   await agent("update_template_meta", {
@@ -381,7 +388,61 @@ export async function takeServerCopy(template: TemplateRow): Promise<{
     page_h_mm: Math.round(remote.page_h_mm),
     revision: remote.revision,
     updatedAt: remote.updated_at,
+    publishedAt: remote.published_at ?? null,
   };
+}
+
+/**
+ * Resolve a save conflict by taking the server's copy: fetch it, write
+ * it over the local cache, and mark the row synced. The caller reloads
+ * its editor from the returned content.
+ */
+export async function takeServerCopy(
+  template: TemplateRow,
+): Promise<RemoteCopy> {
+  const serverId = template.server_id ?? template.remote_id;
+  if (!serverId) throw new Error("This template is not on the server yet");
+  const remote = await fetchRemoteTemplate(serverId);
+  return writeRemoteCopy(template, remote);
+}
+
+/**
+ * Restore a version: the server copies its body and CSS into the
+ * template as a new revision, and the returned copy goes over the local
+ * cache the way a taken server copy does. The row's revision guards the
+ * call like a save: a 409 becomes a `TemplateConflictError` the caller
+ * resolves, and a 428 (the guard is fictional — a row the server has
+ * never seen at that revision) rebases onto the current revision once.
+ */
+export async function restoreTemplateVersion(
+  template: TemplateRow,
+  versionNo: number,
+): Promise<RemoteCopy> {
+  const serverId = template.server_id ?? template.remote_id;
+  if (!serverId) throw new Error("This template is not on the server yet");
+  const attempt = (ifRevision: number | undefined) =>
+    restoreRemoteTemplateVersion(serverId, versionNo, ifRevision);
+  let remote: RemoteTemplate;
+  try {
+    remote = await attempt(template.base_revision ?? undefined);
+  } catch (err) {
+    if (err instanceof ApiError && err.code === "revision_required") {
+      const current = await fetchRemoteTemplate(serverId).catch(
+        (e: unknown) => {
+          if (e instanceof RemoteTemplateNotFoundError) return null;
+          throw e;
+        },
+      );
+      try {
+        remote = await attempt(current?.revision);
+      } catch (retryErr) {
+        throw asConflict(serverId, retryErr);
+      }
+    } else {
+      throw asConflict(serverId, err);
+    }
+  }
+  return writeRemoteCopy(template, remote);
 }
 
 /**

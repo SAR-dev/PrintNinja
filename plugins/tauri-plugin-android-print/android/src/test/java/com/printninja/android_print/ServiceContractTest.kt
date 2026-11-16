@@ -36,6 +36,18 @@ class ServiceContractTest {
         assertEquals(1, PrintNinjaService.NOTIFICATION_ID)
     }
 
+    // Item 41: the job-result notification is a different slot on a
+    // different channel from the pinned service notification, so the
+    // ids must stay distinct and stable.
+
+    @Test
+    fun jobNotificationUsesItsOwnChannelAndId() {
+        assertEquals("printninja-print-jobs", PrintNinjaService.JOB_CHANNEL_ID)
+        assertEquals(2, PrintNinjaService.JOB_NOTIFICATION_ID)
+        assertTrue(PrintNinjaService.JOB_CHANNEL_ID != PrintNinjaService.CHANNEL_ID)
+        assertTrue(PrintNinjaService.JOB_NOTIFICATION_ID != PrintNinjaService.NOTIFICATION_ID)
+    }
+
     @Test
     fun stopActionIsDistinctFromLifecycleActions() {
         assertTrue(PrintNinjaService.ACTION_STOP.startsWith("com.printninja."))
@@ -102,6 +114,52 @@ class ServiceContractTest {
         assertEquals("PrintNinja restarted", title)
         assertFalse(text.contains("17717"))
         assertFalse(text.contains("available"))
+    }
+
+    // Item 41: the job-result wording is the only thing the user sees
+    // when a background job ends, so it is pinned here too.
+
+    @Test
+    fun aSuccessfulJobSaysItFinished() {
+        val (title, text) = PrintNinjaService.jobNotificationText("success", "Order #12", null)
+        assertEquals("Print finished", title)
+        assertEquals("Order #12 was printed.", text)
+    }
+
+    @Test
+    fun aSuccessfulJobWithoutANameStillSaysItFinished() {
+        val (title, text) = PrintNinjaService.jobNotificationText("success", null, null)
+        assertEquals("Print finished", title)
+        assertEquals("Your print job finished.", text)
+    }
+
+    @Test
+    fun aFailedJobShowsTheReasonWithTheName() {
+        val (title, text) =
+            PrintNinjaService.jobNotificationText("failure", "Order #12", "printer offline")
+        assertEquals("Print failed", title)
+        assertEquals("Order #12: printer offline", text)
+    }
+
+    @Test
+    fun aFailedJobWithoutAReasonFallsBackToTheName() {
+        val (title, text) = PrintNinjaService.jobNotificationText("failure", "Order #12", null)
+        assertEquals("Print failed", title)
+        assertEquals("Order #12 could not be printed.", text)
+    }
+
+    @Test
+    fun aFailedJobWithoutANameShowsTheReasonAlone() {
+        val (title, text) = PrintNinjaService.jobNotificationText("failure", null, "render timed out")
+        assertEquals("Print failed", title)
+        assertEquals("render timed out", text)
+    }
+
+    @Test
+    fun aFailedJobWithNothingKnownPointsAtHistory() {
+        val (title, text) = PrintNinjaService.jobNotificationText("failure", null, null)
+        assertEquals("Print failed", title)
+        assertEquals("A print job failed. Open History for details.", text)
     }
 
     // Android 13+ hides the foreground notification until the user allows

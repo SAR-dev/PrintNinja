@@ -939,6 +939,94 @@ async fn retry_rejects_non_terminal_jobs_and_still_404s_unknown_ones() {
     let res = retry(queued_id, db.clone()).await;
     assert_eq!(res.status(), StatusCode::OK, "failed job re-queues");
 }
+
+/// Grouping jobs into a batch is 201 with the batch row, 404 when any
+/// named job is missing, and 400 for an empty list (item 18).
+#[tokio::test]
+async fn create_batch_groups_existing_jobs_and_refuses_bad_ones() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+
+    let (a, b): (i64, i64) = {
+        let guard = db.lock().unwrap();
+        let conn = guard.connection();
+        for _ in 0..2 {
+            conn.execute(
+                "INSERT INTO print_jobs (source, status, copies, is_test)
+                 VALUES ('api', 'success', 1, 0)",
+                [],
+            )
+            .unwrap();
+        }
+        let a = conn
+            .query_row("SELECT id FROM print_jobs ORDER BY id LIMIT 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let b = conn
+            .query_row(
+                "SELECT id FROM print_jobs ORDER BY id LIMIT 1 OFFSET 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        (a, b)
+    };
+
+    let post = |body: serde_json::Value, db: Db| async move {
+        let app = router(&db);
+        app.oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/batches")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    };
+
+    // 201 with the batch row; both jobs cloned under it as queued rows.
+    let res = post(serde_json::json!({ "job_ids": [a, b] }), db.clone()).await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let summary: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(summary["total"], 2);
+    assert_eq!(summary["done"], 0);
+    assert_eq!(summary["status"], "queued");
+    assert!(summary["id"].is_i64(), "the batch has an id");
+    let clones: i64 = {
+        let guard = db.lock().unwrap();
+        guard
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM print_jobs WHERE batch_id = ?1 AND status = 'queued'",
+                [summary["id"].as_i64().unwrap()],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    assert_eq!(clones, 2, "each job is cloned into the batch as a queued row");
+
+    // Any missing id refuses the whole call…
+    let res = post(
+        serde_json::json!({ "job_ids": [a, 424242] }),
+        db.clone(),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    // …and an empty list is a validation error.
+    let res = post(
+        serde_json::json!({ "job_ids": [] }),
+        db.clone(),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
 #[tokio::test]
 async fn the_idempotency_key_is_persisted_with_the_job() {
     let db = setup();
@@ -1158,6 +1246,16 @@ async fn the_openapi_document_matches_the_router() {
         assert!(
             retry.contains(&want.to_string()),
             "retry must document {want}: {retry:?}"
+        );
+    }
+
+    // Batch creation answers 201, refuses a bad list with 400 and a
+    // missing job with 404.
+    let batch = codes("/v1/batches", "post");
+    for want in ["201", "400", "404"] {
+        assert!(
+            batch.contains(&want.to_string()),
+            "create batch must document {want}: {batch:?}"
         );
     }
 

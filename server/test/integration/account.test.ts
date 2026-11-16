@@ -134,6 +134,118 @@ describe("settings", () => {
   });
 });
 
+describe("reads (item 28)", () => {
+  it("lists settings by key and reads one", async () => {
+    const token = await register("ReadSettings");
+
+    await app.inject({
+      method: "PUT",
+      url: "/v2/settings/ui_density",
+      headers: headers(token),
+      payload: { value: "compact" },
+    });
+    await app.inject({
+      method: "PUT",
+      url: "/v2/settings/brand_name",
+      headers: headers(token),
+      payload: { value: "Ninja" },
+    });
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/v2/settings",
+      headers: headers(token),
+    });
+    expect(list.statusCode).toBe(200);
+    const page = list.json() as {
+      items: { key: string; value: string }[];
+      page: number;
+      page_size: number;
+      total: number;
+      has_more: boolean;
+    };
+    expect(page).toMatchObject({ page: 1, page_size: 20, total: 2, has_more: false });
+    expect(page.items.map((s) => s.key)).toEqual([
+      "brand_name",
+      "ui_density",
+    ]);
+    expect(page.items[1]).toMatchObject({ key: "ui_density", value: "compact" });
+
+    const own = await app.inject({
+      method: "GET",
+      url: "/v2/settings/ui_density",
+      headers: headers(token),
+    });
+    expect(own.statusCode).toBe(200);
+    expect(own.json()).toMatchObject({ key: "ui_density", value: "compact" });
+
+    // An allow-listed key the user has not set is 404; a key that can
+    // never be stored is a 400, like on write.
+    const unset = await app.inject({
+      method: "GET",
+      url: "/v2/settings/brand_logo",
+      headers: headers(token),
+    });
+    expect(unset.statusCode).toBe(404);
+
+    const unknown = await app.inject({
+      method: "GET",
+      url: "/v2/settings/api_port",
+      headers: headers(token),
+    });
+    expect(unknown.statusCode).toBe(400);
+
+    const anon = await app.inject({ method: "GET", url: "/v2/settings" });
+    expect(anon.statusCode).toBe(401);
+  });
+
+  it("lists fonts and reads one: 403 for other owners, 404 for missing", async () => {
+    const mine = await register("ReadFontMine");
+    const theirs = await register("ReadFontTheirs");
+    const id = randomUUID();
+    await putFont(mine, id, "Body");
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/v2/fonts",
+      headers: headers(mine),
+    });
+    expect(list.statusCode).toBe(200);
+    const page = list.json() as {
+      items: { id: string; name: string }[];
+      total: number;
+      has_more: boolean;
+    };
+    expect(page).toMatchObject({ total: 1, has_more: false });
+    expect(page.items[0]).toMatchObject({ id, name: "Body" });
+
+    const own = await app.inject({
+      method: "GET",
+      url: `/v2/fonts/${id}`,
+      headers: headers(mine),
+    });
+    expect(own.statusCode).toBe(200);
+    expect(own.json()).toMatchObject({ id, name: "Body" });
+
+    const foreign = await app.inject({
+      method: "GET",
+      url: `/v2/fonts/${id}`,
+      headers: headers(theirs),
+    });
+    expect(foreign.statusCode).toBe(403);
+
+    const missing = await app.inject({
+      method: "GET",
+      url: `/v2/fonts/${randomUUID()}`,
+      headers: headers(mine),
+    });
+    expect(missing.statusCode).toBe(404);
+
+    const anon = await app.inject({ method: "GET", url: "/v2/fonts" });
+    expect(anon.statusCode).toBe(401);
+  });
+});
+
 describe("fonts", () => {
   it("creates metadata, uploads bytes, downloads with the sha ETag, and deletes", async () => {
     const token = await register("FontUser");

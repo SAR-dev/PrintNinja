@@ -1,5 +1,6 @@
 pub mod api;
 pub mod background;
+pub mod batch;
 /// Opt-in headless browser (chrome-headless-shell) status/download/remove.
 pub mod browser;
 pub mod cache;

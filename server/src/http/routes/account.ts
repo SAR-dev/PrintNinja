@@ -1,10 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { deleteSetting, putSetting } from "../../domain/settings.js";
+import {
+  deleteSetting,
+  getSetting,
+  listSettings,
+  putSetting,
+} from "../../domain/settings.js";
 import {
   deleteFont,
+  getFont,
   getFontFile,
+  listFonts,
   putFont,
   putFontFile,
 } from "../../domain/fonts.js";
@@ -20,12 +27,15 @@ import { requireAuth } from "../plugins/auth.js";
 import { errorBody } from "../schemas/error.js";
 import {
   fontIdParams,
+  fontPageSchema,
   fontSchema,
   putFontRequest,
   putSettingBody,
   settingKeyParams,
+  settingPageSchema,
   settingSchema,
 } from "../schemas/account.js";
+import { pageQuery } from "../schemas/templates.js";
 
 export interface AccountRouteOptions {
   deps: AuthDeps & { settings: SettingRepository; fonts: FontRepository };
@@ -89,6 +99,62 @@ export async function accountRoutes(
     },
   );
 
+  typed.get(
+    "/v2/settings",
+    {
+      preHandler: [requireAuth(deps)],
+      schema: {
+        description: "List the user's account preferences, by key.",
+        querystring: pageQuery,
+        response: {
+          200: settingPageSchema,
+          400: errorBody,
+          401: errorBody,
+        },
+      },
+    },
+    async (request) => {
+      if (!request.authUser) {
+        throw new UnauthorizedError();
+      }
+      const page = await listSettings(
+        { settings: deps.settings },
+        request.authUser.id,
+        { page: request.query.page, pageSize: request.query.page_size },
+      );
+      return { ...page, items: page.items.map(toSetting) };
+    },
+  );
+
+  typed.get(
+    "/v2/settings/:key",
+    {
+      preHandler: [requireAuth(deps)],
+      schema: {
+        description:
+          "Read one account preference; the key must be allow-listed.",
+        params: settingKeyParams,
+        response: {
+          200: settingSchema,
+          400: errorBody,
+          401: errorBody,
+          404: errorBody,
+        },
+      },
+    },
+    async (request) => {
+      if (!request.authUser) {
+        throw new UnauthorizedError();
+      }
+      const view = await getSetting(
+        { settings: deps.settings },
+        request.authUser.id,
+        request.params.key,
+      );
+      return toSetting(view);
+    },
+  );
+
   typed.put(
     "/v2/settings/:key",
     {
@@ -146,6 +212,62 @@ export async function accountRoutes(
         request.params.key,
       );
       return reply.status(204).send();
+    },
+  );
+
+  typed.get(
+    "/v2/fonts",
+    {
+      preHandler: [requireAuth(deps)],
+      schema: {
+        description: "List the user's fonts, newest change first.",
+        querystring: pageQuery,
+        response: {
+          200: fontPageSchema,
+          400: errorBody,
+          401: errorBody,
+        },
+      },
+    },
+    async (request) => {
+      if (!request.authUser) {
+        throw new UnauthorizedError();
+      }
+      const page = await listFonts(
+        { fonts: deps.fonts },
+        request.authUser.id,
+        { page: request.query.page, pageSize: request.query.page_size },
+      );
+      return { ...page, items: page.items.map(toFont) };
+    },
+  );
+
+  typed.get(
+    "/v2/fonts/:id",
+    {
+      preHandler: [requireAuth(deps)],
+      schema: {
+        description:
+          "Read one of the user's font rows; the bytes live on /file.",
+        params: fontIdParams,
+        response: {
+          200: fontSchema,
+          401: errorBody,
+          403: errorBody,
+          404: errorBody,
+        },
+      },
+    },
+    async (request) => {
+      if (!request.authUser) {
+        throw new UnauthorizedError();
+      }
+      const font = await getFont(
+        { fonts: deps.fonts },
+        request.params.id,
+        request.authUser.id,
+      );
+      return toFont(font);
     },
   );
 

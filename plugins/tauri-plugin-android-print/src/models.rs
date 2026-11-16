@@ -380,6 +380,18 @@ pub struct ApiServerState {
     pub address: Option<String>,
 }
 
+/// The outcome of one finished background print job, posted to the
+/// notification shade by `postJobNotification` (item 41). `kind` is
+/// "success" or "failure"; `subject` is the job's name (its template)
+/// and `detail` the failure's reason.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobNotificationRequest {
+    pub kind: String,
+    pub subject: Option<String>,
+    pub detail: Option<String>,
+}
+
 /// What `startBackgroundService` / `isBackgroundServiceRunning` resolve
 /// with on the Kotlin side: `{"running": bool}`, never a bare boolean.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -647,6 +659,33 @@ mod tests {
             serde_json::from_str(r#"{"granted":false,"openedSettings":true}"#).unwrap();
         assert!(!r.granted);
         assert!(r.opened_settings);
+    }
+
+    #[test]
+    fn job_notification_request_sends_the_keys_kotlin_expects() {
+        // JobNotificationArgs parses exactly these names by reflection,
+        // so the wire keys are the contract; the absent side serializes
+        // as null, which the Kotlin nullable fields default to.
+        let json = serde_json::to_value(JobNotificationRequest {
+            kind: "failure".into(),
+            subject: Some("Order #12".into()),
+            detail: None,
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({"kind": "failure", "subject": "Order #12", "detail": null})
+        );
+        let json = serde_json::to_value(JobNotificationRequest {
+            kind: "success".into(),
+            subject: None,
+            detail: None,
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({"kind": "success", "subject": null, "detail": null})
+        );
     }
 
     #[test]

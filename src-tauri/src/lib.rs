@@ -316,7 +316,9 @@ pub fn run() {
                     "{e} — printing will fail until a Chromium-family browser is installed (apt install chromium or google-chrome); the AppImage does not bundle one, the .deb declares it"
                 );
             }
-            worker::spawn(db_state.clone(), queue, cache_dir);
+            // The app handle goes in so finished jobs can post their
+            // result notification on Android (item 41).
+            worker::spawn(app.handle().clone(), db_state.clone(), queue, cache_dir);
 
             // Warm the peer capability cache while the app boots, so the
             // first print with paired PCs reuses a known-good probe
@@ -385,6 +387,7 @@ pub fn run() {
             commands::history::reprint_job,
             commands::history::retry_job,
             commands::history::delete_job,
+            commands::batch::create_batch,
             commands::settings::get_setting,
             commands::settings::set_setting,
             commands::settings::get_trusted_sources,
