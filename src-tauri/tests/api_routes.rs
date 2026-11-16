@@ -1009,21 +1009,16 @@ async fn create_batch_groups_existing_jobs_and_refuses_bad_ones() {
             )
             .unwrap()
     };
-    assert_eq!(clones, 2, "each job is cloned into the batch as a queued row");
+    assert_eq!(
+        clones, 2,
+        "each job is cloned into the batch as a queued row"
+    );
 
     // Any missing id refuses the whole call…
-    let res = post(
-        serde_json::json!({ "job_ids": [a, 424242] }),
-        db.clone(),
-    )
-    .await;
+    let res = post(serde_json::json!({ "job_ids": [a, 424242] }), db.clone()).await;
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
     // …and an empty list is a validation error.
-    let res = post(
-        serde_json::json!({ "job_ids": [] }),
-        db.clone(),
-    )
-    .await;
+    let res = post(serde_json::json!({ "job_ids": [] }), db.clone()).await;
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 }
 

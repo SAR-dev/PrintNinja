@@ -45,7 +45,9 @@ pub fn clone_job_as_queued(
     record_index: Option<i64>,
 ) -> AppResult<i64> {
     let exists: i64 =
-        conn.query_row("SELECT COUNT(*) FROM print_jobs WHERE id = ?1", [id], |r| r.get(0))?;
+        conn.query_row("SELECT COUNT(*) FROM print_jobs WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })?;
     if exists == 0 {
         return Err(AppError::NotFound(format!("Job {} not found", id)));
     }
@@ -82,7 +84,9 @@ pub fn clone_job_as_queued(
 /// twice is cloned once, so a duplicate can never double-print.
 pub fn create_batch_conn(conn: &Connection, job_ids: &[i64]) -> AppResult<BatchSummary> {
     if job_ids.is_empty() {
-        return Err(AppError::Validation("A batch needs at least one job".into()));
+        return Err(AppError::Validation(
+            "A batch needs at least one job".into(),
+        ));
     }
 
     let mut unique: Vec<i64> = Vec::with_capacity(job_ids.len());

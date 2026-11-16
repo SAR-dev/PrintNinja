@@ -59,11 +59,7 @@ fn create_batch_clones_each_job_in_order_under_one_batch() {
         .unwrap();
     // Pass them reversed: the batch must run them in the given order, not
     // in id order.
-    let reversed: Vec<i64> = original_urls
-        .iter()
-        .rev()
-        .map(|(id, _)| *id)
-        .collect();
+    let reversed: Vec<i64> = original_urls.iter().rev().map(|(id, _)| *id).collect();
 
     let summary = create_batch_conn(conn, &reversed).expect("batch must work");
     assert_eq!(summary.total, 3);
@@ -167,7 +163,10 @@ fn create_batch_clones_a_listed_twice_job_once() {
         .unwrap();
 
     let summary = create_batch_conn(conn, &[id, id]).expect("batch must work");
-    assert_eq!(summary.total, 1, "a duplicate id clones once, so it prints once");
+    assert_eq!(
+        summary.total, 1,
+        "a duplicate id clones once, so it prints once"
+    );
     let clones: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM print_jobs WHERE batch_id = ?1",
