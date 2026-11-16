@@ -1882,12 +1882,17 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
     @Command
     fun postJobNotification(invoke: Invoke) {
         val args = invoke.parseArgs(JobNotificationArgs::class.java)
-        PrintNinjaService.postJobNotification(
-            activity,
-            args.kind,
-            args.subject,
-            args.detail,
-        )
+        // `kind` names the result ("success" or "failure"); a call without
+        // one is a no-op, like every other failure on this best-effort
+        // path.
+        args.kind?.let { kind ->
+            PrintNinjaService.postJobNotification(
+                activity,
+                kind,
+                args.subject,
+                args.detail,
+            )
+        }
         invoke.resolve()
     }
 
