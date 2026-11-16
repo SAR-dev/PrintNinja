@@ -9,10 +9,8 @@ PrintNinja is a label and receipt printing app. This guide lists what it **canno
 The biggest things to know:
 
 - **No printer has been tested on real hardware** (item 7). Output has only been checked against simulated printers.
-- **Deep links (`printninja://`) do nothing on Android** (item 42). The desktop app handles them.
 - **Background print failures on Android are silent** (item 41). Nothing tells you a job failed until you open History.
-- **Declining the Android notification prompt hides the service notification for good** (item 44).
-- **The server has no read or list endpoints for datasets, profiles, fonts and settings** (item 28), and no per-user limits on templates, datasets or profiles (item 33).
+- **The server has no read or list endpoints for datasets, profiles, fonts and settings** (item 28).
 - **Batch printing is half-built** (item 18): the table, worker and History column exist, but nothing creates a batch.
 - **The version-history screen does not exist** (item 34), although the README promises it.
 
@@ -23,18 +21,12 @@ This is the main list: everything still open, highest priority first. Printer it
 | Order | Item | Area | Tag | Why |
 | --- | --- | --- | --- | --- |
 | 1 | 7. Test on real printers | Printers | High | Nothing else matters if real printers do not work; the checklist is in `docs/TEST_CHECKLIST.md`, not yet run on hardware |
-| 2 | 42. Deep links on Android | Android | Small | Documented feature that cannot work on the phone |
-| 3 | 44. Notification permission asked once | Android | Small | Declining hides the service notification forever |
-| 4 | 45. Update badge without an Android file | Android | Small | Misleading badge |
-| 5 | 46. Android text understates what prints without a PC | Android | Small | README and Settings say CPCL and raster need a PC; they do not |
-| 6 | 4. TSPL density, speed, gapless media | Printers | Medium | Common label printers print too light or fail on gapless rolls |
-| 7 | 32. Sessions cannot be listed or revoked one by one | Server | Small | `DELETE /v2/auth/sessions` revokes all others; listing and per-session revoke are still missing |
-| 8 | 33. No limits on templates, datasets, profiles | Server | Small | Protects self-hosted servers from unbounded growth |
-| 9 | 41. No background job notification | Android | Medium | Failures are invisible |
-| 10 | 47. Phone-to-PC traffic is not encrypted | Android | Medium | Plain HTTP on the local network; the architecture doc calls pinned encryption a planned hardening |
-| 11 | 28. No read or list endpoints | Server | Medium | Integrations need a full sync cache without it |
-| 12 | 18. Batch printing entry point | Backend | Medium | Worker, metrics and History column already exist |
-| 13 | 34. Version history screen | Screens | Medium | Promised in the README, and the API is ready |
+| 2 | 4. TSPL density, speed, gapless media | Printers | Medium | Common label printers print too light or fail on gapless rolls |
+| 3 | 41. No background job notification | Android | Medium | Failures are invisible |
+| 4 | 47. Phone-to-PC traffic is not encrypted | Android | Medium | Plain HTTP on the local network; the architecture doc calls pinned encryption a planned hardening |
+| 5 | 28. No read or list endpoints | Server | Medium | Integrations need a full sync cache without it |
+| 6 | 18. Batch printing entry point | Backend | Medium | Worker, metrics and History column already exist |
+| 7 | 34. Version history screen | Screens | Medium | Promised in the README, and the API is ready |
 
 ## How to read the tags
 
@@ -91,10 +83,6 @@ These are small or medium jobs that can be picked up without a big project. The 
 
 **28. \[Medium\] Datasets, profiles, fonts and settings cannot be read or listed directly.** *Problem:* their API only supports writing and deleting. Reads work only through the sync stream, so "list my datasets" needs a full sync cache. *Solutions:* (a) **Recommended:** add paged `GET` list and `GET /{id}` endpoints, copying the `pageSchema` pattern from templates. (b) Add ETag support so clients can cache cheaply. (c) Update the OpenAPI document.
 
-**32. \[Small\] Sessions cannot be listed or revoked one by one.** *Problem:* the only option is "log out everywhere". Someone who lost a laptop cannot see which devices are signed in and has to sign out every good device too. *Solutions:* (a) **Recommended:** store a device label and last-used time per session, then add `GET /v2/auth/sessions` and `DELETE /v2/auth/sessions/{id}`. (b) Mark the current session in the list. (c) Add a "Signed-in devices" section in Settings. **Progress:** `DELETE /v2/auth/sessions` now ends every session except the calling one, so a lost device no longer forces a full sign-out. What is still missing is listing sessions and revoking one by one.
-
-**33. \[Small\] No per-user limits on templates, datasets and profiles.** *Problem:* fonts, saved templates and sessions already have limits, but `putTemplate`, `putDataset` and `putProfile` do not, and manual template versions are kept forever. A buggy or malicious client could grow the database without bound. *Solutions:* (a) **Recommended:** add count limits using the existing `quota_exceeded` error. (b) Also prune manual versions beyond a number per template, like autosaves. (c) Make limits configurable through environment variables for self-hosters.
-
 ## Frontend (the screens)
 
 **34. \[Medium\] Version history has no screen.** *Problem:* the README promises "version history with diff and restore". The server already has endpoints to list, view and restore versions, but nothing in the app can show them. *Solutions:* (a) **Recommended:** add a "History" side panel in the designer that lists versions from `GET /v2/templates/{id}/versions`, with a Restore button. (b) Add a diff view (two versions side by side or as changed fields). (c) Ship list and restore first and the diff later. (d) If it will not be built soon, remove the claim from the README.
@@ -102,14 +90,6 @@ These are small or medium jobs that can be picked up without a big project. The 
 ## Android
 
 **41. \[Medium\] No notification when a background job succeeds or fails.** *Problem:* the only notification is the pinned "service is running" line. A job that fails in the background (printer offline, PC asleep, render timeout) is invisible until you reopen the app and read History. *Solutions:* (a) **Recommended:** post a notification on failure (and optionally success) from the worker, through the Android plugin or a Tauri notification plugin. (b) Add a setting: "Notify on: failures only / all / never". (c) Show the count of waiting jobs in the pinned notification. (d) Tapping a notification opens History on that job.
-
-**42. \[Small\] Deep links do not work on Android.** *Problem:* the link format, trusted-sources screen and README all exist, but the Android app is not registered to open `printninja://` links, so tapping one in a phone browser does nothing. Desktop deep links work. *Solutions:* (a) **Recommended:** add the Tauri deep-link plugin config for the `printninja` scheme and the matching intent filter, and handle the opened URL at start-up and when the app is already running. The Android project is generated, so put manifest changes in the patch scripts or the plugin manifest. (b) Add `https` app links later for a more reliable handoff from browsers. (c) Add an end-to-end test using `adb shell am start -d printninja://...`.
-
-**44. \[Small\] The notification permission is only asked once.** *Problem:* if you decline the Android 13+ prompt, the service notification becomes invisible, its Open/Close buttons are unreachable, and no screen in Settings offers the permission again. *Solutions:* (a) **Recommended:** add a row in Settings → Background showing the permission state with a button that asks again, or opens the app's notification settings if Android will not prompt again. (b) Ask again when the user turns the background service on. (c) Replace the per-process flag with a check of the real permission state.
-
-**45. \[Small\] The update badge can point to a release with no Android file.** *Problem:* the check compares versions only and never looks at the release's files. On a phone, updating also means downloading an APK in a browser and installing it by hand, with no hint of that. Workaround today: open the release page and check that an APK is attached. *Solutions:* (a) **Recommended:** read the release's asset list and show the badge on Android only when an APK is attached. (b) Show the real next step: "Download APK, then open it to install". (c) Link directly to the APK asset. (d) Longer term, publish through an app store or F-Droid so the OS handles updates.
-
-**46. \[Small\] Android text understates what prints without a PC.** *Problem:* the README says Android prints ESC/POS, ZPL and TSPL on the device and that CPCL and raster need a paired PC. The Settings text (`en.ts`, with its Japanese version) lists the same three languages. In the code only PDF still needs a PC; CPCL has an on-device encoder and raster renders on the phone. A CPCL or raster user may pair a PC they do not need. *Solutions:* (a) **Recommended:** reword the README line and the Settings sentence (both languages) to say that only PDF needs a paired PC. (b) Add a short test that fails if the README and the Settings text name different languages.
 
 **47. \[Medium\] Phone-to-PC traffic is not encrypted.** *Problem:* pairing, shared rendering and Print via PC use plain HTTP on the local network, and the pairing code is an introduction, not proof of identity (`docs/architecture/PHONE_AND_PC_SHARING.md`). Anyone on the same network who can read the traffic can see print data and the device token. Release builds already allow this on purpose (see the cleartext patch in `scripts/patch-android-signing.mjs`). *Solutions:* (a) **Recommended:** TLS with a self-signed certificate made on the PC and pinned by the phone during pairing, so the pairing code also vouches for the certificate. (b) Keep plain HTTP but sign each request with a key exchanged at pairing, which stops tampering but not reading. (c) Document that pairing should only be used on a trusted network, and keep (a) for later.
 

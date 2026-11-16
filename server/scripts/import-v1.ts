@@ -137,6 +137,8 @@ export async function importV1(options: {
 				tokenHash: session.token_hash,
 				userId: session.user_id,
 				expiresAt: parseDate(session.expires_at),
+				// v1 stored no device information.
+				deviceLabel: "Unknown device",
 			});
 		}
 		for (const template of templates) {

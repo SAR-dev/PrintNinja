@@ -1,5 +1,11 @@
 import { describeError } from "@/lib/errors";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { agent } from "@/lib/agent/commands";
 import { useTranslation } from "react-i18next";
@@ -58,6 +64,12 @@ import { Link } from "react-router-dom";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { isAndroid } from "@/lib/platform";
 import { hasPairedProvider } from "@/lib/pairing";
+import {
+  applyPendingDeepLinkPrint,
+  getPendingPrint,
+  subscribePendingPrint,
+  takePendingDeepLinkPrint,
+} from "@/lib/deeplink";
 import { notifyError } from "@/lib/notify";
 import { usePrintStore } from "@/lib/store/printStore";
 import {
@@ -483,6 +495,36 @@ function PrintForm() {
     // Keyed on the template only: a reload must not clobber a manual flip.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewTemplateKey]);
+
+  // A `printninja://print` deep link: dispatch stashes the values here
+  // before navigating, and this form consumes them. The apply lands
+  // after the page's own load (which re-defaults the template when the
+  // store's id is unknown to the fresh list) and after the
+  // template-orientation reset above, so the link's values win.
+  // `deepLinkAppliedKey` records which template key the apply happened
+  // for: setting the template id changes that key, which runs the reset
+  // above for the new template — so the link is applied once more
+  // (idempotently) and only then consumed.
+  const pendingDeepLink = useSyncExternalStore(
+    subscribePendingPrint,
+    getPendingPrint,
+    getPendingPrint,
+  );
+  const [deepLinkAppliedKey, setDeepLinkAppliedKey] = useState<string | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!pendingDeepLink || !previewTemplate) return;
+    if (deepLinkAppliedKey !== previewTemplateKey) {
+      applyPendingDeepLinkPrint(pendingDeepLink);
+      setDeepLinkAppliedKey(previewTemplateKey);
+    } else {
+      // Applied for this template, and its orientation reset already ran:
+      // consume so the effect settles.
+      takePendingDeepLinkPrint();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDeepLink, previewTemplateKey, deepLinkAppliedKey]);
 
   // The preview follows the selected template and data source, so
   // operators see what will print. With test data it renders the bundled

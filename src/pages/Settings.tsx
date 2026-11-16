@@ -56,6 +56,9 @@ import {
 } from "lucide-react";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { ProfileCard } from "@/components/ProfileCard";
+// Type only: keeps the background module (and its invoke wrapper) out
+// of this chunk — every runtime use goes through the dynamic import.
+import type { NotificationPermissionState } from "@/lib/android/background";
 import { notifySuccess, notifyError, notifyInfo } from "@/lib/notify";
 import { diagnostics } from "@/lib/diagnostics";
 import * as share from "@/lib/share/client";
@@ -170,30 +173,49 @@ export function SettingsPage() {
     null,
   );
   const [batteryExempt, setBatteryExempt] = useState<boolean | null>(null);
+  const [notifPerm, setNotifPerm] =
+    useState<NotificationPermissionState | null>(null);
   const [bgBusy, setBgBusy] = useState(false);
   // The exemption dialog opens on top of the app, so the real answer
   // only exists once the user comes back: re-read the state on
   // visibilitychange instead of trusting the moment the invoke
   // resolved (the state read there is always stale — the dialog is
-  // still on screen).
+  // still on screen). The notification prompt behaves the same way.
   const pendingBatteryRecheck = useRef(false);
+  const pendingNotifRecheck = useRef(false);
 
   useEffect(() => {
     if (!isAndroidBackground()) return;
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      if (!pendingBatteryRecheck.current) return;
-      pendingBatteryRecheck.current = false;
-      void (async () => {
-        const bg = await import("@/lib/android/background");
-        const exempt = await bg.isBatteryExemptionGranted();
-        setBatteryExempt(exempt);
-        if (exempt) {
-          notifySuccess(t("settings_page.background_toast_granted"));
-        } else {
-          notifyInfo(t("settings_page.background_toast_not_granted"));
-        }
-      })();
+      if (pendingBatteryRecheck.current) {
+        pendingBatteryRecheck.current = false;
+        void (async () => {
+          const bg = await import("@/lib/android/background");
+          const exempt = await bg.isBatteryExemptionGranted();
+          setBatteryExempt(exempt);
+          if (exempt) {
+            notifySuccess(t("settings_page.background_toast_granted"));
+          } else {
+            notifyInfo(t("settings_page.background_toast_not_granted"));
+          }
+        })();
+      }
+      if (pendingNotifRecheck.current) {
+        pendingNotifRecheck.current = false;
+        void (async () => {
+          const bg = await import("@/lib/android/background");
+          const state = await bg.notificationPermissionState();
+          setNotifPerm(state);
+          if (state.granted) {
+            notifySuccess(
+              t("settings_page.background_notifications_toast_granted"),
+            );
+          }
+          // Still denied: silent — the row already shows it and the
+          // button keeps offering a way back.
+        })();
+      }
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
@@ -893,6 +915,7 @@ export function SettingsPage() {
                       <AndroidBackgroundControls
                         running={bgServiceRunning}
                         exempt={batteryExempt}
+                        notif={notifPerm}
                         busy={bgBusy}
                         onRefresh={async () => {
                           const bg = await import("@/lib/android/background");
@@ -904,6 +927,9 @@ export function SettingsPage() {
                             );
                             setBatteryExempt(
                               await bg.isBatteryExemptionGranted(),
+                            );
+                            setNotifPerm(
+                              await bg.notificationPermissionState(),
                             );
                           } finally {
                             setBgBusy(false);
@@ -928,6 +954,29 @@ export function SettingsPage() {
                               );
                               notifySuccess(
                                 t("settings_page.background_toast_updated"),
+                              );
+                            }
+                          } catch (e) {
+                            notifyError(describeError(e));
+                          } finally {
+                            setBgBusy(false);
+                          }
+                        }}
+                        onRequestNotifications={async () => {
+                          const bg = await import("@/lib/android/background");
+                          setBgBusy(true);
+                          try {
+                            const result =
+                              await bg.requestNotificationPermission();
+                            // The prompt and the settings screen both sit
+                            // on top of the app: the real answer arrives
+                            // when the user comes back (visibilitychange
+                            // effect). The instant read only catches the
+                            // already-granted short circuit.
+                            pendingNotifRecheck.current = true;
+                            if (!result.openedSettings) {
+                              setNotifPerm(
+                                await bg.notificationPermissionState(),
                               );
                             }
                           } catch (e) {

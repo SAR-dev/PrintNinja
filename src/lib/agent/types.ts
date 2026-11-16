@@ -644,17 +644,37 @@ export interface PeerRenderResult {
   render_ms: number;
 }
 
-export interface DeeplinkResult {
-  action: string;
-  /** `printninja://print?` only (MISSING_FEATURES #23): the new optional
-   *  print parameters the parser carries. Garbage drops to `null`, the
-   *  deep-link convention for typed values (a bad `copies` drops too),
-   *  so `null` always means "not set — keep the app default". */
-  page_range?: string | null;
-  grayscale?: boolean | null;
-  margin_top?: number | null;
-  margin_right?: number | null;
-  margin_bottom?: number | null;
-  margin_left?: number | null;
-  [key: string]: unknown;
+/** `printninja://print?...` parameters, one per deep-link key.
+ *  Garbage drops to `null`, the deep-link convention for typed values
+ *  (a bad `copies` drops too), so `null` always means "not set — keep
+ *  the app default". */
+export interface DeeplinkPrint {
+  preset: string | null;
+  /** Template name (unique in the app), not a row id. */
+  template: string | null;
+  /** Printer name, as shown in the Print page's picker. */
+  printer: string | null;
+  url: string | null;
+  copies: number | null;
+  orientation: string | null;
+  fit: string | null;
+  page_range: string | null;
+  grayscale: boolean | null;
+  margin_top: number | null;
+  margin_right: number | null;
+  margin_bottom: number | null;
+  margin_left: number | null;
+  test: boolean;
+  confirm: boolean;
+  callback: string | null;
 }
+
+/**
+ * The wire shape of `parse_deeplink` — serde's externally tagged
+ * `DeepLinkAction` enum (src-tauri/src/deeplink.rs), pinned by
+ * e2e/tests/deeplink.e2e.ts. Exactly one key is present.
+ */
+export type DeeplinkResult =
+  | { Print: DeeplinkPrint }
+  | { Open: string }
+  | { Template: string };

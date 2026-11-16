@@ -139,6 +139,8 @@ export interface TemplateRepository {
     query: ListQuery,
   ): Promise<Page<TemplateSummaryView>>;
   listPublished(query: PublishedQuery): Promise<Page<TemplateSummaryView>>;
+  /** Rows owned by ownerId, for the per-user create quota. */
+  countByOwner(ownerId: string): Promise<number>;
   /** Adds to use_count for a published template only. False means
    * missing or private — the domain answers 404 either way. */
   incrementUseCount(id: string, by: number): Promise<boolean>;

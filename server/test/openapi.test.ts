@@ -85,6 +85,30 @@ describe("generated OpenAPI document", () => {
       "429",
     ]);
     expect(document.paths).toHaveProperty("/v2/auth/me");
+
+    const list = document.paths["/v2/auth/sessions"] as {
+      get: { responses: Record<string, unknown> };
+      delete: { responses: Record<string, unknown> };
+    };
+    expect(Object.keys(list.get.responses).sort()).toEqual([
+      "200",
+      "401",
+      "429",
+    ]);
+    expect(Object.keys(list.delete.responses).sort()).toEqual([
+      "200",
+      "401",
+      "429",
+    ]);
+    const one = document.paths["/v2/auth/sessions/{id}"] as {
+      delete: { responses: Record<string, unknown> };
+    };
+    expect(Object.keys(one.delete.responses).sort()).toEqual([
+      "200",
+      "401",
+      "404",
+      "429",
+    ]);
   });
 
   it("documents the template endpoints with their v2 statuses", async () => {

@@ -1,13 +1,23 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PrintNinja",
-  "version": "2026.1114.0",
+  "version": "2026.1115.0",
   "identifier": "com.printninja.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        { "scheme": ["printninja"] }
+      ],
+      "desktop": {
+        "schemes": ["printninja"]
+      }
+    }
   },
   "app": {
     "windows": [
@@ -52,11 +62,11 @@
     },
     "windows": {
       "wix": {
-        "version": "26.11.1400"
+        "version": "26.11.1500"
       }
     },
     "android": {
-      "versionCode": 26111400
+      "versionCode": 26111500
     }
   }
 }

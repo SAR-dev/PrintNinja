@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@/lib/i18n";
 import {
   buildUpdateCheckUrl,
+  fetchLatestRelease,
+  findApkAsset,
   getAppVersion,
   isNewer,
   normalizeVersion,
@@ -44,6 +46,26 @@ beforeEach(() => {
       throw new Error("offline");
     }),
   );
+});
+
+const realUA = window.navigator.userAgent;
+
+/** The Pixel 7 user agent the mobile e2e project also reports. */
+const ANDROID_UA =
+  "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120.0.0.0 Mobile Safari/537.36";
+
+function stubAndroidUA(): void {
+  Object.defineProperty(window.navigator, "userAgent", {
+    configurable: true,
+    get: () => ANDROID_UA,
+  });
+}
+
+afterEach(() => {
+  Object.defineProperty(window.navigator, "userAgent", {
+    configurable: true,
+    get: () => realUA,
+  });
 });
 
 describe("version compare", () => {
@@ -253,6 +275,133 @@ describe("UpdateBadge", () => {
             }),
           }) as Response,
       ),
+    );
+    render(<UpdateBadge />);
+    await waitFor(() => expect(screen.queryByRole("link")).toBeNull());
+  });
+});
+
+describe("release APK assets", () => {
+  const apk = {
+    name: "PrintNinja_2026.1115.0_aarch64.apk",
+    browser_download_url:
+      "https://github.com/o/r/releases/download/v9.9.9/PrintNinja_2026.1115.0_aarch64.apk",
+  };
+
+  it("findApkAsset returns the first APK link and null without one", () => {
+    expect(
+      findApkAsset([
+        { name: "notes.txt", browser_download_url: "https://x/notes" },
+        {
+          name: "PrintNinja_aarch64.aab",
+          browser_download_url: "https://x/a.ab",
+        },
+        apk,
+      ]),
+    ).toBe(apk.browser_download_url);
+    // No assets, no APK, or an asset without a link: nothing to install.
+    expect(findApkAsset(undefined)).toBeNull();
+    expect(findApkAsset("not-an-array")).toBeNull();
+    expect(
+      findApkAsset([
+        { name: "PrintNinja_aarch64.aab", browser_download_url: "https://x/a" },
+      ]),
+    ).toBeNull();
+    expect(findApkAsset([{ name: "app.apk" }])).toBeNull();
+    expect(findApkAsset([null, "junk", { name: 42 }])).toBeNull();
+  });
+
+  it("fetchLatestRelease carries the APK link from the assets", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          ({
+            ok: true,
+            json: async () => ({
+              tag_name: "v9.9.9",
+              html_url: "https://github.com/o/r/releases/tag/v9.9.9",
+              assets: [apk],
+            }),
+          }) as Response,
+      ),
+    );
+    await expect(fetchLatestRelease()).resolves.toMatchObject({
+      version: "9.9.9",
+      url: "https://github.com/o/r/releases/tag/v9.9.9",
+      apkUrl: apk.browser_download_url,
+    });
+  });
+});
+
+describe("UpdateBadge on Android", () => {
+  const tag = "v9.9.9";
+  const releaseUrl = `https://github.com/o/r/releases/tag/${tag}`;
+  const releaseBody = (assets?: unknown) => ({
+    ok: true,
+    json: async () => ({
+      tag_name: tag,
+      html_url: releaseUrl,
+      ...(assets === undefined ? {} : { assets }),
+    }),
+  });
+
+  it("stays hidden when the release attaches no APK", async () => {
+    stubAndroidUA();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => releaseBody() as Response),
+    );
+    render(<UpdateBadge />);
+    // The release is newer, but a phone has nothing to install from it.
+    await waitFor(() => expect(screen.queryByRole("link")).toBeNull());
+  });
+
+  it("links straight to the APK and says how to install it", async () => {
+    stubAndroidUA();
+    const apk = {
+      name: "PrintNinja_aarch64.apk",
+      browser_download_url: `https://github.com/o/r/releases/download/${tag}/PrintNinja_aarch64.apk`,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => releaseBody([apk]) as Response),
+    );
+    render(<UpdateBadge />);
+    const link = await screen.findByRole("link", {
+      name: `Update to ${tag} — download the APK, then open it to install`,
+    });
+    expect(link).toHaveAttribute("href", apk.browser_download_url);
+  });
+
+  it("paints from a cache that carries an APK when the network fails", async () => {
+    stubAndroidUA();
+    localStorage.setItem(
+      "printninja-update-check",
+      JSON.stringify({
+        version: tag.slice(1),
+        url: releaseUrl,
+        apkUrl: "https://example.com/PrintNinja.apk",
+        checkedAt: Date.now(),
+      }),
+    );
+    // beforeEach's fetch throws: only the cached paint can show.
+    render(<UpdateBadge />);
+    const link = await screen.findByRole("link", {
+      name: /Update to v9\.9\.9/,
+    });
+    expect(link).toHaveAttribute("href", "https://example.com/PrintNinja.apk");
+  });
+
+  it("hides an old cache without an APK until a fetch fills it", async () => {
+    stubAndroidUA();
+    localStorage.setItem(
+      "printninja-update-check",
+      JSON.stringify({
+        version: tag.slice(1),
+        url: releaseUrl,
+        checkedAt: Date.now(),
+      }),
     );
     render(<UpdateBadge />);
     await waitFor(() => expect(screen.queryByRole("link")).toBeNull());

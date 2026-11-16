@@ -12,6 +12,8 @@ Default permissions for the Android print plugin
 - `allow-is-background-service-running`
 - `allow-request-battery-exemption`
 - `allow-is-battery-exemption-granted`
+- `allow-notification-permission-state`
+- `allow-request-notification-permission`
 
 ## Permission Table
 
@@ -129,6 +131,32 @@ Denies the is_battery_exemption_granted command without any pre-configured scope
 <tr>
 <td>
 
+`android-print:allow-notification-permission-state`
+
+</td>
+<td>
+
+Enables the notification_permission_state command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`android-print:deny-notification-permission-state`
+
+</td>
+<td>
+
+Denies the notification_permission_state command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `android-print:allow-request-battery-exemption`
 
 </td>
@@ -148,6 +176,32 @@ Enables the request_battery_exemption command without any pre-configured scope.
 <td>
 
 Denies the request_battery_exemption command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`android-print:allow-request-notification-permission`
+
+</td>
+<td>
+
+Enables the request_notification_permission command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`android-print:deny-request-notification-permission`
+
+</td>
+<td>
+
+Denies the request_notification_permission command without any pre-configured scope.
 
 </td>
 </tr>
