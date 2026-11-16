@@ -121,6 +121,7 @@ function toUserRecord(user: {
   handle: string;
   handleKey: string;
   passwordHash: string;
+  recoveryCodeHash: string | null;
   createdAt: Date;
 }): UserRecord {
   return {
@@ -128,6 +129,7 @@ function toUserRecord(user: {
     handle: user.handle,
     handleKey: user.handleKey,
     passwordHash: user.passwordHash,
+    recoveryCodeHash: user.recoveryCodeHash,
     createdAt: user.createdAt,
   };
 }

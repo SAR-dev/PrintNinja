@@ -18,6 +18,10 @@ import {
 export { ApiError, ServerUnreachableError, SessionExpiredError };
 
 export type AuthResponse =
+  paths["/v2/auth/login"]["post"]["responses"][200]["content"]["application/json"];
+
+/** Register answers with the session plus the one-time recovery code. */
+export type RegisterResponse =
   paths["/v2/auth/register"]["post"]["responses"][201]["content"]["application/json"];
 
 function apiDeps(): ApiDeps {
@@ -269,12 +273,12 @@ export async function authedFetch(
   return res;
 }
 
-async function authRequest(
+async function authRequest<T extends AuthResponse>(
   path: "/v2/auth/register" | "/v2/auth/login",
   handle: string,
   password: string,
-): Promise<AuthResponse> {
-  const data = await callApi<AuthResponse>(apiDeps(), {
+): Promise<T> {
+  const data = await callApi<T>(apiDeps(), {
     method: "POST",
     path,
     body: { handle, password },
@@ -298,8 +302,8 @@ async function authRequest(
 export async function register(
   handle: string,
   password: string,
-): Promise<AuthResponse> {
-  return authRequest("/v2/auth/register", handle, password);
+): Promise<RegisterResponse> {
+  return authRequest<RegisterResponse>("/v2/auth/register", handle, password);
 }
 
 export async function login(
@@ -351,6 +355,43 @@ export async function changePassword(
     method: "PUT",
     path: "/v2/auth/password",
     body: { current_password: currentPassword, new_password: newPassword },
+  });
+}
+
+/**
+ * Forgot-password reset with the account's recovery code (no sign-in
+ * needed). The code works once: the answer carries its replacement,
+ * which the person must save. Every session of the account is ended on
+ * the server, so the caller signs in again afterwards.
+ */
+export async function resetPassword(
+  handle: string,
+  recoveryCode: string,
+  newPassword: string,
+): Promise<{ recovery_code: string; revoked: number }> {
+  return callApi<{ recovery_code: string; revoked: number }>(apiDeps(), {
+    method: "POST",
+    path: "/v2/auth/reset-password",
+    body: {
+      handle,
+      recovery_code: recoveryCode,
+      new_password: newPassword,
+    },
+  });
+}
+
+/**
+ * Make (or replace) the signed-in account's recovery code. Needs the
+ * current password; a wrong one is a 403 (not a 401), so it never reads
+ * as an expired session. The code is shown only in this answer.
+ */
+export async function issueRecoveryCode(
+  currentPassword: string,
+): Promise<{ recovery_code: string }> {
+  return callApi<{ recovery_code: string }>(apiDeps(), {
+    method: "POST",
+    path: "/v2/auth/recovery-code",
+    body: { current_password: currentPassword },
   });
 }
 

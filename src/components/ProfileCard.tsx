@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { notifyError } from "@/lib/notify";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
+import { RecoveryCodeForm } from "@/components/RecoveryCodeForm";
 import { SignedInSessions } from "@/components/SignedInSessions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -165,6 +166,7 @@ export function ProfileCard() {
           {account.kind === "signed_in" && (
             <>
               <ChangePasswordForm busy={busy} setBusy={setBusy} />
+              <RecoveryCodeForm busy={busy} setBusy={setBusy} />
               <SignedInSessions busy={busy} setBusy={setBusy} />
             </>
           )}

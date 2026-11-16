@@ -20,6 +20,7 @@ model User {
   handle       String // as typed, 1 to 32 of A-Z a-z 0-9 _ -
   handleKey    String    @unique @map("handle_key") // lowercase of handle; case-insensitive uniqueness
   passwordHash String    @map("password_hash")
+  recoveryCodeHash String? @map("recovery_code_hash") // SHA-256 hex of the one-time recovery code; null until one is issued
   createdAt    DateTime  @default(now()) @map("created_at")
   sessions     Session[]
   templates    Template[]

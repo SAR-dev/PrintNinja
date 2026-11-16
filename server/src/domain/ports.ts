@@ -16,6 +16,9 @@ export interface UserRecord {
   handle: string;
   handleKey: string;
   passwordHash: string;
+  /** SHA-256 hex of the recovery code; null for accounts that never
+   * made one (created before recovery codes existed). */
+  recoveryCodeHash: string | null;
   createdAt: Date;
 }
 
@@ -42,9 +45,14 @@ export interface UserRepository {
     handle: string;
     handleKey: string;
     passwordHash: string;
+    /** Omitted for accounts made without one (seed and import scripts). */
+    recoveryCodeHash?: string;
   }): Promise<UserRecord>;
   /** Replaces the stored hash (D13: legacy scrypt rehash on login). */
   updatePasswordHash(id: string, passwordHash: string): Promise<void>;
+  /** Stores the hash of a freshly issued recovery code, replacing any
+   * earlier one (a code works once, then it is rotated). */
+  setRecoveryCodeHash(id: string, recoveryCodeHash: string): Promise<void>;
 }
 
 export interface SessionRepository {
@@ -99,6 +107,12 @@ export interface TokenService {
    * stored; the token is sent to the client and never stored. */
   generate(): { token: string; tokenHash: string };
   hash(token: string): string;
+  /** A one-time account recovery code: 20 random characters from an
+   * unambiguous alphabet, shown as XXXXX-XXXXX-XXXXX-XXXXX. Only the
+   * hash is stored. */
+  generateRecoveryCode(): { code: string; codeHash: string };
+  /** Hash of a typed code. Case, dashes and spaces are ignored. */
+  hashRecoveryCode(code: string): string;
 }
 
 export interface Clock {

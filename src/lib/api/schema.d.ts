@@ -149,6 +149,7 @@ export interface paths {
                                 /** Format: date-time */
                                 created_at: string;
                             };
+                            recovery_code: string;
                         };
                     };
                 };
@@ -760,6 +761,238 @@ export interface paths {
             };
         };
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/auth/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Forgot-password reset with the account's recovery code. The code works once and is replaced by a new one in the answer; every session is revoked, so sign in again afterwards. An unknown handle, an account without a code and a wrong code all answer the same 401. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @example Rafi */
+                        handle: string;
+                        recovery_code: string;
+                        new_password: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            recovery_code: string;
+                            revoked: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                /** @enum {string} */
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "own_template_saved" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                message: string;
+                                details?: {
+                                    path: string;
+                                    message: string;
+                                }[];
+                                request_id: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                /** @enum {string} */
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "own_template_saved" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                message: string;
+                                details?: {
+                                    path: string;
+                                    message: string;
+                                }[];
+                                request_id: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                /** @enum {string} */
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "own_template_saved" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                message: string;
+                                details?: {
+                                    path: string;
+                                    message: string;
+                                }[];
+                                request_id: string;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/auth/recovery-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Make a new recovery code (first one for older accounts, or a replacement for a lost one). The current password must verify (a wrong one answers 403, so it never looks like an expired session); any earlier code stops working. The code is shown only in this answer. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        current_password: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            recovery_code: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                /** @enum {string} */
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "own_template_saved" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                message: string;
+                                details?: {
+                                    path: string;
+                                    message: string;
+                                }[];
+                                request_id: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                /** @enum {string} */
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "own_template_saved" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                message: string;
+                                details?: {
+                                    path: string;
+                                    message: string;
+                                }[];
+                                request_id: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                /** @enum {string} */
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "own_template_saved" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                message: string;
+                                details?: {
+                                    path: string;
+                                    message: string;
+                                }[];
+                                request_id: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: {
+                                /** @enum {string} */
+                                code: "validation_failed" | "remote_reference" | "payload_too_large" | "unauthorized" | "invalid_credentials" | "forbidden" | "not_found" | "handle_taken" | "template_name_taken" | "own_template_saved" | "revision_conflict" | "revision_required" | "quota_exceeded" | "service_unavailable" | "rate_limited" | "internal_error";
+                                message: string;
+                                details?: {
+                                    path: string;
+                                    message: string;
+                                }[];
+                                request_id: string;
+                            };
+                        };
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;

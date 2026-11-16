@@ -340,4 +340,100 @@ describe("signed-in devices", () => {
     });
     expect(again.statusCode).toBe(404);
   });
+
+  it("recovery code: register -> reset -> old code dead, new code works", async () => {
+    const reg = await app.inject({
+      method: "POST",
+      url: "/v2/auth/register",
+      payload: { handle: "Ivy", password: "password123" },
+    });
+    expect(reg.statusCode).toBe(201);
+    expect(reg.headers["cache-control"]).toBe("no-store");
+    const { token, recovery_code: code } = reg.json() as {
+      token: string;
+      recovery_code: string;
+    };
+    expect(code).toMatch(/^([A-HJ-NP-Z2-9]{5}-){3}[A-HJ-NP-Z2-9]{5}$/);
+
+    const reset = (handle: string, recovery_code: string) =>
+      app.inject({
+        method: "POST",
+        url: "/v2/auth/reset-password",
+        payload: { handle, recovery_code, new_password: "brand new pw 1" },
+      });
+
+    // Wrong code and unknown handle are the same 401.
+    expect((await reset("Ivy", "AAAAA-AAAAA-AAAAA-AAAAA")).statusCode).toBe(
+      401,
+    );
+    expect((await reset("nobody", code)).statusCode).toBe(401);
+
+    // Right code: typed in lowercase, no dashes, any handle case.
+    const ok = await reset("IVY", code.toLowerCase().replaceAll("-", ""));
+    expect(ok.statusCode).toBe(200);
+    expect(ok.headers["cache-control"]).toBe("no-store");
+    const okBody = ok.json() as { recovery_code: string; revoked: number };
+    expect(okBody.revoked).toBe(1);
+    expect(okBody.recovery_code).not.toBe(code);
+
+    // The old session is gone, the old password and old code are dead.
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/v2/auth/me",
+          headers: { authorization: `Bearer ${token}` },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect((await login("Ivy", "password123")).status).toBe(401);
+    expect((await reset("Ivy", code)).statusCode).toBe(401);
+    expect((await login("Ivy", "brand new pw 1")).status).toBe(200);
+
+    // The rotated code is the live one.
+    expect((await reset("Ivy", okBody.recovery_code)).statusCode).toBe(200);
+  });
+
+  it("recovery code: older accounts make one in settings, needs the password", async () => {
+    const reg = await register("jon", "password123");
+    const headers = { authorization: `Bearer ${reg.body.token}` };
+
+    const wrong = await app.inject({
+      method: "POST",
+      url: "/v2/auth/recovery-code",
+      headers,
+      payload: { current_password: "nope nope nope" },
+    });
+    // 403, not 401: a typo must not look like an expired session.
+    expect(wrong.statusCode).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/v2/auth/recovery-code",
+          payload: { current_password: "password123" },
+        })
+      ).statusCode,
+    ).toBe(401); // not signed in
+
+    const made = await app.inject({
+      method: "POST",
+      url: "/v2/auth/recovery-code",
+      headers,
+      payload: { current_password: "password123" },
+    });
+    expect(made.statusCode).toBe(200);
+    const { recovery_code } = made.json() as { recovery_code: string };
+
+    const reset = await app.inject({
+      method: "POST",
+      url: "/v2/auth/reset-password",
+      payload: {
+        handle: "jon",
+        recovery_code,
+        new_password: "another new pw",
+      },
+    });
+    expect(reset.statusCode).toBe(200);
+  });
 });

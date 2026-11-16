@@ -16,6 +16,15 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+### Added
+
+- **Reset a forgotten password.** New accounts get a recovery code at sign-up
+  (save it somewhere safe). Choose "Forgot your password?" on the sign-in
+  screen and enter it to set a new password. Each code works once, and you get
+  a fresh one after every reset.
+- **Recovery codes for existing accounts.** Make or replace your code any time
+  in Settings, under your account.
+
 ## [2026.1116.1] - 2026-11-16
 
 ### Changed

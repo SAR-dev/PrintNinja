@@ -10,6 +10,7 @@ import {
 import {
   changePassword,
   DEVICE_LABEL_MAX,
+  issueRecoveryCode,
   deviceLabelFromUserAgent,
   listUserSessions,
   loginUser,
@@ -17,14 +18,18 @@ import {
   MAX_SESSIONS_PER_USER,
   purgeExpiredSessions,
   registerUser,
+  resetPassword,
   revokeOtherSessions,
   revokeSession,
   validateSession,
 } from "../src/domain/auth/index.js";
 import {
+  ForbiddenError,
   HandleTakenError,
   InvalidCredentialsError,
+  InvalidRecoveryCodeError,
   UnauthorizedError,
+  ValidationError,
 } from "../src/domain/errors.js";
 import type { AuthDeps } from "../src/domain/ports.js";
 
@@ -468,5 +473,131 @@ describe("listUserSessions and revokeSession", () => {
     expect(
       (await d.sessions.findWithUser(hash))?.session.lastUsedAt.toISOString(),
     ).toBe("2026-10-20T00:06:00.000Z");
+  });
+});
+
+describe("recovery code and password reset", () => {
+  it("register returns a recovery code and stores only its hash", async () => {
+    const d = deps();
+    const result = await registered(d);
+
+    expect(result.recoveryCode).toMatch(/^CODE\d+-/);
+    const stored = await d.users.findById(result.user.id);
+    expect(stored?.recoveryCodeHash).toBe(
+      d.tokens.hashRecoveryCode(result.recoveryCode),
+    );
+    expect(stored?.recoveryCodeHash).not.toContain(result.recoveryCode);
+  });
+
+  it("resets the password with the code, rotates the code, signs everything out", async () => {
+    const d = deps();
+    const { user, token, recoveryCode } = await registered(d);
+    await loginUser(d, { handle: "Alice", password: PASSWORD }); // 2nd device
+
+    const result = await resetPassword(d, {
+      handle: "alice", // case-insensitive, like login
+      recoveryCode: recoveryCode.toLowerCase().replaceAll("-", " "),
+      newPassword: "a brand new one",
+    });
+
+    expect(result.revoked).toBe(2);
+    expect(result.recoveryCode).not.toBe(recoveryCode);
+    await expect(validateSession(d, token)).rejects.toBeInstanceOf(
+      UnauthorizedError,
+    );
+    await expect(
+      loginUser(d, { handle: "Alice", password: PASSWORD }),
+    ).rejects.toBeInstanceOf(InvalidCredentialsError);
+    const login = await loginUser(d, {
+      handle: "Alice",
+      password: "a brand new one",
+    });
+    expect(login.user.id).toBe(user.id);
+  });
+
+  it("a recovery code works only once", async () => {
+    const d = deps();
+    const { recoveryCode } = await registered(d);
+    await resetPassword(d, {
+      handle: "Alice",
+      recoveryCode,
+      newPassword: "first new password",
+    });
+
+    await expect(
+      resetPassword(d, {
+        handle: "Alice",
+        recoveryCode,
+        newPassword: "second new password",
+      }),
+    ).rejects.toBeInstanceOf(InvalidRecoveryCodeError);
+  });
+
+  it("answers one error for a wrong code, an unknown handle and a missing code", async () => {
+    const d = deps();
+    const { user } = await registered(d);
+    const originalHash = (await d.users.findById(user.id))?.passwordHash;
+    // An account from before recovery codes: no hash on file.
+    await d.users.create({
+      id: "legacy",
+      handle: "Legacy",
+      handleKey: "legacy",
+      passwordHash: "hash-of:whatever",
+    });
+    const attempts = [
+      { handle: "Alice", recoveryCode: "WRONG-CODE" },
+      { handle: "Nobody", recoveryCode: "CODE1-AAAAA-BBBBB-CCCCC" },
+      { handle: "Legacy", recoveryCode: "CODE1-AAAAA-BBBBB-CCCCC" },
+    ];
+    for (const attempt of attempts) {
+      await expect(
+        resetPassword(d, { ...attempt, newPassword: "long enough pw" }),
+      ).rejects.toBeInstanceOf(InvalidRecoveryCodeError);
+    }
+    // None of those changed the real account.
+    const stored = await d.users.findById(user.id);
+    expect(stored?.passwordHash).toBe(originalHash);
+  });
+
+  it("rejects a too-short new password before touching anything", async () => {
+    const d = deps();
+    const { recoveryCode } = await registered(d);
+    await expect(
+      resetPassword(d, { handle: "Alice", recoveryCode, newPassword: "short" }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    // The code is still good.
+    await expect(
+      resetPassword(d, {
+        handle: "Alice",
+        recoveryCode,
+        newPassword: "long enough pw",
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it("issueRecoveryCode needs the password and replaces the old code", async () => {
+    const d = deps();
+    const { user, recoveryCode: first } = await registered(d);
+
+    await expect(
+      issueRecoveryCode(d, user, "wrong password"),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    const { recoveryCode: second } = await issueRecoveryCode(d, user, PASSWORD);
+    expect(second).not.toBe(first);
+    await expect(
+      resetPassword(d, {
+        handle: "Alice",
+        recoveryCode: first,
+        newPassword: "long enough pw",
+      }),
+    ).rejects.toBeInstanceOf(InvalidRecoveryCodeError);
+    await expect(
+      resetPassword(d, {
+        handle: "Alice",
+        recoveryCode: second,
+        newPassword: "long enough pw",
+      }),
+    ).resolves.toBeDefined();
   });
 });

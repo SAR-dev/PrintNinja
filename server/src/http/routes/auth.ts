@@ -4,10 +4,12 @@ import { z } from "zod";
 import {
   handleKey,
   changePassword,
+  issueRecoveryCode,
   listUserSessions,
   loginUser,
   logoutUser,
   registerUser,
+  resetPassword,
   revokeOtherSessions,
   revokeSession,
 } from "../../domain/auth/index.js";
@@ -23,6 +25,11 @@ import {
   authCredentials,
   authResponse,
   changePasswordBody,
+  issueRecoveryCodeBody,
+  recoveryCodeResponse,
+  registerResponse,
+  resetPasswordBody,
+  resetPasswordResponse,
   sessionListResponse,
   userSchema,
 } from "../schemas/auth.js";
@@ -78,7 +85,7 @@ export async function authRoutes(
         description: "Create an account and its first session.",
         body: authCredentials,
         response: {
-          201: authResponse,
+          201: registerResponse,
           400: errorBody,
           409: errorBody,
           429: errorBody,
@@ -93,7 +100,10 @@ export async function authRoutes(
       return reply
         .header("Cache-Control", "no-store")
         .status(201)
-        .send(toAuthResponse(result.user, result.token, result.expiresAt));
+        .send({
+          ...toAuthResponse(result.user, result.token, result.expiresAt),
+          recovery_code: result.recoveryCode,
+        });
     },
   );
 
@@ -263,6 +273,67 @@ export async function authRoutes(
         bearerToken(request),
       );
       return reply.header("Cache-Control", "no-store").send({ revoked });
+    },
+  );
+
+  typed.post(
+    "/v2/auth/reset-password",
+    {
+      config: { rateLimit: bruteForceLimit },
+      schema: {
+        description:
+          "Forgot-password reset with the account's recovery code. The code works once and is replaced by a new one in the answer; every session is revoked, so sign in again afterwards. An unknown handle, an account without a code and a wrong code all answer the same 401.",
+        body: resetPasswordBody,
+        response: {
+          200: resetPasswordResponse,
+          400: errorBody,
+          401: errorBody,
+          429: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const result = await resetPassword(deps, {
+        handle: request.body.handle,
+        recoveryCode: request.body.recovery_code,
+        newPassword: request.body.new_password,
+      });
+      return reply.header("Cache-Control", "no-store").send({
+        recovery_code: result.recoveryCode,
+        revoked: result.revoked,
+      });
+    },
+  );
+
+  typed.post(
+    "/v2/auth/recovery-code",
+    {
+      preHandler: [requireAuth(deps)],
+      schema: {
+        description:
+          "Make a new recovery code (first one for older accounts, or a replacement for a lost one). The current password must verify (a wrong one answers 403, so it never looks like an expired session); any earlier code stops working. The code is shown only in this answer.",
+        body: issueRecoveryCodeBody,
+        response: {
+          200: recoveryCodeResponse,
+          400: errorBody,
+          401: errorBody,
+          403: errorBody,
+          429: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!request.authUser) {
+        throw new UnauthorizedError();
+      }
+      const { recoveryCode } = await issueRecoveryCode(
+        deps,
+        request.authUser,
+        request.body.current_password,
+      );
+      return reply
+        .header("Cache-Control", "no-store")
+        .send({ recovery_code: recoveryCode });
     },
   );
 

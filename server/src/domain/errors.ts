@@ -54,6 +54,15 @@ export class InvalidCredentialsError extends DomainError {
   }
 }
 
+/** Password reset with an unknown handle, an account with no recovery
+ * code, or a wrong code. One error for all three, so handles cannot be
+ * probed. Reuses the invalid_credentials code: no new vocabulary. */
+export class InvalidRecoveryCodeError extends DomainError {
+  constructor() {
+    super("invalid_credentials", 401, "Invalid handle or recovery code");
+  }
+}
+
 /** Missing, unknown or expired session token. One message for all three,
  * for the same reason as above. */
 export class UnauthorizedError extends DomainError {

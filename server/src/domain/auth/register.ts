@@ -12,6 +12,8 @@ export interface RegisterResult {
   user: UserRecord;
   token: string;
   expiresAt: Date;
+  /** Shown to the person once; only its hash is stored. */
+  recoveryCode: string;
 }
 
 /**
@@ -37,6 +39,7 @@ export async function registerUser(
   }
 
   const passwordHash = await deps.hasher.hash(input.password);
+  const recovery = deps.tokens.generateRecoveryCode();
   // The repository maps a unique-violation on the concurrent-insert
   // race to the same HandleTakenError, so two simultaneous registers
   // of one handle still get one 409 and one 201.
@@ -45,6 +48,7 @@ export async function registerUser(
     handle,
     handleKey: key,
     passwordHash,
+    recoveryCodeHash: recovery.codeHash,
   });
 
   const { token, tokenHash } = deps.tokens.generate();
@@ -59,5 +63,5 @@ export async function registerUser(
   });
   await deps.sessions.deleteOldestForUser(user.id, MAX_SESSIONS_PER_USER);
 
-  return { user, token, expiresAt };
+  return { user, token, expiresAt, recoveryCode: recovery.code };
 }
