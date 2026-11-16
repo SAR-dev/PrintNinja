@@ -16,6 +16,8 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+## [2026.1116.1] - 2026-11-16
+
 ### Changed
 
 - **Phone pairing has its own Devices page.** Pairing phones with this PC,
