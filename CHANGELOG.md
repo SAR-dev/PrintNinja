@@ -16,6 +16,8 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+## [2026.1117.1] - 2026-11-16
+
 ### Added
 
 - **Reset a forgotten password.** New accounts get a recovery code at sign-up
