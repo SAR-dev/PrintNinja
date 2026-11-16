@@ -1474,6 +1474,12 @@ const en = {
       "No trusted sources yet — every deep link asks for confirmation.",
     trusted_remove: "Remove {{src}}",
   },
+  deeplink: {
+    error_parse: "Could not open this deep link: {{message}}",
+    error_unknown_destination: "Unknown deep link destination: {{dest}}",
+    error_unknown_template:
+      'No template named "{{name}}" — the print page opened with your current selection.',
+  },
   explorer: {
     web_notice:
       "The API tools need the desktop app: it calls the local server on this machine, which the browser preview cannot reach.",

@@ -16,6 +16,13 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+### Fixed
+
+- **Deep links now open on the phone.** `printninja://` links from a
+  browser or another app now open the app on Android — opening a page,
+  a template, or a pre-filled Print screen — the same as they already
+  did on the desktop.
+
 ## [2026.1115.0] - 2026-11-15
 
 ### Added

@@ -1508,6 +1508,12 @@ const ja: Translation = {
       "信頼する送信元はまだありません。すべてのディープリンクで確認が表示されます。",
     trusted_remove: "{{src}} を削除",
   },
+  deeplink: {
+    error_parse: "このディープリンクを開けませんでした: {{message}}",
+    error_unknown_destination: "不明なディープリンク先: {{dest}}",
+    error_unknown_template:
+      "「{{name}}」というテンプレートがありません。現在の選択で印刷ページを開きます。",
+  },
   explorer: {
     web_notice:
       "API機能にはデスクトップアプリが必要です。このマシン上のローカルサーバーを呼び出すため、ブラウザープレビューからは接続できません。",

@@ -9,7 +9,6 @@ PrintNinja is a label and receipt printing app. This guide lists what it **canno
 The biggest things to know:
 
 - **No printer has been tested on real hardware** (item 7). Output has only been checked against simulated printers.
-- **Deep links (`printninja://`) do nothing on Android** (item 42). The desktop app handles them.
 - **Background print failures on Android are silent** (item 41). Nothing tells you a job failed until you open History.
 - **The server has no read or list endpoints for datasets, profiles, fonts and settings** (item 28).
 - **Batch printing is half-built** (item 18): the table, worker and History column exist, but nothing creates a batch.
@@ -22,13 +21,12 @@ This is the main list: everything still open, highest priority first. Printer it
 | Order | Item | Area | Tag | Why |
 | --- | --- | --- | --- | --- |
 | 1 | 7. Test on real printers | Printers | High | Nothing else matters if real printers do not work; the checklist is in `docs/TEST_CHECKLIST.md`, not yet run on hardware |
-| 2 | 42. Deep links on Android | Android | Small | Documented feature that cannot work on the phone |
-| 3 | 4. TSPL density, speed, gapless media | Printers | Medium | Common label printers print too light or fail on gapless rolls |
-| 4 | 41. No background job notification | Android | Medium | Failures are invisible |
-| 5 | 47. Phone-to-PC traffic is not encrypted | Android | Medium | Plain HTTP on the local network; the architecture doc calls pinned encryption a planned hardening |
-| 6 | 28. No read or list endpoints | Server | Medium | Integrations need a full sync cache without it |
-| 7 | 18. Batch printing entry point | Backend | Medium | Worker, metrics and History column already exist |
-| 8 | 34. Version history screen | Screens | Medium | Promised in the README, and the API is ready |
+| 2 | 4. TSPL density, speed, gapless media | Printers | Medium | Common label printers print too light or fail on gapless rolls |
+| 3 | 41. No background job notification | Android | Medium | Failures are invisible |
+| 4 | 47. Phone-to-PC traffic is not encrypted | Android | Medium | Plain HTTP on the local network; the architecture doc calls pinned encryption a planned hardening |
+| 5 | 28. No read or list endpoints | Server | Medium | Integrations need a full sync cache without it |
+| 6 | 18. Batch printing entry point | Backend | Medium | Worker, metrics and History column already exist |
+| 7 | 34. Version history screen | Screens | Medium | Promised in the README, and the API is ready |
 
 ## How to read the tags
 
@@ -92,8 +90,6 @@ These are small or medium jobs that can be picked up without a big project. The 
 ## Android
 
 **41. \[Medium\] No notification when a background job succeeds or fails.** *Problem:* the only notification is the pinned "service is running" line. A job that fails in the background (printer offline, PC asleep, render timeout) is invisible until you reopen the app and read History. *Solutions:* (a) **Recommended:** post a notification on failure (and optionally success) from the worker, through the Android plugin or a Tauri notification plugin. (b) Add a setting: "Notify on: failures only / all / never". (c) Show the count of waiting jobs in the pinned notification. (d) Tapping a notification opens History on that job.
-
-**42. \[Small\] Deep links do not work on Android.** *Problem:* the link format, trusted-sources screen and README all exist, but the Android app is not registered to open `printninja://` links, so tapping one in a phone browser does nothing. Desktop deep links work. *Solutions:* (a) **Recommended:** add the Tauri deep-link plugin config for the `printninja` scheme and the matching intent filter, and handle the opened URL at start-up and when the app is already running. The Android project is generated, so put manifest changes in the patch scripts or the plugin manifest. (b) Add `https` app links later for a more reliable handoff from browsers. (c) Add an end-to-end test using `adb shell am start -d printninja://...`.
 
 **47. \[Medium\] Phone-to-PC traffic is not encrypted.** *Problem:* pairing, shared rendering and Print via PC use plain HTTP on the local network, and the pairing code is an introduction, not proof of identity (`docs/architecture/PHONE_AND_PC_SHARING.md`). Anyone on the same network who can read the traffic can see print data and the device token. Release builds already allow this on purpose (see the cleartext patch in `scripts/patch-android-signing.mjs`). *Solutions:* (a) **Recommended:** TLS with a self-signed certificate made on the PC and pinned by the phone during pairing, so the pairing code also vouches for the certificate. (b) Keep plain HTTP but sign each request with a key exchanged at pairing, which stops tampering but not reading. (c) Document that pairing should only be used on a trusted network, and keep (a) for later.
 
