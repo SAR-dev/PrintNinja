@@ -70,6 +70,28 @@ const ja: Translation = {
     register: "アカウントを作成",
     registering: "アカウントを作成しています…",
     switch_to_register: "初めての方はこちら: アカウントを作成",
+    forgot_password: "パスワードをお忘れですか？",
+    reset_title: "パスワードをリセット",
+    reset_description:
+      "ハンドルと、アカウント作成時に保存した復旧コードを入力してください。",
+    reset_required:
+      "ハンドル、復旧コード、新しいパスワードを入力してください。",
+    recovery_code: "復旧コード",
+    new_password: "新しいパスワード",
+    reset_submit: "パスワードをリセット",
+    resetting: "リセット中...",
+    back_to_sign_in: "サインインに戻る",
+    recovery_save_title: "復旧コードを保存してください",
+    recovery_save_body:
+      "パスワードを忘れた場合、このコードがアカウントに戻る唯一の方法です。表示されるのは一度だけです。パスワードマネージャーなど安全な場所に保管してください。",
+    recovery_save_reset_title:
+      "パスワードを変更しました。新しいコードを保存してください",
+    recovery_save_reset_body:
+      "以前のコードは使えなくなりました。この新しいコードを安全な場所に保管してください（表示は一度だけです）。すべての端末からサインアウトされたため、新しいパスワードでサインインしてください。",
+    recovery_copy: "コードをコピー",
+    recovery_copied: "コピーしました",
+    recovery_continue: "保存しました。続ける",
+    recovery_continue_sign_in: "保存しました。サインインへ",
     switch_to_sign_in: "アカウントをお持ちの方はこちら: サインイン",
     continue_as_guest: "ゲストとして続ける",
     guest_handle: "お名前",
@@ -996,6 +1018,14 @@ const ja: Translation = {
     notify_on_never_hint: "通知を出さず、結果は履歴で確認します。",
     notify_on_note:
       "アプリがバックグラウンドのときに印刷キューが実行したジョブに適用されます。通知をタップすると履歴が開きます。",
+    recovery_title: "復旧コード",
+    recovery_hint:
+      "パスワードを忘れたときにリセットするためのコードです。新しいコードを作ると以前のコードは無効になります。表示されるのは一度だけです。",
+    recovery_password: "パスワードで確認",
+    recovery_generate: "新しい復旧コードを作成",
+    recovery_saved_note:
+      "今すぐこのコードを保存してください。再表示はされず、以前のコードは使えなくなりました。",
+    recovery_done: "保存しました",
     change_password_title: "パスワードを変更",
     change_password_current: "現在のパスワード",
     change_password_new: "新しいパスワード",

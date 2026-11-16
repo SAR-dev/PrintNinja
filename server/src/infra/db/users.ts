@@ -7,6 +7,7 @@ type PrismaUser = {
   handle: string;
   handleKey: string;
   passwordHash: string;
+  recoveryCodeHash: string | null;
   createdAt: Date;
 };
 
@@ -30,6 +31,7 @@ export function createUserRepository(db: DbClient): UserRepository {
       handle: string;
       handleKey: string;
       passwordHash: string;
+      recoveryCodeHash?: string;
     }): Promise<UserRecord> {
       try {
         const user = await db.$transaction(async (tx) => {
@@ -51,6 +53,13 @@ export function createUserRepository(db: DbClient): UserRepository {
     async updatePasswordHash(id: string, passwordHash: string): Promise<void> {
       await db.user.update({ where: { id }, data: { passwordHash } });
     },
+
+    async setRecoveryCodeHash(
+      id: string,
+      recoveryCodeHash: string,
+    ): Promise<void> {
+      await db.user.update({ where: { id }, data: { recoveryCodeHash } });
+    },
   };
 }
 
@@ -60,6 +69,7 @@ function toRecord(user: PrismaUser): UserRecord {
     handle: user.handle,
     handleKey: user.handleKey,
     passwordHash: user.passwordHash,
+    recoveryCodeHash: user.recoveryCodeHash,
     createdAt: user.createdAt,
   };
 }

@@ -35,6 +35,26 @@ export const changePasswordBody = z.object({
   new_password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
 });
 
+export const resetPasswordBody = z.object({
+  handle: authCredentials.shape.handle,
+  // Loose on purpose: people paste it with spaces or lowercase.
+  recovery_code: z.string().min(1).max(64),
+  new_password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
+});
+
+export const issueRecoveryCodeBody = z.object({
+  current_password: z.string().min(1, "Current password is required"),
+});
+
+export const recoveryCodeResponse = z.object({
+  recovery_code: z.string().min(1),
+});
+
+export const resetPasswordResponse = z.object({
+  recovery_code: z.string().min(1),
+  revoked: z.number(),
+});
+
 export type ChangePasswordBody = z.infer<typeof changePasswordBody>;
 
 export const userSchema = z.object({
@@ -62,6 +82,11 @@ export const authResponse = z.object({
   token: z.string().min(1),
   expires_at: z.string().datetime(),
   user: userSchema,
+});
+
+/** Register answers with the session plus the one-time recovery code. */
+export const registerResponse = authResponse.extend({
+  recovery_code: z.string().min(1),
 });
 
 export type AuthCredentials = z.infer<typeof authCredentials>;

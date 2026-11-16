@@ -69,6 +69,26 @@ const en = {
     registering: "Creating account...",
     switch_to_register: "New here? Create an account",
     switch_to_sign_in: "Already have an account? Sign in",
+    forgot_password: "Forgot your password?",
+    reset_title: "Reset your password",
+    reset_description:
+      "Enter your handle and the recovery code you saved when you made your account.",
+    reset_required: "Enter your handle, recovery code and a new password.",
+    recovery_code: "Recovery code",
+    new_password: "New password",
+    reset_submit: "Reset password",
+    resetting: "Resetting...",
+    back_to_sign_in: "Back to sign in",
+    recovery_save_title: "Save your recovery code",
+    recovery_save_body:
+      "If you forget your password, this code is the only way back into your account. It is shown once, so keep it somewhere safe, such as a password manager.",
+    recovery_save_reset_title: "Password changed. Save your new code",
+    recovery_save_reset_body:
+      "Your old code no longer works. Keep this new one somewhere safe; it is shown once. You were signed out on every device, so sign in with your new password.",
+    recovery_copy: "Copy code",
+    recovery_copied: "Copied",
+    recovery_continue: "I have saved it, continue",
+    recovery_continue_sign_in: "I have saved it, go to sign in",
     continue_as_guest: "Continue as guest",
     guest_handle: "Your name",
     guest_handle_placeholder: "e.g. {{example}}",
@@ -978,6 +998,14 @@ const en = {
     notify_on_never_hint: "Stay silent; check History for the results.",
     notify_on_note:
       "Applies to jobs the print queue runs while the app is in the background. Tapping a notification opens History.",
+    recovery_title: "Recovery code",
+    recovery_hint:
+      "Lets you reset your password if you forget it. A new code replaces the old one. It is shown only once.",
+    recovery_password: "Confirm with your password",
+    recovery_generate: "Make a new recovery code",
+    recovery_saved_note:
+      "Save this code now. It will not be shown again, and the old code no longer works.",
+    recovery_done: "I have saved it",
     change_password_title: "Change password",
     change_password_current: "Current password",
     change_password_new: "New password",

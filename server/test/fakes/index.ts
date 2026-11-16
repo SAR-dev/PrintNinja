@@ -38,11 +38,19 @@ export function createFakeUsers(): UserRepository & {
       }
       const user: UserRecord = {
         ...input,
+        recoveryCodeHash: input.recoveryCodeHash ?? null,
         createdAt: new Date("2026-10-20T00:00:00Z"),
       };
       byId.set(user.id, user);
       byKey.set(user.handleKey, user);
       return user;
+    },
+    async setRecoveryCodeHash(id, recoveryCodeHash) {
+      const user = byId.get(id);
+      if (user) {
+        byId.set(id, { ...user, recoveryCodeHash });
+        byKey.set(user.handleKey, { ...user, recoveryCodeHash });
+      }
     },
     async updatePasswordHash(id, passwordHash) {
       const user = byId.get(id);
@@ -166,6 +174,7 @@ export function createFakeHasher(): PasswordHasher {
 
 export function createFakeTokens(): TokenService & { count: number } {
   let count = 0;
+  let recoveryCount = 0;
   const service: TokenService & { count: number } = {
     count: 0,
     generate() {
@@ -178,6 +187,20 @@ export function createFakeTokens(): TokenService & { count: number } {
     },
     hash(token) {
       return `hash-of:${token}`;
+    },
+    generateRecoveryCode() {
+      recoveryCount += 1;
+      const code = `CODE${recoveryCount}-AAAAA-BBBBB-CCCCC`;
+      return { code, codeHash: `recovery-hash-of:${recoveryCount}` };
+    },
+    hashRecoveryCode(code) {
+      // Mirrors the real normalisation: case, dashes and spaces ignored.
+      const match = /^CODE(\d+)/.exec(
+        code.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
+      );
+      return match
+        ? `recovery-hash-of:${match[1]}`
+        : `recovery-hash-of:bad:${code}`;
     },
   };
   return service;
