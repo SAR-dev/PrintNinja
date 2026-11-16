@@ -105,6 +105,18 @@ pub fn run() {
     // External links (the update badge's release page). Link opening only;
     // updates stay manual, there is no auto-download or install path.
     let builder = builder.plugin(tauri_plugin_opener::init());
+
+    // printninja:// deep links. Registered before single-instance: the
+    // single-instance plugin's `deep-link` feature re-parses a second
+    // instance's CLI args through this plugin and emits
+    // `deep-link://new-url` on the running app's handle (the instance
+    // that received the link from the OS exits right after forwarding).
+    // On Android the plugin's Kotlin side also covers the cold start:
+    // the launcher intent is read when the webview loads and sent over
+    // the same channel, so the frontend gets the URL in both cases.
+    // The frontend listens and, at start-up, reads `get_current` to pick
+    // up a link that arrived before the webview was ready.
+    let builder = builder.plugin(tauri_plugin_deep_link::init());
     // Phone side of pairing used to scan the PC's QR code; pairing is a
     // typed 8-character code now, so no camera plugin ships anymore
     // (was QR scanner; now 8-char code — see docs/architecture/PHONE_AND_PC_SHARING.md#pairing).

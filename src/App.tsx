@@ -39,6 +39,7 @@ const TemplatesPage = lazy(() =>
   import("./pages/Templates").then((m) => ({ default: m.TemplatesPage })),
 );
 import { diagnostics } from "./lib/diagnostics";
+import { DeepLinkListener } from "./lib/deeplink";
 import { startOnPrint } from "./lib/shell/startRoute";
 import { notifyInfo } from "./lib/notify";
 import i18n from "./lib/i18n";
@@ -244,6 +245,8 @@ function AppContent() {
 
   return (
     <AppRouter>
+      {/* printninja:// links: mounted inside the router — it navigates. */}
+      <DeepLinkListener />
       <Layout>
         <Suspense fallback={<PageLoading />}>
           <Routes>

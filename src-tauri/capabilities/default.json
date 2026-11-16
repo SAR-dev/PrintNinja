@@ -4,8 +4,10 @@
   "windows": ["main"],
   "permissions": [
     "core:window:allow-set-title",
+    "core:event:allow-listen",
     "opener:allow-open-url",
     "opener:allow-default-urls",
-    "android-print:default"
+    "android-print:default",
+    "deep-link:default"
   ]
 }
