@@ -7,6 +7,7 @@ import {
   checkLogoFile,
   isValidLogoDataUrl,
   parseDensity,
+  parseNotifyOn,
   parseTheme,
   resolveTheme,
   sanitizeAppName,
@@ -30,6 +31,14 @@ describe("prefs helpers", () => {
     expect(resolveTheme("system", false)).toBe("light");
     expect(resolveTheme("dark", false)).toBe("dark");
     expect(resolveTheme("light", true)).toBe("light");
+  });
+  it("defaults to notifying on failures only", () => {
+    expect(parseNotifyOn(null)).toBe("failures");
+    expect(parseNotifyOn("")).toBe("failures");
+    expect(parseNotifyOn("nonsense")).toBe("failures");
+    expect(parseNotifyOn("failures")).toBe("failures");
+    expect(parseNotifyOn("all")).toBe("all");
+    expect(parseNotifyOn("never")).toBe("never");
   });
   it("sanitizes the app name", () => {
     expect(sanitizeAppName("  Acme   Print  ")).toBe("Acme Print");

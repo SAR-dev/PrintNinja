@@ -207,6 +207,31 @@ impl Default for OpenApiSpec {
                         }
                     }
                 },
+                "/v1/batches": {
+                    "post": {
+                        "summary": "Group existing jobs into one batch",
+                        "description": "Creates one `batches` row and clones each named job into it as a `queued` row (same row-to-row copy a reprint uses), in the order given — the worker prints them one by one and the batch's `done`/`failed`/`status` move with them. All-or-nothing: any missing `job_id` refuses the whole call, so no half-cloned batch is left behind. A job listed twice is cloned once. The batch's `template_id`/`printer_id` come from the first job.",
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["job_ids"],
+                                        "properties": {
+                                            "job_ids": { "type": "array", "minItems": 1, "items": { "type": "integer" }, "description": "Existing print job ids, in batch order" }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {
+                            "201": { "description": "Created: the batch row (`id`, `template_id`, `printer_id`, `total`, `done`, `failed`, `mode`, `status`, `created_at`)" },
+                            "400": { "description": "`job_ids` is empty, or the body is not JSON" },
+                            "404": { "description": "Any `job_id` does not exist" }
+                        }
+                    }
+                },
                 "/v1/openapi.json": {
                     "get": {
                         "summary": "This document",

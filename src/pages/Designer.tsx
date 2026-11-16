@@ -23,6 +23,7 @@ import {
 import { DesignerActions } from "@/components/designer/DesignerActions";
 import { DesignerOverflowMenu } from "@/components/designer/DesignerOverflowMenu";
 import { DesignerToolbar } from "@/components/designer/DesignerToolbar";
+import { VersionHistoryPanel } from "@/components/designer/VersionHistoryPanel";
 import { HelpersPanel } from "@/components/designer/HelpersPanel";
 import { ReadmePanel } from "@/components/designer/ReadmePanel";
 import { README_MAX_BYTES } from "@/components/ReadmeEditor";
@@ -97,6 +98,7 @@ import {
   createTemplateOnServer,
   saveTemplateToServer,
   overwriteWithMine,
+  restoreTemplateVersion,
   takeServerCopy,
   TemplateConflictError,
   type TemplateContent,
@@ -241,6 +243,13 @@ export function DesignerPage() {
     rowId: number;
     serverId: string;
   } | null>(null);
+  // Version history: the sheet shows the server's list for the open
+  // template; a restore asks once, then writes the chosen version back
+  // into the editor like a taken server copy.
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [restorePending, setRestorePending] = useState<number | null>(null);
+  // Bumped after a successful restore so the new version shows at the top.
+  const [historyRefresh, setHistoryRefresh] = useState(0);
   // Offline the cache is view/print only: the server owns the copies, so
   // Save (and creating) has nowhere to go and stays disabled.
   const shareStatus = useShareStatus();
@@ -677,7 +686,7 @@ export function DesignerPage() {
         h: taken.page_h_mm,
       });
       setRemoteId(conflict.serverId);
-      setPublishedAt(taken.updatedAt);
+      setPublishedAt(taken.publishedAt);
       setConflict(null);
       // The canvas re-renders with the server copy — visible, no toast.
     } catch (e) {
@@ -717,6 +726,73 @@ export function DesignerPage() {
       notifyError(describeError(e));
     } finally {
       setPending(null);
+    }
+  };
+
+  /**
+   * Restore a version: the server copies its body and CSS into the
+   * template as a new revision, and the returned copy takes over the
+   * editor exactly like a taken server copy. A conflict (another PC
+   * saved meanwhile) opens the usual resolve dialog instead of losing
+   * either copy.
+   */
+  const handleRestoreVersion = async (versionNo: number) => {
+    if (!currentTemplateDbId) return;
+    if (offline) {
+      notifyError(t("designer.toast_offline_save"));
+      return;
+    }
+    setPending("save");
+    try {
+      const row = await getLocalTemplate(currentTemplateDbId);
+      if (isReadOnly(row)) {
+        notifyError(t("designer.toast_readonly"));
+        return;
+      }
+      const taken = await restoreTemplateVersion(row, versionNo);
+      setHtmlCode(formatHtml(taken.html));
+      setCssCode(formatCss(taken.css));
+      setTemplateName(taken.name);
+      setPageWidth(taken.page_w_mm);
+      setPageHeight(taken.page_h_mm);
+      loadReadme(taken.readme);
+      setBaseline({
+        name: taken.name,
+        html: formatHtml(taken.html),
+        css: formatCss(taken.css),
+        w: taken.page_w_mm,
+        h: taken.page_h_mm,
+      });
+      setRemoteId(row.server_id ?? row.remote_id ?? remoteId);
+      setPublishedAt(taken.publishedAt);
+      setTemplates((prev) =>
+        prev.map((t) =>
+          t.id === currentTemplateDbId
+            ? {
+                ...t,
+                name: taken.name,
+                html: taken.html,
+                css: taken.css,
+                page_w_mm: taken.page_w_mm,
+                page_h_mm: taken.page_h_mm,
+                orientation:
+                  taken.page_w_mm > taken.page_h_mm ? "landscape" : "portrait",
+              }
+            : t,
+        ),
+      );
+      // The restore lands as a new version — the list shows it on top.
+      setHistoryRefresh((k) => k + 1);
+      notifySuccess(t("designer.history_restored", { n: versionNo }));
+    } catch (e) {
+      if (e instanceof TemplateConflictError) {
+        setConflict({ rowId: currentTemplateDbId, serverId: e.serverId });
+        return;
+      }
+      notifyError(describeError(e));
+    } finally {
+      setPending(null);
+      setRestorePending(null);
     }
   };
 
@@ -1107,6 +1183,7 @@ export function DesignerPage() {
             readOnly={isReadOnly({ origin })}
             pending={pending}
             onVisibilityChange={(v) => void handleVisibilityChange(v)}
+            onHistory={() => setHistoryOpen(true)}
           />
         </div>
       ) : isPhone ? (
@@ -1129,6 +1206,7 @@ export function DesignerPage() {
             busy={pending != null}
             dirty={dirty}
             onVisibilityChange={(v) => void handleVisibilityChange(v)}
+            onHistory={() => setHistoryOpen(true)}
           />
         </PageHeader>
       )}
@@ -1718,6 +1796,64 @@ export function DesignerPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Version history: the server's list for the open template, with a
+          Restore per row. It stays open after a restore so the new version
+          (created by the restore itself) is visible at the top. */}
+      <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-md"
+        >
+          <DialogHeader className="border-b p-5">
+            <DialogTitle>{t("designer.history_title")}</DialogTitle>
+            <DialogDescription>
+              {t("designer.history_description")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {remoteId ? (
+              <VersionHistoryPanel
+                remoteId={remoteId}
+                refreshKey={historyRefresh}
+                disabled={pending != null || offline || isReadOnly({ origin })}
+                onRestore={(n) => setRestorePending(n)}
+              />
+            ) : (
+              <p className="p-4 text-sm text-muted-foreground">
+                {t("designer.history_only_local")}
+              </p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Restore asks once: it replaces the editor's content with the
+          chosen version's copy, and says so up front when edits are
+          unsaved. */}
+      <ConfirmDialog
+        open={restorePending !== null}
+        onOpenChange={(open) => {
+          if (!open) setRestorePending(null);
+        }}
+        title={
+          restorePending != null
+            ? t("designer.history_confirm_title", { n: restorePending })
+            : ""
+        }
+        description={
+          t("designer.history_confirm_body") +
+          (dirty ? t("designer.history_confirm_dirty") : "")
+        }
+        confirmLabel={t("designer.history_restore")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        busy={pending === "save"}
+        onConfirm={() => {
+          const n = restorePending;
+          if (n != null) void handleRestoreVersion(n);
+        }}
+      />
     </div>
   );
 }

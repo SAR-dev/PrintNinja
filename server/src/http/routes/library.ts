@@ -1,9 +1,19 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { deleteDataset, putDataset } from "../../domain/datasets.js";
-import { DATASET_JSON_MAX_BYTES } from "../../domain/datasets.js";
-import { deleteProfile, putProfile } from "../../domain/profiles.js";
+import {
+  DATASET_JSON_MAX_BYTES,
+  deleteDataset,
+  getDataset,
+  listDatasets,
+  putDataset,
+} from "../../domain/datasets.js";
+import {
+  deleteProfile,
+  getProfile,
+  listProfiles,
+  putProfile,
+} from "../../domain/profiles.js";
 import { UnauthorizedError } from "../../domain/errors.js";
 import type { AuthDeps } from "../../domain/ports.js";
 import type {
@@ -13,12 +23,15 @@ import type {
 import { requireAuth } from "../plugins/auth.js";
 import { errorBody } from "../schemas/error.js";
 import {
+  datasetPageSchema,
   datasetSchema,
+  profilePageSchema,
   profileSchema,
   putDatasetRequest,
   putProfileRequest,
   uuidParams,
 } from "../schemas/library.js";
+import { pageQuery } from "../schemas/templates.js";
 
 export interface LibraryRouteOptions {
   deps: AuthDeps & { datasets: DatasetRepository; profiles: ProfileRepository };
@@ -74,6 +87,61 @@ export async function libraryRoutes(
 ): Promise<void> {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   const { deps } = options;
+
+  typed.get(
+    "/v2/datasets",
+    {
+      preHandler: [requireAuth(deps)],
+      schema: {
+        description: "List the user's sample datasets, newest change first.",
+        querystring: pageQuery,
+        response: {
+          200: datasetPageSchema,
+          400: errorBody,
+          401: errorBody,
+        },
+      },
+    },
+    async (request) => {
+      if (!request.authUser) {
+        throw new UnauthorizedError();
+      }
+      const page = await listDatasets(
+        { datasets: deps.datasets },
+        request.authUser.id,
+        { page: request.query.page, pageSize: request.query.page_size },
+      );
+      return { ...page, items: page.items.map(toDataset) };
+    },
+  );
+
+  typed.get(
+    "/v2/datasets/:id",
+    {
+      preHandler: [requireAuth(deps)],
+      schema: {
+        description: "Read one of the user's sample datasets.",
+        params: uuidParams,
+        response: {
+          200: datasetSchema,
+          401: errorBody,
+          403: errorBody,
+          404: errorBody,
+        },
+      },
+    },
+    async (request) => {
+      if (!request.authUser) {
+        throw new UnauthorizedError();
+      }
+      const dataset = await getDataset(
+        { datasets: deps.datasets },
+        request.params.id,
+        request.authUser.id,
+      );
+      return toDataset(dataset);
+    },
+  );
 
   typed.put(
     "/v2/datasets/:id",
@@ -143,6 +211,61 @@ export async function libraryRoutes(
         request.authUser.id,
       );
       return reply.status(204).send();
+    },
+  );
+
+  typed.get(
+    "/v2/profiles",
+    {
+      preHandler: [requireAuth(deps)],
+      schema: {
+        description: "List the user's printer profiles, newest change first.",
+        querystring: pageQuery,
+        response: {
+          200: profilePageSchema,
+          400: errorBody,
+          401: errorBody,
+        },
+      },
+    },
+    async (request) => {
+      if (!request.authUser) {
+        throw new UnauthorizedError();
+      }
+      const page = await listProfiles(
+        { profiles: deps.profiles },
+        request.authUser.id,
+        { page: request.query.page, pageSize: request.query.page_size },
+      );
+      return { ...page, items: page.items.map(toProfile) };
+    },
+  );
+
+  typed.get(
+    "/v2/profiles/:id",
+    {
+      preHandler: [requireAuth(deps)],
+      schema: {
+        description: "Read one of the user's printer profiles.",
+        params: uuidParams,
+        response: {
+          200: profileSchema,
+          401: errorBody,
+          403: errorBody,
+          404: errorBody,
+        },
+      },
+    },
+    async (request) => {
+      if (!request.authUser) {
+        throw new UnauthorizedError();
+      }
+      const profile = await getProfile(
+        { profiles: deps.profiles },
+        request.params.id,
+        request.authUser.id,
+      );
+      return toProfile(profile);
     },
   );
 

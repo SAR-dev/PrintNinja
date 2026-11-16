@@ -18,6 +18,7 @@ const client = vi.hoisted(() => {
     unpublishRemoteTemplate: vi.fn(),
     unpublishTemplate: vi.fn(),
     fetchRemoteTemplate: vi.fn(),
+    restoreRemoteTemplateVersion: vi.fn(),
     RemoteTemplateNotFoundError: NotFound,
   };
 });
@@ -30,6 +31,7 @@ import {
   createTemplateOnServer,
   deleteTemplateEverywhere,
   overwriteWithMine,
+  restoreTemplateVersion,
   saveTemplateToServer,
   takeServerCopy,
   TemplateConflictError,
@@ -100,6 +102,7 @@ beforeEach(() => {
   client.unpublishRemoteTemplate.mockReset();
   client.unpublishTemplate.mockReset();
   client.fetchRemoteTemplate.mockReset();
+  client.restoreRemoteTemplateVersion.mockReset();
   invoke.mockImplementation(async () => null);
 });
 
@@ -297,6 +300,113 @@ describe("takeServerCopy", () => {
       /not on the server/,
     );
     expect(client.fetchRemoteTemplate).not.toHaveBeenCalled();
+  });
+});
+
+describe("restoreTemplateVersion", () => {
+  it("guards the restore with the row's revision and writes the restored copy locally", async () => {
+    const restored = {
+      ...REMOTE,
+      body: "<p>old</p>",
+      css: ".old {}",
+      readme: "# Old",
+      revision: 7,
+    };
+    client.restoreRemoteTemplateVersion.mockResolvedValue(restored);
+    const result = await restoreTemplateVersion(
+      local({ remote_id: REMOTE.id }),
+      3,
+    );
+
+    // No fetch first: the row already knows the revision it was synced at.
+    expect(client.fetchRemoteTemplate).not.toHaveBeenCalled();
+    expect(client.restoreRemoteTemplateVersion).toHaveBeenCalledWith(
+      REMOTE.id,
+      3,
+      4,
+    );
+    expect(calls("update_template_meta")[0][1]).toMatchObject({
+      req: expect.objectContaining({
+        id: 7,
+        html: "<p>old</p>",
+        css: ".old {}",
+      }),
+    });
+    expect(calls("cache_mark_pushed")[0][1]).toEqual({
+      server_id: REMOTE.id,
+      revision: 7,
+    });
+    expect(result.html).toBe("<p>old</p>");
+    expect(result.revision).toBe(7);
+  });
+
+  it("keeps a private restored copy private in the publish info", async () => {
+    client.restoreRemoteTemplateVersion.mockResolvedValue({
+      ...REMOTE,
+      published_at: null,
+      revision: 7,
+    });
+    const result = await restoreTemplateVersion(
+      local({ remote_id: REMOTE.id }),
+      2,
+    );
+    expect(result.publishedAt).toBeNull();
+    expect(invoke).toHaveBeenCalledWith("set_publish_info", {
+      req: { id: 7, remote_id: REMOTE.id, published_at: null },
+    });
+  });
+
+  it("rebases onto the current revision when the guard is 428-stale", async () => {
+    client.restoreRemoteTemplateVersion
+      .mockRejectedValueOnce(
+        new ApiError({
+          code: "revision_required",
+          message: "Update needs if_revision",
+          requestId: "r",
+          status: 428,
+        }),
+      )
+      .mockResolvedValue({ ...REMOTE, revision: 9 });
+    client.fetchRemoteTemplate.mockResolvedValue({ ...REMOTE, revision: 8 });
+    await restoreTemplateVersion(local({ remote_id: REMOTE.id }), 3);
+    expect(client.restoreRemoteTemplateVersion).toHaveBeenNthCalledWith(
+      1,
+      REMOTE.id,
+      3,
+      4,
+    );
+    expect(client.restoreRemoteTemplateVersion).toHaveBeenNthCalledWith(
+      2,
+      REMOTE.id,
+      3,
+      8,
+    );
+  });
+
+  it("reports a concurrent edit as a conflict instead of overwriting it", async () => {
+    client.restoreRemoteTemplateVersion.mockRejectedValue(
+      new ApiError({
+        code: "revision_conflict",
+        message: "Stale revision",
+        requestId: "r1",
+        status: 409,
+      }),
+    );
+    const err = await restoreTemplateVersion(
+      local({ remote_id: REMOTE.id }),
+      3,
+    ).catch((e) => e);
+    expect(err).toBeInstanceOf(TemplateConflictError);
+    expect((err as TemplateConflictError).serverId).toBe(REMOTE.id);
+    expect(calls("update_template_meta")).toHaveLength(0);
+    expect(calls("cache_mark_pushed")).toHaveLength(0);
+  });
+
+  it("refuses a template that was never saved", async () => {
+    await expect(
+      restoreTemplateVersion(local({ server_id: null, remote_id: null }), 1),
+    ).rejects.toThrow(/not on the server/);
+    expect(client.restoreRemoteTemplateVersion).not.toHaveBeenCalled();
   });
 });
 

@@ -3,6 +3,7 @@ import type {
   AddPrinterReq,
   ApiHttpResponse,
   ApiStatus,
+  BatchSummary,
   BrowserShellStatus,
   ApplyReport,
   ConflictedRow,
@@ -232,6 +233,7 @@ export interface AgentCommands {
   reprint_job: [{ id: number }, HistoryJob];
   retry_job: [{ id: number }, HistoryJob];
   delete_job: [{ id: number }, null];
+  create_batch: [{ job_ids: number[] }, BatchSummary];
   // Local API server (loopback by default, LAN only when enabled;
   // there is no key — binding is the entire security boundary)
   start_api_server: [{ port: number; lan_access: boolean }, string];

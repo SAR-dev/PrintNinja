@@ -8,6 +8,7 @@ import {
   ValidationError,
 } from "./errors.js";
 import type { DatasetRepository, DatasetView } from "./libraryPorts.js";
+import { toPage, type Page } from "./pagination.js";
 
 /** Sample-dataset bodies are capped like CSS (unchecked UTF-16 length
  * would let multi-byte text past the budget — see P10). */
@@ -166,4 +167,35 @@ export async function deleteDataset(
     throw new ForbiddenError();
   }
   await repos.datasets.deleteWithTombstone(id);
+}
+
+/** Reads one of the owner's datasets. Another owner's row reads the
+ * same as a missing one would be a leak, so it is a 403, not a 404. */
+export async function getDataset(
+  repos: { datasets: DatasetRepository },
+  id: string,
+  ownerId: string,
+): Promise<DatasetView> {
+  const existing = await repos.datasets.findById(id);
+  if (!existing) {
+    throw new NotFoundError();
+  }
+  if (existing.ownerId !== ownerId) {
+    throw new ForbiddenError();
+  }
+  return existing;
+}
+
+/** The owner's datasets, newest change first (id breaks ties), paged. */
+export async function listDatasets(
+  repos: { datasets: DatasetRepository },
+  ownerId: string,
+  query: { page: number; pageSize: number },
+): Promise<Page<DatasetView>> {
+  const rows = (await repos.datasets.listByOwner(ownerId)).sort(
+    (a, b) =>
+      b.updatedAt.getTime() - a.updatedAt.getTime() || a.id.localeCompare(b.id),
+  );
+  const start = (query.page - 1) * query.pageSize;
+  return toPage(rows.slice(start, start + query.pageSize), rows.length, query);
 }

@@ -650,6 +650,36 @@ const implemented: Record<string, Handler> = {
   list_jobs: () => allSeededJobs(),
   get_job: (args) =>
     allSeededJobs().find((j) => j["id"] === Number(args["id"])) ?? null,
+  // Group the selection into one batch (History, item 18). The e2e
+  // browser has no worker, so the fake mirrors the Rust command's
+  // validation and dedupe and returns the batch row — without queueing
+  // clones.
+  create_batch: (args) => {
+    const ids: number[] = Array.isArray(args["job_ids"])
+      ? (args["job_ids"] as unknown[]).map(Number)
+      : [];
+    if (ids.length === 0) {
+      throw new Error("A batch needs at least one job");
+    }
+    const unique = [...new Set(ids)];
+    for (const id of unique) {
+      if (!allSeededJobs().some((j) => j["id"] === id)) {
+        throw new Error(`Job ${id} not found`);
+      }
+    }
+    const first = allSeededJobs().find((j) => j["id"] === unique[0]);
+    return {
+      id: 9000 + unique.length,
+      template_id: first?.["template_id"] ?? null,
+      printer_id: first?.["printer_id"] ?? null,
+      total: unique.length,
+      done: 0,
+      failed: 0,
+      mode: "per_record",
+      status: "queued",
+      created_at: new Date().toISOString(),
+    };
+  },
 };
 
 /** Every Rust command without real behavior yet (src-tauri/src/lib.rs).

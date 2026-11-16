@@ -188,6 +188,156 @@ describe("datasets", () => {
   });
 });
 
+describe("reads (item 28)", () => {
+  it("lists datasets paged with the shared page shape", async () => {
+    const token = await register("ReadRafi");
+    const ids = [randomUUID(), randomUUID(), randomUUID()];
+    for (let i = 0; i < ids.length; i += 1) {
+      const created = await app.inject({
+        method: "PUT",
+        url: `/v2/datasets/${ids[i]}`,
+        headers: headers(token),
+        payload: { name: `D${i}`, dataJson: "{}" },
+      });
+      expect(created.statusCode).toBe(201);
+    }
+
+    const all = await app.inject({
+      method: "GET",
+      url: "/v2/datasets",
+      headers: headers(token),
+    });
+    expect(all.statusCode).toBe(200);
+    const page1 = all.json() as {
+      items: { id: string }[];
+      page: number;
+      page_size: number;
+      total: number;
+      has_more: boolean;
+    };
+    expect(page1).toMatchObject({
+      page: 1,
+      page_size: 20,
+      total: 3,
+      has_more: false,
+    });
+    expect(page1.items.map((d) => d.id).sort()).toEqual([...ids].sort());
+
+    const half = await app.inject({
+      method: "GET",
+      url: "/v2/datasets?page_size=2",
+      headers: headers(token),
+    });
+    expect(half.statusCode).toBe(200);
+    const p1 = half.json() as { items: unknown[]; has_more: boolean };
+    expect(p1.items).toHaveLength(2);
+    expect(p1.has_more).toBe(true);
+
+    const last = await app.inject({
+      method: "GET",
+      url: "/v2/datasets?page=2&page_size=2",
+      headers: headers(token),
+    });
+    const p2 = last.json() as { items: unknown[]; has_more: boolean };
+    expect(p2.items).toHaveLength(1);
+    expect(p2.has_more).toBe(false);
+
+    const beyond = await app.inject({
+      method: "GET",
+      url: "/v2/datasets?page=9",
+      headers: headers(token),
+    });
+    const p9 = beyond.json() as { items: unknown[]; has_more: boolean };
+    expect(p9.items).toEqual([]);
+    expect(p9.has_more).toBe(false);
+
+    const anon = await app.inject({ method: "GET", url: "/v2/datasets" });
+    expect(anon.statusCode).toBe(401);
+  });
+
+  it("reads one dataset: 403 for other owners, 404 for missing", async () => {
+    const mine = await register("ReadMine");
+    const theirs = await register("ReadTheirs");
+    const id = randomUUID();
+    await app.inject({
+      method: "PUT",
+      url: `/v2/datasets/${id}`,
+      headers: headers(mine),
+      payload: { name: "Mine", dataJson: "{}" },
+    });
+
+    const own = await app.inject({
+      method: "GET",
+      url: `/v2/datasets/${id}`,
+      headers: headers(mine),
+    });
+    expect(own.statusCode).toBe(200);
+    expect(own.json()).toMatchObject({ id, name: "Mine" });
+
+    const foreign = await app.inject({
+      method: "GET",
+      url: `/v2/datasets/${id}`,
+      headers: headers(theirs),
+    });
+    expect(foreign.statusCode).toBe(403);
+
+    const missing = await app.inject({
+      method: "GET",
+      url: `/v2/datasets/${randomUUID()}`,
+      headers: headers(mine),
+    });
+    expect(missing.statusCode).toBe(404);
+  });
+
+  it("lists and reads profiles the same way", async () => {
+    const mine = await register("ReadProfMine");
+    const theirs = await register("ReadProfTheirs");
+    const id = randomUUID();
+    const templateId = randomUUID();
+    await app.inject({
+      method: "PUT",
+      url: `/v2/profiles/${id}`,
+      headers: headers(mine),
+      payload: { template_id: templateId, printer_name: "E2E" },
+    });
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/v2/profiles",
+      headers: headers(mine),
+    });
+    expect(list.statusCode).toBe(200);
+    const page = list.json() as {
+      items: { id: string; printer_name: string }[];
+      total: number;
+    };
+    expect(page.total).toBe(1);
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]).toMatchObject({ id, printer_name: "e2e" });
+
+    const own = await app.inject({
+      method: "GET",
+      url: `/v2/profiles/${id}`,
+      headers: headers(mine),
+    });
+    expect(own.statusCode).toBe(200);
+
+    const foreign = await app.inject({
+      method: "GET",
+      url: `/v2/profiles/${id}`,
+      headers: headers(theirs),
+    });
+    expect(foreign.statusCode).toBe(403);
+
+    const missing = await app.inject({
+      method: "GET",
+      url: `/v2/profiles/${randomUUID()}`,
+      headers: headers(mine),
+    });
+    expect(missing.statusCode).toBe(404);
+  });
+});
+
 describe("profiles", () => {
   it("creates keyed by template and lowercased printer name", async () => {
     const token = await register("Rafi");
