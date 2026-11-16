@@ -16,6 +16,8 @@ change isn't something a user would notice, don't list it.
 
 ## Unreleased
 
+## [2026.1116.0] - 2026-11-16
+
 ### Added
 
 - **See and restore template versions.** The designer's History panel
