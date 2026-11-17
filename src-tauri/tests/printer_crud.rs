@@ -2,8 +2,12 @@
 //! `update_printer` instead of delete + re-add, so profiles keyed by
 //! printer name survive a rename of anything but the name itself.
 
-use printninja_lib::commands::printer::{update_printer_conn, AddPrinterRequest};
+use printninja_lib::commands::print::lookup_printer;
+use printninja_lib::commands::printer::{
+    set_printer_tspl_tuning_conn, update_printer_conn, AddPrinterRequest,
+};
 use printninja_lib::db::Database;
+use printninja_lib::transport::label_langs::tspl::{TsplMedia, TsplTuning};
 use std::sync::{Arc, Mutex};
 
 type Db = Arc<Mutex<Database>>;
@@ -161,4 +165,56 @@ fn via_driver_stores_and_updates_explicitly() {
     .expect("update works");
     assert!(kept_on.via_driver);
     assert_eq!(kept_on.dpi, Some(300));
+}
+
+#[test]
+fn tspl_tuning_round_trips_validates_and_clears() {
+    let db = test_db();
+    let id = add(&db, "Dock Zebra");
+
+    // Nothing stored: the pipeline sees the "send nothing" defaults.
+    assert_eq!(
+        lookup_printer(&db, "Dock Zebra").unwrap().tspl,
+        TsplTuning::default()
+    );
+
+    let tuning = TsplTuning {
+        density: Some(9),
+        speed: Some(4.0),
+        media: TsplMedia::Continuous,
+    };
+    with_conn(&db, |conn| {
+        set_printer_tspl_tuning_conn(conn, id, Some(&tuning)).unwrap()
+    });
+    assert_eq!(lookup_printer(&db, "Dock Zebra").unwrap().tspl, tuning);
+
+    // Out-of-range values are refused and leave the stored value alone.
+    let bad = TsplTuning {
+        density: Some(40),
+        ..Default::default()
+    };
+    assert!(with_conn(&db, |conn| set_printer_tspl_tuning_conn(
+        conn,
+        id,
+        Some(&bad)
+    ))
+    .is_err());
+    assert_eq!(lookup_printer(&db, "Dock Zebra").unwrap().tspl, tuning);
+
+    // Unknown printer.
+    assert!(with_conn(&db, |conn| set_printer_tspl_tuning_conn(
+        conn,
+        id + 999,
+        Some(&tuning)
+    ))
+    .is_err());
+
+    // Clearing restores the defaults.
+    with_conn(&db, |conn| {
+        set_printer_tspl_tuning_conn(conn, id, None).unwrap()
+    });
+    assert_eq!(
+        lookup_printer(&db, "Dock Zebra").unwrap().tspl,
+        TsplTuning::default()
+    );
 }

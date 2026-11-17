@@ -159,9 +159,51 @@ pub fn dots_for_mm(mm: f64, dpi: u32) -> usize {
     ((mm * f64::from(dpi)) / 25.4).round().max(1.0) as usize
 }
 
+/// Dots across the raster for a job of `paper_w_mm` on a printer speaking
+/// `language`.
+///
+/// Receipt (ESC/POS) heads are narrower than the roll they take: a 58 mm
+/// roll has a 384-dot head and an 80 mm roll a 576-dot head, not the
+/// 464 / 640 dots that millimetres x dpi gives. Asking for the geometric
+/// width makes the right edge clip or wrap, so for the standard receipt
+/// widths at the usual 203 dpi the head's real dot count is used and the
+/// layout is scaled onto it (`layout::fit_to_dots`). Everything else —
+/// label languages, other dpi, other widths — keeps the plain
+/// millimetres-to-dots conversion.
+pub fn raster_width_dots(
+    language: &crate::transport::PrinterLanguage,
+    paper_w_mm: f64,
+    dpi: u32,
+) -> usize {
+    let geometric = dots_for_mm(paper_w_mm, dpi);
+    if !matches!(language, crate::transport::PrinterLanguage::Escpos) || dpi != 203 {
+        return geometric;
+    }
+    let nearest = paper_w_mm.round();
+    if (paper_w_mm - nearest).abs() > 0.5 || !matches!(nearest as i64, 58 | 80 | 100) {
+        return geometric;
+    }
+    dot_width_for_paper(nearest as usize).min(geometric)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::transport::PrinterLanguage;
+
+    /// Receipt heads are narrower than millimetres x dpi: 58 mm -> 384
+    /// dots, 80 mm -> 576. Labels and other dpi keep the geometric width.
+    #[test]
+    fn escpos_receipt_widths_use_the_head_dot_count() {
+        assert_eq!(raster_width_dots(&PrinterLanguage::Escpos, 58.0, 203), 384);
+        assert_eq!(raster_width_dots(&PrinterLanguage::Escpos, 80.0, 203), 576);
+        // Label languages are untouched.
+        assert_eq!(raster_width_dots(&PrinterLanguage::Tspl, 58.0, 203), 464);
+        assert_eq!(raster_width_dots(&PrinterLanguage::Zpl, 80.0, 203), 640);
+        // Non-standard width or dpi falls back to the geometric width.
+        assert_eq!(raster_width_dots(&PrinterLanguage::Escpos, 72.0, 203), 577);
+        assert_eq!(raster_width_dots(&PrinterLanguage::Escpos, 58.0, 300), 685);
+    }
 
     /// P4: 40 × 30 mm at the common 203 dpi thermal head is 320 × 240
     /// dots (319.69 × 239.76 rounded) — what the dispatch asks the

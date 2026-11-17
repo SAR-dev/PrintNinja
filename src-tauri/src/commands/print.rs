@@ -96,7 +96,17 @@ pub struct PrintRequest {
     pub data: Option<serde_json::Value>,
     #[serde(default)]
     pub data_url: Option<String>,
-    /// HTTP method for fetching `data_url`: GET (default) or POST.
+    /// Shown when a job asks for a page range: the option is accepted but not
+/// applied, so every page is printed.
+pub const PAGE_RANGE_UNSUPPORTED_WARNING: &str =
+    "Page range is not supported yet: all pages were printed.";
+
+/// True when `raw` names a non-blank page range.
+pub fn page_range_requested(raw: Option<&str>) -> bool {
+    raw.map(str::trim).is_some_and(|s| !s.is_empty())
+}
+
+/// HTTP method for fetching `data_url`: GET (default) or POST.
     /// Anything else is rejected on intake so the preview (which uses
     /// the same choice) and the pipeline can never disagree.
     #[serde(default)]
@@ -236,6 +246,7 @@ pub trait JobRenderer: Send + Sync {
         language: crate::transport::PrinterLanguage,
         dpi: u32,
         label_gap_mm: Option<f64>,
+        tspl: &crate::transport::label_langs::tspl::TsplTuning,
     ) -> anyhow::Result<(Vec<u8>, &'static str)> {
         match language {
             crate::transport::PrinterLanguage::Pdf => self
@@ -246,7 +257,7 @@ pub trait JobRenderer: Send + Sync {
                 // 1 CSS px = 1 printer dot: ask for exactly the paper's dots
                 // so nothing is resampled on the way to the head.
                 let (w_px, h_px) = (
-                    crate::render::raster::dots_for_mm(paper_w_mm, dpi),
+                    crate::render::raster::raster_width_dots(lang, paper_w_mm, dpi),
                     crate::render::raster::dots_for_mm(paper_h_mm, dpi),
                 );
                 // The sheet is laid out in mm; map it onto the dot viewport
@@ -255,13 +266,14 @@ pub trait JobRenderer: Send + Sync {
                 self.rasterize(&raster_html, w_px, h_px)
                     .await
                     .and_then(|raster| {
-                        crate::transport::encode_for_language(
+                        crate::transport::encode_for_language_tuned(
                             lang,
                             &raster,
                             paper_w_mm,
                             paper_h_mm,
                             dpi,
                             label_gap_mm,
+                            tspl,
                         )
                         .map_err(|e| anyhow::anyhow!(e))
                     })
@@ -627,6 +639,32 @@ pub fn validate_page_range(raw: Option<&str>) -> AppResult<()> {
         }
     }
     Ok(())
+}
+
+/// Command-language printers (ESC/POS, ZPL, TSPL, CPCL, raster) print one
+/// bitmap per job, so only the first sheet would reach the head
+/// (MISSING_FEATURES item 49). Refuse a job that lays out more than one
+/// sheet instead of silently printing a truncated receipt. PDF printers
+/// are unaffected: each sheet is its own PDF page.
+///
+/// This counts the sheets the layout wrote (one per record). A single
+/// design that the browser later paginates onto extra sheets is not
+/// visible here.
+pub fn multi_sheet_refusal(
+    language: &crate::transport::PrinterLanguage,
+    final_html: &str,
+) -> Option<String> {
+    if matches!(language, crate::transport::PrinterLanguage::Pdf) {
+        return None;
+    }
+    let sheets = final_html.matches("class=\"pn-sheet\"").count();
+    (sheets > 1).then(|| {
+        format!(
+            "This job has {sheets} sheets, but this printer's command language \
+             prints only one page per job, so the rest would be dropped. \
+             Print one record at a time, or use a printer set to PDF."
+        )
+    })
 }
 
 /// HTTP method for fetching `data_url`: GET (default) or POST.
@@ -1185,6 +1223,13 @@ async fn run_stages(
     // preflight and send stages, attached on every exit from there on.
     let mut warnings: Vec<String> = Vec::new();
 
+    // `page_range` is validated and stored but nothing slices the document
+    // yet (MISSING_FEATURES item 48). Say so instead of silently printing
+    // every page.
+    if page_range_requested(req.page_range.as_deref()) {
+        warnings.push(PAGE_RANGE_UNSUPPORTED_WARNING.to_string());
+    }
+
     // Fetch live data when a URL is supplied and test mode is off.
     let t_fetch = Instant::now();
     let mut fetched: Option<serde_json::Value> = req.data.clone();
@@ -1503,7 +1548,19 @@ async fn run_stages(
     // where PDF beats HTML: no engine at all); a command-language
     // printer gets its first page rasterised at its dot dimensions, then
     // the identical encoder the HTML path uses.
-    let rendered: anyhow::Result<(Vec<u8>, String)> = match req
+    let tspl_tuning = printer
+        .as_ref()
+        .map(|p| p.tspl.clone())
+        .unwrap_or_default();
+    let sheet_refusal = if req.pdf.as_ref().is_some_and(|p| !p.is_empty()) {
+        None
+    } else {
+        multi_sheet_refusal(&language, &final_html)
+    };
+    let rendered: anyhow::Result<(Vec<u8>, String)> = if let Some(msg) = sheet_refusal {
+        Err(anyhow::anyhow!(msg))
+    } else {
+        match req
         .pdf
         .as_ref()
         .filter(|p| !p.is_empty())
@@ -1521,6 +1578,7 @@ async fn run_stages(
                 paper_h_mm,
                 dpi,
                 printer.as_ref().and_then(|p| p.label_gap_mm),
+                &tspl_tuning,
                 &mut warnings,
             )
             .await
@@ -1635,6 +1693,7 @@ async fn run_stages(
                             language.clone(),
                             dpi,
                             printer.as_ref().and_then(|p| p.label_gap_mm),
+                            &tspl_tuning,
                         )
                         .await
                         .map(|(b, m)| (b, m.to_string()))
@@ -1642,6 +1701,7 @@ async fn run_stages(
                 Err(msg) => Err(anyhow::anyhow!(msg)),
             }
         }
+    }
     };
     let render_ms = ms(t_render);
     timings.render_ms = render_ms;
@@ -1930,6 +1990,7 @@ async fn render_pdf_input(
     paper_h_mm: f64,
     dpi: u32,
     label_gap_mm: Option<f64>,
+    tspl: &crate::transport::label_langs::tspl::TsplTuning,
     warnings: &mut Vec<String>,
 ) -> anyhow::Result<(Vec<u8>, String)> {
     match language {
@@ -1943,7 +2004,7 @@ async fn render_pdf_input(
             // ask for the paper's dots so nothing is resampled on the way
             // to the head.
             let (w_px, h_px) = (
-                crate::render::raster::dots_for_mm(paper_w_mm, dpi),
+                crate::render::raster::raster_width_dots(lang, paper_w_mm, dpi),
                 crate::render::raster::dots_for_mm(paper_h_mm, dpi),
             );
             let (raster, page_count) = renderer.rasterize_pdf(pdf, w_px, h_px).await?;
@@ -1952,13 +2013,14 @@ async fn render_pdf_input(
                     "The PDF has {page_count} pages; only the first page was printed."
                 ));
             }
-            crate::transport::encode_for_language(
+            crate::transport::encode_for_language_tuned(
                 lang,
                 &raster,
                 paper_w_mm,
                 paper_h_mm,
                 dpi,
                 label_gap_mm,
+                tspl,
             )
             .map(|(b, m)| (b, m.to_string()))
             .map_err(anyhow::Error::msg)
@@ -1980,6 +2042,9 @@ pub struct StoredPrinter {
     pub dpi: Option<i64>,
     /// TSPL media gap in mm; `None` means the encoder default (2 mm).
     pub label_gap_mm: Option<f64>,
+    /// TSPL darkness, speed and media type from the row's
+    /// `default_settings_json`; defaults send nothing extra.
+    pub tspl: crate::transport::label_langs::tspl::TsplTuning,
     /// IPP sign-in user; `None` keeps the built-in `PrintNinja`.
     pub username: Option<String>,
     /// IPP password; `None` sends no HTTP authentication.
@@ -2002,7 +2067,7 @@ pub fn lookup_printer(db: &DbState, name: &str) -> Option<StoredPrinter> {
     conn.query_row(
         "SELECT type, COALESCE(address, ''), COALESCE(language, 'pdf'), \
                 paper_width_mm, dpi, label_gap_mm, username, password, \
-                skip_tls_verification, via_driver \
+                skip_tls_verification, via_driver, default_settings_json \
          FROM printers WHERE name = ?1 COLLATE NOCASE",
         [name],
         |r| {
@@ -2017,6 +2082,9 @@ pub fn lookup_printer(db: &DbState, name: &str) -> Option<StoredPrinter> {
                 password: r.get(7)?,
                 skip_tls_verification: r.get(8)?,
                 via_driver: r.get(9)?,
+                tspl: crate::transport::label_langs::tspl::TsplTuning::from_settings_json(
+                    r.get::<_, Option<String>>(10)?.as_deref(),
+                ),
             })
         },
     )
@@ -3014,6 +3082,25 @@ mod tests {
             );
         }
         assert!(validate_page_range(None).is_ok());
+    }
+
+    #[test]
+    fn command_language_refuses_more_than_one_sheet() {
+        use crate::transport::PrinterLanguage as L;
+        let two = r#"<div class="pn-sheet" data-page="0"></div><div class="pn-sheet" data-page="0"></div>"#;
+        let one = r#"<div class="pn-sheet" data-page="0"></div>"#;
+        assert!(multi_sheet_refusal(&L::Escpos, two).is_some());
+        assert!(multi_sheet_refusal(&L::Zpl, two).is_some());
+        assert!(multi_sheet_refusal(&L::Escpos, one).is_none());
+        // PDF printers get every sheet as a page.
+        assert!(multi_sheet_refusal(&L::Pdf, two).is_none());
+    }
+
+    #[test]
+    fn page_range_requested_ignores_blank() {
+        assert!(!page_range_requested(None));
+        assert!(!page_range_requested(Some("  ")));
+        assert!(page_range_requested(Some("1-3")));
     }
 
     #[test]
