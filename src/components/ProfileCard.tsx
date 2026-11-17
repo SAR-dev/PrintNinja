@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SessionExpiredError } from "@/lib/api/errors";
 import { describeError } from "@/lib/errors";
 import * as share from "@/lib/share/client";
+import { ChangeHandleForm } from "@/components/ChangeHandleForm";
 
 type Account =
   | { kind: "loading" }
@@ -165,6 +166,12 @@ export function ProfileCard() {
 
           {account.kind === "signed_in" && (
             <>
+              <ChangeHandleForm
+                currentHandle={account.handle}
+                busy={busy}
+                setBusy={setBusy}
+                onChanged={() => void load()}
+              />
               <ChangePasswordForm busy={busy} setBusy={setBusy} />
               <RecoveryCodeForm busy={busy} setBusy={setBusy} />
               <SignedInSessions busy={busy} setBusy={setBusy} />

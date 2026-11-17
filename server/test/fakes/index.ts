@@ -59,6 +59,21 @@ export function createFakeUsers(): UserRepository & {
         byKey.set(user.handleKey, { ...user, passwordHash });
       }
     },
+    async updateHandle(id, handle, handleKey) {
+      const user = byId.get(id);
+      if (!user) {
+        throw new Error("user not found");
+      }
+      const occupant = byKey.get(handleKey);
+      if (occupant && occupant.id !== id) {
+        throw new HandleTakenError();
+      }
+      const updated = { ...user, handle, handleKey };
+      byKey.delete(user.handleKey);
+      byId.set(id, updated);
+      byKey.set(handleKey, updated);
+      return updated;
+    },
   };
 }
 

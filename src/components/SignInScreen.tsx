@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { AppLogo } from "@/components/AppLogo";
 import { RecoveryCodeBox } from "@/components/RecoveryCodeBox";
 import { Button } from "@/components/ui/button";
+import { HandleSuggestions } from "@/components/HandleSuggestions";
 import {
   Card,
   CardContent,
@@ -352,6 +353,9 @@ export function SignInScreen({
                 onChange={(e) => setHandle(e.target.value)}
                 disabled={busy}
               />
+              {registering && (
+                <HandleSuggestions onPick={setHandle} disabled={busy} />
+              )}
             </div>
 
             {resetting && (
