@@ -109,7 +109,7 @@ const pickPaperPreset = async (name: string) => {
   fireEvent.click(screen.getByRole("combobox", { name: "Paper size" }));
   fireEvent.click(await screen.findByRole("option", { name }));
 };
-// Page range and paper size live in the Advanced fold, closed by default.
+// Paper size lives in the Advanced fold, closed by default.
 const openAdvanced = async () => {
   fireEvent.click(
     await screen.findByRole("button", { name: /Advanced options/ }),
@@ -155,13 +155,10 @@ describe("changing the template or printer", () => {
     expect(usePrintStore.getState().status).toBe("printing");
   });
 
-  it("clears a page range typed for another template", async () => {
+  it("clears a page range left over from a previous print", async () => {
     renderPage();
     await screen.findByRole("button", { name: /^Print$/ });
-    await openAdvanced();
-    fireEvent.change(document.getElementById("page-range")!, {
-      target: { value: "2-3" },
-    });
+    usePrintStore.setState({ pageRange: "2-3" });
     expect(usePrintStore.getState().pageRange).toBe("2-3");
     await pickTemplate("A4 sheet");
     expect(usePrintStore.getState().pageRange).toBe("");
@@ -170,12 +167,38 @@ describe("changing the template or printer", () => {
   it("keeps the page range when the same template is picked again", async () => {
     renderPage();
     await screen.findByRole("button", { name: /^Print$/ });
-    await openAdvanced();
-    fireEvent.change(document.getElementById("page-range")!, {
-      target: { value: "2-3" },
-    });
+    usePrintStore.setState({ pageRange: "2-3" });
     await pickTemplate("Shipping label");
     expect(usePrintStore.getState().pageRange).toBe("2-3");
+  });
+
+  it("warns when a command-language printer would print a multi-page job", async () => {
+    h.printers = [
+      {
+        id: "saved:1",
+        name: "Thermal 80",
+        paper_width_mm: 72,
+        language: "escpos",
+      },
+    ];
+    usePrintStore.setState({ records: 2 });
+    renderPage();
+    await screen.findByRole("button", { name: /^Print$/ });
+    await pickPrinter("Thermal 80");
+    expect(
+      await screen.findByTestId("thermal-truncate-warning"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not warn for a PDF printer even with multiple pages", async () => {
+    h.printers = [
+      { id: "saved:1", name: "Laser", paper_width_mm: null, language: "pdf" },
+    ];
+    usePrintStore.setState({ records: 3 });
+    renderPage();
+    await screen.findByRole("button", { name: /^Print$/ });
+    await pickPrinter("Laser");
+    expect(screen.queryByTestId("thermal-truncate-warning")).toBeNull();
   });
 
   it("does not carry one printer's paper to a printer with no memory", async () => {

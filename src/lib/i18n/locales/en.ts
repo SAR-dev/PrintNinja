@@ -584,6 +584,12 @@ const en = {
     preview_empty_data: "The data is an empty array: nothing to print.",
     preview_truncated:
       "Showing first {{shown}} of {{total}} pages — the print has them all.",
+    // Command-language printers (ESC/POS, ZPL, TSPL, CPCL, raster) rasterize
+    // a single paper-height bitmap, so a multi-sheet job is cut off after
+    // the first page. This is the preview's frontend mitigation; the actual
+    // multi-sheet output is backend work (MISSING_FEATURES item 49).
+    thermal_truncate:
+      "This printer prints one page at a time, so a multi-page job prints only its first page.",
     preview_unavailable: "Preview unavailable: {{error}}",
     // The phone flow (PLAN §6): plain sentences and one-field-per-row
     // labels; the desktop form keeps the keys above.
@@ -611,7 +617,9 @@ const en = {
       "Local printers sit unused while Print via PC is on — jobs go to the PC's printers.",
     add_printer: "Add Printer",
     test_print: "Test Print",
-    paper_width_mm: "Paper width (mm)",
+    paper_width_mm: "Printable width (mm)",
+    paper_width_hint:
+      "The printable width, not the roll width — e.g. 72 mm for an 80 mm receipt printer.",
     dpi: "DPI",
     label_gap_mm: "Label gap (mm)",
     label_gap_hint:

@@ -143,14 +143,12 @@ describe("Print page", () => {
     // Folded: the header shows the current values, the fields stay hidden.
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle).toHaveTextContent(/Portrait/);
-    expect(screen.queryByLabelText("Page range")).toBeNull();
     expect(screen.queryByRole("group", { name: /Margins/ })).toBeNull();
     expect(screen.queryByLabelText("Paper size")).toBeNull();
     expect(screen.queryByLabelText("Fit mode")).toBeNull();
     // Opening exposes every moved field.
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByLabelText("Page range")).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /Margins/ })).toBeInTheDocument();
     expect(screen.getByLabelText("Paper size")).toBeInTheDocument();
     expect(screen.getByLabelText("Fit mode")).toBeInTheDocument();
