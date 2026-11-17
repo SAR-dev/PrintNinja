@@ -165,7 +165,9 @@ on several machines, give each machine the same explicit version (for example
 `node scripts/release-local.mjs 2026.1225.0`), as you would have with a hand-typed version before.
 
 The `server/` share service is tested and drift-checked by `pnpm check` but **not** deployed by
-any tool in this repo. It is deployed by hand, see section 7.
+any tool in this repo. It is deployed by hand, see section 7. On a `v*` tag, CI also publishes
+its Docker image to GitHub Container Registry for anyone who wants to run it themselves, see
+section 8.
 
 ## 5. Publish
 
@@ -186,7 +188,9 @@ The share service (accounts, publish, browse, save, sync for every PC) is the
 TypeScript service in `server/` backed by Turso Cloud (libSQL) in production
 and a local SQLite file everywhere else. It is **not** part of the
 release script and nothing automatic deploys it; `pnpm check` tests and drift-checks it,
-and you deploy it by hand.
+and you deploy it by hand. (A tagged release does publish a ready-made image of it for
+other people to self-host, see section 8; that publishes the image only and
+deploys nothing.)
 
 ### When to deploy
 - First time, before anyone can sign in.
@@ -363,7 +367,77 @@ database, not over the live one).
 ### What the local checks cover
 `pnpm check` runs the service's typecheck, architecture and test suites and fails on OpenAPI
 drift. `pnpm check --docker` also builds the service image. Deploying remains a manual step:
-nothing pushes the image or runs migrations against the live database.
+nothing runs migrations against your live database. Pushing the image to a registry is done
+by CI on a release tag only, see section 8.
+
+## 8. Share the server build (Docker image on GHCR)
+
+Pushing a `v*` tag makes the `server-publish` job in `.github/workflows/ci.yml` build
+`server/Dockerfile` and push it to GitHub Container Registry. Nothing else is needed from you:
+it logs in with the automatic `GITHUB_TOKEN`, so there is no secret to store.
+
+| Image | Tags |
+|---|---|
+| `ghcr.io/sar-dev/printninja-server` | the release version without the `v` (for example `2026.1225.0`), and `latest` |
+
+What to know:
+- The job waits for `server-check`, `server-image`, `server-e2e` and `version-check`, so a
+  broken server is never published.
+- It does **not** block `github-release`. If the push fails, the installers still ship; fix the
+  cause and re-run only the `server-publish` job (the same tags are overwritten).
+- The image is `linux/amd64` only. A Raspberry Pi or other ARM host cannot run it; add
+  `docker buildx` with `--platform linux/amd64,linux/arm64` to the job if you need that.
+- The image does not contain `.env`, Turso credentials or `CRON_SECRET`. Whoever runs it
+  supplies them.
+- It tags with the same date version as the app, so you can tell people which server image
+  matches which app release. Mention the image tag in the release notes when the `/v2` API
+  changed.
+
+### First release only: make the package public
+GHCR packages start **private**, so `docker pull` fails for everyone else until you change that
+once. After the first tagged run, on GitHub open your profile or organisation → **Packages** →
+`printninja-server` → **Package settings** → **Change visibility** → **Public**. Later releases
+keep the setting. If the package does not list this repository, use **Connect repository** (the
+image already carries the source label that normally links it).
+
+### Run it (for people who self-host)
+Pin a version rather than `latest` so an update is a choice, not a surprise.
+
+```bash
+docker pull ghcr.io/sar-dev/printninja-server:2026.1225.0
+
+docker run -d --name printninja-server --restart unless-stopped \
+  -p 3001:3001 \
+  -v printninja-data:/data \
+  -e DATABASE_URL=file:/data/printninja.db \
+  -e CORS_ORIGINS=tauri://localhost,http://tauri.localhost \
+  -e TRUST_PROXY=1 \
+  ghcr.io/sar-dev/printninja-server:2026.1225.0
+
+curl http://127.0.0.1:3001/v2/health   # 200
+```
+
+- The first start applies the database migrations itself, like the compose stack.
+- For Turso instead of the bundled file, set `DATABASE_URL=libsql://…` and
+  `DATABASE_AUTH_TOKEN`, and drop the `-v` volume.
+- Do not use `--env-file server/.env`: Docker keeps the quotes that `env.example` puts around
+  `CORS_ORIGINS`, which breaks the value. Pass each variable with `-e` as above.
+- Every variable is explained in [`ENV.md`](ENV.md). Put an HTTPS reverse proxy in front, as in
+  section 7, and set `TRUST_PROXY` to the number of proxy hops.
+- To update: pull the new tag, `docker rm -f printninja-server`, and run it again with the same
+  volume. The data survives; migrations run forward on boot and are not undone by going back to
+  an older image (restore a backup first if the schema changed).
+
+### Share it without a registry
+If you cannot use GHCR (private network, no internet), build and export the image by hand and
+send the file:
+
+```bash
+docker build -f server/Dockerfile -t printninja-server:2026.1225.0 .
+docker save printninja-server:2026.1225.0 | gzip > printninja-server-2026.1225.0.tar.gz
+# on the other machine:
+gunzip -c printninja-server-2026.1225.0.tar.gz | docker load
+```
 
 ## Clean up cache
 
