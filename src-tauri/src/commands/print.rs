@@ -96,17 +96,7 @@ pub struct PrintRequest {
     pub data: Option<serde_json::Value>,
     #[serde(default)]
     pub data_url: Option<String>,
-    /// Shown when a job asks for a page range: the option is accepted but not
-/// applied, so every page is printed.
-pub const PAGE_RANGE_UNSUPPORTED_WARNING: &str =
-    "Page range is not supported yet: all pages were printed.";
-
-/// True when `raw` names a non-blank page range.
-pub fn page_range_requested(raw: Option<&str>) -> bool {
-    raw.map(str::trim).is_some_and(|s| !s.is_empty())
-}
-
-/// HTTP method for fetching `data_url`: GET (default) or POST.
+    /// HTTP method for fetching `data_url`: GET (default) or POST.
     /// Anything else is rejected on intake so the preview (which uses
     /// the same choice) and the pipeline can never disagree.
     #[serde(default)]
@@ -129,6 +119,16 @@ pub fn page_range_requested(raw: Option<&str>) -> bool {
     /// "printed for <phone name>".
     #[serde(default)]
     pub requested_by_device_id: Option<String>,
+}
+
+/// Shown when a job asks for a page range: the option is accepted but not
+/// applied, so every page is printed.
+pub const PAGE_RANGE_UNSUPPORTED_WARNING: &str =
+    "Page range is not supported yet: all pages were printed.";
+
+/// True when `raw` names a non-blank page range.
+pub fn page_range_requested(raw: Option<&str>) -> bool {
+    raw.map(str::trim).is_some_and(|s| !s.is_empty())
 }
 
 /// Where one job's time went, in whole milliseconds per pipeline stage.
@@ -1548,10 +1548,7 @@ async fn run_stages(
     // where PDF beats HTML: no engine at all); a command-language
     // printer gets its first page rasterised at its dot dimensions, then
     // the identical encoder the HTML path uses.
-    let tspl_tuning = printer
-        .as_ref()
-        .map(|p| p.tspl.clone())
-        .unwrap_or_default();
+    let tspl_tuning = printer.as_ref().map(|p| p.tspl.clone()).unwrap_or_default();
     let sheet_refusal = if req.pdf.as_ref().is_some_and(|p| !p.is_empty()) {
         None
     } else {
@@ -1560,78 +1557,74 @@ async fn run_stages(
     let rendered: anyhow::Result<(Vec<u8>, String)> = if let Some(msg) = sheet_refusal {
         Err(anyhow::anyhow!(msg))
     } else {
-        match req
-        .pdf
-        .as_ref()
-        .filter(|p| !p.is_empty())
-    {
-        Some(pdf) => {
-            // This device's own print: hold the guard so the peer
-            // endpoint yields while we rasterize (local prints come
-            // first), like the HTML local path below.
-            let _local = crate::api::render_share::LocalRenderGuard::enter();
-            render_pdf_input(
-                pdf,
-                renderer,
-                language.clone(),
-                paper_w_mm,
-                paper_h_mm,
-                dpi,
-                printer.as_ref().and_then(|p| p.label_gap_mm),
-                &tspl_tuning,
-                &mut warnings,
-            )
-            .await
-        }
-        None => {
-            // A paired provider renders first when the auto policy is on:
-            // same bytes the local stage would produce, bought from the
-            // faster box. Any peer failure falls back to the local render
-            // below — sharing can only speed a print up, never fail it.
-            // Probes flew during template+layout; collect them now. Timed
-            // separately (Phase 0): the caps-probe wait is otherwise buried
-            // inside render_ms, and it is the part caching controls.
-            let t_peer_probe = Instant::now();
-            let (candidates, probe_errors) = match peer_probe {
-                Some(task) => task.await.unwrap_or_default(),
-                None => (Vec::new(), Vec::new()),
-            };
-            if peer_had_pairs {
-                tracing::debug!(
-                    job_id,
-                    peer_probe_ms = ms(t_peer_probe),
-                    candidates = candidates.len(),
-                    "peer probe collect"
-                );
+        match req.pdf.as_ref().filter(|p| !p.is_empty()) {
+            Some(pdf) => {
+                // This device's own print: hold the guard so the peer
+                // endpoint yields while we rasterize (local prints come
+                // first), like the HTML local path below.
+                let _local = crate::api::render_share::LocalRenderGuard::enter();
+                render_pdf_input(
+                    pdf,
+                    renderer,
+                    language.clone(),
+                    paper_w_mm,
+                    paper_h_mm,
+                    dpi,
+                    printer.as_ref().and_then(|p| p.label_gap_mm),
+                    &tspl_tuning,
+                    &mut warnings,
+                )
+                .await
             }
-            let attempted = peer_had_pairs;
-            // A peer may lack this device's uploaded fonts: inline them as data
-            // URIs so B renders what the template means — but only when a peer
-            // will actually render. The local fallback below then sees
-            // byte-identical HTML either way.
-            let peer_html = if candidates.is_empty() {
-                None
-            } else {
-                db.lock().ok().map(|guard| {
-                    crate::api::peer_consume::inline_fonts(guard.connection(), &final_html)
-                })
-            };
-            // PDF-language jobs on Android are still bought from the paired PC,
-            // which is mandatory there (the app opens on the pairing screen until
-            // one is paired): a local attempt could only report "no renderer",
-            // hiding the real cause (PC off, unpaired, busy). That is the only
-            // peer-bound PDF path — a submitted PDF to a command-language head is
-            // rasterised on the device itself (PLAN §2), like thermal jobs
-            // (PLAN §4). On Android they go local — `render_best` below still
-            // asks a paired PC first when one answers. Desktop is unchanged:
-            // local rendering, with required mode only for languages the platform
-            // cannot rasterize itself (macOS has no browser renderer).
-            let need_peer = (cfg!(target_os = "android")
-                && matches!(language, crate::transport::PrinterLanguage::Pdf))
-                || !(matches!(language, crate::transport::PrinterLanguage::Pdf)
-                    || crate::api::render_share::can_render()
-                    || cfg!(target_os = "android"));
-            let peer_result: Result<Option<crate::api::peer_consume::PeerOutcome>, String> =
+            None => {
+                // A paired provider renders first when the auto policy is on:
+                // same bytes the local stage would produce, bought from the
+                // faster box. Any peer failure falls back to the local render
+                // below — sharing can only speed a print up, never fail it.
+                // Probes flew during template+layout; collect them now. Timed
+                // separately (Phase 0): the caps-probe wait is otherwise buried
+                // inside render_ms, and it is the part caching controls.
+                let t_peer_probe = Instant::now();
+                let (candidates, probe_errors) = match peer_probe {
+                    Some(task) => task.await.unwrap_or_default(),
+                    None => (Vec::new(), Vec::new()),
+                };
+                if peer_had_pairs {
+                    tracing::debug!(
+                        job_id,
+                        peer_probe_ms = ms(t_peer_probe),
+                        candidates = candidates.len(),
+                        "peer probe collect"
+                    );
+                }
+                let attempted = peer_had_pairs;
+                // A peer may lack this device's uploaded fonts: inline them as data
+                // URIs so B renders what the template means — but only when a peer
+                // will actually render. The local fallback below then sees
+                // byte-identical HTML either way.
+                let peer_html = if candidates.is_empty() {
+                    None
+                } else {
+                    db.lock().ok().map(|guard| {
+                        crate::api::peer_consume::inline_fonts(guard.connection(), &final_html)
+                    })
+                };
+                // PDF-language jobs on Android are still bought from the paired PC,
+                // which is mandatory there (the app opens on the pairing screen until
+                // one is paired): a local attempt could only report "no renderer",
+                // hiding the real cause (PC off, unpaired, busy). That is the only
+                // peer-bound PDF path — a submitted PDF to a command-language head is
+                // rasterised on the device itself (PLAN §2), like thermal jobs
+                // (PLAN §4). On Android they go local — `render_best` below still
+                // asks a paired PC first when one answers. Desktop is unchanged:
+                // local rendering, with required mode only for languages the platform
+                // cannot rasterize itself (macOS has no browser renderer).
+                let need_peer = (cfg!(target_os = "android")
+                    && matches!(language, crate::transport::PrinterLanguage::Pdf))
+                    || !(matches!(language, crate::transport::PrinterLanguage::Pdf)
+                        || crate::api::render_share::can_render()
+                        || cfg!(target_os = "android"));
+                let peer_result: Result<Option<crate::api::peer_consume::PeerOutcome>, String> =
         match (peer_had_pairs, need_peer) {
             (false, true) => Err(format!(
                 "this {} job needs a paired PC (pair one in Settings → Shared rendering); this device cannot render {} itself",
@@ -1672,36 +1665,36 @@ async fn run_stages(
                 }
             }
         };
-            if attempted {
-                crate::metrics::count_peer_render(matches!(peer_result, Ok(Some(_))));
-            }
-            match peer_result {
-                Ok(Some(o)) => {
-                    rendered_by = Some(o.peer_name.clone());
-                    Ok((o.bytes, o.mime))
+                if attempted {
+                    crate::metrics::count_peer_render(matches!(peer_result, Ok(Some(_))));
                 }
-                Ok(None) => {
-                    // This device's own print: hold the guard so the peer
-                    // endpoint yields while we render (local prints come first).
-                    let _local = crate::api::render_share::LocalRenderGuard::enter();
-                    renderer
-                        .render_for_language(
-                            &final_html,
-                            paper_w_mm,
-                            paper_h_mm,
-                            &orientation,
-                            language.clone(),
-                            dpi,
-                            printer.as_ref().and_then(|p| p.label_gap_mm),
-                            &tspl_tuning,
-                        )
-                        .await
-                        .map(|(b, m)| (b, m.to_string()))
+                match peer_result {
+                    Ok(Some(o)) => {
+                        rendered_by = Some(o.peer_name.clone());
+                        Ok((o.bytes, o.mime))
+                    }
+                    Ok(None) => {
+                        // This device's own print: hold the guard so the peer
+                        // endpoint yields while we render (local prints come first).
+                        let _local = crate::api::render_share::LocalRenderGuard::enter();
+                        renderer
+                            .render_for_language(
+                                &final_html,
+                                paper_w_mm,
+                                paper_h_mm,
+                                &orientation,
+                                language.clone(),
+                                dpi,
+                                printer.as_ref().and_then(|p| p.label_gap_mm),
+                                &tspl_tuning,
+                            )
+                            .await
+                            .map(|(b, m)| (b, m.to_string()))
+                    }
+                    Err(msg) => Err(anyhow::anyhow!(msg)),
                 }
-                Err(msg) => Err(anyhow::anyhow!(msg)),
             }
         }
-    }
     };
     let render_ms = ms(t_render);
     timings.render_ms = render_ms;
