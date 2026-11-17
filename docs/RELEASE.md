@@ -383,8 +383,13 @@ it logs in with the automatic `GITHUB_TOKEN`, so there is no secret to store.
 What to know:
 - The job waits for `server-check`, `server-image`, `server-e2e` and `version-check`, so a
   broken server is never published.
-- It does **not** block `github-release`. If the push fails, the installers still ship; fix the
-  cause and re-run only the `server-publish` job (the same tags are overwritten).
+- It does **not** block `github-release`, on purpose: `github-release` waits only for the
+  Windows, Linux and Android builds, so a registry problem must never hold back the installers.
+  If the push fails, the installers still ship; fix the cause and re-run only the
+  `server-publish` job (the same tags are overwritten).
+- The image is not attached to the GitHub release page and is not added to the release notes
+  for you. Mention the `docker pull` line there by hand if you want people to find it (the job
+  summary of the `server-publish` run prints it).
 - The image is `linux/amd64` only. A Raspberry Pi or other ARM host cannot run it; add
   `docker buildx` with `--platform linux/amd64,linux/arm64` to the job if you need that.
 - The image does not contain `.env`, Turso credentials or `CRON_SECRET`. Whoever runs it
