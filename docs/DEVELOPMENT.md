@@ -46,7 +46,7 @@ plugins/      Tauri plugin for Android printing (Kotlin)
 server/       Share service (Fastify, Prisma, OpenAPI contract in server/openapi)
 e2e/          Playwright suite with a fake desktop agent
 dev-printer/  Fake IPP printer for local development
-docs/         Architecture overview + deep dives, glossary, decisions, UI guide, environment, CI, release and signing
+docs/         User guides (features, phone printing, troubleshooting, automation), architecture overview + deep dives, glossary, decisions, UI guide, environment, CI, release and signing (index: docs/README.md)
 scripts/      Release and versioning helpers
 ```
 

@@ -35,7 +35,7 @@ No contribution is too small. If something confused you, it will confuse others 
 
 ## 🐞 Report a problem
 
-Before you report, take a quick look at [Troubleshooting](README.md#troubleshooting) in the README. Many common problems have a short fix there.
+Before you report, take a quick look at the [Troubleshooting guide](docs/TROUBLESHOOTING.md). Many common problems have a short fix there.
 
 If it is still not working, [open an issue](https://github.com/SAR-dev/PrintNinja/issues) and tell us:
 
