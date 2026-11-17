@@ -74,6 +74,15 @@ and AAB to a draft release. A re-run reuses the draft and overwrites assets of
 the same name. `release-local.mjs` is the manual route for when you want to
 build on your own machines instead.
 
+The same tag also starts `server-publish`, which builds the share-service image
+and pushes it to GitHub Container Registry as
+`ghcr.io/<owner>/printninja-server:<version>` and `:latest`. It runs after
+`server-check`, `server-image`, `server-e2e` and `version-check` pass, uses the
+automatic `GITHUB_TOKEN` (needs the job's `packages: write` permission, already
+set), and does not block `github-release`, so you can re-run it on its own if
+the push fails. The first time, make the package public in GitHub's package
+settings; see [`RELEASE.md`](RELEASE.md#8-share-the-server-build-docker-image-on-ghcr).
+
 The app's update badge follows the release: it queries
 `{VITE_UPDATE_API}/repos/{VITE_UPDATE_REPO}/releases/latest`, which
 defaults to this repo on `https://api.github.com`. Point it elsewhere
@@ -110,7 +119,8 @@ when needed (template: `.secrets.example`). The hosted workflow reads two of
 them, `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD`, from the
 repo's Actions secrets when it builds the APK on a tag. It also reads the
 Actions variable `VITE_DEFAULT_SHARE_URL` (empty in forks means no pre-fill)
-and uses the automatic `GITHUB_TOKEN` to publish the draft release.
+and uses the automatic `GITHUB_TOKEN` to publish the draft release and to push
+the server image to GHCR.
 
 | Secret | Used by |
 |---|---|

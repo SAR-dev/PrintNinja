@@ -17,8 +17,9 @@ on:
   # whole Tauri tree cold. The merge to main warms it just before the tag.
   #
   # Release tags: everything above, plus the installer builds and the
-  # release (windows-build, linux-build, android-build, github-release),
-  # which run on `v*` tags only. version-check rejects any tag that is not on
+  # release (windows-build, linux-build, android-build, github-release)
+  # and the share-service image push to GHCR (server-publish), which run
+  # on `v*` tags only. version-check rejects any tag that is not on
   # main. `create` events do not support tag filters, so tag builds must
   # use `push`.
   push:
@@ -726,6 +727,47 @@ jobs:
             src-tauri/gen/android/app/build/outputs/**/*.aab
           if-no-files-found: error
           retention-days: 30
+
+  # Publishes the share-service image to GitHub Container Registry so anyone
+  # can `docker pull` it instead of building from source. Tagged with the
+  # release version (the tag without its leading v) and `latest`. It does not
+  # gate `github-release`: a registry problem must never hold back the
+  # installers, and re-running just this job is safe (same tags are
+  # overwritten). The package is private until it is made public once, see
+  # docs/RELEASE.md section 8.
+  server-publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: [server-check, server-image, server-e2e, version-check]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Log in to GitHub Container Registry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build and push the service image
+        run: |
+          # Image names must be lowercase; the owner (SAR-dev) is not.
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/printninja-server"
+          VERSION="${GITHUB_REF_NAME#v}"
+          docker build -f server/Dockerfile \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.version=${VERSION}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -t "${IMAGE}:${VERSION}" \
+            -t "${IMAGE}:latest" \
+            .
+          docker push "${IMAGE}:${VERSION}"
+          docker push "${IMAGE}:latest"
+          {
+            echo "### Share service image"
+            echo
+            echo "\`docker pull ${IMAGE}:${VERSION}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   github-release:
     if: startsWith(github.ref, 'refs/tags/v')
