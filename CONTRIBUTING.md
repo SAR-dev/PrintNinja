@@ -1,20 +1,110 @@
-# Contributing to PrintNinja
+# 💙 Contributing to PrintNinja
 
-Thanks for helping. This page covers how to set up, what to run before you push, and the project rules that reviewers expect. For an overview of the app, see the [README](README.md).
+Thank you for wanting to help! 🎉 PrintNinja gets better because people use it, break it, question it and improve it.
 
-## Workflow
+**You do not need to write code to contribute.** Reporting a problem, sharing an idea, testing on your own printer or fixing a confusing sentence in the docs all make a real difference.
 
-- `develop` is the integration branch. Open pull requests against it.
-- `main` is the release branch. Release tags must point at a commit on `main`.
-- Keep commits small and focused: one change per commit, with a regression test for every bug fix.
-- Use conventional commit messages: `feat(print): …`, `fix(designer): …`, `docs: …`, `chore: …`.
-- CI only runs on pull requests into `main`, pushes to `main` and release tags, so a push to `develop` is not checked for you. Run `pnpm check` before you push (add `--rust` when Rust changed, `pnpm check:full` before a release). See [`docs/CI.md`](docs/CI.md).
+For an overview of the app, see the [README](README.md).
 
-## Setup
+**Jump to:**
+[🙌 Ways to help](#ways-to-help) ·
+[🐞 Report a problem](#report-a-problem) ·
+[💡 Suggest an idea](#suggest-an-idea) ·
+[🧪 Test on real printers](#test-on-real-printers) ·
+[📝 Improve the docs and translations](#improve-the-docs-and-translations) ·
+[👩‍💻 For developers](#for-developers)
 
-You need Node 22 (the `engines` field pins 22.x), pnpm 10 and Rust 1.90 (pinned in `rust-toolchain.toml`). For Android you also need Java 17 and the Android SDK and NDK.
+---
+
+<a id="ways-to-help"></a>
+
+## 🙌 Ways to help
+
+| I want to... | Do this |
+|---|---|
+| 🐞 Tell you something is broken | [Report a problem](#report-a-problem) |
+| 💡 Ask for a feature or improvement | [Suggest an idea](#suggest-an-idea) |
+| 🖨️ Try PrintNinja with my own printer | [Test on real printers](#test-on-real-printers) |
+| 📝 Fix a typo or make the docs clearer | [Improve the docs and translations](#improve-the-docs-and-translations) |
+| 🌏 Help with the Japanese or English text | [Improve the docs and translations](#improve-the-docs-and-translations) |
+| 👩‍💻 Change the code | [For developers](#for-developers) |
+
+No contribution is too small. If something confused you, it will confuse others too, and that is worth telling us. 🙏
+
+<a id="report-a-problem"></a>
+
+## 🐞 Report a problem
+
+Before you report, take a quick look at [Troubleshooting](README.md#troubleshooting) in the README. Many common problems have a short fix there.
+
+If it is still not working, [open an issue](https://github.com/SAR-dev/PrintNinja/issues) and tell us:
+
+1. 💻 **What device you use.** Windows, Android or Linux, and the PrintNinja version (shown in the app, and on the [Releases page](https://github.com/SAR-dev/PrintNinja/releases)).
+2. 🖨️ **What printer you use.** Brand and model, and how it is connected (Wi-Fi, USB or Bluetooth).
+3. 👣 **What you did.** The steps, in order, like "I opened Print, chose my printer, pressed Print."
+4. ✅ **What you expected.** For example, "A receipt comes out."
+5. ❌ **What happened instead.** Include the exact message if there was one. A screenshot helps a lot.
+6. 📎 **Your diagnostics file.** Open **Settings → Diagnostics**, choose **Export Diagnostics**, and attach the file.
+
+Please do not worry about getting the wording perfect. A rough report is far better than no report. 💛
+
+<a id="suggest-an-idea"></a>
+
+## 💡 Suggest an idea
+
+Have a thought about how PrintNinja could work better? [Open an issue](https://github.com/SAR-dev/PrintNinja/issues) and describe:
+
+- 🎯 **What you are trying to do** (for example, "print 50 labels from a spreadsheet every morning")
+- 😣 **What is hard about it today**
+- ✨ **What would make it easier**, if you have a picture of it
+
+You do not have to know how it could be built. Describing the problem is the most useful part.
+
+<a id="test-on-real-printers"></a>
+
+## 🧪 Test on real printers
+
+Printers are all a little different, and we cannot own every model. If you have a receipt, label or office printer, you can help by trying it out and telling us what happened, good or bad.
+
+- 📋 The [real-printer test checklist](docs/TEST_CHECKLIST.md) lists simple things to print (text, a barcode, an image, a long job). It has not been run on real hardware yet, so your results are valuable.
+- 🗺️ [`docs/MISSING_FEATURES.md`](docs/MISSING_FEATURES.md) lists what is known not to work yet, by system and connection type.
+
+When you report back, say which printer you used, how it was connected and which of the checks worked. A short "it worked" is useful too! 🎉
+
+<a id="improve-the-docs-and-translations"></a>
+
+## 📝 Improve the docs and translations
+
+Clear writing is a feature. If a sentence in the README or the other guides made you stop and re-read it, please help us fix it.
+
+- ✏️ **Small fixes:** you can edit any Markdown file (`.md`) directly on GitHub. Look for the pencil icon, make your change and propose it.
+- 🗣️ **Plain language:** write the way you would explain it to a friend. Say what to click, not how it works inside. The [glossary](docs/GLOSSARY.md) has plain-language meanings for the technical words we use.
+- 🌏 **Translations:** the app's text is in `src/lib/i18n/locales/`, with `en.ts` for English and `ja.ts` for Japanese. If a phrase sounds unnatural, tell us or suggest a better one.
+
+---
+
+<a id="for-developers"></a>
+
+## 👩‍💻 For developers
+
+The rest of this page is for people who change the code. It covers how to set up, what to run before you push, and the rules reviewers expect. 🛠️
+
+<a id="set-up-your-computer-developers"></a>
+
+### 💻 Set up your computer (developers)
+
+You need:
+
+- **Node 22** (the `engines` field pins 22.x)
+- **pnpm 10**
+- **Rust 1.90** (pinned in `rust-toolchain.toml`)
+- For Android: **Java 17**, plus the Android SDK and NDK
+
+Then get the code and start it:
 
 ```bash
+git clone https://github.com/SAR-dev/PrintNinja.git
+cd PrintNinja
 pnpm install
 pnpm dev                 # web preview at http://localhost:1420
 pnpm tauri:dev           # desktop app
@@ -24,7 +114,17 @@ In a browser there is no Tauri backend, so settings fall back to `localStorage` 
 
 For the share service, copy `server/env.example` to `server/.env` and run `pnpm --filter server db:generate` once on a fresh clone, because the Prisma client is gitignored. Every variable is explained in [`docs/ENV.md`](docs/ENV.md).
 
-## Before you push
+**🧪 No printer handy?** `pnpm dev:printer` starts a fake printer that saves every job as a PDF. See [`dev-printer/README.md`](dev-printer/README.md).
+
+### 🔀 Workflow
+
+- `develop` is the integration branch. Open pull requests against it.
+- `main` is the release branch. Release tags must point at a commit on `main`.
+- Keep commits small and focused: one change per commit, with a regression test for every bug fix.
+- Use conventional commit messages: `feat(print): ...`, `fix(designer): ...`, `docs: ...`, `chore: ...`.
+- CI only runs on pull requests into `main`, pushes to `main` and release tags, so a push to `develop` is not checked for you. Run `pnpm check` before you push (add `--rust` when Rust changed, `pnpm check:full` before a release). See [`docs/CI.md`](docs/CI.md).
+
+### ✅ Before you push
 
 `pnpm check` runs these checks (`--rust` adds the Rust ones, `--e2e` Playwright). You can also run the ones that match what you changed.
 
@@ -61,17 +161,17 @@ If you changed the Android side (the print plugin, `render/` or the android tran
 
   The plugin's `src/androidTest` tests need a connected device.
 
-On a machine with little disk space, `target/` can grow to several GB — a 4-ABI Android debug build grew it to about 27 GB here. Run `cargo clean` when done and use `CARGO_INCREMENTAL=0 cargo test` if RAM gets tight. `pnpm test:rust` compiles inside the container, so it does not grow the host `target/`.
+💾 On a machine with little disk space, `target/` can grow to several GB. A 4-ABI Android debug build grew it to about 27 GB here. Run `cargo clean` when done and use `CARGO_INCREMENTAL=0 cargo test` if RAM gets tight. `pnpm test:rust` compiles inside the container, so it does not grow the host `target/`.
 
-## Code style
+### 🎨 Code style
 
 - **TypeScript:** Biome handles formatting (2 spaces) and a small set of lint rules. Run `pnpm lint:fix` and `pnpm format`. Do not make the rules stricter. `tsc` must be clean.
 - **Rust:** `cargo fmt` and `cargo clippy -- -D warnings` must pass. Warnings fail `pnpm check --rust`.
-- Keep comments for the "why". No emojis in code or commit messages.
+- Keep comments for the "why". No emojis in code or commit messages (they are fine in docs like this one).
 
-## Project rules
+### 📐 Project rules
 
-### Frontend
+#### Frontend
 
 - **Template CSS is compiled per template.** Tailwind v4 (installed as the `tailwind4` alias, the app shell stays on v3) compiles the classes found in a template's HTML, and the result is stored as `compiled_css`. If you change what `compileTemplateCss` outputs, bump `COMPILER_REV`. Existing versions pick up the change the next time their template is saved.
 - **Write full class names in templates.** Use `{{#if urgent}}bg-red-600{{else}}bg-green-600{{/if}}` or a CSS variable. A name built from data, such as `bg-{{color}}-500`, cannot be compiled.
@@ -80,31 +180,31 @@ On a machine with little disk space, `target/` can grow to several GB — a 4-AB
 - **Phones count.** Use the coarse-pointer variant for touch targets (`[@media(pointer:coarse)]:min-h-11`) and the shared queries in `src/lib/hooks/useMediaQuery.ts` for phone layouts. New tables should offer a card layout below `md`.
 - **API types are generated.** Do not edit `src/lib/api/schema.d.ts`. Change the server schemas and run `pnpm gen:api`.
 
-### Rust core
+#### Rust core
 
 - Printing always goes through the real pipeline: data fetch, Handlebars, layout, render, per-printer queue, transport, history. `POST /v1/print`, deep links and the UI share it. Never return a fake "queued" response.
 - `PrintQueue` is `Clone + Send + Sync`, and each printer has its own semaphore so jobs never interleave. `PrinterTransport` must stay usable as `dyn` through `TransportRegistry`.
 - `DbState` is `Arc<Mutex<Database>>`, managed as Tauri state.
-- **Pipeline changes touch the docs.** `docs/ARCHITECTURE.md` is the overview; the prose lives in `docs/architecture/` — rendering and layout, printers and transports, queue and history, and phone and PC sharing (the shared-rendering protocol and its limits). Update the matching file in the same change when stages, timeouts, caps or status codes move.
+- **Pipeline changes touch the docs.** `docs/ARCHITECTURE.md` is the overview; the prose lives in `docs/architecture/` (rendering and layout, printers and transports, queue and history, and phone and PC sharing, which covers the shared-rendering protocol and its limits). Update the matching file in the same change when stages, timeouts, caps or status codes move.
 - **This device's own prints come first.** Any new code path that renders a print locally must hold `LocalRenderGuard` (see `run_stages`), so that shared-rendering requests from phones get a 429 and the phone renders for itself. In the other direction, asking a PC must never be able to fail a print: every failure falls back to local rendering.
 - **Pairing links are LAN-only.** `parse_link` refuses public hosts before any socket opens. Keep that check in front of anything that accepts a scanned or pasted address.
 
-### Share service (`server/`)
+#### Share service (`server/`)
 
 - Layers are enforced by `pnpm --filter server arch`: `domain` imports neither `http` nor `infra`, `http` imports only `domain`, and Prisma stays inside `infra`.
 - Every error uses the `{ error: { code, message, details?, request_id } }` envelope. `server/openapi/openapi.json` is the contract, and `pnpm check` fails if it drifts.
 - Change the schema with `pnpm --filter server db:migrate` (Prisma migrate dev). Migrations are applied at boot by `db:apply`.
 
-## Testing
+### 🧪 Testing
 
-Add a regression test for every fix.
+Add a regression test for every fix. 🛡️
 
 - **App:** Vitest and Testing Library in `src/test/`. jsdom has no `matchMedia`, so phone behaviour is tested by stubbing it (see `src/test/mobile.test.tsx`).
 - **Rust:** unit tests next to the code and integration tests in `src-tauri/tests/`. Shared rendering is covered by `peer_consume.rs` and `peer_render_priority.rs`; the live-Chromium provider test runs only with `PRINTNINJA_TEST_REAL_CHROMIUM=1`. `virtual_printer.rs` builds a small virtual printer (vendored in `e2e/support/virtual-printer`) and switches it between `ok`, `paperout`, `jam`, `offline`, `hang` and `drop`. It needs only `cargo` and never skips. The whole suite can also run in a Linux container: `pnpm test:rust`.
 - **Share service:** unit and integration tests in `server/test/` run against local SQLite files. `pnpm --filter server test:e2e` runs over HTTP against a Docker stack (`pnpm --filter server test:e2e:stack`).
 - **End to end:** Playwright in `e2e/tests/`. Desktop projects run Chromium. The `mobile-pixel7` and `mobile-small` projects run `*.mobile.e2e.ts` and check sideways scrolling, 44px tap targets, screenshots and axe. Screenshot baselines are Linux images. To update them after an intended layout change, run `pnpm --filter e2e exec playwright test --project=mobile-pixel7 --project=mobile-small --update-snapshots` on Linux and review the diff.
 
-## Releasing
+### 🚢 Releasing
 
 ```bash
 pnpm release             # next date version (YYYY.MMDD.N); add --push to push the tag, --label TEXT to note it
@@ -112,9 +212,12 @@ pnpm release             # next date version (YYYY.MMDD.N); add --push to push t
 
 This sets the version from the date (`YYYY.MMDD.N`, for example `2026.1225.0`, then `2026.1225.1` for a second release that day) in every manifest (`pnpm version:set` does only that), commits and tags. To build the Windows MSI, Linux packages and Android APK and attach them to a draft GitHub Release, run `node scripts/release-local.mjs --push` on each machine. Signing is done locally. See [`docs/RELEASE.md`](docs/RELEASE.md) and [`docs/SIGNING.md`](docs/SIGNING.md).
 
-## Pull request checklist
+### 📬 Pull request checklist
 
 - [ ] The checks above for the code you changed pass
 - [ ] New or changed behaviour has a regression test
 - [ ] `COMPILER_REV` is bumped if compiled template CSS changes
 - [ ] `openapi.json` and `schema.d.ts` are regenerated if the API changed
+- [ ] Docs are updated if what people see or do has changed (README, guides, translations)
+
+Thank you again for helping make PrintNinja better. 💙
