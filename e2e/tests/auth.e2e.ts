@@ -142,7 +142,9 @@ test("F2 forgot password: reset with the recovery code", async ({
   expect(secondCode).not.toBe(firstCode);
   await page.getByTestId(testids.recoveryContinue).click();
   await expect(page.getByTestId(testids.signinForm)).toBeVisible();
-  await expect(page.getByTestId(testids.shellApp)).toHaveCount(0);
+  // The reset signs nobody in. AuthGate keeps the shell mounted but hidden
+  // after sign-out, so assert hidden rather than removed from the DOM.
+  await expect(page.getByTestId(testids.shellApp)).toBeHidden();
 
   // The first code was single-use: it no longer resets anything.
   await page.getByTestId(testids.authForgotPassword).click();
