@@ -80,8 +80,12 @@ and pushes it to GitHub Container Registry as
 `server-check`, `server-image`, `server-e2e` and `version-check` pass, uses the
 automatic `GITHUB_TOKEN` (needs the job's `packages: write` permission, already
 set), and does not block `github-release`, so you can re-run it on its own if
-the push fails. The first time, make the package public in GitHub's package
-settings; see [`RELEASE.md`](RELEASE.md#8-share-the-server-build-docker-image-on-ghcr).
+the push fails. It is a separate job on purpose: `github-release` waits only for
+the three installer builds, so a registry outage or a permissions problem on
+GHCR can never hold back the installers. The image is not attached to the
+GitHub release page; it lives only in the registry. The first time, make the
+package public in GitHub's package settings; see
+[`RELEASE.md`](RELEASE.md#8-share-the-server-build-docker-image-on-ghcr).
 
 The app's update badge follows the release: it queries
 `{VITE_UPDATE_API}/repos/{VITE_UPDATE_REPO}/releases/latest`, which

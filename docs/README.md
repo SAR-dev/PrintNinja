@@ -15,6 +15,7 @@ Pick the guide that matches what you want to do. New here? Start with the [main 
 
 - 🤖 [Templates and automation](./AUTOMATION.md): template placeholders, the local REST API and deep links
 - ⚙️ [Environment settings](./ENV.md): share service settings, including print callbacks
+- 🐳 [Self-host the share service](./RELEASE.md#8-share-the-server-build-docker-image-on-ghcr): the ready-made Docker image on GitHub Container Registry, and how to run it
 
 ## 👩‍💻 For developers
 
