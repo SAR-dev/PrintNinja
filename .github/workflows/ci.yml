@@ -755,6 +755,8 @@ jobs:
           IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/printninja-server"
           VERSION="${GITHUB_REF_NAME#v}"
           docker build -f server/Dockerfile \
+            --provenance=false \
+            --sbom=false \
             --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
             --label "org.opencontainers.image.version=${VERSION}" \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
