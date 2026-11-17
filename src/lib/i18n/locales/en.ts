@@ -56,6 +56,7 @@ const en = {
       "Enter the full server address, starting with http:// or https://.",
     handle: "Handle",
     handle_placeholder: "e.g. {{example}}",
+    suggest: "Suggest",
     password: "Password",
     show_password: "Show password",
     hide_password: "Hide password",
@@ -1018,6 +1019,14 @@ const en = {
     change_password_done: "Password changed",
     change_password_revoked:
       "Password changed — {{count}} other session(s) signed out",
+    change_handle_title: "Change handle",
+    change_handle_new: "New handle",
+    change_handle_save: "Save handle",
+    change_handle_hint:
+      "Your handle is how others see you and how you sign in. Your templates and saved data keep working unchanged.",
+    change_handle_required: "Enter a new handle",
+    change_handle_unchanged: "That is already your handle",
+    change_handle_done: "Handle updated",
     sessions_title: "Signed-in devices",
     sessions_hint:
       "Every session here can be ended. Revoking the current device signs it out.",

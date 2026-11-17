@@ -53,6 +53,14 @@ export interface UserRepository {
   /** Stores the hash of a freshly issued recovery code, replacing any
    * earlier one (a code works once, then it is rotated). */
   setRecoveryCodeHash(id: string, recoveryCodeHash: string): Promise<void>;
+  /** Renames the account (handle + its unique key). Throws
+   * HandleTakenError when the new key is another user's, covering the
+   * check-then-update race the same way create does. */
+  updateHandle(
+    id: string,
+    handle: string,
+    handleKey: string,
+  ): Promise<UserRecord>;
 }
 
 export interface SessionRepository {

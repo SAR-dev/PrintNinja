@@ -57,6 +57,7 @@ import {
 } from "lucide-react";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { ProfileCard } from "@/components/ProfileCard";
+import { HandleSuggestions } from "@/components/HandleSuggestions";
 // Type only: keeps the background module (and its invoke wrapper) out
 // of this chunk — every runtime use goes through the dynamic import.
 import type { NotificationPermissionState } from "@/lib/android/background";
@@ -1139,6 +1140,10 @@ export function SettingsPage() {
                               />
                             </div>
                           </div>
+                          <HandleSuggestions
+                            onPick={setShareHandle}
+                            disabled={shareBusy}
+                          />
                           <div className="flex gap-2">
                             <Button onClick={doLogin} disabled={shareBusy}>
                               {shareBusy ? "…" : t("auth.sign_in")}

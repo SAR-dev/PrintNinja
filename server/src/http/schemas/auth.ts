@@ -57,6 +57,19 @@ export const resetPasswordResponse = z.object({
 
 export type ChangePasswordBody = z.infer<typeof changePasswordBody>;
 
+/** The new handle for PUT /v2/auth/handle. Same rules as register. */
+export const changeHandleBody = z.object({
+  handle: z
+    .string()
+    .trim()
+    .min(HANDLE_MIN_LENGTH)
+    .max(HANDLE_MAX_LENGTH)
+    .regex(HANDLE_PATTERN, "Handle must be 1-32 of A-Z a-z 0-9 _ -")
+    .meta({ examples: ["SayedRafi"] }),
+});
+
+export type ChangeHandleBody = z.infer<typeof changeHandleBody>;
+
 export const userSchema = z.object({
   id: z.string().uuid(),
   handle: z.string(),

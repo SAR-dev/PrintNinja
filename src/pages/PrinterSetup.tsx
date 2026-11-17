@@ -167,6 +167,7 @@ export function PrinterSetupPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("all");
   const [testing, setTesting] = useState<number | null>(null);
+  const [removing, setRemoving] = useState<number | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanningSys, setScanningSys] = useState(false);
   // False until the first OS enumeration answers, so the dialog never says
@@ -592,6 +593,7 @@ export function PrinterSetupPage() {
   };
 
   const removePrinter = async (p: PrinterRow) => {
+    setRemoving(p.id);
     try {
       await agent("delete_printer", { id: p.id });
       setPrinters((prev) => prev.filter((x) => x.id !== p.id));
@@ -600,6 +602,8 @@ export function PrinterSetupPage() {
       notifyError(
         t("printers.toast_remove_failed", { error: describeError(e) }),
       );
+    } finally {
+      setRemoving(null);
     }
   };
 
@@ -1086,6 +1090,7 @@ export function PrinterSetupPage() {
         description={t("printers.remove_body")}
         confirmLabel={t("printers.remove_confirm")}
         destructive
+        busy={removing != null}
         onConfirm={async () => {
           if (removeTarget) await removePrinter(removeTarget);
           setRemoveTarget(null);

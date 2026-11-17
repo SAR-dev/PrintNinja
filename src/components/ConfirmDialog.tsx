@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -57,7 +58,11 @@ export function ConfirmDialog({
             variant={destructive ? "destructive" : "default"}
             onClick={() => void onConfirm()}
             disabled={busy}
+            aria-busy={busy}
           >
+            {busy && (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            )}
             {confirmLabel}
           </Button>
         </DialogFooter>
