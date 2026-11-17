@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
   handleKey,
+  changeHandle,
   changePassword,
   issueRecoveryCode,
   listUserSessions,
@@ -24,6 +25,7 @@ import { bearerToken, requireAuth } from "../plugins/auth.js";
 import {
   authCredentials,
   authResponse,
+  changeHandleBody,
   changePasswordBody,
   issueRecoveryCodeBody,
   recoveryCodeResponse,
@@ -334,6 +336,39 @@ export async function authRoutes(
       return reply
         .header("Cache-Control", "no-store")
         .send({ recovery_code: recoveryCode });
+    },
+  );
+
+  typed.put(
+    "/v2/auth/handle",
+    {
+      preHandler: [requireAuth(deps)],
+      schema: {
+        description:
+          "Change the account handle. The new handle must be valid and free; a case-only change is allowed.",
+        body: changeHandleBody,
+        response: {
+          200: userSchema,
+          400: errorBody,
+          401: errorBody,
+          409: errorBody,
+          429: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!request.authUser) {
+        throw new UnauthorizedError();
+      }
+      const user = await changeHandle(
+        deps,
+        request.authUser,
+        request.body.handle,
+      );
+      // Account data must never sit in a cache.
+      return reply
+        .header("Cache-Control", "no-store")
+        .send(toUserResponse(user));
     },
   );
 

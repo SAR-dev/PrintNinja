@@ -58,6 +58,7 @@ const ja: Translation = {
       "http:// または https:// から始まる完全なサーバーアドレスを入力してください。",
     handle: "ハンドル",
     handle_placeholder: "例: {{example}}",
+    suggest: "候補を表示",
     password: "パスワード",
     show_password: "パスワードを表示",
     hide_password: "パスワードを非表示",
@@ -1038,6 +1039,14 @@ const ja: Translation = {
     change_password_done: "パスワードを変更しました",
     change_password_revoked:
       "パスワードを変更しました。他の{{count}}件のセッションをサインアウトしました",
+    change_handle_title: "ハンドルを変更",
+    change_handle_new: "新しいハンドル",
+    change_handle_save: "ハンドルを保存",
+    change_handle_hint:
+      "ハンドルは他のユーザーに表示され、サインインにも使います。テンプレートや保存したデータはそのまま使えます。",
+    change_handle_required: "新しいハンドルを入力してください",
+    change_handle_unchanged: "すでに使用中のハンドルです",
+    change_handle_done: "ハンドルを変更しました",
     sessions_title: "サインイン中のデバイス",
     sessions_hint:
       "ここに表示されるセッションはすべて終了できます。現在のデバイスを取り消すと、そのデバイスはサインアウトします。",

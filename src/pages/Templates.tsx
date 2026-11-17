@@ -388,25 +388,31 @@ export function TemplatesPage() {
 
   const handleUnsave = async (localTpl: TemplateRow) => {
     if (!localTpl.remote_id) return;
+    if (syncing != null) return;
+    setSyncing(localTpl.id);
     try {
-      await share.unsaveRemoteTemplate(localTpl.remote_id);
-    } catch (e) {
-      // Saving is a network operation: without the server round-trip the
-      // copy stays, and the next pull (which still lists it as saved)
-      // would bring it right back.
-      notifyError(describeError(e));
-      return;
-    }
-    // The server confirmed the unsave, so the local copy is forgotten
-    // outright — no tombstone, nothing for the engine to push.
-    try {
-      await agent("cache_forget_template", {
-        server_id: localTpl.server_id ?? localTpl.remote_id,
-      });
-      notifySuccess(t("templates.toast_removed_saved"));
-      await loadMine();
-    } catch (e) {
-      notifyError(describeError(e));
+      try {
+        await share.unsaveRemoteTemplate(localTpl.remote_id);
+      } catch (e) {
+        // Saving is a network operation: without the server round-trip the
+        // copy stays, and the next pull (which still lists it as saved)
+        // would bring it right back.
+        notifyError(describeError(e));
+        return;
+      }
+      // The server confirmed the unsave, so the local copy is forgotten
+      // outright — no tombstone, nothing for the engine to push.
+      try {
+        await agent("cache_forget_template", {
+          server_id: localTpl.server_id ?? localTpl.remote_id,
+        });
+        notifySuccess(t("templates.toast_removed_saved"));
+        await loadMine();
+      } catch (e) {
+        notifyError(describeError(e));
+      }
+    } finally {
+      setSyncing(null);
     }
   };
 
@@ -1148,6 +1154,7 @@ export function TemplatesPage() {
         description={t("templates.delete_body")}
         confirmLabel={t("templates.delete_confirm")}
         destructive
+        busy={syncing === deleteTarget?.id}
         onConfirm={async () => {
           if (deleteTarget) await handleDelete(deleteTarget);
           setDeleteTarget(null);
@@ -1166,6 +1173,7 @@ export function TemplatesPage() {
         }
         description={t("templates.refresh_body")}
         confirmLabel={t("templates.refresh_confirm")}
+        busy={syncing === refreshTarget?.id}
         onConfirm={async () => {
           if (refreshTarget) await handleRefresh(refreshTarget);
           setRefreshTarget(null);
@@ -1192,6 +1200,7 @@ export function TemplatesPage() {
         description={t("templates.remove_body")}
         confirmLabel={t("templates.remove_confirm")}
         destructive
+        busy={syncing === removeTarget?.id}
         onConfirm={async () => {
           if (removeTarget) await handleUnsave(removeTarget);
           setRemoveTarget(null);

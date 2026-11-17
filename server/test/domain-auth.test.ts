@@ -8,6 +8,7 @@ import {
   createFakeUsers,
 } from "./fakes/index.js";
 import {
+  changeHandle,
   changePassword,
   DEVICE_LABEL_MAX,
   issueRecoveryCode,
@@ -370,6 +371,58 @@ describe("deviceLabelFromUserAgent", () => {
     expect(deviceLabelFromUserAgent("device ".repeat(100))).toHaveLength(
       DEVICE_LABEL_MAX,
     );
+  });
+});
+
+describe("changeHandle", () => {
+  it("renames the account and keeps the id and password hash", async () => {
+    const d = deps();
+    const { user } = await registered(d, "Alice");
+
+    const updated = await changeHandle(d, user, "SayedRafi");
+
+    expect(updated.id).toBe(user.id);
+    expect(updated.handle).toBe("SayedRafi");
+    expect(updated.handleKey).toBe("sayedrafi");
+    expect(updated.passwordHash).toBe(user.passwordHash);
+
+    // The store agrees, and the old key is free again.
+    expect((await d.users.findById(user.id))?.handle).toBe("SayedRafi");
+    expect(await d.users.findByHandleKey("alice")).toBeNull();
+    expect((await d.users.findByHandleKey("sayedrafi"))?.id).toBe(user.id);
+  });
+
+  it("allows a case-only change", async () => {
+    const d = deps();
+    const { user } = await registered(d, "Alice");
+
+    const updated = await changeHandle(d, user, "ALICE");
+
+    expect(updated.handle).toBe("ALICE");
+    expect(updated.handleKey).toBe("alice");
+  });
+
+  it("rejects a taken handle case-insensitively", async () => {
+    const d = deps();
+    const { user } = await registered(d, "Alice");
+    await registered(d, "Bob");
+
+    await expect(changeHandle(d, user, "bob")).rejects.toBeInstanceOf(
+      HandleTakenError,
+    );
+    await expect(changeHandle(d, user, "BOB")).rejects.toBeInstanceOf(
+      HandleTakenError,
+    );
+  });
+
+  it("rejects an invalid handle without touching the store", async () => {
+    const d = deps();
+    const { user } = await registered(d, "Alice");
+
+    for (const handle of ["", "has space", "semi;colon", "a".repeat(33)]) {
+      await expect(changeHandle(d, user, handle)).rejects.toThrow("handle");
+    }
+    expect((await d.users.findById(user.id))?.handle).toBe("Alice");
   });
 });
 

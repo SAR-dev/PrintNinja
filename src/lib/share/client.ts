@@ -395,6 +395,24 @@ export async function issueRecoveryCode(
   });
 }
 
+/**
+ * Change the account handle. The server checks the new handle is valid
+ * and free (throwing handle_taken otherwise); the account id stays the
+ * same. Returns the updated profile.
+ */
+export async function changeHandle(
+  newHandle: string,
+): Promise<{ id: string; handle: string; created_at: string }> {
+  return callApi<{ id: string; handle: string; created_at: string }>(
+    apiDeps(),
+    {
+      method: "PUT",
+      path: "/v2/auth/handle",
+      body: { handle: newHandle },
+    },
+  );
+}
+
 /** One row of the signed-in devices list. */
 export type RemoteSession =
   paths["/v2/auth/sessions"]["get"]["responses"][200]["content"]["application/json"]["items"][number];
