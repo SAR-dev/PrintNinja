@@ -99,10 +99,14 @@ fn print_request(printer: &str) -> PrintRequest {
         orientation: Some("portrait".to_string()),
         copies: Some(1),
         records: None,
-        margin_top: None,
-        margin_right: None,
-        margin_bottom: None,
-        margin_left: None,
+        // Zero margins: the 40 × 30 design then fills the 40 × 30 paper
+        // exactly, so the layout writes one sheet. Command-language
+        // printers refuse multi-sheet jobs (the 5 mm default margins
+        // would page this design onto two).
+        margin_top: Some(0.0),
+        margin_right: Some(0.0),
+        margin_bottom: Some(0.0),
+        margin_left: Some(0.0),
         fit_mode: None,
         page_range: None,
         grayscale: None,
@@ -259,7 +263,7 @@ async fn cpcl_printers_receive_cpcl() {
     let (bytes, _) = capture("cpcl").await;
     let text = String::from_utf8_lossy(&bytes);
     assert!(text.starts_with("! 0 200 200"), "{text}");
-    assert!(text.contains("CG "), "{text}");
+    assert!(text.contains("EG "), "{text}");
     assert!(text.trim_end().ends_with("PRINT"), "{text}");
     let hex: String = test_raster()
         .dots

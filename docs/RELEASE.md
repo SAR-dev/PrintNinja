@@ -373,8 +373,9 @@ by CI on a release tag only, see section 8.
 ## 8. Share the server build (Docker image on GHCR)
 
 Pushing a `v*` tag makes the `server-publish` job in `.github/workflows/ci.yml` build
-`server/Dockerfile` and push it to GitHub Container Registry. Nothing else is needed from you:
-it logs in with the automatic `GITHUB_TOKEN`, so there is no secret to store.
+`server/Dockerfile` and, when `server/` actually changed, push it to GitHub Container Registry.
+Nothing else is needed from you: it logs in with the automatic `GITHUB_TOKEN`, so there is no
+secret to store.
 
 | Image | Tags |
 |---|---|
@@ -383,6 +384,10 @@ it logs in with the automatic `GITHUB_TOKEN`, so there is no secret to store.
 What to know:
 - The job waits for `server-check`, `server-image`, `server-e2e` and `version-check`, so a
   broken server is never published.
+- If the built image has the same content as the current `:latest` (same layers and config,
+  ignoring the per-release version/revision labels), the job skips the push: an app-only
+  release no longer creates a misleading new server tag. The job summary says so. A missing
+  `:latest` or any uncertainty publishes as before.
 - It does **not** block `github-release`, on purpose: `github-release` waits only for the
   Windows, Linux and Android builds, so a registry problem must never hold back the installers.
   If the push fails, the installers still ship; fix the cause and re-run only the
@@ -394,9 +399,9 @@ What to know:
   `docker buildx` with `--platform linux/amd64,linux/arm64` to the job if you need that.
 - The image does not contain `.env`, Turso credentials or `CRON_SECRET`. Whoever runs it
   supplies them.
-- It tags with the same date version as the app, so you can tell people which server image
-  matches which app release. Mention the image tag in the release notes when the `/v2` API
-  changed.
+- When it does publish, it tags with the same date version as the app, so you can tell people
+  which server image matches which app release. Mention the image tag in the release notes when
+  the `/v2` API changed.
 
 ### First release only: make the package public
 GHCR packages start **private**, so `docker pull` fails for everyone else until you change that

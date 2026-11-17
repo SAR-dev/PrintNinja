@@ -761,8 +761,32 @@ jobs:
             --label "org.opencontainers.image.version=${VERSION}" \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
             -t "${IMAGE}:${VERSION}" \
-            -t "${IMAGE}:latest" \
             .
+          # The version/revision labels change on every app release, so the
+          # image id alone always differs. Compare the layers plus the config
+          # with those two labels removed — that is the image's real content.
+          # A missing :latest (first release, or a previous push failed)
+          # compares unequal, so this check can only ever skip a redundant
+          # tag, never suppress a needed publish.
+          docker pull "${IMAGE}:latest" >/dev/null 2>&1 || true
+          identity() {
+            docker image inspect "$1" \
+              --format '[{{json .RootFS.Layers}},{{json .Config}}]' 2>/dev/null \
+              | jq -S -c 'del(.[1].Labels["org.opencontainers.image.version"], .[1].Labels["org.opencontainers.image.revision"])' \
+              || true
+          }
+          NEW_IDENTITY=$(identity "${IMAGE}:${VERSION}")
+          OLD_IDENTITY=$(identity "${IMAGE}:latest")
+          if [ -n "$OLD_IDENTITY" ] && [ "$NEW_IDENTITY" = "$OLD_IDENTITY" ]; then
+            echo "server/ unchanged since :latest — skipping version tag ${VERSION}."
+            {
+              echo "### Share service image"
+              echo
+              echo "No new image: \`server/\` is unchanged since \`:latest\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          docker tag "${IMAGE}:${VERSION}" "${IMAGE}:latest"
           docker push "${IMAGE}:${VERSION}"
           docker push "${IMAGE}:latest"
           {

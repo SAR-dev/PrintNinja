@@ -45,6 +45,18 @@ Only use the headings you actually have entries for.
 
 ## Unreleased
 
+### Changed
+
+- **Receipts use the full print area.** On 58 mm and 80 mm receipt printers, text and barcodes near the right margin no longer get clipped or wrapped.
+- **Zebra labels get the right size.** Label size now comes from your print job instead of whatever is stored on the printer, so a stale setting no longer makes labels come out the wrong size.
+- **A heads-up for long thermal jobs.** If a job spans more than one sheet on a receipt or label printer, you're told before it prints instead of getting only the first sheet. PDF printers still print every page.
+- **Honest page-range messages.** If a print job carries a page range, you now get a clear "not supported" warning instead of silently printing every page.
+- **Server images only move when the server changes.** If you run the share service yourself, app-only updates no longer publish a new server image tag.
+
+### Fixed
+
+- **CPCL images print properly.** Logos and graphics on CPCL label printers now use the right format, so they no longer come out garbled or the wrong size.
+
 ## [2026.1117.1] - 2026-11-16
 
 ### Added
