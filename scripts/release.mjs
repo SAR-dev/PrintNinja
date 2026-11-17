@@ -41,7 +41,7 @@ const FILES = {
 	layout: "src/components/Layout.tsx",
 	readme: "README.md",
 	// Frozen by `bumpChangelog` below, not by `applyVersion`.
-	changelog: "CHANGELOG.md",
+	changelog: "docs/CHANGELOG.md",
 };
 const RELEASE_BRANCH = "main";
 
