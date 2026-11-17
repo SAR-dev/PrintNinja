@@ -45,6 +45,8 @@ Only use the headings you actually have entries for.
 
 ## Unreleased
 
+## [2026.1118.0] - 2026-11-17
+
 ### Changed
 
 - **Receipts use the full print area.** On 58 mm and 80 mm receipt printers, text and barcodes near the right margin no longer get clipped or wrapped.
