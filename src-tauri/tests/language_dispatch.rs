@@ -259,7 +259,7 @@ async fn cpcl_printers_receive_cpcl() {
     let (bytes, _) = capture("cpcl").await;
     let text = String::from_utf8_lossy(&bytes);
     assert!(text.starts_with("! 0 200 200"), "{text}");
-    assert!(text.contains("CG "), "{text}");
+    assert!(text.contains("EG "), "{text}");
     assert!(text.trim_end().ends_with("PRINT"), "{text}");
     let hex: String = test_raster()
         .dots

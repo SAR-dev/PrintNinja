@@ -606,8 +606,10 @@ pub async fn peer_render(
             dpi,
             // The peer endpoint sees no printer row, so a TSPL label gap
             // set on the requesting device is not knowable here: the
-            // encoder default (2 mm) applies.
+            // encoder default (2 mm) applies, and so do the default TSPL
+            // tuning (no darkness or speed commands).
             None,
+            &crate::transport::label_langs::tspl::TsplTuning::default(),
         ),
     )
     .await;

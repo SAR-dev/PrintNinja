@@ -217,6 +217,28 @@ pub fn encode_for_language(
     dpi: u32,
     label_gap_mm: Option<f64>,
 ) -> Result<(Vec<u8>, &'static str), String> {
+    encode_for_language_tuned(
+        language,
+        image,
+        label_w_mm,
+        label_h_mm,
+        dpi,
+        label_gap_mm,
+        &label_langs::tspl::TsplTuning::default(),
+    )
+}
+
+/// [`encode_for_language`] plus the printer's TSPL tuning (darkness,
+/// speed, media type). Only the TSPL arm reads `tspl`.
+pub fn encode_for_language_tuned(
+    language: &PrinterLanguage,
+    image: &crate::render::raster::RasterImage,
+    label_w_mm: f64,
+    label_h_mm: f64,
+    dpi: u32,
+    label_gap_mm: Option<f64>,
+    tspl: &label_langs::tspl::TsplTuning,
+) -> Result<(Vec<u8>, &'static str), String> {
     const DEFAULT_GAP_MM: f64 = 2.0;
 
     match language {
@@ -239,12 +261,13 @@ pub fn encode_for_language(
             ))
         }
         PrinterLanguage::Tspl => Ok((
-            label_langs::tspl::print_bitmap(
+            label_langs::tspl::print_bitmap_tuned(
                 image,
                 label_w_mm,
                 label_h_mm,
                 label_gap_mm.unwrap_or(DEFAULT_GAP_MM),
                 dpi,
+                tspl,
             ),
             "application/octet-stream",
         )),
