@@ -4,6 +4,7 @@ Pick the guide that matches what you want to do. New here? Start with the [main 
 
 ## 🙂 For everyone
 
+- 🎉 [What's new](./CHANGELOG.md): a plain-English list of what changed in each version
 - ✨ [Features](./FEATURES.md): everything PrintNinja can do, and what the badges in the top bar mean
 - 📱 [Print from your phone](./PRINT_FROM_PHONE.md): pair a phone with a PC, invite guests, and keep printing in the background
 - 🛠️ [Troubleshooting](./TROUBLESHOOTING.md): fixes for the most common printer, computer and phone problems

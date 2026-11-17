@@ -116,6 +116,7 @@ An Android phone can print straight to a Bluetooth or USB receipt or label print
 
 ## 📚 Guides
 
+- 🎉 [What's new](docs/CHANGELOG.md): a plain-English list of what changed in each version
 - ✨ [Features](docs/FEATURES.md): everything it can do, and what the top-bar badges mean
 - 📱 [Print from your phone](docs/PRINT_FROM_PHONE.md): pairing, guests and background printing
 - 🛠️ [Troubleshooting](docs/TROUBLESHOOTING.md): fixes for common problems

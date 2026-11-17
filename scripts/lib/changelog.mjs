@@ -1,6 +1,6 @@
 // Changelog handling for `pnpm release` (scripts/release.mjs).
 //
-// The convention (see CHANGELOG.md): entries land under **Unreleased** as
+// The convention (see docs/CHANGELOG.md): entries land under **Unreleased** as
 // work happens; at a release the section is frozen under the new version's
 // dated heading and a fresh empty Unreleased opens on top. Released
 // sections are never edited again — they are the release notes.
