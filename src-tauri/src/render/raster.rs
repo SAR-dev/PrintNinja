@@ -164,7 +164,7 @@ pub fn dots_for_mm(mm: f64, dpi: u32) -> usize {
 ///
 /// Receipt (ESC/POS) heads are narrower than the roll they take: a 58 mm
 /// roll has a 384-dot head and an 80 mm roll a 576-dot head, not the
-/// 464 / 640 dots that millimetres x dpi gives. Asking for the geometric
+/// 464 / 639 dots that millimetres x dpi gives. Asking for the geometric
 /// width makes the right edge clip or wrap, so for the standard receipt
 /// widths at the usual 203 dpi the head's real dot count is used and the
 /// layout is scaled onto it (`layout::fit_to_dots`). Everything else —
@@ -199,9 +199,9 @@ mod tests {
         assert_eq!(raster_width_dots(&PrinterLanguage::Escpos, 80.0, 203), 576);
         // Label languages are untouched.
         assert_eq!(raster_width_dots(&PrinterLanguage::Tspl, 58.0, 203), 464);
-        assert_eq!(raster_width_dots(&PrinterLanguage::Zpl, 80.0, 203), 640);
+        assert_eq!(raster_width_dots(&PrinterLanguage::Zpl, 80.0, 203), 639);
         // Non-standard width or dpi falls back to the geometric width.
-        assert_eq!(raster_width_dots(&PrinterLanguage::Escpos, 72.0, 203), 577);
+        assert_eq!(raster_width_dots(&PrinterLanguage::Escpos, 72.0, 203), 575);
         assert_eq!(raster_width_dots(&PrinterLanguage::Escpos, 58.0, 300), 685);
     }
 

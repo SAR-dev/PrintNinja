@@ -99,10 +99,14 @@ fn print_request(printer: &str) -> PrintRequest {
         orientation: Some("portrait".to_string()),
         copies: Some(1),
         records: None,
-        margin_top: None,
-        margin_right: None,
-        margin_bottom: None,
-        margin_left: None,
+        // Zero margins: the 40 × 30 design then fills the 40 × 30 paper
+        // exactly, so the layout writes one sheet. Command-language
+        // printers refuse multi-sheet jobs (the 5 mm default margins
+        // would page this design onto two).
+        margin_top: Some(0.0),
+        margin_right: Some(0.0),
+        margin_bottom: Some(0.0),
+        margin_left: Some(0.0),
         fit_mode: None,
         page_range: None,
         grayscale: None,

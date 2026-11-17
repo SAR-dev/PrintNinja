@@ -1548,7 +1548,7 @@ async fn run_stages(
     // where PDF beats HTML: no engine at all); a command-language
     // printer gets its first page rasterised at its dot dimensions, then
     // the identical encoder the HTML path uses.
-    let tspl_tuning = printer.as_ref().map(|p| p.tspl.clone()).unwrap_or_default();
+    let tspl_tuning = printer.as_ref().map(|p| p.tspl).unwrap_or_default();
     let sheet_refusal = if req.pdf.as_ref().is_some_and(|p| !p.is_empty()) {
         None
     } else {
