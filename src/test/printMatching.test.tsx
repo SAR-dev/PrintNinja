@@ -166,7 +166,7 @@ describe("paper size mismatch warning", () => {
     fireEvent.click(screen.getByTestId("set-paper-size-other"));
     // Prefilled with the width the current print needs, not the
     // printer's registered 80 mm.
-    const input = await screen.findByLabelText("Paper width (mm)");
+    const input = await screen.findByLabelText("Printable width (mm)");
     expect(input).toHaveValue(100);
     fireEvent.click(screen.getByTestId("save-paper-width"));
     await waitFor(() =>
