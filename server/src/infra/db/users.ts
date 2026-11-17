@@ -60,6 +60,27 @@ export function createUserRepository(db: DbClient): UserRepository {
     ): Promise<void> {
       await db.user.update({ where: { id }, data: { recoveryCodeHash } });
     },
+
+    async updateHandle(
+      id: string,
+      handle: string,
+      handleKey: string,
+    ): Promise<UserRecord> {
+      try {
+        const updated = await db.user.update({
+          where: { id },
+          data: { handle, handleKey },
+        });
+        return toRecord(updated);
+      } catch (error: unknown) {
+        if (isUniqueViolation(error)) {
+          // handle_key is the only unique column, so a conflict here is
+          // always another user grabbing the new handle concurrently.
+          throw new HandleTakenError();
+        }
+        throw error;
+      }
+    },
   };
 }
 

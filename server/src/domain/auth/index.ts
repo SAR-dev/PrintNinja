@@ -3,6 +3,7 @@ export type { RegisterInput, RegisterResult } from "./register.js";
 export { loginUser } from "./login.js";
 export type { LoginInput, LoginResult } from "./login.js";
 export { changePassword } from "./password.js";
+export { changeHandle } from "./changeHandle.js";
 export { issueRecoveryCode, resetPassword } from "./recovery.js";
 export {
   DEVICE_LABEL_MAX,

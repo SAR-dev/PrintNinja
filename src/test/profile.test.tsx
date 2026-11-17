@@ -17,6 +17,8 @@ const client = vi.hoisted(() => ({
   fetchMe: vi.fn(),
   logout: vi.fn(),
   changePassword: vi.fn(),
+  changeHandle: vi.fn(),
+  setSessionHandle: vi.fn(),
   listSessions: vi.fn(),
   revokeSession: vi.fn(),
   onSessionStarted: vi.fn((cb: () => void) => {
@@ -84,6 +86,42 @@ describe("Profile section", () => {
     window.dispatchEvent(new CustomEvent("printninja:session-started"));
     expect(await screen.findByTestId("profile-handle")).toHaveTextContent(
       "sam",
+    );
+  });
+
+  it("changes the handle and refreshes the display", async () => {
+    client.changeHandle.mockResolvedValue({
+      id: "u1",
+      handle: "SayedRafi",
+      created_at: "2026-03-01T10:00:00.000Z",
+    });
+    // First read is the mount-time profile; the reload after the change
+    // returns the renamed account.
+    client.fetchMe
+      .mockResolvedValueOnce({
+        id: "u1",
+        handle: "rafi",
+        created_at: "2026-03-01T10:00:00.000Z",
+      })
+      .mockResolvedValue({
+        id: "u1",
+        handle: "SayedRafi",
+        created_at: "2026-03-01T10:00:00.000Z",
+      });
+    renderCard();
+    await screen.findByTestId("profile-handle");
+
+    fireEvent.change(screen.getByTestId("settings-change-handle-new"), {
+      target: { value: "SayedRafi" },
+    });
+    fireEvent.click(screen.getByTestId("settings-change-handle-submit"));
+
+    await waitFor(() =>
+      expect(client.changeHandle).toHaveBeenCalledWith("SayedRafi"),
+    );
+    expect(client.setSessionHandle).toHaveBeenCalledWith("SayedRafi");
+    expect(await screen.findByTestId("profile-handle")).toHaveTextContent(
+      "SayedRafi",
     );
   });
 

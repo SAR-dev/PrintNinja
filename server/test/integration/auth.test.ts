@@ -267,6 +267,71 @@ describe("v2 endpoint contracts", () => {
   });
 });
 
+describe("handle change", () => {
+  it("renames the account and keeps the session", async () => {
+    const reg = await register("sayed", "password123");
+    const headers = { authorization: `Bearer ${reg.body.token}` };
+
+    const change = await app.inject({
+      method: "PUT",
+      url: "/v2/auth/handle",
+      headers,
+      payload: { handle: "SayedRafi" },
+    });
+    expect(change.statusCode).toBe(200);
+    const changed = change.json() as { id: string; handle: string };
+    expect(changed.handle).toBe("SayedRafi");
+    expect(changed.id).toBe(reg.body.user.id);
+    expect(change.headers["cache-control"]).toBe("no-store");
+
+    // The stored session still works and reports the new handle.
+    const me = await app.inject({ method: "GET", url: "/v2/auth/me", headers });
+    expect(me.statusCode).toBe(200);
+    expect((me.json() as { handle: string }).handle).toBe("SayedRafi");
+
+    // Sign-in follows the rename: the new handle works, the old one is gone.
+    expect((await login("SayedRafi", "password123")).status).toBe(200);
+    expect((await login("sayed", "password123")).status).toBe(401);
+  });
+
+  it("answers 409 for a taken handle and 400 for an invalid one", async () => {
+    const reg = await register("alice", "password123");
+    await register("bob", "password123");
+    const headers = { authorization: `Bearer ${reg.body.token}` };
+
+    const taken = await app.inject({
+      method: "PUT",
+      url: "/v2/auth/handle",
+      headers,
+      payload: { handle: "BOB" },
+    });
+    expect(taken.statusCode).toBe(409);
+    expect((taken.json() as { error: { code: string } }).error.code).toBe(
+      "handle_taken",
+    );
+
+    const invalid = await app.inject({
+      method: "PUT",
+      url: "/v2/auth/handle",
+      headers,
+      payload: { handle: "has space" },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect((invalid.json() as { error: { code: string } }).error.code).toBe(
+      "validation_failed",
+    );
+  });
+
+  it("needs a session", async () => {
+    const noAuth = await app.inject({
+      method: "PUT",
+      url: "/v2/auth/handle",
+      payload: { handle: "SomebodyElse" },
+    });
+    expect(noAuth.statusCode).toBe(401);
+  });
+});
+
 describe("signed-in devices", () => {
   it("labels sessions from the User-Agent and revokes one by id", async () => {
     const reg = await app.inject({
