@@ -98,8 +98,8 @@ const LANGUAGES = [
 ];
 
 const PAPERS = [
-  { value: "58", label: "58 mm" },
-  { value: "80", label: "80 mm" },
+  { value: "48", label: "48 mm" },
+  { value: "72", label: "72 mm" },
   { value: "100", label: "100 mm" },
   { value: "152", label: "4x6 in (152 mm)" },
   { value: "210", label: "A4 (210 mm)" },
@@ -214,7 +214,7 @@ export function PrinterSetupPage() {
     printer_type: "ipp",
     address: "",
     language: "pdf",
-    paper_width_mm: "80",
+    paper_width_mm: "72",
     dpi: "203",
     label_gap_mm: "",
     username: "",
@@ -236,7 +236,7 @@ export function PrinterSetupPage() {
     printer_type: "ipp",
     address: "",
     language: "pdf",
-    paper_width_mm: "80",
+    paper_width_mm: "72",
     dpi: "203",
     label_gap_mm: "",
     username: "",
@@ -277,7 +277,7 @@ export function PrinterSetupPage() {
       printer_type: p.printer_type,
       address: p.address,
       language: p.language,
-      paper_width_mm: String(p.paper_width_mm ?? "80"),
+      paper_width_mm: String(p.paper_width_mm ?? "72"),
       dpi: String(p.dpi ?? "203"),
       label_gap_mm: p.label_gap_mm != null ? String(p.label_gap_mm) : "",
       username: p.username ?? "",
@@ -1644,6 +1644,10 @@ export function PrinterSetupPage() {
                     )}
                   </div>
                 </div>
+
+                <p className="text-xs text-muted-foreground">
+                  {t("printers.paper_width_hint")}
+                </p>
 
                 {form.language === "tspl" && (
                   <div className={field}>

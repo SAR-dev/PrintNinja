@@ -89,7 +89,7 @@ import type { TemplateListRow } from "@/lib/templates/listTemplates";
 import { compileTemplateCss } from "@/lib/templates/compileTemplateCss";
 import { PrintPreview } from "@/components/PrintPreview";
 import { renderDesignPagesRust } from "@/lib/render/rustPreview";
-import { resolvePaper } from "@/lib/render/printLayout";
+import { computePrintLayout, resolvePaper } from "@/lib/render/printLayout";
 import { derivePaperKey, PAPER_PRESETS } from "@/lib/paperPresets";
 import { PaperSizeFields } from "@/components/print/PaperSizeFields";
 import { PhonePrintFlow } from "@/components/print/PhonePrintFlow";
@@ -1187,6 +1187,37 @@ function PrintForm() {
     setPaperPromptDismissed(next);
     void savePaperWidthDismissed(next).catch(() => {});
   };
+  // Item 49 (frontend mitigation): a command-language printer (ESC/POS,
+  // ZPL, TSPL, CPCL, raster) rasterizes a single paper-height bitmap and
+  // sends it once, so a job that spans more than one sheet is cut off after
+  // the first. The preview knows the record count and the sheet count, so
+  // warn before that surprise reaches paper. The real multi-sheet output is
+  // backend work.
+  const commandLanguage =
+    !viaPc &&
+    selectedPrinter != null &&
+    selectedPrinter.language != null &&
+    selectedPrinter.language !== "pdf";
+  const sheetLayout = computePrintLayout(
+    store.fitMode,
+    designW,
+    designH,
+    previewPaperW,
+    previewPaperH,
+    {
+      top: store.marginTop,
+      right: store.marginRight,
+      bottom: store.marginBottom,
+      left: store.marginLeft,
+    },
+  );
+  const thermalTruncates =
+    commandLanguage &&
+    (store.records > 1 ||
+      previewPages.length > 1 ||
+      sheetLayout.placements.length > 1);
+  const thermalWarning = thermalTruncates ? t("print.thermal_truncate") : "";
+
   // One element for both layouts: the mismatch warning wins over the
   // "missing" prompt (they never both apply: one needs a saved width).
   const paperNotice = paperMismatch ? (
@@ -1397,15 +1428,6 @@ function PrintForm() {
           </p>
         </>
       )}
-      <div className={field}>
-        <Label htmlFor="page-range">{t("print.page_range")}</Label>
-        <Input
-          id="page-range"
-          placeholder={t("print.page_range_example")}
-          value={store.pageRange}
-          onChange={(e) => store.setPageRange(e.target.value)}
-        />
-      </div>
       <fieldset className="space-y-1.5">
         <legend className="text-sm font-medium leading-none">
           {t("print.margins")} (mm)
@@ -1551,6 +1573,7 @@ function PrintForm() {
           previewPaperH={previewPaperH}
           paperPreset={paperPreset}
           paperNotice={paperNotice}
+          thermalWarning={thermalWarning}
           canPrint={canPrint}
           blocker={blocker}
           onPrint={() => void handlePrint(false)}
@@ -2030,6 +2053,15 @@ function PrintForm() {
               </div>
             </CardHeader>
             <CardContent id="print-preview-body">
+              {thermalWarning && (
+                <p
+                  role="alert"
+                  data-testid="thermal-truncate-warning"
+                  className="mb-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning"
+                >
+                  {thermalWarning}
+                </p>
+              )}
               {previewNotice && !previewError ? (
                 <p className="mb-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning">
                   {previewNotice}
