@@ -133,7 +133,9 @@ pub mod tspl {
             TsplMedia::Continuous => cmd.extend_from_slice(b"GAP 0 mm,0 mm\r\n"),
         }
         if let Some(d) = tuning.density {
-            cmd.extend_from_slice(format!("DENSITY {}\r\n", d.min(TsplTuning::MAX_DENSITY)).as_bytes());
+            cmd.extend_from_slice(
+                format!("DENSITY {}\r\n", d.min(TsplTuning::MAX_DENSITY)).as_bytes(),
+            );
         }
         if let Some(v) = tuning.speed {
             let v = v.clamp(TsplTuning::MIN_SPEED, TsplTuning::MAX_SPEED);
@@ -326,11 +328,15 @@ mod tests {
     fn tspl_default_tuning_is_byte_identical_to_the_untuned_encoder() {
         let img = image(16, 2);
         let plain = tspl::print_bitmap(&img, 40.0, 30.0, 2.0, 203);
-        let tuned = tspl::print_bitmap_tuned(&img, 40.0, 30.0, 2.0, 203, &tspl::TsplTuning::default());
+        let tuned =
+            tspl::print_bitmap_tuned(&img, 40.0, 30.0, 2.0, 203, &tspl::TsplTuning::default());
         assert_eq!(plain, tuned);
         let text = String::from_utf8_lossy(&plain);
         assert!(text.contains("GAP 2 mm,0 mm\r\n"), "{text}");
-        assert!(!text.contains("DENSITY") && !text.contains("SPEED"), "{text}");
+        assert!(
+            !text.contains("DENSITY") && !text.contains("SPEED"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -369,8 +375,14 @@ mod tests {
         assert_eq!(t.media, TsplMedia::Continuous);
         // Missing, malformed or out-of-range stored values mean defaults.
         assert_eq!(TsplTuning::from_settings_json(None), TsplTuning::default());
-        assert_eq!(TsplTuning::from_settings_json(Some("not json")), TsplTuning::default());
-        assert_eq!(TsplTuning::from_settings_json(Some(r#"{"x":1}"#)), TsplTuning::default());
+        assert_eq!(
+            TsplTuning::from_settings_json(Some("not json")),
+            TsplTuning::default()
+        );
+        assert_eq!(
+            TsplTuning::from_settings_json(Some(r#"{"x":1}"#)),
+            TsplTuning::default()
+        );
         assert_eq!(
             TsplTuning::from_settings_json(Some(r#"{"tspl":{"density":99}}"#)),
             TsplTuning::default()
@@ -380,9 +392,30 @@ mod tests {
             TsplTuning::default()
         );
         // Saving is strict.
-        assert!(TsplTuning { density: Some(16), ..Default::default() }.validate().is_err());
-        assert!(TsplTuning { speed: Some(0.5), ..Default::default() }.validate().is_err());
-        assert!(TsplTuning { speed: Some(f64::NAN), ..Default::default() }.validate().is_err());
-        assert!(TsplTuning { density: Some(15), speed: Some(10.0), ..Default::default() }.validate().is_ok());
+        assert!(TsplTuning {
+            density: Some(16),
+            ..Default::default()
+        }
+        .validate()
+        .is_err());
+        assert!(TsplTuning {
+            speed: Some(0.5),
+            ..Default::default()
+        }
+        .validate()
+        .is_err());
+        assert!(TsplTuning {
+            speed: Some(f64::NAN),
+            ..Default::default()
+        }
+        .validate()
+        .is_err());
+        assert!(TsplTuning {
+            density: Some(15),
+            speed: Some(10.0),
+            ..Default::default()
+        }
+        .validate()
+        .is_ok());
     }
 }
