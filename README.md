@@ -86,7 +86,7 @@ This takes about five minutes. ⏱️ The **Setup checklist** in **Settings** wa
 
 ## 📱 Print from your phone
 
-An Android phone can print straight to a Bluetooth or USB receipt or label printer, with nothing else needed. To print normal documents (PDF) from the phone, or to use a PC's printers, **pair** the phone with a PC on the same Wi-Fi. Everything stays on your local network.
+An Android phone can print straight to a Bluetooth or USB receipt or label printer, with nothing else needed. It works with ESC/POS, ZPL, TSPL, CPCL and raster on the phone itself, and only PDF needs a paired PC. To print normal documents (PDF) from the phone, or to use a PC's printers, **pair** the phone with a PC on the same Wi-Fi. Everything stays on your local network.
 
 👉 Step by step: [Print from your phone](docs/PRINT_FROM_PHONE.md)
 
