@@ -724,6 +724,10 @@ const acknowledgedStubs: string[] = [
   // against this canned provider; the pipeline path is covered in Rust.
   "peer_render_request",
   "refresh_background",
+  // TSPL print tuning (darkness, speed, media type) is stored on the printer
+  // row by Rust and read back by the print pipeline; no browser code calls
+  // it yet, so the fake agent only acknowledges it for the contract test.
+  "set_printer_tspl_tuning",
   // mDNS discovery is implemented above
 ];
 
