@@ -599,6 +599,11 @@ const ja: Translation = {
     preview_empty_data: "データが空の配列のため、印刷するものがありません。",
     preview_truncated:
       "{{total}}ページ中、最初の{{shown}}ページを表示しています。印刷にはすべて含まれます。",
+    // コマンド言語プリンター（ESC/POS・ZPL・TSPL・CPCL・raster）は
+    // 用紙1枚分のビットマップしか描画しないため、複数ページのジョブは
+    // 先頭ページのみ印刷されます。ここはプレビュー側の緩和策です。
+    thermal_truncate:
+      "このプリンターは1回につき1ページ印刷するため、複数ページのジョブでは最初のページのみ印刷されます。",
     preview_unavailable: "プレビューを表示できません: {{error}}",
     // スマホ向けフロー（PLAN §6）：短い文と、1行1項目のラベル。
     phone: {
@@ -625,7 +630,9 @@ const ja: Translation = {
       "PC経由印刷がオンの間、ローカルプリンターは使われません — ジョブはPCのプリンターに送られます。",
     add_printer: "プリンターを追加",
     test_print: "テスト印刷",
-    paper_width_mm: "用紙幅 (mm)",
+    paper_width_mm: "印字幅 (mm)",
+    paper_width_hint:
+      "ロール幅ではなく印字幅です。例: 80 mm のレシートプリンターなら 72 mm。",
     dpi: "DPI",
     label_gap_mm: "ラベルギャップ (mm)",
     label_gap_hint:

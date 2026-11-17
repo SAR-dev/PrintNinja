@@ -100,6 +100,8 @@ interface PhonePrintFlowProps {
   /** The paper-width notice under the printer picker (mismatch warning or
    * the one-time "no width saved" prompt), built by the Print page. */
   paperNotice?: React.ReactNode;
+  /** Warns that a command-language printer prints only one page per job. */
+  thermalWarning?: string;
 }
 
 /** Store fit values → their display key (the ids are kebab, keys are not). */
@@ -173,11 +175,6 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
         b: store.marginBottom,
         l: store.marginLeft,
       }),
-    );
-  }
-  if (store.pageRange.trim()) {
-    summaryParts.push(
-      t("print.phone.sum_range", { range: store.pageRange.trim() }),
     );
   }
   if (store.grayscale) summaryParts.push(t("print.grayscale"));
@@ -637,6 +634,15 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
           id="print-preview-body-phone"
           className={cn(!previewOpen && "hidden")}
         >
+          {props.thermalWarning ? (
+            <p
+              role="alert"
+              data-testid="thermal-truncate-warning"
+              className="mb-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning"
+            >
+              {props.thermalWarning}
+            </p>
+          ) : null}
           {props.previewNotice && !props.previewError ? (
             <p className="mb-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning">
               {props.previewNotice}
@@ -1167,16 +1173,6 @@ function LayoutOptionsSheet({
                 </div>
               ))}
             </fieldset>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="phone-page-range">{t("print.page_range")}</Label>
-              <Input
-                id="phone-page-range"
-                placeholder={t("print.page_range_example")}
-                value={store.pageRange}
-                onChange={(e) => store.setPageRange(e.target.value)}
-              />
-            </div>
 
             <div className="flex min-h-11 items-center justify-between">
               <Label htmlFor="phone-grayscale" className="font-normal">

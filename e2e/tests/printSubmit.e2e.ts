@@ -4,7 +4,7 @@ import { signedSeed } from "../support/fixtures";
 // The UI half of the print path (REFACTORING.md section 11): on the
 // Print page, choosing a printer and a template and pressing Print
 // sends one print_html call carrying the whole form — options the
-// backend added later (page range, grayscale) included. The fake agent
+// backend added later (grayscale, paper size) included. The fake agent
 // answers print_html with null, so this spec pins the request shape,
 // not the outcome; the wire to a real device is printPath.e2e.ts and
 // the Rust virtual-printer suite.
@@ -26,7 +26,7 @@ async function printCalls(page: {
   );
 }
 
-test("print submits the whole form, including page range and grayscale", async ({
+test("print submits the whole form, including grayscale and paper size", async ({
   browser,
 }) => {
   const seeded = await signedSeed(browser, "submit", {
@@ -50,13 +50,13 @@ test("print submits the whole form, including page range and grayscale", async (
     page.locator('iframe[title="Print preview"]').first(),
   ).toBeAttached({ timeout: 15_000 });
 
-  // Page range, grayscale and paper size sit in the Advanced options
-  // fold, which is closed by default.
+  // Grayscale and paper size sit in the Advanced options fold, which is
+  // closed by default. (Page range was removed from the UI: it was accepted
+  // but never sliced the document — a silent no-op.)
   const advanced = page.getByRole("button", { name: /Advanced options/ });
   await expect(advanced).toHaveAttribute("aria-expanded", "false");
   await advanced.click();
 
-  await page.getByLabel("Page range").fill("1-3");
   await page.getByLabel("Grayscale").click();
   await page.getByRole("combobox", { name: "Paper size" }).click();
   await page.getByRole("option", { name: /A4/ }).click();
@@ -69,7 +69,6 @@ test("print submits the whole form, including page range and grayscale", async (
   const [call] = await printCalls(page);
   expect(call?.args.req).toMatchObject({
     printer_name: "E2E Submit Printer",
-    page_range: "1-3",
     page_width_mm: 210,
     page_height_mm: 297,
     grayscale: true,
