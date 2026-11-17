@@ -179,12 +179,12 @@ describe("Printers page", () => {
     });
     // Paper width and DPI are folded under Advanced, whose header already
     // shows the current values.
-    expect(within(panel).queryByLabelText(/Paper width/)).toBeNull();
+    expect(within(panel).queryByLabelText(/Printable width/)).toBeNull();
     fireEvent.click(
-      within(panel).getByRole("button", { name: /Advanced.*80 mm · 203 dpi/ }),
+      within(panel).getByRole("button", { name: /Advanced.*72 mm · 203 dpi/ }),
     );
     // Custom numbers outside the old fixed selects are accepted.
-    fireEvent.change(within(panel).getByLabelText(/Paper width/), {
+    fireEvent.change(within(panel).getByLabelText(/Printable width/), {
       target: { value: "110" },
     });
     fireEvent.change(within(panel).getByLabelText("DPI"), {
@@ -792,7 +792,7 @@ describe("Add / edit dialog layout", () => {
     const panel = await openAdd();
     const toggle = within(panel).getByTestId("printer-advanced-toggle");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(toggle).toHaveTextContent("80 mm · 203 dpi");
+    expect(toggle).toHaveTextContent("72 mm · 203 dpi");
     expect(within(panel).queryByLabelText("DPI")).toBeNull();
     fireEvent.click(toggle);
     expect(within(panel).getByLabelText("DPI")).toHaveValue(203);
