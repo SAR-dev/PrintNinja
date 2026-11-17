@@ -206,6 +206,72 @@ pub fn update_printer(db: State<DbState>, id: i64, req: AddPrinterRequest) -> Ap
     update_printer_conn(guard.connection(), id, &req)
 }
 
+/// Save a printer's TSPL tuning (darkness, speed, media type). `None`
+/// clears it, so the printer's own settings apply again. Stored under the
+/// `tspl` key of the row's `default_settings_json`; other keys there are
+/// kept.
+#[tauri::command]
+pub fn set_printer_tspl_tuning(
+    db: State<DbState>,
+    id: i64,
+    tuning: Option<crate::transport::label_langs::tspl::TsplTuning>,
+) -> AppResult<()> {
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    set_printer_tspl_tuning_conn(guard.connection(), id, tuning.as_ref())
+}
+
+/// Test seam for [`set_printer_tspl_tuning`].
+pub fn set_printer_tspl_tuning_conn(
+    conn: &rusqlite::Connection,
+    id: i64,
+    tuning: Option<&crate::transport::label_langs::tspl::TsplTuning>,
+) -> AppResult<()> {
+    if let Some(t) = tuning {
+        t.validate().map_err(AppError::Validation)?;
+    }
+    let current: Option<String> = conn
+        .query_row(
+            "SELECT default_settings_json FROM printers WHERE id = ?1",
+            [id],
+            |r| r.get(0),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => {
+                AppError::NotFound(format!("Printer {} not found", id))
+            }
+            other => other.into(),
+        })?;
+    let mut root = current
+        .as_deref()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+        .filter(|v| v.is_object())
+        .unwrap_or_else(|| serde_json::json!({}));
+    let obj = root.as_object_mut().expect("object");
+    match tuning {
+        Some(t) => {
+            obj.insert(
+                "tspl".to_string(),
+                serde_json::to_value(t).map_err(|e| AppError::Internal(e.to_string()))?,
+            );
+        }
+        None => {
+            obj.remove("tspl");
+        }
+    }
+    let stored = if obj.is_empty() {
+        None
+    } else {
+        Some(root.to_string())
+    };
+    conn.execute(
+        "UPDATE printers SET default_settings_json = ?1, updated_at = datetime('now') WHERE id = ?2",
+        rusqlite::params![stored, id],
+    )?;
+    Ok(())
+}
+
 /// Test seam for the edit path: the Tauri command only adds the lock.
 /// Public so integration tests can drive validation and the duplicate
 /// check against a real database without a Tauri runtime.

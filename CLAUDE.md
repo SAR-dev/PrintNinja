@@ -1,3 +1,12 @@
+## Running tests locally (Docker, not native)
+
+The heavy test suites run in Linux containers, not natively:
+
+- Rust tests: `pnpm test:rust` (compose: `src-tauri/docker-compose.test.yml`). Never a bare `cargo test` for the full suite: the desktop crate's debug build peaks at several gigabytes natively, while the container caps `CARGO_BUILD_JOBS` at 2 and memory at 6 GB (an over-sized run fails fast inside the box) and keeps `target/` in a named volume, so only the first run compiles everything. `pnpm test:rust:report` additionally writes a JUnit report.
+- Playwright (app-e2e): `pnpm e2e:docker` (compose: `e2e/docker-compose.e2e.yml`). It mirrors the CI `app-e2e` job (Ubuntu 24.04 fonts, Chromium). On Windows the native `pnpm e2e` cannot always bind the worker ports and host-rendered screenshots never match the committed Linux baselines.
+- `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` are fine natively (check-only, low memory).
+- Details: `docs/DEVELOPMENT.md` ("Run the Rust tests in Docker") and the compose files above.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

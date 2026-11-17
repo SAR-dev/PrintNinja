@@ -369,6 +369,7 @@ pub fn run() {
             commands::printer::list_printers,
             commands::printer::add_printer,
             commands::printer::update_printer,
+            commands::printer::set_printer_tspl_tuning,
             commands::printer::delete_printer,
             commands::printer::get_printer,
             commands::printer::test_printer,
