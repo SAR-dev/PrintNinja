@@ -62,6 +62,12 @@ Only use the headings you actually have entries for.
 - **Clearer selection in Settings.** The chosen language, theme, or density card now carries a check mark and a darker border, so you can see at a glance which one is active.
 - **Easier with a keyboard or screen reader.** The designer's layout switch moves with the arrow keys, and the app now announces when a template is saved or has unsaved changes.
 
+### Fixed
+
+- **Small buttons are easier to tap.** The notice close button and the sync chip now have a 44 px touch area on touch screens.
+- **Clearer sync status for screen readers.** The sync chip now announces "Synced" or "Syncing" — the same word you see — so its spoken name matches its visible label.
+- **Automation tabs fit small phones.** The three section tabs stay on one line at 360 px instead of making the strip scroll sideways.
+
 ## [2026.1118.1] - 2026-11-18
 
 ### Added

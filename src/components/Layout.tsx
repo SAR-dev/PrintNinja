@@ -155,10 +155,17 @@ function ShareIndicator() {
       : sync.lastPulledAt
         ? t("shell.sync_synced", { time: sync.lastPulledAt })
         : t("shell.share_online", { handle: status.handle });
-  const syncBadge = syncing ? (
-    <StatusBadge status="syncing" compact />
-  ) : (
-    <StatusBadge status="synced" compact />
+  // The badge shows this word from `sm` up, so the button's accessible name
+  // must contain it (WCAG 2.5.3 / axe label-content-name-mismatch).
+  const syncWord = t(syncing ? "status.syncing" : "status.synced", {
+    defaultValue: syncing ? "Syncing" : "Synced",
+  });
+  const syncBadge = (
+    <StatusBadge
+      status={syncing ? "syncing" : "synced"}
+      label={syncWord}
+      compact
+    />
   );
   const onCacheNow = async () => {
     if (busy) return;
@@ -195,7 +202,7 @@ function ShareIndicator() {
         type="button"
         data-testid="sync-chip"
         title={`${t("shell.sync_now")} — ${detail}`}
-        aria-label={`${t("shell.sync_now")}: ${detail}`}
+        aria-label={`${syncWord}. ${t("shell.sync_now")}: ${detail}`}
         onClick={() => void onCacheNow()}
         disabled={syncing}
         className="flex items-center justify-center rounded-md hover:opacity-80 disabled:cursor-wait disabled:hover:opacity-100 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"

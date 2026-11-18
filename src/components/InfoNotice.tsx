@@ -52,7 +52,7 @@ export function InfoNotice({
           }
           setDismissed(true);
         }}
-        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-info/70 hover:bg-info/10 hover:text-info"
+        className="absolute right-2 top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-md p-1 text-info/70 hover:bg-info/10 hover:text-info [@media(pointer:coarse)]:right-0 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
       >
         <X className="h-4 w-4" aria-hidden="true" />
       </button>

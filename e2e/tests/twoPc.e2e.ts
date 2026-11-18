@@ -211,8 +211,9 @@ test("F5 delete on PC A removes the template on PC B", async ({ browser }) => {
 
   // A deletes from the list: server copy and cache go together, after
   // a confirm. Nothing is queued — the server round-trip happens now.
+  await pageA.getByRole("button", { name: "Actions for Shared Idea" }).click();
   await pageA
-    .getByRole("button", { name: "Delete Shared Idea everywhere" })
+    .getByRole("menuitem", { name: "Delete Shared Idea everywhere" })
     .click();
   const dialog = await pageA.getByRole("dialog");
   await expect(

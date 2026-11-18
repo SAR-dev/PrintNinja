@@ -430,8 +430,12 @@ than hardcoding the product name in new UI, and use `AppLogo` to show the logo.
   bar and a search icon below.
 - Top-bar badges are compact below `sm`: the icon and tone stay, the word is hidden, and the
   link's accessible name carries it. Do not rely on the word being visible on a phone.
+- The sync chip's accessible name includes the visible sync word (`Synced` / `Syncing`) so it
+  matches its label on `sm` and up (WCAG 2.5.3, label in name). The Automation tab strip keeps
+  its three labels on one line down to 360 px; icons appear from `sm` up.
 - The top and bottom bars respect the device safe areas (`env(safe-area-inset-*)`).
-- On touch screens, buttons, inputs, selects and palette rows keep a 44 px minimum height.
+- On touch screens, buttons, inputs, selects and palette rows keep a 44 px minimum height,
+  including the notice dismiss button and the sync chip.
 - **Phones are portrait-only and vertical-only.** The Android build locks phones to portrait
   (tablets at 600 dp and up keep rotating; see [Windows and Android](#windows-and-android)).
   On phones everything is one column: no horizontal strips or pan zones, no side-by-side form

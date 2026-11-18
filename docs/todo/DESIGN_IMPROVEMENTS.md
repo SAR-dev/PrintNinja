@@ -387,7 +387,8 @@ Route loading is a bare spinner (`PageLoading`), and one nested Suspense uses `f
 2. ✅ Phone header slimming and dismissible banners (4.5).
 3. ✅ Designer improvements: save state, canvas balance, collapsed sample data (4.8).
 4. ✅ Automation and Devices phone cleanup (4.9).
-5. Accessibility pass: focus ring, keyboard, axe, selection cues (4.10, 5.7).
+5. ✅ Accessibility pass: focus ring, keyboard, axe, selection cues (4.10, 5.7); 44 px touch
+   targets and label-in-name on compact top-bar controls and notice dismiss buttons.
 6. Page skeletons and motion tokens (5.8, 5.9).
 7. Visual regression tests (8.2).
 
