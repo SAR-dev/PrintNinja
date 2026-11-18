@@ -1256,7 +1256,7 @@ export function DesignerPage() {
             // and the sections scroll inside it instead of leaving a gap below.
             <aside
               aria-label={t("designer.controls_expanded")}
-              className="flex w-[300px] shrink-0 flex-col overflow-hidden rounded-lg border bg-card"
+              className="flex w-panel shrink-0 flex-col overflow-hidden rounded-lg border bg-card"
             >
               <div className="flex h-11 shrink-0 items-center border-b px-2">
                 <button

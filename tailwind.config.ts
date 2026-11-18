@@ -20,8 +20,39 @@ const config: Config = {
       },
     },
     extend: {
-      height: { control: "var(--control-h)" },
-      width: { control: "var(--control-h)" },
+      // Named type scale: 12px is the floor for any UI text (14px for phone
+      // body copy), so text-[Npx] has nowhere to go — see textScale.test.ts.
+      fontSize: {
+        caption: ["0.75rem", { lineHeight: "1rem" }], // 12/16 — the floor
+        "body-sm": ["0.8125rem", { lineHeight: "1.25rem" }], // 13/20
+        body: ["0.875rem", { lineHeight: "1.375rem" }], // 14/22
+        title: ["1.125rem", { lineHeight: "1.5rem" }], // 18/24
+        display: ["1.5rem", { lineHeight: "2rem" }], // 24/32
+      },
+      // Repeated fixed widths collapse to a few names: form fields and the
+      // designer side panel.
+      width: {
+        control: "var(--control-h)",
+        "field-sm": "140px",
+        field: "160px",
+        "field-lg": "180px",
+        panel: "300px",
+      },
+      // Sheet heights: how tall a dialog, sheet, or preview region may grow.
+      // dvh everywhere, so a phone's URL bar never clips them.
+      height: {
+        control: "var(--control-h)",
+        "sheet-sm": "40dvh",
+        sheet: "60dvh",
+        "sheet-lg": "70dvh",
+        "sheet-xl": "85dvh",
+      },
+      maxHeight: {
+        "sheet-sm": "40dvh",
+        sheet: "60dvh",
+        "sheet-lg": "70dvh",
+        "sheet-xl": "85dvh",
+      },
       fontFamily: {
         sans: ["IBM Plex Sans", "Segoe UI", "-apple-system", "BlinkMacSystemFont", "Roboto", "Noto Sans", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", "Noto Sans JP", "sans-serif"],
         mono: ["IBM Plex Mono", "ui-monospace", "Cascadia Mono", "Consolas", "monospace"],

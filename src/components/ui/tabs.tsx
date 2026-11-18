@@ -7,20 +7,61 @@ const Tabs = TabsPrimitive.Root;
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.List
-    ref={ref}
-    data-slot="tabs-list"
-    className={cn(
-      // max-w-full + overflow-x-auto: on a phone a long tab row scrolls sideways
-      // instead of being clipped by the screen edge. On coarse pointers the strip
-      // grows so its 44px triggers are not clipped (h-10 still wins on fine pointers).
-      "inline-flex h-10 max-w-full items-center justify-start overflow-x-auto rounded-md bg-muted p-1 text-muted-foreground [@media(pointer:coarse)]:min-h-[3.25rem] sm:justify-center",
-      className,
-    )}
-    {...props}
-  />
-));
+>(({ className, onScroll, ...props }, ref) => {
+  const innerRef = React.useRef<HTMLDivElement | null>(null);
+  const [fadeRight, setFadeRight] = React.useState(false);
+  const setRefs = (node: HTMLDivElement | null) => {
+    innerRef.current = node;
+    if (typeof ref === "function") ref(node);
+    else if (ref) ref.current = node;
+  };
+  // Recompute after every render: tab labels carry counts that change
+  // width, and the active tab can move programmatically (not just by
+  // tapping a visible trigger).
+  React.useLayoutEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    // The phone layer (mobile.css) stacks the rows full-width, where
+    // nothing is ever cut off; only the horizontal strip can overflow.
+    const horizontal = getComputedStyle(el).flexDirection !== "column";
+    setFadeRight(
+      horizontal && el.scrollWidth - el.clientWidth - el.scrollLeft > 4,
+    );
+    if (horizontal) {
+      const active = el.querySelector<HTMLElement>('[data-state="active"]');
+      if (!active) return;
+      const start = el.scrollLeft;
+      if (
+        active.offsetLeft < start ||
+        active.offsetLeft + active.offsetWidth > start + el.clientWidth
+      ) {
+        // jsdom has no scrollIntoView; in the app this keeps the active
+        // tab in view when it changes without a tap on the strip.
+        active.scrollIntoView?.({ inline: "nearest", block: "nearest" });
+      }
+    }
+  });
+  return (
+    <TabsPrimitive.List
+      ref={setRefs}
+      data-slot="tabs-list"
+      data-fade={fadeRight ? "right" : undefined}
+      onScroll={(e) => {
+        const el = e.currentTarget;
+        setFadeRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 4);
+        onScroll?.(e);
+      }}
+      className={cn(
+        // max-w-full + overflow-x-auto: on a phone a long tab row scrolls sideways
+        // instead of being clipped by the screen edge. On coarse pointers the strip
+        // grows so its 44px triggers are not clipped (h-10 still wins on fine pointers).
+        "inline-flex h-10 max-w-full items-center justify-start overflow-x-auto rounded-md bg-muted p-1 text-muted-foreground [@media(pointer:coarse)]:min-h-[3.25rem] sm:justify-center",
+        className,
+      )}
+      {...props}
+    />
+  );
+});
 TabsList.displayName = TabsPrimitive.List.displayName;
 
 const TabsTrigger = React.forwardRef<

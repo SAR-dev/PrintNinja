@@ -67,7 +67,6 @@ import {
   saveRowToServer,
   takeServerCopy,
 } from "@/lib/share/save";
-import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
 type ServerSummary = share.CommunitySummary;
@@ -115,7 +114,7 @@ function TemplateSearchSort({
       <Select value={sort} onValueChange={onSort}>
         <SelectTrigger
           aria-label={t("templates.sort_aria")}
-          className="w-full md:w-[170px]"
+          className="w-full md:w-field-lg"
         >
           <SelectValue placeholder={t("templates.sort_placeholder")} />
         </SelectTrigger>
@@ -671,18 +670,40 @@ export function TemplatesPage() {
         accessorFn: (r) => r.name.toLowerCase(),
         enableSorting: true,
         cell: (c) => (
-          <div className="min-w-0">
-            <p className="truncate font-medium">{c.row.original.name}</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {c.row.original.summary || t("templates.no_summary")}
-            </p>
+          <div className="flex min-w-0 items-center gap-3">
+            <PaperThumb
+              widthMm={c.row.original.page_w_mm}
+              heightMm={c.row.original.page_h_mm}
+            />
+            <div className="min-w-0">
+              <p className="truncate font-medium">{c.row.original.name}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {c.row.original.summary || t("templates.no_summary")}
+              </p>
+            </div>
           </div>
         ),
       },
       {
         id: "status",
         header: t("common.status"),
-        cell: (c) => mineStatus(c.row.original),
+        cell: (c) => {
+          const tpl = c.row.original;
+          const sid = tpl.server_id ?? tpl.remote_id;
+          const badge = mineStatus(tpl);
+          // The server id and revision are details, not rows: they live in
+          // a tooltip on the status badge.
+          return sid ? (
+            <span
+              title={`${sid} · r${tpl.base_revision ?? "–"}`}
+              className="inline-flex"
+            >
+              {badge}
+            </span>
+          ) : (
+            badge
+          );
+        },
       },
       {
         id: "size",
@@ -690,26 +711,6 @@ export function TemplatesPage() {
         meta: { className: "hidden md:table-cell" },
         cell: (c) =>
           `${c.row.original.page_w_mm} × ${c.row.original.page_h_mm} mm`,
-      },
-      {
-        id: "sync",
-        header: t("templates.col_sync_id"),
-        meta: { className: "hidden lg:table-cell" },
-        cell: (c) => {
-          const sid = c.row.original.server_id ?? c.row.original.remote_id;
-          return sid ? (
-            <span
-              className="font-mono text-xs text-muted-foreground"
-              title={sid}
-            >
-              {sid.slice(0, 8)} · r{c.row.original.base_revision ?? "–"}
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground">
-              {t("templates.local_only")}
-            </span>
-          );
-        },
       },
       {
         id: "updated",
@@ -723,61 +724,16 @@ export function TemplatesPage() {
         id: "actions",
         header: () => <span className="sr-only">{t("common.actions")}</span>,
         meta: { className: "text-right" },
+        // One primary action (Print) plus Edit; the sync and delete
+        // actions live in the labeled ⋯ menu, delete last in danger.
         cell: (c) => {
           const tpl = c.row.original;
           return (
             <div
-              className="flex justify-end gap-2"
+              className="flex items-center justify-end gap-2"
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={t("templates.action_save_server", {
-                  name: tpl.name,
-                })}
-                title={t("templates.action_save_server_title", {
-                  name: tpl.name,
-                })}
-                disabled={syncing != null}
-                onClick={() => handleSaveToServer(tpl)}
-              >
-                <CloudUpload className="h-4 w-4" aria-hidden="true" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={t("templates.action_refresh_server", {
-                  name: tpl.name,
-                })}
-                title={t("templates.action_refresh_server_title", {
-                  name: tpl.name,
-                })}
-                disabled={syncing != null}
-                onClick={() => setRefreshTarget(tpl)}
-              >
-                <RefreshCw
-                  className={cn(
-                    "h-4 w-4",
-                    syncing === tpl.id && "motion-safe:animate-spin",
-                  )}
-                  aria-hidden="true"
-                />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={t("templates.action_delete_everywhere", {
-                  name: tpl.name,
-                })}
-                title={t("templates.action_delete_title", { name: tpl.name })}
-                disabled={syncing != null}
-                onClick={() => setDeleteTarget(tpl)}
-                className="text-danger hover:text-danger"
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -790,6 +746,35 @@ export function TemplatesPage() {
                 <Printer className="h-4 w-4" aria-hidden="true" />
                 {t("templates.action_print")}
               </Button>
+              {cardMenu(
+                tpl.name,
+                <>
+                  <DropdownMenuItem
+                    disabled={syncing != null}
+                    onSelect={() => handleSaveToServer(tpl)}
+                  >
+                    <CloudUpload className="h-4 w-4" aria-hidden="true" />
+                    {t("templates.action_save_server", { name: tpl.name })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={syncing != null}
+                    onSelect={() => setRefreshTarget(tpl)}
+                  >
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                    {t("templates.action_refresh_server", { name: tpl.name })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={syncing != null}
+                    onSelect={() => setDeleteTarget(tpl)}
+                    className="text-danger focus:text-danger"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    {t("templates.action_delete_everywhere", {
+                      name: tpl.name,
+                    })}
+                  </DropdownMenuItem>
+                </>,
+              )}
             </div>
           );
         },
@@ -807,11 +792,17 @@ export function TemplatesPage() {
         accessorFn: (r) => r.name.toLowerCase(),
         enableSorting: true,
         cell: (c) => (
-          <div className="min-w-0">
-            <p className="truncate font-medium">{c.row.original.name}</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {c.row.original.summary || t("templates.no_summary")}
-            </p>
+          <div className="flex min-w-0 items-center gap-3">
+            <PaperThumb
+              widthMm={c.row.original.page_w_mm}
+              heightMm={c.row.original.page_h_mm}
+            />
+            <div className="min-w-0">
+              <p className="truncate font-medium">{c.row.original.name}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {c.row.original.summary || t("templates.no_summary")}
+              </p>
+            </div>
           </div>
         ),
       },
@@ -831,53 +822,45 @@ export function TemplatesPage() {
         id: "actions",
         header: () => <span className="sr-only">{t("common.actions")}</span>,
         meta: { className: "text-right" },
+        // Saved copies are read-only: Print is the one primary action, the
+        // rest (refresh, clone, remove) lives in the labeled ⋯ menu.
         cell: (c) => {
           const tpl = c.row.original;
           return (
             <div
-              className="flex justify-end gap-2"
+              className="flex items-center justify-end gap-2"
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={t("templates.action_refresh_server", {
-                  name: tpl.name,
-                })}
-                title={t("templates.action_refresh_server_title", {
-                  name: tpl.name,
-                })}
-                disabled={syncing != null}
-                onClick={() => setRefreshTarget(tpl)}
-              >
-                <RefreshCw
-                  className={cn(
-                    "h-4 w-4",
-                    syncing === tpl.id && "motion-safe:animate-spin",
-                  )}
-                  aria-hidden="true"
-                />
-              </Button>
               <Button size="sm" onClick={() => handleUse(tpl, true)}>
                 <Printer className="h-4 w-4" aria-hidden="true" />
                 {t("templates.action_print")}
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={syncing != null}
-                onClick={() => void handleClone(tpl)}
-              >
-                {t("templates.action_clone")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setRemoveTarget(tpl)}
-              >
-                {t("templates.action_remove")}
-              </Button>
+              {cardMenu(
+                tpl.name,
+                <>
+                  <DropdownMenuItem
+                    disabled={syncing != null}
+                    onSelect={() => setRefreshTarget(tpl)}
+                  >
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                    {t("templates.action_refresh_server", { name: tpl.name })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={syncing != null}
+                    onSelect={() => void handleClone(tpl)}
+                  >
+                    <CopyPlus className="h-4 w-4" aria-hidden="true" />
+                    {t("templates.action_clone")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => setRemoveTarget(tpl)}
+                    className="text-danger focus:text-danger"
+                  >
+                    {t("templates.action_remove")}
+                  </DropdownMenuItem>
+                </>,
+              )}
             </div>
           );
         },
@@ -1234,7 +1217,7 @@ export function TemplatesPage() {
             </p>
           ) : previewHtml ? (
             <div
-              className="max-h-[60vh] overflow-auto rounded-md border bg-muted p-4"
+              className="max-h-sheet overflow-auto rounded-md border bg-muted p-4"
               tabIndex={0}
               role="region"
               aria-label={t("templates.preview_region")}

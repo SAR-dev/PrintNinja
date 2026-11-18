@@ -50,6 +50,13 @@ interface DataTableProps<T> {
     selectedIds: ReadonlySet<string>;
     onChange: (ids: Set<string>) => void;
   };
+  /**
+   * Card (phone) rows only: when `selection` is set but this is false, the
+   * cards show no checkboxes and tapping one activates the row; when true,
+   * tapping toggles its checkbox. The table keeps its checkbox column
+   * whenever `selection` is set, whatever this is.
+   */
+  selectionVisible?: boolean;
   /** Scroll the body inside this height and keep the header visible. */
   maxHeight?: string;
   className?: string;
@@ -87,6 +94,7 @@ export function DataTable<T>({
   onRowActivate,
   selectedRowId,
   selection,
+  selectionVisible = true,
   maxHeight,
   className,
   footer,
@@ -128,6 +136,10 @@ export function DataTable<T>({
   // no matchMedia, so unit tests and desktop e2e always see the table below.
   const isPhone = useMediaQuery(PHONE_QUERY);
   const cardMode = isPhone && renderCard != null;
+  // Card rows: checkboxes appear only in an explicit selection mode
+  // (selectionVisible), and there a tap toggles the checkbox instead of
+  // activating the row.
+  const cardSelection = cardMode && selection != null && selectionVisible;
 
   const colCount = table.getVisibleLeafColumns().length;
   const rows = table.getRowModel().rows;
@@ -148,11 +160,12 @@ export function DataTable<T>({
   };
 
   // Cards navigate between list items instead of sibling rows.
-  const onCardKeyDown = (e: KeyboardEvent<HTMLElement>, row: T) => {
-    if (!onRowActivate) return;
+  const onCardKeyDown = (e: KeyboardEvent<HTMLElement>, row: Row<T>) => {
     if (e.key === "Enter" || e.key === " ") {
+      if (!onRowActivate && !cardSelection) return;
       e.preventDefault();
-      onRowActivate(row);
+      if (cardSelection) toggleRowSelected(row);
+      else onRowActivate?.(row.original);
     } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const item = e.currentTarget.closest("li");
@@ -188,6 +201,14 @@ export function DataTable<T>({
       </label>
     ) : null;
 
+  const toggleRowSelected = (row: Row<T>) => {
+    if (!selection) return;
+    const next = new Set(selection.selectedIds);
+    if (next.has(row.id)) next.delete(row.id);
+    else next.add(row.id);
+    selection.onChange(next);
+  };
+
   const stop = {
     onClick: (e: MouseEvent) => e.stopPropagation(),
     onKeyDown: (e: KeyboardEvent) => e.stopPropagation(),
@@ -220,21 +241,23 @@ export function DataTable<T>({
                 <div
                   data-card=""
                   data-state={selectedRowId === row.id ? "selected" : undefined}
-                  tabIndex={onRowActivate ? 0 : undefined}
+                  tabIndex={onRowActivate || cardSelection ? 0 : undefined}
                   className={cn(
                     "flex gap-1 rounded-lg border bg-card p-3",
-                    onRowActivate &&
+                    (onRowActivate || cardSelection) &&
                       "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                     selectedRowId === row.id && "bg-accent",
                   )}
                   onClick={
-                    onRowActivate
-                      ? () => onRowActivate(row.original)
-                      : undefined
+                    cardSelection
+                      ? () => toggleRowSelected(row)
+                      : onRowActivate
+                        ? () => onRowActivate(row.original)
+                        : undefined
                   }
-                  onKeyDown={(e) => onCardKeyDown(e, row.original)}
+                  onKeyDown={(e) => onCardKeyDown(e, row)}
                 >
-                  {selection && (
+                  {cardSelection && (
                     <span {...stop} className="flex shrink-0 pt-0.5">
                       {selectBox(row)}
                     </span>

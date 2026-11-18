@@ -10,6 +10,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { AuthGate } from "./components/AuthGate";
+import { ErrorBoundary, RouteErrorFallback } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
 import { Onboarding } from "./components/Onboarding";
 // Each page is its own chunk: the app opens on a single route, and the
@@ -122,6 +123,54 @@ function PairRoute() {
 export function AppRouter({ children }: { children: React.ReactNode }) {
   useState(startOnPrint);
   return <BrowserRouter>{children}</BrowserRouter>;
+}
+
+/**
+ * The page inside the shell. A boundary here keeps the navigation (the
+ * Layout around it) alive when a page crashes, and the key remounts it
+ * on every navigation, so a broken page always lets the person leave.
+ */
+function AppRoutes() {
+  const location = useLocation();
+  return (
+    <ErrorBoundary
+      key={location.pathname}
+      context="page crash"
+      fallback={(error, reset) => (
+        <RouteErrorFallback error={error} onRetry={reset} />
+      )}
+    >
+      <Suspense fallback={<PageLoading />}>
+        <Routes>
+          <Route path="/" element={<DesignerPage />} />
+          <Route path="/template/:id" element={<DesignerPage />} />
+          <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/print" element={<PrintPage />} />
+          <Route path="/pair" element={<PairRoute />} />
+          <Route path="/printers" element={<PrinterSetupPage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/automation" element={<AutomationRoute />} />
+          <Route path="/devices" element={<DevicesPage />} />
+          <Route
+            path="/api-explorer"
+            element={<Navigate to="/automation?tab=explorer" replace />}
+          />
+          <Route path="/settings" element={<SettingsRoute />} />
+          {UiKitPage && (
+            <Route
+              path="/__ui"
+              element={
+                <Suspense fallback={null}>
+                  <UiKitPage />
+                </Suspense>
+              }
+            />
+          )}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
+  );
 }
 
 function AppContent() {
@@ -267,35 +316,7 @@ function AppContent() {
       {/* printninja:// links: mounted inside the router — it navigates. */}
       <DeepLinkListener />
       <Layout>
-        <Suspense fallback={<PageLoading />}>
-          <Routes>
-            <Route path="/" element={<DesignerPage />} />
-            <Route path="/template/:id" element={<DesignerPage />} />
-            <Route path="/templates" element={<TemplatesPage />} />
-            <Route path="/print" element={<PrintPage />} />
-            <Route path="/pair" element={<PairRoute />} />
-            <Route path="/printers" element={<PrinterSetupPage />} />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="/automation" element={<AutomationRoute />} />
-            <Route path="/devices" element={<DevicesPage />} />
-            <Route
-              path="/api-explorer"
-              element={<Navigate to="/automation?tab=explorer" replace />}
-            />
-            <Route path="/settings" element={<SettingsRoute />} />
-            {UiKitPage && (
-              <Route
-                path="/__ui"
-                element={
-                  <Suspense fallback={null}>
-                    <UiKitPage />
-                  </Suspense>
-                }
-              />
-            )}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
+        <AppRoutes />
       </Layout>
     </AppRouter>
   );

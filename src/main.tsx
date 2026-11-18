@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AppErrorFallback, ErrorBoundary } from "./components/ErrorBoundary";
 import { Toaster } from "./components/ui/sonner";
 import { PrefsProvider } from "./lib/prefs/PrefsProvider";
 import {
@@ -48,11 +49,16 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <PrefsProvider>
-        <App />
-        <Toaster closeButton />
-      </PrefsProvider>
-    </QueryClientProvider>
+    <ErrorBoundary
+      context="app crash"
+      fallback={(error) => <AppErrorFallback error={error} />}
+    >
+      <QueryClientProvider client={queryClient}>
+        <PrefsProvider>
+          <App />
+          <Toaster closeButton />
+        </PrefsProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   </React.StrictMode>,
 );

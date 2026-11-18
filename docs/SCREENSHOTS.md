@@ -30,7 +30,7 @@ screenshots/
 
 | Flag | Values | Default |
 |------|--------|---------|
-| `--platforms` | `windows`, `android-phone`, `android-small`, `android-tablet` | all |
+| `--platforms` | `windows`, `windows-narrow-900`, `windows-narrow-1024`, `android-phone`, `android-small`, `android-tablet` | all |
 | `--themes` | `light`, `dark` | `light,dark` |
 | `--densities` | `comfortable`, `compact` | `comfortable` |
 | `--langs` | `en`, `ja` | `en` |
@@ -63,8 +63,10 @@ Settings (general and profile) and the API explorer. Edit `ROUTES` in
 - Pages are captured with animations off and after the route spinner and
   skeletons have gone, so images are stable.
 - The script exits non-zero if a page throws or never finishes loading.
-- A full default matrix (4 platforms x 2 themes x 11 pages = 88 images) takes
-  about 3 minutes on a laptop-class machine, mostly Vite compiling each page
-  on first visit.
+- The narrow desktop widths (900x700, 1024x768) exist to review the
+  768-1100px range where the desktop layout does not fit yet.
+- A full default matrix (6 platforms x 2 themes x 11 pages = 132 images)
+  takes about 5 minutes on a laptop-class machine, mostly Vite compiling
+  each page on first visit.
 - This is for reviewing design, not a replacement for the committed e2e
   baselines in `e2e/tests/*-snapshots`.

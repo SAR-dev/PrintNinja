@@ -65,7 +65,7 @@ describe("Profile section", () => {
     expect(
       screen.getByRole("button", { name: "Sign out" }),
     ).toBeInTheDocument();
-    // The password form moved here from the Share section.
+    // The password form moved here from the Account & sync section.
     expect(screen.getByLabelText("Current password")).toBeInTheDocument();
   });
 
@@ -148,11 +148,11 @@ describe("Profile section", () => {
     await waitFor(() => expect(client.logout).toHaveBeenCalledOnce());
   });
 
-  it("points to Share settings when nobody is signed in", async () => {
+  it("points to the Account & sync section when nobody is signed in", async () => {
     client.getSessionToken.mockResolvedValue(null);
     renderCard();
     const link = await screen.findByRole("link", {
-      name: "Open Share settings",
+      name: "Open Account & sync",
     });
     expect(link).toHaveAttribute("href", "/settings?section=share");
     expect(client.fetchMe).not.toHaveBeenCalled();

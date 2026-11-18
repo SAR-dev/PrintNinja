@@ -7,7 +7,7 @@
  * "FariyaLaboni") or a first name plus a short number ("Rafi001").
  */
 
-const FIRST_NAMES = [
+export const FIRST_NAMES = [
   "Sayed",
   "Fariya",
   "Rafi",
@@ -26,7 +26,7 @@ const FIRST_NAMES = [
   "Maya",
 ] as const;
 
-const LAST_NAMES = [
+export const LAST_NAMES = [
   "Rafi",
   "Laboni",
   "Ahmed",

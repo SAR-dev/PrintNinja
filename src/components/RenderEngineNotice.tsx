@@ -385,7 +385,7 @@ export function RenderEngineNotice() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           data-testid="render-engine-dialog"
-          className="max-h-[90vh] max-w-xl overflow-y-auto"
+          className="max-h-sheet-xl max-w-xl overflow-y-auto"
         >
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
