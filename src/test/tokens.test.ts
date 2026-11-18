@@ -106,4 +106,14 @@ describe("design tokens", () => {
     const dark = themeBody(':root[data-theme="dark"]');
     expect(dark).toMatch(/color-scheme:\s*dark/);
   });
+
+  it("declares shared motion tokens in the root :root", () => {
+    // Easing and duration live at the top level (not in a media query), so
+    // desktop and phone share them — the phone sheet used to carry its own
+    // --ease-out. Regressing to a phone-only token fails this.
+    expect(css).toMatch(/--ease-out:\s*cubic-bezier/);
+    expect(css).toMatch(/--dur-fast:\s*120ms/);
+    expect(css).toMatch(/--dur-base:\s*200ms/);
+    expect(css).toMatch(/--dur-slow:\s*320ms/);
+  });
 });
