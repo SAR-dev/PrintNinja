@@ -155,7 +155,10 @@ mod tests {
         let mut out = Vec::new();
         let mut i = 0;
         while i + 8 <= bytes.len() && bytes[i..i + 4] == [0x1D, 0x76, 0x30, 0x00] {
-            assert_eq!(bytes[i + 4] as usize | (bytes[i + 5] as usize) << 8, width_bytes);
+            assert_eq!(
+                bytes[i + 4] as usize | (bytes[i + 5] as usize) << 8,
+                width_bytes
+            );
             let rows = bytes[i + 6] as usize | (bytes[i + 7] as usize) << 8;
             out.push(rows);
             i += 8 + rows * width_bytes;
