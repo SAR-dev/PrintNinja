@@ -1779,7 +1779,7 @@ export function SettingsPage() {
               {t("settings_page.diag_app_log_hint")}
             </DialogDescription>
           </DialogHeader>
-          <pre className="max-h-[50dvh] overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">
+          <pre className="max-h-sheet overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">
             {appLogText || t("settings_page.diag_app_log_empty")}
           </pre>
         </DialogContent>

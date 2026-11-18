@@ -12,7 +12,8 @@
  *   pnpm shots --out=shots/before --full-page=false
  *
  * Flags (comma-separated lists; defaults in brackets):
- *   --platforms  windows, android-phone, android-small, android-tablet [all]
+ *   --platforms  windows, windows-narrow-900, windows-narrow-1024,
+ *                android-phone, android-small, android-tablet          [all]
  *   --themes     light, dark                                   [light,dark]
  *   --densities  comfortable, compact                           [comfortable]
  *   --langs      en, ja                                         [en]
@@ -78,6 +79,22 @@ const PLATFORMS = {
     android: false,
     context: {
       viewport: { width: 1440, height: 900 },
+      userAgent: WIN_UA,
+    },
+  },
+  // The 768-1100px range (DESIGN_IMPROVEMENTS 4.1): the desktop layout is
+  // still active here, but its tables and two-column pages need about 1100px.
+  "windows-narrow-900": {
+    android: false,
+    context: {
+      viewport: { width: 900, height: 700 },
+      userAgent: WIN_UA,
+    },
+  },
+  "windows-narrow-1024": {
+    android: false,
+    context: {
+      viewport: { width: 1024, height: 768 },
       userAgent: WIN_UA,
     },
   },
@@ -208,12 +225,18 @@ async function startVite() {
     return null;
   }
   console.log("Starting Vite…");
-  const vite = join(root, "node_modules", ".bin", "vite");
-  const child = spawn(vite, ["--port", String(PORT), "--strictPort"], {
-    cwd: root,
-    stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, BROWSER: "none" },
-  });
+  // Launch vite's own entry via the running Node, not node_modules/.bin/vite:
+  // that shim is a shell script and does not spawn on Windows.
+  const vite = join(root, "node_modules", "vite", "bin", "vite.js");
+  const child = spawn(
+    process.execPath,
+    [vite, "--port", String(PORT), "--strictPort"],
+    {
+      cwd: root,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, BROWSER: "none" },
+    },
+  );
   let log = "";
   child.stdout.on("data", (d) => (log += d));
   child.stderr.on("data", (d) => (log += d));

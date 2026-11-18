@@ -45,6 +45,17 @@ Only use the headings you actually have entries for.
 
 ## Unreleased
 
+### Changed
+
+- **A broken page no longer takes the whole app down.** If a page runs into a problem or its files fail to load, you get a short message with "Try again" or "Back to Print" instead of a blank window — and you can copy the diagnostics to share with the team.
+- **The Print page settles down.** A ready printer is now marked with a small "Ready" chip next to the printer name instead of a full-width banner, so the page focuses on the job.
+- **Clearer paper-size warning.** When a sheet is wider than the printer's paper, the warning now says exactly what the button changes — "Set printer paper to … mm" — and the "Other…" button reads "Choose a different paper size…".
+- **A calmer template list.** Each template now shows a small preview of its page, a Print button and an Edit link; saving, refreshing and deleting live in a small menu behind the ⋯ button, and the technical sync ID is tucked away behind the status badge.
+- **A calmer History on phones.** Job rows give the printer name its own line and show two lines of the error — tap the error to read the whole thing — and checkboxes only appear after you tap "Select".
+- **Tabs that don't fit stay findable.** When a row of tabs overflows, it now fades out at the edge so you know there are more to scroll to, and the active tab is kept in view.
+- **Consistent text sizes.** Small helper text and captions now follow one set of sizes with a 12px minimum, so the app reads more evenly, and popups and preview panels cap their height the same way.
+- **Handle examples look like names.** The example in the handle field on sign-in and sign-up now uses the same name style as the Suggest picks, so it shows what your handle will actually look like.
+
 ## [2026.1118.1] - 2026-11-18
 
 ### Added

@@ -193,7 +193,7 @@ export function SampleDataPanel({ dataset, onEdit, onInsert }: Props) {
             className="h-8 pl-7 text-xs"
           />
         </div>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-caption text-muted-foreground">
           {onInsert
             ? t("designer.sample_click_insert")
             : t("designer.sample_click_copy")}
@@ -207,7 +207,7 @@ export function SampleDataPanel({ dataset, onEdit, onInsert }: Props) {
             {groups.map(([group, list]) => (
               <section key={group || "_root"} aria-label={group || undefined}>
                 {group && (
-                  <h4 className="sticky top-0 z-10 flex items-center gap-2 bg-background py-1 text-[11px] font-medium text-muted-foreground">
+                  <h4 className="sticky top-0 z-10 flex items-center gap-2 bg-background py-1 text-caption font-medium text-muted-foreground">
                     <span>{group}</span>
                     <span
                       className="h-px flex-1 bg-border"
@@ -239,7 +239,7 @@ export function SampleDataPanel({ dataset, onEdit, onInsert }: Props) {
                           {`{{${v.path}}}`}
                         </code>
                         {v.preview && (
-                          <span className="mt-0.5 line-clamp-2 break-words text-[11px] leading-snug text-muted-foreground">
+                          <span className="mt-0.5 line-clamp-2 break-words text-caption leading-snug text-muted-foreground">
                             {v.kind === "list" ? `${v.preview} ↻` : v.preview}
                           </span>
                         )}

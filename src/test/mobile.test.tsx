@@ -293,7 +293,7 @@ describe("phone Print page", () => {
     expect(url).toBeEnabled();
   });
 
-  it("caps the preview at 40vh, expands on tap and collapses from the header", async () => {
+  it("caps the preview at 40dvh, expands on tap and collapses from the header", async () => {
     render(
       <MemoryRouter>
         <PrintPage />
@@ -301,13 +301,13 @@ describe("phone Print page", () => {
     );
     await screen.findByTestId("print-action-bar");
     const region = await screen.findByRole("region", { name: "Print preview" });
-    expect(region).toHaveClass("max-h-[40vh]");
+    expect(region).toHaveClass("max-h-sheet-sm");
 
     const expand = screen.getByRole("button", { name: "Tap to expand" });
     fireEvent.click(expand);
-    expect(region).toHaveClass("max-h-[70vh]");
+    expect(region).toHaveClass("max-h-sheet-lg");
     fireEvent.click(screen.getByRole("button", { name: "Show less" }));
-    expect(region).toHaveClass("max-h-[40vh]");
+    expect(region).toHaveClass("max-h-sheet-sm");
 
     const toggle = screen.getByRole("button", { name: "Collapse preview" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -673,6 +673,9 @@ describe("phone History cards", () => {
     expect(within(list).getAllByRole("listitem")).toHaveLength(3);
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.getByText("Paper out")).toBeInTheDocument();
+    // Checkboxes stay hidden until selection mode is asked for.
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
     // Checkbox multi-select keeps its accessible names in card mode.
     expect(
       screen.getByRole("checkbox", { name: "Select row 1" }),
@@ -704,9 +707,22 @@ describe("phone History cards", () => {
   it("selection shows a sticky bulk bar", async () => {
     renderPage();
     await screen.findByText("#1");
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Select row 1" }));
     const bar = await screen.findByText("1 selected");
     expect(bar.parentElement).toHaveClass("sticky");
+  });
+
+  it("tapping a card in selection mode toggles its checkbox", async () => {
+    renderPage();
+    await screen.findByText("#1");
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(screen.getByText("#1"));
+    expect(
+      screen.getByRole("checkbox", { name: "Select row 1" }),
+    ).toBeChecked();
+    // The tap selected the row; it did not open the details.
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 

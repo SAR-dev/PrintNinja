@@ -5,6 +5,7 @@ import {
   Ban,
   Bookmark,
   Check,
+  CheckSquare,
   Clock,
   Download,
   Eye,
@@ -21,6 +22,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { currentLanguage } from "@/lib/i18n";
 import { notifySuccess, notifyError } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import { agent } from "@/lib/agent/commands";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
@@ -130,6 +132,11 @@ export function HistoryPage() {
   // Paired-phone names for the "from <phone>" label on remote jobs.
   const [phoneNames, setPhoneNames] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Phone: the row checkboxes hide until this mode is on (Select button),
+  // so the list stays calm; the table at md and up keeps its column.
+  const [selectMode, setSelectMode] = useState(false);
+  // Which failed job's error line is expanded to its full text.
+  const [expandedErrorId, setExpandedErrorId] = useState<number | null>(null);
   const [saved, setSaved] = useState<SavedFilter[]>(loadSaved);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -691,7 +698,7 @@ export function HistoryPage() {
           <SelectTrigger
             id="history-filter-status"
             aria-label={t("history.filter_status")}
-            className="w-full sm:w-[140px]"
+            className="w-full sm:w-field-sm"
           >
             <SelectValue placeholder={t("history.filter_status")} />
           </SelectTrigger>
@@ -715,7 +722,7 @@ export function HistoryPage() {
           <SelectTrigger
             id="history-filter-source"
             aria-label={t("history.filter_by_source")}
-            className="w-full sm:w-[130px]"
+            className="w-full sm:w-field-sm"
           >
             <SelectValue placeholder={t("history.source")} />
           </SelectTrigger>
@@ -745,7 +752,7 @@ export function HistoryPage() {
           <SelectTrigger
             id="history-filter-test"
             aria-label={t("history.filter_by_test")}
-            className="w-full sm:w-[130px]"
+            className="w-full sm:w-field-sm"
           >
             <SelectValue placeholder={t("history.filter_test")} />
           </SelectTrigger>
@@ -766,7 +773,7 @@ export function HistoryPage() {
           <SelectTrigger
             id="history-filter-printer"
             aria-label={t("history.filter_printer")}
-            className="w-full sm:w-[160px]"
+            className="w-full sm:w-field"
           >
             <SelectValue placeholder={t("history.filter_printer")} />
           </SelectTrigger>
@@ -795,7 +802,7 @@ export function HistoryPage() {
           id="history-filter-from"
           type="date"
           aria-label={t("history.filter_from_date")}
-          className="w-full sm:w-[150px]"
+          className="w-full sm:w-field"
           value={f.dateFrom}
           onChange={(e) => store.setFilter({ dateFrom: e.target.value })}
         />,
@@ -807,7 +814,7 @@ export function HistoryPage() {
           id="history-filter-to"
           type="date"
           aria-label={t("history.filter_to_date")}
-          className="w-full sm:w-[150px]"
+          className="w-full sm:w-field"
           value={f.dateTo}
           onChange={(e) => store.setFilter({ dateTo: e.target.value })}
         />,
@@ -858,7 +865,7 @@ export function HistoryPage() {
       clear: () => store.setFilter({ dateTo: "" }),
     });
 
-  // Phone card: job + status + template stay visible without horizontal
+  // Phone card: job + status + printer stay visible without horizontal
   // scrolling. The repeat action (Reprint, or Retry for failed jobs) is
   // the primary card action, one tap; the ⋯ menu keeps the rest. Tapping
   // the card opens the details via the DataTable's onRowActivate.
@@ -871,11 +878,28 @@ export function HistoryPage() {
           <JobStatusBadge status={job.status} />
         </div>
         <p className="truncate text-xs text-muted-foreground">
+          {printerName(job.printer_id)}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
           {job.template_id != null && `Template #${job.template_id} · `}
-          {printerName(job.printer_id)} · {fmtTime(job)} · {job.source}
+          {fmtTime(job)} · {job.source}
         </p>
         {job.error && (
-          <p className="truncate text-xs text-danger">{job.error}</p>
+          <button
+            type="button"
+            aria-expanded={expandedErrorId === job.id}
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpandedErrorId(expandedErrorId === job.id ? null : job.id);
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+            className={cn(
+              "block w-full text-left text-xs text-danger",
+              expandedErrorId !== job.id && "line-clamp-2",
+            )}
+          >
+            {job.error}
+          </button>
         )}
       </div>
       <div
@@ -934,6 +958,25 @@ export function HistoryPage() {
   return (
     <div className="space-y-4">
       <PageHeader title={t("history.title")} description={t("pages.history")}>
+        {/* Phones: checkboxes live in an explicit selection mode, so the
+            rows stay calm until you ask to pick jobs. */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="md:hidden"
+          aria-pressed={selectMode}
+          onClick={() => {
+            if (selectMode) setSelected(new Set());
+            setSelectMode(!selectMode);
+          }}
+        >
+          {selectMode ? (
+            <X className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <CheckSquare className="h-4 w-4" aria-hidden="true" />
+          )}
+          {selectMode ? t("history.done") : t("history.select")}
+        </Button>
         <Button variant="outline" size="sm" onClick={handleExportCsv}>
           <Download className="h-4 w-4" aria-hidden="true" />
           {t("history.export_csv")}
@@ -949,7 +992,7 @@ export function HistoryPage() {
         aria-label={t("history.filter_heading")}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-0 flex-1 sm:w-[180px] sm:flex-none">
+          <div className="relative min-w-0 flex-1 sm:w-field-lg sm:flex-none">
             <Search
               className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden="true"
@@ -1067,7 +1110,7 @@ export function HistoryPage() {
         <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
           <SheetContent
             side="bottom"
-            className="flex max-h-[85dvh] w-full flex-col gap-0 p-0 pb-[env(safe-area-inset-bottom)]"
+            className="flex max-h-sheet-xl w-full flex-col gap-0 p-0 pb-[env(safe-area-inset-bottom)]"
           >
             <DialogHeader className="border-b p-5 pr-12">
               <DialogTitle>{t("history.filters")}</DialogTitle>
@@ -1145,6 +1188,8 @@ export function HistoryPage() {
         loading={loading}
         onRowActivate={(j) => store.setSelectedJob(j)}
         selection={{ selectedIds: selected, onChange: setSelected }}
+        // Phone cards hide their checkboxes outside selection mode.
+        selectionVisible={selectMode}
         renderCard={historyCard}
         empty={{
           title: filtersActive

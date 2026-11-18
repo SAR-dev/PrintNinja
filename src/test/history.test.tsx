@@ -106,6 +106,21 @@ describe("History page", () => {
     expect(screen.getByText("3 of 3 jobs")).toBeInTheDocument();
   });
 
+  it("toggles the phone selection mode from the Select button", async () => {
+    renderPage();
+    await screen.findByText("#1");
+    const select = screen.getByRole("button", { name: "Select" });
+    expect(select).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(select);
+    expect(select).toHaveAttribute("aria-pressed", "true");
+    // Exiting selection mode drops the half-finished selection.
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.getByRole("button", { name: "Select" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
   it("filters by status and explains an empty result", async () => {
     renderPage();
     await screen.findByText("#2");

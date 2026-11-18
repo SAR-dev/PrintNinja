@@ -18,7 +18,7 @@ Terms are written *plain word first, technical name second*.
 
 ## Reaching a printer
 
-- **Transport (printer type)** — how to reach the machine: network, system, USB, or Bluetooth.
+- **Transport (printer type)** — how to reach the machine: Network, System, USB, or Bluetooth (the app's display names; `ipp` and `raw_tcp` are both Network).
 - **Printer language** — what the machine understands: a document (PDF) or a small command language for receipts and labels (ESC/POS, ZPL, TSPL, CPCL, or bare raster).
 - **IPP** — the office network printing protocol; Print-Job requests on default port 631.
 - **Raw TCP** — the other network option: a plain socket (default port 9100) with bytes in and paper out.
@@ -33,6 +33,7 @@ Terms are written *plain word first, technical name second*.
 - **Print via PC** — a stronger borrowing: the whole job runs on the PC's printers with the PC's templates, and the phone only polls for the outcome. No local fallback while it is on.
 - **Guest invite** — a time-boxed code a PC owner mints so someone without an account can pair: expiry, optional max uses, and print or render-only. The invite *is* the credential.
 - **Background service** — the Android service that keeps the print queue draining after the app is swiped away.
+- **Devices page** — where phones pair with this PC, guests are invited, and Print via PC is switched on. Titled "Devices" on the PC and "Connect to PC" on the phone; its main card is "Shared rendering".
 
 ## Automation
 

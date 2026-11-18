@@ -316,10 +316,10 @@ export function ApiExplorerPanel({
             {t("explorer.spec_version", { version: specVersion })}
           </Badge>
         )}
+        {/* Status only: the address lives in the curl example and the
+            live-endpoint header, never a third copy in a badge. */}
         <Badge variant={status?.running ? "success" : "secondary"}>
-          {status?.running
-            ? `${status.address}:${status.port}`
-            : t("explorer.stopped")}
+          {status?.running ? t("explorer.running") : t("explorer.stopped")}
         </Badge>
       </div>
 
@@ -330,7 +330,7 @@ export function ApiExplorerPanel({
           <p className="text-xs font-medium">
             {t("settings_page.api_curl_title")}
           </p>
-          <pre className="text-[11px] overflow-x-auto whitespace-pre-wrap break-all">{`curl -X POST http://127.0.0.1:${
+          <pre className="text-caption overflow-x-auto whitespace-pre-wrap break-all">{`curl -X POST http://127.0.0.1:${
             status?.local_port ?? status?.port ?? 17717
           }/v1/print \\
   -H "Content-Type: application/json" \\
@@ -388,7 +388,7 @@ export function ApiExplorerPanel({
                 >
                   <Badge
                     variant={methodVariant(ep.method)}
-                    className="w-14 shrink-0 justify-center px-1 font-mono text-[10px]"
+                    className="w-14 shrink-0 justify-center px-1 font-mono text-caption"
                   >
                     {ep.method}
                   </Badge>
@@ -427,7 +427,7 @@ export function ApiExplorerPanel({
               <CardTitle className="flex items-center gap-2 text-base">
                 <Badge
                   variant={methodVariant(selected.method)}
-                  className="font-mono text-[11px]"
+                  className="font-mono text-caption"
                 >
                   {selected.method}
                 </Badge>
