@@ -56,6 +56,21 @@ qrcode = { version = "0.14", default-features = false }
 # render/barcode.rs — no image features needed.
 rxing = { version = "0.9", default-features = false, features = ["encoders", "oned", "aztec", "datamatrix", "pdf417", "encoding_rs"] }
 axum = { version = "0.8", features = ["ws"] }
+# TLS termination for the LAN phone-facing listener (docs/
+# MISSING_FEATURES.md item 47). `tls-rustls-no-provider` (NOT `tls-rustls`):
+# the latter force-enables the `aws-lc-rs` crypto provider, which panics at
+# runtime alongside the `ring`-based rustls below unless an explicit default
+# provider is installed. With `no-provider` axum-server only needs a ready
+# `ServerConfig`, which we build in `api/cert.rs`.
+axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
+# Parses the PC's own cert PEM when the phone-side bootstrap re-reads it
+# from disk; also what the `/v1/cert` response is built from.
+rustls-pemfile = "2"
+# Self-signed cert + key generation (ECDSA P-256), PC-side only.
+rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"] }
+# NotBefore/NotAfter for the generated cert.
+time = { version = "0.3", default-features = false, features = ["std"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 sha2 = "0.10"

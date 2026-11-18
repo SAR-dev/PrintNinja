@@ -1716,6 +1716,8 @@ const ja: Translation = {
       "{{name}}に接続できないか、ブロックされています（ポート{{port}}に応答がありません）。PCの電源が入ってスリープしていないこと、同じWi-Fiにつながっていること、ファイアウォールでPrintNinjaが許可されていることを確認してください。",
     peer_refused:
       "{{name}}がポート{{port}}への接続を拒否しました。PCには届いていますが、PrintNinjaが共有していません。PCでPrintNinjaを開き、Wi-Fiアクセスをオンにしてください。",
+    peer_cert:
+      "{{name}}を検証できませんでした：証明書が一致しなくなりました。設定 → デバイスでもう一度ペアリングしてください。",
     peer_removed:
       "{{name}}はこのスマートフォンを削除しました。もう一度ペアリングしてください。",
     cups_http: "CUPSがHTTP {{status}}を返しました",

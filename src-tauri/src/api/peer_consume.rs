@@ -74,16 +74,33 @@ static CAPS_CACHE: LazyLock<Mutex<HashMap<String, (Instant, Capabilities)>>> =
 static FAIL_CACHE: LazyLock<Mutex<HashMap<String, (Instant, String)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-/// One client for every probe and render (A9). A fresh client per request
-/// threw away TCP keep-alive, so each print paid a new handshake plus
-/// slow-start on top of the render POST. `Client::clone` is an `Arc`
-/// bump; idle pooled connections are reused across prints.
-static SHARED_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+/// The phone's TLS trust for a PC, per (host, port). Phones dial
+/// `https://{host}:{port}` (see `pair_base`); the PC serves a
+/// self-signed cert whose identity is "this PC on this Wi-Fi", so the
+/// phone fetches it once over the permissive bootstrap client, pins it
+/// as a root, and reuses one client per address thereafter. A TLS
+/// validation failure — the PC rotated its cert (new IP, fresh
+/// install) — drops the entry, re-fetches, and retries the request once
+/// (`send_trusted`).
+struct TrustedClient {
+    client: reqwest::Client,
+}
+
+static TRUSTED_CLIENTS: LazyLock<Mutex<HashMap<String, TrustedClient>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// The bootstrap dial: permissive on purpose, because its whole job is
+/// to fetch the certificate that makes the rest of the traffic
+/// verifiable. Trust-on-first-use is the design (see `cert.rs`), and the
+/// per-device Bearer token still authenticates every real request.
+static CERT_FETCH_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_hostnames(true)
         .connect_timeout(Duration::from_millis(PEER_CONNECT_TIMEOUT_MS))
-        .pool_idle_timeout(Duration::from_secs(60))
+        .timeout(Duration::from_secs(5))
         .build()
-        .expect("peer HTTP client builds with plain timeouts")
+        .expect("bootstrap cert client builds")
 });
 
 /// Cache key: address plus a hash of the secret, so rotating the secret
@@ -410,10 +427,9 @@ pub fn is_private_host(host: &str) -> bool {
     host == "localhost" || host.ends_with(".local") || !host.contains('.')
 }
 
-/// Base URL for a pair, validated. HTTP only: the provider serves the
-/// same cleartext API as the local server. Shared with `remote_print`,
-/// which dials the same PCs for printing instead of rendering.
-pub(crate) fn pair_base(pair: &RenderPair) -> Result<String, String> {
+/// The pair's host, bracketed IPv6 forms stripped, validated. Shared
+/// with `pair_base` so the dial address and the TLS trust key agree.
+pub(crate) fn pair_host(pair: &RenderPair) -> Result<String, String> {
     let host = pair.host.trim().trim_matches(|c| c == '[' || c == ']');
     if host.is_empty() || host.len() > 253 {
         return Err("empty pairing host".into());
@@ -432,14 +448,132 @@ pub(crate) fn pair_base(pair: &RenderPair) -> Result<String, String> {
     if pair.port == 0 {
         return Err("pairing port must be 1–65535".into());
     }
-    Ok(format!("http://{host}:{port}", port = pair.port))
+    Ok(host.to_string())
 }
 
-fn client() -> Result<reqwest::Client, String> {
-    Ok(SHARED_CLIENT.clone())
+/// Base URL for a pair, validated. HTTPS: since the PC encrypts its
+/// phone-facing port, every peer request goes over TLS (the cert the
+/// phone pins comes from `client_for`). Shared with `remote_print`,
+/// which dials the same PCs for printing instead of rendering.
+pub(crate) fn pair_base(pair: &RenderPair) -> Result<String, String> {
+    let host = pair_host(pair)?;
+    Ok(format!("https://{}:{}", dial_host(&host), pair.port))
 }
 
-/// Why a request to the PC never got an answer. The three cases need
+/// The URL form of the host: IPv6 literals need brackets on the wire.
+pub(crate) fn dial_host(host: &str) -> String {
+    if host.contains(':') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    }
+}
+
+fn trusted_key(host: &str, port: u16) -> String {
+    format!("{host}:{port}")
+}
+
+/// Fetch the PC's self-signed cert (PEM) for `host:port` over the
+/// permissive bootstrap connection.
+pub(crate) async fn fetch_cert(host: &str, port: u16) -> Result<String, reqwest::Error> {
+    let res = CERT_FETCH_CLIENT
+        .get(format!("https://{}:{port}/v1/cert", dial_host(host)))
+        .send()
+        .await?
+        .error_for_status()?;
+    // A 200 with a non-PEM body (a non-PrintNinja TLS server on this
+    // port) is caught by `Certificate::from_pem` in `client_for`, which
+    // yields a real reqwest error — this crate must not synthesize one,
+    // as `reqwest::Error` has no public constructor.
+    res.text().await
+}
+
+/// A client that trusts `host:port`'s cert: the cached one, or a fresh
+/// bootstrap. `danger_accept_invalid_hostnames` is deliberate — the
+/// bootstrap is trust-on-first-use by design, so hostname checks add
+/// nothing against the threats this design covers, while pairs stored
+/// by LAN name (`.local` aliases) would never match the cert's IP SANs.
+pub(crate) async fn client_for(host: &str, port: u16) -> Result<reqwest::Client, reqwest::Error> {
+    let key = trusted_key(host, port);
+    if let Ok(cache) = TRUSTED_CLIENTS.lock() {
+        if let Some(entry) = cache.get(&key) {
+            return Ok(entry.client.clone());
+        }
+    }
+    let pem = fetch_cert(host, port).await?;
+    // `Certificate::from_pem` keeps the bytes for 'static, so the PEM is
+    // leaked: a few KB per paired PC, for the life of the app. It also
+    // rejects non-PEM bodies here, so a 200 from a non-PrintNinja TLS
+    // server on this port surfaces as a real reqwest error.
+    let static_pem: &'static [u8] = Box::leak(pem.into_bytes().into_boxed_slice());
+    let cert = reqwest::tls::Certificate::from_pem(static_pem)?;
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_hostnames(true)
+        .connect_timeout(Duration::from_millis(PEER_CONNECT_TIMEOUT_MS))
+        .pool_idle_timeout(Duration::from_secs(60))
+        .add_root_certificate(cert)
+        .build()?;
+    if let Ok(mut cache) = TRUSTED_CLIENTS.lock() {
+        cache.insert(
+            key,
+            TrustedClient {
+                client: client.clone(),
+            },
+        );
+    }
+    Ok(client)
+}
+
+/// Drop the trusted entry so the next `client_for` re-fetches the cert
+/// (the PC rotated it, or the operator pointed the pair at a different
+/// machine on the same address).
+pub(crate) fn forget_trusted_client(host: &str, port: u16) {
+    if let Ok(mut cache) = TRUSTED_CLIENTS.lock() {
+        cache.remove(&trusted_key(host, port));
+    }
+}
+
+/// Whether a transport failure is a TLS validation problem (the PC's
+/// cert no longer matches what the phone trusts). String heuristic over
+/// rustls's "invalid peer certificate: ..." / "error trying to connect"
+/// text. `reqwest::Error` has no public constructor, so the string half
+/// is split out for tests.
+pub(crate) fn is_tls_error(e: &reqwest::Error) -> bool {
+    tls_error_text(&e.to_string())
+}
+
+fn tls_error_text(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    text.contains("certificate")
+        || text.contains("tls")
+        || text.contains("ssl")
+        || text.contains("handshake")
+}
+
+/// Send one request through the trusting client; when the TLS
+/// validation fails, re-fetch the cert and retry once (the PC rotated
+/// its cert, e.g. after a fresh install). `make` must be re-runnable
+/// (`FnMut`), because the retry builds the request again on the fresh
+/// client.
+pub(crate) async fn send_trusted(
+    host: &str,
+    port: u16,
+    mut make: impl FnMut(reqwest::Client) -> reqwest::RequestBuilder,
+) -> Result<reqwest::Response, reqwest::Error> {
+    let client = client_for(host, port).await?;
+    match make(client).send().await {
+        Ok(res) => Ok(res),
+        Err(e) if is_tls_error(&e) => {
+            tracing::info!(host, port, "PC cert changed; re-fetching and retrying once");
+            forget_trusted_client(host, port);
+            let client = client_for(host, port).await?;
+            make(client).send().await
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Why a request to the PC never got an answer. The cases need
 /// different advice, so the message must not collapse them into one
 /// bare timeout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -451,7 +585,11 @@ pub(crate) enum NoAnswer {
     /// another Wi-Fi network and a firewall that silently drops the port
     /// look identical from the phone.
     Silent,
-    /// Anything else (DNS, TLS, protocol): keep the raw detail.
+    /// The TLS handshake failed and the one cert re-fetch + retry did not
+    /// fix it: the PC's certificate no longer matches what the phone
+    /// trusts.
+    Tls,
+    /// Anything else (DNS, protocol): keep the raw detail.
     Other,
 }
 
@@ -461,6 +599,9 @@ pub(crate) enum NoAnswer {
 pub(crate) fn classify_transport(e: &reqwest::Error) -> NoAnswer {
     use std::error::Error as _;
     use std::io::ErrorKind;
+    if is_tls_error(e) {
+        return NoAnswer::Tls;
+    }
     if e.is_timeout() {
         return NoAnswer::Silent;
     }
@@ -512,6 +653,14 @@ pub(crate) fn describe_no_answer(name: &str, port: u16, kind: NoAnswer, detail: 
         ),
         NoAnswer::Silent => format!(
             "{name} is blocked or unreachable (no answer on port {port}). Check that the PC is on and awake, on the same Wi-Fi, and that its firewall allows PrintNinja."
+        ),
+        // Reaching here means the one cert re-fetch + retry did not fix
+        // the handshake: the PC's identity genuinely changed (or someone
+        // is intercepting the link). Keep the leading
+        // "{name} could not be verified" text in sync with
+        // `src/lib/errors.ts`.
+        NoAnswer::Tls => format!(
+            "{name} could not be verified: its certificate no longer matches. Pair it again in Settings → Devices."
         ),
         NoAnswer::Other => format!("{name} unreachable: {detail}"),
     }
@@ -599,13 +748,15 @@ pub(crate) fn note_failure(pair: &RenderPair, msg: &str) {
 }
 
 async fn probe_network(pair: &RenderPair) -> Result<Capabilities, String> {
+    let host = pair_host(pair)?;
     let base = pair_base(pair)?;
     let res = timeout(
         Duration::from_secs(PEER_CAPS_TIMEOUT_SECS),
-        client()?
-            .get(format!("{base}/v1/capabilities"))
-            .header("authorization", format!("Bearer {}", pair.secret))
-            .send(),
+        send_trusted(&host, pair.port, |client| {
+            client
+                .get(format!("{base}/v1/capabilities"))
+                .header("authorization", format!("Bearer {}", pair.secret))
+        }),
     )
     .await
     .map_err(|_| describe_no_answer(&pair.name, pair.port, NoAnswer::Silent, "probe timeout"))?;
@@ -768,7 +919,8 @@ async fn render_attempt(
     job: &PeerRenderJob,
     busy_retries: u32,
 ) -> Result<PeerOutcome, String> {
-    let base = pair_base(pair).map_err(|e| format!("{}: {e}", pair.name))?;
+    let host = pair_host(pair).map_err(|e| format!("{}: {e}", pair.name))?;
+    let base = pair_base(pair)?;
     let body = serde_json::json!({
         "protocol": super::render_share::PROTOCOL_VERSION,
         "html": job.html,
@@ -781,12 +933,12 @@ async fn render_attempt(
     let started = std::time::Instant::now();
     let res = timeout(
         Duration::from_secs(PEER_RENDER_TIMEOUT_SECS),
-        client()
-            .map_err(|e| format!("{} unreachable: {e}", pair.name))?
-            .post(format!("{base}/v1/render"))
-            .header("authorization", format!("Bearer {}", pair.secret))
-            .json(&body)
-            .send(),
+        send_trusted(&host, pair.port, |client| {
+            client
+                .post(format!("{base}/v1/render"))
+                .header("authorization", format!("Bearer {}", pair.secret))
+                .json(&body)
+        }),
     )
     .await;
     let res = match res {
@@ -916,6 +1068,36 @@ mod peer_consume_tests {
         assert_eq!(msg, "Studio PC unreachable: dns error");
     }
 
+    #[test]
+    fn a_tls_mismatch_says_to_pair_again() {
+        let msg = describe_no_answer("Studio PC", 17717, NoAnswer::Tls, "certificate invalid");
+        assert!(msg.starts_with("Studio PC could not be verified"), "{msg}");
+        assert!(msg.contains("certificate"), "{msg}");
+        // No raw jargon (rustls source text) leaks into the user message.
+        assert!(!msg.contains("invalid peer"), "{msg}");
+    }
+
+    #[test]
+    fn the_tls_text_heuristic_matches_validation_failures() {
+        // The real rustls/reqwest texts these requests surface as.
+        assert!(tls_error_text(
+            "error trying to connect: invalid peer certificate: UnknownIssuer"
+        ));
+        assert!(tls_error_text("error trying to connect: TLS handshake eof"));
+        assert!(tls_error_text("invalid SSL certificate: UnknownIssuer"));
+        assert!(tls_error_text("certificate has expired"));
+        // Transport failures that are NOT cert problems.
+        assert!(!tls_error_text("operation timed out"));
+        assert!(!tls_error_text(
+            "error trying to connect: tcp connect error: Connection refused (os error 10061)"
+        ));
+        // reqwest's status-kind display for a 503 (cert off) must not be
+        // misread as a TLS failure.
+        assert!(!tls_error_text(
+            "HTTP status client error (503 Service Unavailable) for url (https://192.168.1.4:17717/v1/print)"
+        ));
+    }
+
     fn pair(host: &str) -> RenderPair {
         RenderPair {
             id: "p1".into(),
@@ -958,6 +1140,18 @@ mod peer_consume_tests {
         ] {
             assert!(pair_base(&pair(bad)).is_err(), "{bad} must be refused");
         }
+    }
+
+    #[test]
+    fn pair_base_is_https_and_brackets_ipv6() {
+        assert_eq!(
+            pair_base(&pair("192.168.1.4")).unwrap(),
+            "https://192.168.1.4:17717"
+        );
+        // An unbracketed IPv6 base (`https://::1:17717`) is ambiguous and
+        // undialable, so the base always carries brackets.
+        assert_eq!(pair_base(&pair("[::1]")).unwrap(), "https://[::1]:17717");
+        assert_eq!(pair_base(&pair("::1")).unwrap(), "https://[::1]:17717");
     }
 
     #[test]

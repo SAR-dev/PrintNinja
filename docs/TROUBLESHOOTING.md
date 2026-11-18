@@ -67,6 +67,6 @@ Open **Settings** in PrintNinja and check that the background service is running
 
 - 🐞 Open **Settings → Diagnostics** and choose **Export Diagnostics**, then attach the file when you [report the problem](https://github.com/SAR-dev/PrintNinja/issues). Say what you did, what you expected, and what happened.
 - 📖 Not sure what a word means? See the [glossary](./GLOSSARY.md).
-- 🗺️ Printer you cannot get working? It may be on the [known gaps list](./MISSING_FEATURES.md), which includes workarounds.
+- 🗺️ Printer you cannot get working? It may be a [known limitation](./LIMITATIONS.md), which includes what to do instead.
 
 [⬅️ Back to the README](../README.md)

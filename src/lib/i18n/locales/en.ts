@@ -1676,6 +1676,8 @@ const en = {
       "{{name}} is blocked or unreachable (no answer on port {{port}}). Check that the PC is on and awake, on the same Wi-Fi, and that its firewall allows PrintNinja.",
     peer_refused:
       "{{name}} refused the connection on port {{port}}: the PC is reachable but PrintNinja is not sharing there. Open PrintNinja on it and turn on Wi-Fi access.",
+    peer_cert:
+      "{{name}} could not be verified: its certificate no longer matches. Pair it again in Settings → Devices.",
     peer_removed: "{{name}} removed this phone. Pair again.",
     cups_http: "CUPS returned HTTP {{status}}",
     ipp_http: "The IPP server returned HTTP {{status}}",
