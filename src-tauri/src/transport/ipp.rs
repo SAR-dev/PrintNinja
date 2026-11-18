@@ -593,6 +593,18 @@ impl IppPrinter {
     }
 }
 
+/// The `document-format` to declare for a rendered job: PDF for a PDF payload
+/// or an empty (pre-dispatch) mime type, octet-stream for a command language
+/// (ESC/POS, ZPL, TSPL, CPCL, raster) so a raw IPP endpoint passes the bytes
+/// through unchanged.
+fn document_format(mime_type: &str) -> &'static str {
+    if mime_type.is_empty() || mime_type == "application/pdf" {
+        "application/pdf"
+    } else {
+        "application/octet-stream"
+    }
+}
+
 #[async_trait]
 impl PrinterTransport for IppPrinter {
     async fn discover(&self) -> Vec<PrinterInfo> {
@@ -601,13 +613,23 @@ impl PrinterTransport for IppPrinter {
     }
 
     async fn test(&self) -> Result<(), String> {
-        // Send test page
-        let test_pdf = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 210 297] >>\nendobj\ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n140\n%%EOF";
-        self.send_pdf(test_pdf, 1).await
+        // Connectivity only, like every other transport: a `test` must not
+        // submit a document. (The test-print command probes first, then runs a
+        // full render, so it never calls `test`.) `reach()` opens a TCP
+        // connection — or does a tiny TLS GET for an https endpoint — and never
+        // POSTs a job.
+        self.reach().await
     }
 
     async fn send(&self, job: RenderedJob) -> Result<(), String> {
-        self.send_pdf(&job.data, job.copies).await
+        // Mirror CupsPrinter::send: the declared document-format must match
+        // the payload. A PDF-language job stays application/pdf; a command
+        // language (ESC/POS, ZPL, TSPL, CPCL, raster) is application/octet-stream
+        // so a raw IPP endpoint passes the bytes through unchanged. An empty
+        // mime_type is the pre-dispatch default, so it stays PDF for rows that
+        // predate per-language dispatch.
+        self.send_bytes(&job.data, job.copies, document_format(&job.mime_type))
+            .await
     }
 }
 
@@ -910,6 +932,19 @@ mod tests {
         );
         assert!(String::from_utf8_lossy(&raw).contains("application/octet-stream"));
         assert!(!String::from_utf8_lossy(&raw).contains("application/pdf\n"));
+    }
+
+    /// The transport's own `send` picks the document-format from the job's
+    /// mime type (octet-stream for a command language, PDF otherwise) instead
+    /// of always declaring application/pdf.
+    #[test]
+    fn send_declares_the_format_matching_the_job() {
+        assert_eq!(document_format("application/pdf"), "application/pdf");
+        assert_eq!(document_format(""), "application/pdf");
+        assert_eq!(
+            document_format("application/octet-stream"),
+            "application/octet-stream"
+        );
     }
 
     // ── P7: configurable endpoint ────────────────────────────────
