@@ -1,8 +1,17 @@
 # syntax=docker/dockerfile:1
 # PrintNinja v2 service (REFACTORING.md Phase 1, packaging).
 # Multi-stage: build with the full toolchain, ship compiled JS plus the
-# production dependencies only. Base image pinned by the Phase 1 spike.
-FROM node:22-bookworm-slim AS build
+# production dependencies only.
+#
+# The base is pinned by digest, not tag: `server-publish` skips the
+# publish when the image is unchanged since :latest by comparing layer
+# digests, and a floating tag (node re-releases 22-bookworm-slim often)
+# would make the base layers differ on every build, so the image would
+# be republished on every app tag regardless of whether server/ changed.
+# Bump the digest deliberately (both stages, together) when a new Node
+# 22.x / Debian patch is wanted; the digest is the multi-arch manifest
+# list, so any platform still resolves correctly.
+FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS build
 
 # Prisma needs the `openssl` command to pick the right engine; the slim
 # image only has the libraries.
@@ -41,7 +50,9 @@ RUN cd /deploy \
     && sed -i 's/\r$//' docker-entrypoint.sh \
     && chmod 755 docker-entrypoint.sh
 
-FROM node:22-bookworm-slim AS runtime
+# Same digest as the build stage (see above): both must move together,
+# or the two stages would build against different Node 22.x patches.
+FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS runtime
 
 # Same reason as in the build stage: Prisma's migrate step runs here.
 RUN apt-get update -y \
