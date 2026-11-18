@@ -4,13 +4,15 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
-use tokio::sync::oneshot;
+use tokio::sync::watch;
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
 
 /// Shutdown handle so `stop_api_server` actually stops the listener.
-/// `Mutex` (not `static mut`) to avoid mutable-static-reference UB.
-static SHUTDOWN: Mutex<Option<oneshot::Sender<()>>> = Mutex::new(None);
+/// A `watch` sender (not oneshot) because LAN mode runs **two** listeners
+/// (TLS + plain loopback) and each needs its own clone of the stop
+/// signal. `Mutex` (not `static mut`) to avoid mutable-static-reference UB.
+static SHUTDOWN: Mutex<Option<watch::Sender<bool>>> = Mutex::new(None);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiStatus {
@@ -18,6 +20,12 @@ pub struct ApiStatus {
     pub address: String,
     pub port: u16,
     pub lan_access: bool,
+    /// The plain loopback port the PC's own UI talks to. Equals `port`
+    /// unless Wi-Fi access is on, where the phone-facing port serves TLS
+    /// and the UI moves to `port + 1`. `#[serde(default)]` so a status
+    /// serialized by an older build still deserializes.
+    #[serde(default)]
+    pub local_port: u16,
 }
 
 fn port_from_conn(conn: &rusqlite::Connection, key: &str, default: u16) -> u16 {
@@ -125,6 +133,13 @@ pub fn api_status_from_db(conn: &rusqlite::Connection, running: bool) -> ApiStat
         address,
         port,
         lan_access: lan,
+        // When LAN is on and the server runs, the UI's plain listener sits
+        // on port+1; otherwise the UI uses the (only) listener.
+        local_port: if running && lan {
+            port.saturating_add(1)
+        } else {
+            port
+        },
     }
 }
 
@@ -227,9 +242,28 @@ pub async fn launch_server(
     let host = if lan { "0.0.0.0" } else { "127.0.0.1" };
     let addr = format!("{}:{}", host, port);
 
+    // Phones dial `https://{host}:{port}`: in LAN mode that port serves
+    // TLS on 0.0.0.0, and the PC's own UI (which does not trust
+    // self-signed certs) keeps a plain listener on 127.0.0.1:{port+1} —
+    // one port cannot be bound both ways.
+    let local_addr = if lan {
+        format!("127.0.0.1:{}", port.saturating_add(1))
+    } else {
+        addr.clone()
+    };
+
+    // The TLS listener's socket is owned by axum-server and bound
+    // asynchronously later, so pre-check the port for a clear error in
+    // the common case; the async bind remains authoritative.
+    if lan && std::net::TcpListener::bind(&addr).is_err() {
+        return Err(AppError::Internal(format!(
+            "Cannot bind {addr}: the port is already in use"
+        )));
+    }
+
     // Bound synchronously first so a busy port returns a clear error to
     // the UI instead of failing silently inside the spawned task.
-    let listener = bind_addr(&addr)?;
+    let local_listener = bind_addr(&local_addr)?;
 
     let display_addr = host.to_string();
     app.manage(ApiServerHandle {
@@ -248,7 +282,7 @@ pub async fn launch_server(
         )?;
     }
 
-    let (tx, rx) = oneshot::channel::<()>();
+    let (tx, rx) = watch::channel(false);
     // The routes need the same queue the desktop UI uses, so an API job and
     // a UI job aimed at the same printer are serialised against each other.
     let cache_dir = app
@@ -266,11 +300,36 @@ pub async fn launch_server(
     if let Ok(mut slot) = SHUTDOWN.lock() {
         *slot = Some(tx);
     }
+
+    // In LAN mode the phones cannot negotiate anything without a
+    // certificate, and serving cleartext LAN traffic would defeat the
+    // point — fail loudly if the cert cannot be prepared.
+    let cert_pair: Option<crate::api::cert::CertPair> = if lan {
+        let data_dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| AppError::Internal(format!("No app data dir: {e}")))?;
+        Some(
+            crate::api::cert::ensure_cert(&data_dir, &lan_ip())
+                .map_err(|e| AppError::Internal(format!("Cannot prepare TLS certificate: {e}")))?,
+        )
+    } else {
+        None
+    };
+    // Build the rustls config up front so a broken cert fails here with
+    // a clear error instead of inside the spawned task.
+    let tls_config: Option<rustls::ServerConfig> = cert_pair
+        .as_ref()
+        .map(crate::api::cert::server_config)
+        .transpose()
+        .map_err(|e| AppError::Internal(format!("Cannot build TLS configuration: {e}")))?;
+
     let state = crate::api::routes::ApiState {
         db: db.clone(),
         queue: std::sync::Arc::new(queue),
         cache_dir,
         window: pairing_window(&app),
+        cert_pem: cert_pair.as_ref().map(|p| p.cert_pem.clone()),
     };
     // The share service's origin is the one browser origin allowed to read
     // responses: the demo page fetches this API cross-origin from there
@@ -304,19 +363,70 @@ pub async fn launch_server(
     // Advertise _printninja._tcp while LAN is reachable (mDNS is link-local, no internet exposure)
     refresh_mdns_advertise(&db);
     tauri::async_runtime::spawn(async move {
-        tracing::info!("API server listening on {}", log_addr);
+        let mut serves: Vec<tauri::async_runtime::JoinHandle<()>> = Vec::new();
 
-        // Keep the peer address available to handlers via ConnectInfo.
-        let server = axum::serve(
-            listener,
-            router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-        )
-        .with_graceful_shutdown(async {
-            let _ = rx.await;
-        });
+        // Plain loopback listener: the PC's own UI (and tests) always
+        // talk to this one, on both the loopback address and LAN mode's
+        // port+1.
+        {
+            let mut stop = rx.clone();
+            let server = axum::serve(
+                local_listener,
+                router
+                    .clone()
+                    .into_make_service_with_connect_info::<std::net::SocketAddr>(),
+            )
+            .with_graceful_shutdown(async move {
+                let _ = stop.wait_for(|v| *v).await;
+            });
+            serves.push(tauri::async_runtime::spawn(async move {
+                if let Err(e) = server.await {
+                    tracing::error!("API server (loopback) error: {e}");
+                }
+            }));
+        }
 
-        if let Err(e) = server.await {
-            tracing::error!("API server error: {}", e);
+        // The TLS listener for phones on the Wi-Fi (LAN mode only).
+        // axum-server binds lazily inside `serve()`, so a busy port
+        // surfaces there as the error logged below; the pre-check before
+        // spawn already returns the common case to the UI.
+        if let Some(config) = tls_config {
+            let tls_addr: std::net::SocketAddr = format!("{host}:{port}")
+                .parse()
+                .expect("host and port were validated");
+            let handle = axum_server::Handle::new();
+            let server = axum_server::bind_rustls(
+                tls_addr,
+                axum_server::tls_rustls::RustlsConfig::from_config(std::sync::Arc::new(config)),
+            )
+            .handle(handle.clone());
+            let mut stop = rx.clone();
+            // Fire the graceful shutdown from a side task so the serve
+            // task below can still be awaited by cleanup.
+            tauri::async_runtime::spawn(async move {
+                let _ = stop.wait_for(|v| *v).await;
+                handle.graceful_shutdown(None);
+            });
+            serves.push(tauri::async_runtime::spawn(async move {
+                if let Err(e) = server
+                    .serve(router.into_make_service_with_connect_info::<std::net::SocketAddr>())
+                    .await
+                {
+                    tracing::error!("API server (TLS) error: {e}");
+                }
+            }));
+        }
+
+        tracing::info!(
+            "API server listening on {} (plain loopback {})",
+            log_addr,
+            local_addr
+        );
+
+        // Each listener runs until the shared stop signal or its own
+        // error; when the last one is down, clean up.
+        for serve in serves {
+            let _ = serve.await;
         }
 
         RUNNING.store(false, Ordering::Relaxed);
@@ -548,7 +658,8 @@ pub async fn stop_api_server() -> AppResult<()> {
     }
     if let Ok(mut slot) = SHUTDOWN.lock() {
         if let Some(tx) = slot.take() {
-            let _ = tx.send(());
+            // Wake every listener's stop-waiter (plain + TLS in LAN mode).
+            let _ = tx.send(true);
         }
     }
     for _ in 0..STOP_WAIT_STEPS {
@@ -1228,8 +1339,18 @@ struct ClaimReply {
     paired_at: String,
 }
 
+/// The phone's pairing-time dial: permissive on purpose. Pairing happens
+/// before this phone trusts anything on the link — the PC's cert is
+/// fetched over this same unverified channel — so strict TLS would
+/// deadlock first contact. The link is still encrypted, and what
+/// authorizes the pair is the code the user types (never read from the
+/// wire), so a first-contact MITM still cannot forge a pair. The
+/// pinned-cert client (`peer_consume::client_for`) takes over for every
+/// request after pairing.
 fn pair_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_hostnames(true)
         .connect_timeout(std::time::Duration::from_millis(400))
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -1240,8 +1361,12 @@ async fn hello_at(client: &reqwest::Client, host: &str, port: u16) -> Option<(St
     if !crate::api::peer_consume::is_private_host(host) {
         return None;
     }
+    // The PC's phone-facing port serves TLS; `dial_host` brackets IPv6.
     let reply: HelloReply = client
-        .get(format!("http://{host}:{port}/v1/pair/hello"))
+        .get(format!(
+            "https://{}:{port}/v1/pair/hello",
+            crate::api::peer_consume::dial_host(host)
+        ))
         .send()
         .await
         .ok()?
@@ -1312,10 +1437,12 @@ async fn claim_at(
     client: &reqwest::Client,
     target: &ClaimTarget<'_>,
 ) -> Result<ClaimReply, String> {
+    // TLS like every phone→PC dial; the target host is already
+    // bracket-stripped, so re-bracket for IPv6.
     let res = client
         .post(format!(
-            "http://{host}:{port}/v1/pair/claim",
-            host = target.host,
+            "https://{}:{port}/v1/pair/claim",
+            crate::api::peer_consume::dial_host(target.host),
             port = target.port
         ))
         .json(&serde_json::json!({

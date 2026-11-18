@@ -296,6 +296,23 @@ impl Default for OpenApiSpec {
                         }
                     }
                 },
+                "/v1/cert": {
+                    "get": {
+                        "summary": "This device's LAN-facing TLS certificate",
+                        "description": "The self-signed certificate of the Wi-Fi listener, PEM. A phone fetches it once over a permissive connection and pins it as the root for every later request (trust-on-first-use). No auth — the cert is not the secret; each real request is still gated by its per-device Bearer token.",
+                        "responses": {
+                            "200": {
+                                "description": "PEM certificate",
+                                "content": {
+                                    "application/x-pem-file": {
+                                        "schema": { "type": "string" }
+                                    }
+                                }
+                            },
+                            "503": { "description": "No TLS listener (Wi-Fi access is off)" }
+                        }
+                    }
+                },
                 "/v1/pair/hello": {
                     "get": {
                         "summary": "Pairing discovery hello",

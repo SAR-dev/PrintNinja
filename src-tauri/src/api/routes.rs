@@ -29,6 +29,10 @@ pub struct ApiState {
     /// The open pairing-code window, if any. In memory only — never in the
     /// DB or logs (docs/architecture/PHONE_AND_PC_SHARING.md#pairing).
     pub window: std::sync::Arc<std::sync::Mutex<Option<crate::api::pair_code::PairingWindow>>>,
+    /// The PC's self-signed cert (PEM) served by `GET /v1/cert` for the
+    /// phone's TLS bootstrap, when a LAN-facing TLS listener is up.
+    /// `None` means Wi-Fi access is off (no TLS listener, no cert).
+    pub cert_pem: Option<String>,
 }
 
 impl ApiState {
@@ -43,6 +47,7 @@ impl ApiState {
             queue,
             cache_dir,
             window: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            cert_pem: None,
         }
     }
 }
@@ -106,6 +111,10 @@ pub fn router_with_state(
     let pair = Router::new()
         .route("/v1/pair/hello", get(crate::api::pair_routes::hello))
         .route("/v1/pair/claim", post(crate::api::pair_routes::claim))
+        // The phone's TLS bootstrap: fetch the cert before it can trust
+        // the connection. Unauthenticated — a certificate is public by
+        // definition; the per-device token still gates real requests.
+        .route("/v1/cert", get(cert))
         .layer(axum::extract::DefaultBodyLimit::max(
             crate::api::pair_routes::MAX_PAIR_BODY_BYTES,
         ))
@@ -181,6 +190,27 @@ use rusqlite::OptionalExtension;
 /// Liveness plus the dependencies a print needs: the database answers
 /// and the queue lock is acquirable. A wedged DB (or a poisoned lock)
 /// reports degraded instead of a lying "ok".
+/// The PC's self-signed certificate, PEM-encoded. Phones fetch it over a
+/// permissive connection once per (host, port) and then trust it for the
+/// rest of their traffic (see `crate::api::peer_consume` and
+/// `api/cert.rs`). 503 when no TLS listener is up (Wi-Fi access off) so
+/// the phone knows to look elsewhere rather than trusting nothing.
+async fn cert(State(state): State<ApiState>) -> Response {
+    match state.cert_pem.clone() {
+        Some(pem) => (
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "application/x-pem-file")],
+            pem,
+        )
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({ "error": "TLS is not in use: Wi-Fi access is off" })),
+        )
+            .into_response(),
+    }
+}
+
 async fn health(State(state): State<ApiState>) -> Json<Value> {
     let db_ok = state
         .db

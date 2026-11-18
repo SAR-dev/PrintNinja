@@ -12,7 +12,9 @@
 //! enforces the template version check (ARCHITECTURE §9); this command feeds it the
 //! `server_id`/`server_revision` from the phone's own template row.
 
-use crate::api::peer_consume::{describe_no_answer_for, pair_base, RenderPair};
+use crate::api::peer_consume::{
+    describe_no_answer_for, pair_base, pair_host, send_trusted, RenderPair,
+};
 use crate::commands::print::{
     check_copies, validate_margins, validate_orientation_and_fit, MAX_API_DATA_BYTES, MAX_RECORDS,
 };
@@ -168,13 +170,15 @@ pub async fn pc_templates(
         }
     }
 
+    let host = pair_host(&pair).map_err(AppError::Validation)?;
     let base = pair_base(&pair).map_err(AppError::Validation)?;
-    let client = print_client(PRINTERS_TIMEOUT_SECS)?;
-    let send = client
-        .get(format!("{base}/v1/pc-templates"))
-        .header("Authorization", format!("Bearer {}", pair.secret))
-        .send()
-        .await;
+    let send = send_trusted(&host, pair.port, |client| {
+        client
+            .get(format!("{base}/v1/pc-templates"))
+            .header("Authorization", format!("Bearer {}", pair.secret))
+            .timeout(std::time::Duration::from_secs(PRINTERS_TIMEOUT_SECS))
+    })
+    .await;
     let mut live: Option<Vec<PcTemplateInfo>> = None;
     let mut unreachable: Option<String> = None;
     match send {
@@ -203,15 +207,11 @@ pub async fn pc_templates(
                 }
             },
             Err(e) => {
-                unreachable = Some(describe_no_answer_for(
-                    &pair.name, &pair.host, pair.port, &e,
-                ));
+                unreachable = Some(describe_no_answer_for(&pair.name, &host, pair.port, &e));
             }
         },
         Err(e) => {
-            unreachable = Some(describe_no_answer_for(
-                &pair.name, &pair.host, pair.port, &e,
-            ));
+            unreachable = Some(describe_no_answer_for(&pair.name, &host, pair.port, &e));
         }
     }
     match live {
@@ -331,20 +331,6 @@ fn lookup_template(
     .map_err(|_| AppError::NotFound(format!("Template #{template_id} not found")))
 }
 
-fn print_client(timeout_secs: u64) -> AppResult<reqwest::Client> {
-    reqwest::Client::builder()
-        // The peer path's connect timeout, not the pairing probe's: this
-        // dials one known PC, and a hasty connect fails on slow phone
-        // Wi-Fi where the Test button (same address, patient dial)
-        // succeeds. Same address, same outcome.
-        .connect_timeout(std::time::Duration::from_millis(
-            crate::api::peer_consume::PEER_CONNECT_TIMEOUT_MS,
-        ))
-        .timeout(std::time::Duration::from_secs(timeout_secs))
-        .build()
-        .map_err(|e| AppError::Internal(format!("http client failed: {e}")))
-}
-
 /// The PC's refusal, in its own words when it has them. 401 is generic by
 /// design (the gate hides why), so the phone says what it means here:
 /// pair again. (409s never reach this: a version refusal is an answered
@@ -378,7 +364,8 @@ fn refusal(status: reqwest::StatusCode, body: &serde_json::Value) -> AppError {
 /// Poll the PC's job until it leaves `printing`/`queued`. The POST
 /// already ran the pipeline, so this usually returns on the first read.
 async fn poll_job(
-    client: &reqwest::Client,
+    host: &str,
+    port: u16,
     base: &str,
     secret: &str,
     job_id: &str,
@@ -386,12 +373,17 @@ async fn poll_job(
     let url = format!("{base}/v1/jobs/{job_id}");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(POLL_TIMEOUT_SECS);
     loop {
-        let res = client
-            .get(&url)
-            .header("Authorization", format!("Bearer {secret}"))
-            .send()
-            .await
-            .map_err(|e| AppError::Internal(format!("Could not read the PC's job: {e}")))?;
+        // The shared trusted client has no overall timeout, so the poll
+        // sets one per request: one long-wedged read must not stall the
+        // deadline loop forever.
+        let res = send_trusted(host, port, |client| {
+            client
+                .get(&url)
+                .header("Authorization", format!("Bearer {secret}"))
+                .timeout(std::time::Duration::from_secs(10))
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("Could not read the PC's job: {e}")))?;
         if !res.status().is_success() {
             return Err(AppError::Internal(format!(
                 "The PC lost the job ({})",
@@ -554,7 +546,7 @@ pub async fn remote_print_inner(
     // One scoped lock, released before any network round trip: holding it
     // across the send would stall every other command, and the history
     // write below takes it again.
-    let (pair, base, template_name, server_id, server_revision, local_template_id) = {
+    let (pair, host, base, template_name, server_id, server_revision, local_template_id) = {
         let guard = db
             .lock()
             .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
@@ -569,6 +561,7 @@ pub async fn remote_print_inner(
             &pairs,
             args.pair_id.as_deref().or(stored_default.as_deref()),
         )?;
+        let host = pair_host(&pair).map_err(AppError::Validation)?;
         let base = pair_base(&pair).map_err(AppError::Validation)?;
         // A PC-listed template carries the PC's own identity: no local
         // row needed, and history links one only when it exists.
@@ -596,6 +589,7 @@ pub async fn remote_print_inner(
             };
             (
                 pair,
+                host,
                 base,
                 name,
                 Some(sid),
@@ -610,6 +604,7 @@ pub async fn remote_print_inner(
                 lookup_template(guard.connection(), id)?;
             (
                 pair,
+                host,
                 base,
                 template_name,
                 server_id,
@@ -685,19 +680,19 @@ pub async fn remote_print_inner(
         body["test"] = true.into();
     }
 
-    let client = print_client(POST_TIMEOUT_SECS)?;
-    let res = client
-        .post(format!("{base}/v1/print"))
-        .header("Authorization", format!("Bearer {}", pair.secret))
-        .header("Idempotency-Key", &key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| {
-            AppError::Internal(describe_no_answer_for(
-                &pair.name, &pair.host, pair.port, &e,
-            ))
-        })?;
+    // The trusted client has no overall timeout, so the long POST sets
+    // one per request (a big document can render for minutes on the PC
+    // before the answer comes back).
+    let res = send_trusted(&host, pair.port, |client| {
+        client
+            .post(format!("{base}/v1/print"))
+            .header("Authorization", format!("Bearer {}", pair.secret))
+            .header("Idempotency-Key", &key)
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(POST_TIMEOUT_SECS))
+    })
+    .await
+    .map_err(|e| AppError::Internal(describe_no_answer_for(&pair.name, &host, pair.port, &e)))?;
     let status = res.status();
     let reply: serde_json::Value = res.json().await.unwrap_or(serde_json::Value::Null);
 
@@ -732,8 +727,7 @@ pub async fn remote_print_inner(
             .and_then(|j| j.as_str())
             .unwrap_or("")
             .to_string();
-        let client2 = print_client(POLL_TIMEOUT_SECS + 10)?;
-        match poll_job(&client2, &base, &pair.secret, &job_id).await {
+        match poll_job(&host, pair.port, &base, &pair.secret, &job_id).await {
             // A duplicate replays the reply of an earlier job, whose
             // warnings are not in this reply.
             Ok((st, err)) => (st, err, None, Some(job_id), Vec::new()),
@@ -943,13 +937,15 @@ pub async fn remote_printers(
         }
     }
 
+    let host = pair_host(&pair).map_err(AppError::Validation)?;
     let base = pair_base(&pair).map_err(AppError::Validation)?;
-    let client = print_client(PRINTERS_TIMEOUT_SECS)?;
-    let send = client
-        .get(format!("{base}/v1/printers"))
-        .header("Authorization", format!("Bearer {}", pair.secret))
-        .send()
-        .await;
+    let send = send_trusted(&host, pair.port, |client| {
+        client
+            .get(format!("{base}/v1/printers"))
+            .header("Authorization", format!("Bearer {}", pair.secret))
+            .timeout(std::time::Duration::from_secs(PRINTERS_TIMEOUT_SECS))
+    })
+    .await;
     let mut live: Option<Vec<PcPrinterInfo>> = None;
     let mut unreachable: Option<String> = None;
     match send {
@@ -988,9 +984,7 @@ pub async fn remote_printers(
             }
         },
         Err(e) => {
-            unreachable = Some(describe_no_answer_for(
-                &pair.name, &pair.host, pair.port, &e,
-            ));
+            unreachable = Some(describe_no_answer_for(&pair.name, &host, pair.port, &e));
         }
     }
     match live {
