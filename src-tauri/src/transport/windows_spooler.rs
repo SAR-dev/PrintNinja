@@ -582,34 +582,12 @@ impl WindowsSpooler {
             }
         }
     }
-}
 
-#[cfg(windows)]
-#[async_trait]
-impl PrinterTransport for WindowsSpooler {
-    async fn discover(&self) -> Vec<PrinterInfo> {
-        // W4: enumeration opens every queue; a wedged one must not stall a
-        // tokio worker. Discovery must never fail the Setup page either,
-        // so a panicked task degrades to an empty list.
-        tokio::task::spawn_blocking(WindowsSpooler::enumerate_printers)
-            .await
-            .unwrap_or_default()
-    }
-
-    async fn test(&self) -> Result<(), String> {
-        // Status only: the queue's language is unknown here, and ESC/POS
-        // bytes sent to a laser or inkjet queue print as garbage.
-        // W4: check_ready blocks on the queue; keep it off tokio workers.
-        let spooler = WindowsSpooler::new(self.printer_name.clone());
-        tokio::task::spawn_blocking(move || spooler.check_ready())
-            .await
-            .unwrap_or_else(|e| Err(format!("spooler test task failed: {e}")))
-    }
-
-    async fn send(&self, job: RenderedJob) -> Result<(), String> {
-        // W4: the Win32 spooler calls below block (a wedged queue can stall
-        // them), so the whole send runs on the blocking pool instead of a
-        // tokio worker.
+    /// Datatype-aware send, off the tokio workers (W4) — the single send path
+    /// shared by the `system` and `usb` transports. A USB printer is installed
+    /// as a Windows queue, so it needs the same PDF-vs-RAW decision the spooler
+    /// transport makes (see [`choose_datatype`]).
+    pub async fn send_job(&self, job: RenderedJob) -> Result<(), String> {
         let spooler = WindowsSpooler::new(self.printer_name.clone());
         tokio::task::spawn_blocking(move || {
             // Phase 0 visibility: datatype lookup vs the send itself.
@@ -641,6 +619,33 @@ impl PrinterTransport for WindowsSpooler {
         })
         .await
         .unwrap_or_else(|e| Err(format!("spooler send task failed: {e}")))
+    }
+}
+
+#[cfg(windows)]
+#[async_trait]
+impl PrinterTransport for WindowsSpooler {
+    async fn discover(&self) -> Vec<PrinterInfo> {
+        // W4: enumeration opens every queue; a wedged one must not stall a
+        // tokio worker. Discovery must never fail the Setup page either,
+        // so a panicked task degrades to an empty list.
+        tokio::task::spawn_blocking(WindowsSpooler::enumerate_printers)
+            .await
+            .unwrap_or_default()
+    }
+
+    async fn test(&self) -> Result<(), String> {
+        // Status only: the queue's language is unknown here, and ESC/POS
+        // bytes sent to a laser or inkjet queue print as garbage.
+        // W4: check_ready blocks on the queue; keep it off tokio workers.
+        let spooler = WindowsSpooler::new(self.printer_name.clone());
+        tokio::task::spawn_blocking(move || spooler.check_ready())
+            .await
+            .unwrap_or_else(|e| Err(format!("spooler test task failed: {e}")))
+    }
+
+    async fn send(&self, job: RenderedJob) -> Result<(), String> {
+        self.send_job(job).await
     }
 }
 
@@ -694,6 +699,10 @@ impl WindowsSpooler {
     }
 
     pub fn check_ready(&self) -> Result<(), String> {
+        Err("Windows spooler not available on this platform".to_string())
+    }
+
+    pub async fn send_job(&self, _job: crate::transport::RenderedJob) -> Result<(), String> {
         Err("Windows spooler not available on this platform".to_string())
     }
 }

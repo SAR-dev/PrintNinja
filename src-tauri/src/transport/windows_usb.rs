@@ -19,10 +19,6 @@ impl WindowsUsbPrinter {
     fn spooler(&self) -> crate::transport::windows_spooler::WindowsSpooler {
         crate::transport::windows_spooler::WindowsSpooler::new(self.name.clone())
     }
-
-    pub async fn send_raw(&self, data: &[u8]) -> Result<(), String> {
-        self.spooler().send_raw(data)
-    }
 }
 
 #[async_trait]
@@ -33,10 +29,18 @@ impl PrinterTransport for WindowsUsbPrinter {
 
     async fn test(&self) -> Result<(), String> {
         // Status only: no bytes are sent, so no assumption about the language.
-        self.spooler().check_ready()
+        // W4: check_ready blocks on the queue; keep it off the tokio workers
+        // like the spooler transport's own test does.
+        let spooler = self.spooler();
+        tokio::task::spawn_blocking(move || spooler.check_ready())
+            .await
+            .unwrap_or_else(|e| Err(format!("USB test task failed: {e}")))
     }
 
     async fn send(&self, job: RenderedJob) -> Result<(), String> {
-        self.send_raw(&job.data).await
+        // A USB printer is a Windows queue: run the same datatype-aware,
+        // off-tokio send the spooler transport uses (PDF when the queue
+        // offers it, RAW otherwise) instead of always-RAW bytes.
+        self.spooler().send_job(job).await
     }
 }
