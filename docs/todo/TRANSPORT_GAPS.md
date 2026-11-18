@@ -1,6 +1,6 @@
 # Transport gaps: where the printing paths diverge
 
-**Status:** code review of the encoder and transport layer, not a hardware test. Every item below is a *current condition* in the code with a proposed *solution*. None are yet implemented.
+**Status:** code review of the encoder and transport layer, not a hardware test. Gaps 1–3 and 5–7 are implemented on branch `fix/transport-gaps`; gap 4 is deferred. See "Implementation status" below. Nothing is yet verified on real hardware or a full Windows/Android build.
 
 **Scope reviewed:** the shared encoder (`src-tauri/src/transport/mod.rs`, `escpos.rs`, `label_langs.rs`), the transport implementations (`ipp.rs`, `raw_tcp.rs`, `cups.rs`, `windows_spooler.rs`, `windows_usb.rs`, `windows_bluetooth.rs`, `linux_bluetooth.rs`, `android_usb.rs`, `android_bluetooth.rs`), the status/precheck module (`status.rs`), and the dispatch layer (`src-tauri/src/commands/print.rs`).
 
@@ -19,6 +19,38 @@ All jobs flow through two layers — **encoding** (`encode_for_language_tuned`) 
 | 5 | `IppPrinter::test()` sends a real document, unlike every other `test()` | Low | `transport/ipp.rs`, `transport/mod.rs` |
 | 6 | Two encoders exist; `LabelPrinterTransport` is dead and divergent | Low | `transport/label_langs.rs` |
 | 7 | Android mDNS discovery silently drops raw-TCP printers | Medium | `transport/android_bridge.rs` |
+
+---
+
+## Implementation status
+
+| # | Status | Notes |
+|---|--------|-------|
+| 1 | Implemented | `IppPrinter::send` picks the `document-format` from `job.mime_type` via a `document_format` helper; unit test added. |
+| 2 | Implemented | USB send delegates to `WindowsSpooler::send_job` (datatype-aware). **Windows-only — uncompiled here.** |
+| 3 | Implemented | USB `test`/`send` run on the blocking pool via `spawn_blocking`. **Windows-only — uncompiled here.** |
+| 4 | Deferred | Needs a Windows machine plus two design decisions (see below). |
+| 5 | Implemented | `IppPrinter::test` calls `reach()`; the hardcoded test PDF is gone. |
+| 6 | Implemented | `LabelPrinterTransport` deleted; a comment marks the live encoder. |
+| 7 | Implemented | mDNS results map `raw_tcp` → `PrinterType::RawTcp` instead of being dropped. **Android-only — uncompiled here.** |
+
+### Verification not yet run (resource / platform constraints)
+
+This work was done on a low-end Linux box (2 cores, ~7.8 GiB RAM, ~8.6 GiB free disk, no prebuilt `target/`). Per `CLAUDE.md`, the Rust suite must run in Docker (`pnpm test:rust`) because the desktop crate's debug build peaks at several gigabytes natively. The following were therefore **not** run here and are TODOs for a fuller machine:
+
+- [ ] `cargo check` / `cargo clippy --all-targets -- -D warnings` — skipped; a from-scratch build of the Tauri crate is too heavy on this box.
+- [ ] `pnpm test:rust` (Docker) — the full Rust unit suite, including the new `send_declares_the_format_matching_the_job` test.
+- [ ] Windows build/test — gaps 2, 3 (and the deferred gap 4) are `#[cfg(windows)]` and were written by inspection only.
+- [ ] Android build/test — gap 7 is `#[cfg(target_os = "android")]` and was written by inspection only.
+
+`cargo fmt --check` **does** pass.
+
+### Gap 4 deferred — what is left to do
+
+Gap 4 (no pre-send fault detection on Windows) is the only High gap still open and is **not implemented**. Two decisions must be made on a Windows machine before coding it, so it is deliberately left out rather than written blind:
+
+1. **Spooler/USB precheck:** run `check_ready` before every send (adds an open/read/close round trip per job), or accept that the OS queue surfaces state only at `test` time and document the tradeoff. A cooldown like `status::should_probe` would also need porting to queue names.
+2. **Bluetooth COM precheck:** the direct path opens the port with `GENERIC_WRITE` only and sets only write timeouts; a status query needs read access (`GENERIC_READ`), read timeouts, `ReadFile`, and `status::dialect_for`/`decode` wired over the COM port.
 
 ---
 
