@@ -91,7 +91,9 @@ test("F12 offline opens the cache view-only, recovery pulls then saves", async (
     timeout: 15_000,
   });
 
-  const content = page.getByLabel("HTML editor").locator(".cm-content");
+  // The accessible name lives on `.cm-content` itself, so the label
+  // resolves directly to the editable node.
+  const content = page.getByLabel("HTML editor");
   await content.click();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Backspace");

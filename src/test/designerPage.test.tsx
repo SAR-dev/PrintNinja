@@ -553,8 +553,11 @@ describe("Designer page layout on desktop", () => {
     renderDesigner();
     const frame = await screen.findByTitle("Canvas preview");
     const editorOf = (label: string) => {
+      // The editor's accessible name now lives on `.cm-content` itself (the
+      // role=textbox node axe checks), so getByLabelText returns that node;
+      // findFromDOM resolves the view from it directly.
       const view = EditorView.findFromDOM(
-        screen.getByLabelText(label).querySelector(".cm-editor") as HTMLElement,
+        screen.getByLabelText(label) as HTMLElement,
       );
       if (!view) throw new Error(`no editor for ${label}`);
       return view;

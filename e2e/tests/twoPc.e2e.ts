@@ -45,7 +45,9 @@ async function setHtml(
   page: import("@playwright/test").Page,
   html: string,
 ): Promise<string> {
-  const content = page.getByLabel("HTML editor").locator(".cm-content");
+  // The accessible name lives on `.cm-content` itself, so the label
+  // resolves directly to the editable node.
+  const content = page.getByLabel("HTML editor");
   await content.click();
   await expect(async () => {
     await page.keyboard.press("ControlOrMeta+a");
