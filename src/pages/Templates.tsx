@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { InfoNotice } from "@/components/InfoNotice";
 import { PageHeader } from "@/components/PageHeader";
 import { PaperThumb } from "@/components/PaperThumb";
 import type { TemplateRow } from "@/lib/agent/types";
@@ -879,9 +880,9 @@ export function TemplatesPage() {
 
       {/* Phones view and print templates; the PC edits them (PLAN §6, D4). */}
       {isPhone && (
-        <div className="rounded-lg border border-info/30 bg-info-soft px-4 py-3 text-sm text-info">
+        <InfoNotice id="templates.viewer_notice">
           {t("designer.viewer_notice")}
-        </div>
+        </InfoNotice>
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

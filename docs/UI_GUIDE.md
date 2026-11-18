@@ -107,7 +107,7 @@ top bar or sidebar.
   A single failed status read keeps the last known badge; it only disappears after three in a row.
 - **Sidebar** (desktop, `md` and up): grouped by the job being done, collapsible to icons.
   The collapsed state is remembered in `localStorage`.
-- **Bottom bar** (phones): Print, History, Templates and Printers, plus a More button for the rest (Designer, Connect to PC, Automation, Settings). Labels match the sidebar.
+- **Bottom bar** (phones): Print, History, Templates and Printers, plus a More button for the rest (Designer, Devices, Automation, Settings). Labels match the sidebar.
 - **Main area**: `<main id="main">`, content capped at 1600 px, with a "Skip to content" link
   as the first focusable element.
 
@@ -156,7 +156,7 @@ the code editor. "Reprint last job" asks for confirmation before it prints.
 | `/printers` | Printers | `DataTable` of printers with their status, grouped in tabs (**All**, Network, USB, Bluetooth, System); the header offers Refresh, **Scan system** and **Add printer** (side sheet). The sheet opens on one **Detected devices** block with a single **Rescan** and one collapsed row per source that shows only its count: **Found on this computer** (OS print queues, **Fill** only, with a visible note on queues that offer no PDF datatype), **Found on this network** (mDNS-discovered IPP / Raw TCP rows) and, on Android with the connection type **Bluetooth**, **Paired Bluetooth printers** (the phone's bonded devices, plus **Open Bluetooth settings**). A row opens on demand and lists its devices; network and Bluetooth rows offer **Fill** (prefill the form) and **Add** (save it straight away). While **editing** a printer the block is hidden behind **Choose from detected devices instead**, and rows offer **Fill** only, so a click cannot create a second printer. Below the name, connection, language and address fields, **Advanced** folds paper width, DPI and the TSPL label gap (its header shows the current values and it opens itself when a folded field fails validation); a driverless Bluetooth address is checked against the MAC / COM shapes the backend accepts, and a USB port typed there is flagged at once. The footer with **Save printer** stays pinned while the form scrolls |
 | `/history` | History | `DataTable` of jobs with `JobStatusBadge`; reprint, retry and delete, one at a time or in bulk, with a confirmation |
 | `/settings` | Settings | Sections opened with `?section=`: `setup` (checklist), `profile` (signed-in account, password, sign out; opened by the top-bar user badge and by the account row in the phone More sheet), `general` (appearance, branding, density), `background`, `share` (labelled **Account & sync**: the share service URL and sign-in), `data` (labelled **Data & network**: allowed domains and private-IP blocking), `retention`, `diagnostics`. `&field=<id>` scrolls to and flashes a control. An unknown section opens General. The local API server is not here; it lives on Automation |
-| `/devices` | Devices (on phones **Connect to PC**) | `DevicesCard`, one half per device: on a PC the provider half (share switch, pairing window with 8-character code and countdown, the paired-device list with rename / remove / per-device print toggle, guest invites); on a phone the consumer half (type the 8-character code — the PC is found on its own via the **Nearby PCs** mDNS scan or a typed address — plus a list of paired PCs to test and remove). On Android also `PrintViaPcCard`: **Print via PC** sends the job to a paired PC. `?field=<id>` scrolls to and flashes a control. Old `/automation?tab=phones` links redirect here |
+| `/devices` | Devices (one name on every platform) | `DevicesCard`, one half per device: on a PC the provider half (share switch, pairing window with 8-character code and countdown, the paired-device list with rename / remove / per-device print toggle, guest invites); on a phone the consumer half (type the 8-character code — the PC is found on its own via the **Nearby PCs** mDNS scan or a typed address — plus a list of paired PCs to test and remove). On Android also `PrintViaPcCard`: **Print via PC** sends the job to a paired PC. `?field=<id>` scrolls to and flashes a control. Old `/automation?tab=phones` links redirect here |
 | `/automation` | Automation | Tabs opened with `?tab=`: `server` (port, start/stop, **Network access**: LAN access and start at launch), `explorer` (try the API), `links` (trusted deep-link sources). `&field=<id>` scrolls to and flashes a control. A missing or unknown tab opens `server` |
 | `/__ui` | UI kit | Development only; not in production builds |
 
@@ -442,9 +442,9 @@ than hardcoding the product name in new UI, and use `AppLogo` to show the logo.
   phone may adjust — HTML/CSS editing, page setup, version restore and publishing are
   not offered, and **New template** / **Clone** are hidden (Templates page, command
   palette). The phone e2e spec asserts the absence of editing controls.
-- **Phone naming follows the job, not the desktop menu:** the Devices page is
-  **Connect to PC** (its pairing screen), Printer Setup is **Printers**, and the
-  sign-in subtitle says printing still works from the PC.
+- **Page names are the same on every platform:** the Devices page is
+  **Devices** even on a phone (its pairing screen), Printer Setup is **Printers**,
+  and the sign-in subtitle says printing still works from the PC.
 - **Toasts clear on route change:** a phone carries one screen at a time, so leaving a
   page never carries its messages along.
 - Test at 390 px and 1440 px, and at 125% and 150% Windows scaling (see

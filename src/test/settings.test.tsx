@@ -25,6 +25,7 @@ vi.mock("@/lib/share/client", () => ({
 }));
 
 import { SettingsPage } from "@/pages/Settings";
+import { PrefsProvider } from "@/lib/prefs/PrefsProvider";
 
 beforeAll(() => {
   (globalThis as any).ResizeObserver = class {
@@ -551,5 +552,58 @@ describe("Settings print repair (Windows)", () => {
       await screen.findByRole("button", { name: /Export Diagnostics/ }),
     ).toBeInTheDocument();
     expect(document.getElementById("settings-diag-fix-pc-print")).toBeNull();
+  });
+});
+
+describe("Appearance option cards", () => {
+  // The page renders without a provider by default, where every setter
+  // is a no-op; these tests need the real preference state to move.
+  const renderWithPrefs = () =>
+    render(
+      <MemoryRouter>
+        <PrefsProvider>
+          <SettingsPage />
+        </PrefsProvider>
+      </MemoryRouter>,
+    );
+
+  it("marks only the selected card with a filled check and a primary border", async () => {
+    renderWithPrefs();
+    open("General");
+    const group = await screen.findByRole("radiogroup", { name: "Theme" });
+    const light = within(group).getByRole("radio", { name: "Light" });
+    const dark = within(group).getByRole("radio", { name: "Dark" });
+    expect(light).toHaveAttribute("aria-checked", "true");
+    // The selected card carries the check mark; the others do not.
+    expect(light.querySelector("svg")).not.toBeNull();
+    expect(dark.querySelector("svg")).toBeNull();
+    expect(light.className).toContain("border-primary");
+
+    // Selecting another card moves the mark with it.
+    fireEvent.click(dark);
+    expect(dark).toHaveAttribute("aria-checked", "true");
+    expect(dark.querySelector("svg")).not.toBeNull();
+    expect(light.querySelector("svg")).toBeNull();
+  });
+
+  it("keeps one tab stop; arrows move and select, and wrap around", async () => {
+    renderWithPrefs();
+    open("General");
+    const group = await screen.findByRole("radiogroup", { name: "Theme" });
+    const light = within(group).getByRole("radio", { name: "Light" });
+    const dark = within(group).getByRole("radio", { name: "Dark" });
+    const system = within(group).getByRole("radio", { name: "System" });
+    expect(light).toHaveAttribute("tabindex", "0");
+    expect(dark).toHaveAttribute("tabindex", "-1");
+    expect(system).toHaveAttribute("tabindex", "-1");
+
+    light.focus();
+    fireEvent.keyDown(light, { key: "ArrowLeft" });
+    await waitFor(() => expect(system).toHaveAttribute("aria-checked", "true"));
+    expect(system).toHaveFocus();
+
+    fireEvent.keyDown(system, { key: "Home" });
+    await waitFor(() => expect(light).toHaveAttribute("aria-checked", "true"));
+    expect(light).toHaveFocus();
   });
 });

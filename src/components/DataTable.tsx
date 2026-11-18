@@ -20,7 +20,7 @@ import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import { CARD_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import {
   Table,
   TableBody,
@@ -132,10 +132,12 @@ export function DataTable<T>({
     getSortedRowModel: getSortedRowModel(),
   });
 
-  // Phone card mode, gated on JS like the phase-1 phone layouts: jsdom has
-  // no matchMedia, so unit tests and desktop e2e always see the table below.
-  const isPhone = useMediaQuery(PHONE_QUERY);
-  const cardMode = isPhone && renderCard != null;
+  // Card mode: phones (below `md`) and the narrow desktop band both use the
+  // card list instead of the table (DESIGN_IMPROVEMENTS 4.1 / 5.10). Gated on
+  // JS like the phase-1 phone layouts: jsdom has no matchMedia, and desktop
+  // e2e runs at 1280px, so unit tests and e2e always see the table below.
+  const useCards = useMediaQuery(CARD_QUERY);
+  const cardMode = useCards && renderCard != null;
   // Card rows: checkboxes appear only in an explicit selection mode
   // (selectionVisible), and there a tap toggles the checkbox instead of
   // activating the row.

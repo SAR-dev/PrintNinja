@@ -33,7 +33,7 @@ Terms are written *plain word first, technical name second*.
 - **Print via PC** — a stronger borrowing: the whole job runs on the PC's printers with the PC's templates, and the phone only polls for the outcome. No local fallback while it is on.
 - **Guest invite** — a time-boxed code a PC owner mints so someone without an account can pair: expiry, optional max uses, and print or render-only. The invite *is* the credential.
 - **Background service** — the Android service that keeps the print queue draining after the app is swiped away.
-- **Devices page** — where phones pair with this PC, guests are invited, and Print via PC is switched on. Titled "Devices" on the PC and "Connect to PC" on the phone; its main card is "Shared rendering".
+- **Devices page** — where phones pair with this PC, guests are invited, and Print via PC is switched on. Titled "Devices" on every platform (phone included); its main card is "Shared rendering".
 
 ## Automation
 
@@ -49,6 +49,17 @@ Terms are written *plain word first, technical name second*.
 - **Job** — one print request, remembered end to end: settings, data, outcome, error, duration, and per-stage timings.
 - **Reprint vs retry** — reprint clones a finished job and wakes the queue; retry re-queues only jobs that ended in failure or cancellation.
 - **Retention** — the Settings limits (age and record count) that automatically purge old history rows.
+
+## Pages and sections
+
+- **Print** — where you pick a printer, load data, and send a job.
+- **History** — every job with its outcome, settings, and reprint actions.
+- **Templates** — the library of saved templates, each with a preview, print, and edit.
+- **Designer** — where templates are built: canvas, editor, and palette.
+- **Printers** — the printer list with test print and per-printer settings.
+- **Automation** — the program-driven side: the local API server, an explorer console, and trusted deep links.
+- **Devices** — phone-to-PC pairing, guest invites, and Print via PC (see "Devices page" above).
+- **Settings** — app configuration, grouped into sections: General (appearance and language), Setup, Profile, Background, Account & sync, Data & network, Retention, and Diagnostics.
 
 ## Where to go deeper
 

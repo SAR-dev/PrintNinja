@@ -88,4 +88,5 @@ graphify-out/*
 !graphify-out/graph.json
 
 # Output of `pnpm shots`
-/screenshots/
+screenshots/
+shots/

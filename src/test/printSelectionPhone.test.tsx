@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import "@/lib/i18n";
+import { CARD_QUERY, PHONE_QUERY } from "@/lib/hooks/useMediaQuery";
 
 // Mutable so each test shapes its own printer/template world; the hook and
 // lister mocks below read it live, like the real backend would.
@@ -58,9 +59,11 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = () => {};
 });
 
+// Phone-width matchMedia: the `max-width` queries above phone width match —
+// PHONE_QUERY and CARD_QUERY; `min-width` queries (DESKTOP/NARROW/WIDE) do not.
 const phoneMatchMedia = (query: string) =>
   ({
-    matches: query.includes("767"),
+    matches: query === PHONE_QUERY || query === CARD_QUERY,
     media: query,
     onchange: null,
     addListener: vi.fn(),

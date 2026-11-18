@@ -24,6 +24,7 @@ const ja: Translation = {
     apply: "適用",
     reset: "リセット",
     clear: "クリア",
+    learn_more: "詳しくはこちら",
     sort_by: "{{column}}で並べ替え",
     select_all_rows: "すべての行を選択",
     select_row: "行 {{id}} を選択",
@@ -38,7 +39,6 @@ const ja: Translation = {
     templates: "テンプレート",
     automation: "自動化",
     devices: "デバイス",
-    connect_pc: "PCに接続",
     more: "その他",
     more_title: "その他",
     group_work: "作業",
@@ -439,6 +439,7 @@ const ja: Translation = {
     search_templates: "テンプレートを検索…",
     no_template_match: "一致するテンプレートがありません",
     unsaved: "未保存の変更",
+    saved: "保存済み",
     swap_dimensions: "幅と高さを入れ替える",
     discard_title: "未保存の変更を破棄しますか？",
     discard_body:
@@ -1133,7 +1134,7 @@ const ja: Translation = {
     devices_step_2:
       "「自分の電話をペアリング」（自分のスマートフォン）または「ゲストを招待」（他の人のスマートフォン）をクリックします。",
     devices_step_3:
-      "スマートフォンで「PCに接続」→ 共有レンダリング を開き、ここに表示されたコードを入力します。",
+      "スマートフォンで「デバイス」→ 共有レンダリング を開き、ここに表示されたコードを入力します。",
     devices_status_on:
       "共有はオンです・ペアリング済みのスマートフォン：{{count}}",
     devices_lan_warning:
@@ -1159,6 +1160,8 @@ const ja: Translation = {
     devices_nearby_hint:
       "PCをタップしてアドレスを入力し、8文字のコードを入力してください。",
     devices_remove: "{{name}}を削除",
+    devices_phone_hint_short:
+      "スマートフォンはPCを経由して印刷します。PCがすべてのジョブを準備し、自分で印刷するか、スマートフォンに返して印刷します。",
     devices_phone_hint:
       "スマートフォンはPCを経由して印刷します。PCがすべてのジョブを準備し、電話が印刷するか — PC経由印刷がオンならPC自身のプリンターで印刷します。PCがオフ・スリープ中・ブロックされているときは、応答があるまで印刷は失敗します。履歴から再試行できます。",
     devices_pc_hint:
@@ -1173,7 +1176,7 @@ const ja: Translation = {
     devices_pair_my_phone: "自分の電話をペアリング",
     devices_pair_phone_hide: "ペアリングコードを隠す",
     devices_code_hint:
-      "スマートフォン側：「PCに接続」→ 共有レンダリング → このコードを入力。まもなく期限切れになります。しばらくは新しいコードが自動で表示され、その後は「新しいコード」で取得できます。",
+      "スマートフォン側：「デバイス」→ 共有レンダリング を開いてこのコードを入力。まもなく期限切れになります。しばらくは新しいコードが自動で表示され、その後は「新しいコード」で取得できます。",
     devices_code_expires: "有効期限まであと{{count}}秒",
     devices_code_gone:
       "このコードは使用済みか期限切れです。続けるには新しいコードを取得してください。",

@@ -516,15 +516,17 @@ describe("Designer page layout on desktop", () => {
     expect(controls.getByLabelText("Width (mm)")).toBeInTheDocument();
   });
 
-  it("shows the sample data in the controls column, open by default, beside the editor and canvas it drives", async () => {
+  it("keeps the sample data in the controls column, collapsed by default, beside the editor and canvas it drives", async () => {
     renderDesigner();
     await screen.findByTitle("Canvas preview");
     const controls = within(
       await screen.findByRole("complementary", { name: "Designer controls" }),
     );
-    expect(
-      controls.getByRole("button", { name: "Sample data" }),
-    ).toHaveAttribute("aria-expanded", "true");
+    const sample = controls.getByRole("button", { name: "Sample data" });
+    // Collapsed so the controls column fits without scrolling (DESIGN
+    // IMPROVEMENTS 4.8); one click still reaches the editor.
+    expect(sample).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(sample);
     expect(
       await controls.findByRole("button", { name: "Edit sample data" }),
     ).toBeInTheDocument();
@@ -643,10 +645,11 @@ describe("Designer page, phase 3 polish on desktop", () => {
   it("starts side by side and switches to canvas only and back, remembering the choice", async () => {
     const first = renderDesigner();
     await screen.findByTitle("Canvas preview");
-    expect(
-      screen.getByRole("button", { name: "Side by side" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "Canvas only" }));
+    expect(screen.getByRole("radio", { name: "Side by side" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "Canvas only" }));
     expect(screen.queryByLabelText("HTML editor")).not.toBeInTheDocument();
     expect(await screen.findByTitle("Canvas preview")).toBeInTheDocument();
     first.unmount();
@@ -654,12 +657,12 @@ describe("Designer page, phase 3 polish on desktop", () => {
     // A new visit comes back in the layout it was left in.
     renderDesigner();
     await screen.findByTitle("Canvas preview");
-    expect(screen.getByRole("button", { name: "Canvas only" })).toHaveAttribute(
-      "aria-pressed",
+    expect(screen.getByRole("radio", { name: "Canvas only" })).toHaveAttribute(
+      "aria-checked",
       "true",
     );
     expect(screen.queryByLabelText("HTML editor")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Stacked" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Stacked" }));
     expect(screen.getByLabelText("HTML editor")).toBeInTheDocument();
     expect(await screen.findByTitle("Canvas preview")).toBeInTheDocument();
   });
@@ -669,7 +672,7 @@ describe("Designer page, phase 3 polish on desktop", () => {
     renderDesigner();
     await screen.findByRole("tablist", { name: "Designer views" });
     expect(
-      screen.queryByRole("group", { name: "Workspace layout" }),
+      screen.queryByRole("radiogroup", { name: "Workspace layout" }),
     ).not.toBeInTheDocument();
   });
 
@@ -723,7 +726,7 @@ describe("Designer page, phase 3 polish on desktop", () => {
       name: "Designer controls",
     });
     fireEvent.click(within(aside).getByRole("button", { name: "Helpers" }));
-    fireEvent.click(screen.getByRole("button", { name: "Canvas only" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Canvas only" }));
     expect(screen.queryByLabelText("HTML editor")).not.toBeInTheDocument();
     await act(async () => {
       fireEvent.click(

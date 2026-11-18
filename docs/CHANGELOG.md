@@ -55,6 +55,12 @@ Only use the headings you actually have entries for.
 - **Tabs that don't fit stay findable.** When a row of tabs overflows, it now fades out at the edge so you know there are more to scroll to, and the active tab is kept in view.
 - **Consistent text sizes.** Small helper text and captions now follow one set of sizes with a 12px minimum, so the app reads more evenly, and popups and preview panels cap their height the same way.
 - **Handle examples look like names.** The example in the handle field on sign-in and sign-up now uses the same name style as the Suggest picks, so it shows what your handle will actually look like.
+- **Fits tablets and narrow windows.** On a tablet or a narrow desktop window, lists like Templates and History now show as cards and the side menu folds to just its icons, so buttons and details are never cut off.
+- **Less chrome, more content.** On phones the page title and its buttons now share one row and the subtitle stays out of the way, and notices like "Templates are edited on a computer" can be closed and stay closed. On desktops the page header sticks to the top and shrinks while you scroll a long list.
+- **The designer shows where your template stands.** Next to the Save button it now says "Saved" or "Unsaved changes", the canvas takes a bigger share of the window, and the note about offline printing tucks into a small icon once you've read it.
+- **The phone pages fit their screens.** On the Automation page the three sections sit in one row instead of stacking, the pairing page keeps one name — "Devices" — everywhere, and its explanation starts with the short version and a "Learn more" for the rest.
+- **Clearer selection in Settings.** The chosen language, theme, or density card now carries a check mark and a darker border, so you can see at a glance which one is active.
+- **Easier with a keyboard or screen reader.** The designer's layout switch moves with the arrow keys, and the app now announces when a template is saved or has unsaved changes.
 
 ## [2026.1118.1] - 2026-11-18
 

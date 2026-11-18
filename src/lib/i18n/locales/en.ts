@@ -22,6 +22,7 @@ const en = {
     apply: "Apply",
     reset: "Reset",
     clear: "Clear",
+    learn_more: "Learn more",
     sort_by: "Sort by {{column}}",
     select_all_rows: "Select all rows",
     select_row: "Select row {{id}}",
@@ -36,7 +37,6 @@ const en = {
     templates: "Templates",
     automation: "Automation",
     devices: "Devices",
-    connect_pc: "Connect to PC",
     more: "More",
     more_title: "More",
     group_work: "Work",
@@ -428,6 +428,7 @@ const en = {
     search_templates: "Search templates…",
     no_template_match: "No template matches",
     unsaved: "Unsaved changes",
+    saved: "Saved",
     swap_dimensions: "Swap width and height",
     discard_title: "Discard unsaved changes?",
     discard_body:
@@ -1111,7 +1112,7 @@ const en = {
     devices_step_2:
       "Click Pair my phone (your own phone) or Invite guest (someone else's).",
     devices_step_3:
-      "On the phone, open Connect to PC → Shared rendering and type the code shown here.",
+      "On the phone, open Devices → Shared rendering and type the code shown here.",
     devices_status_on: "Sharing is on · Paired phones: {{count}}",
     devices_lan_warning:
       "Phones can only reach this PC while the server is running with Wi-Fi (LAN) access on.",
@@ -1135,6 +1136,8 @@ const en = {
     devices_nearby_hint:
       "Tap a PC to fill its address, then enter the 8-character code.",
     devices_remove: "Remove {{name}}",
+    devices_phone_hint_short:
+      "Your phone prints through your PC: the PC prepares every job, then either prints it or sends it back for the phone to print.",
     devices_phone_hint:
       "Your phone prints through your PC: the PC prepares every job and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. If the PC is off, asleep or blocked, prints fail until it answers; retry them from History.",
     devices_pc_hint:
@@ -1149,7 +1152,7 @@ const en = {
     devices_pair_my_phone: "Pair my phone",
     devices_pair_phone_hide: "Hide pairing code",
     devices_code_hint:
-      "On the phone: Connect to PC → Shared rendering → type this code. It expires after a short time; a new one appears by itself for a few minutes, then use New code.",
+      "On the phone: open Devices → Shared rendering and type this code. It expires after a short time; a new one appears by itself for a few minutes, then use New code.",
     devices_code_expires: "Expires in {{count}} seconds",
     devices_code_gone:
       "This code is used or expired. Get a new one to keep pairing.",

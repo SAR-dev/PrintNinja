@@ -21,8 +21,9 @@ const TabsList = React.forwardRef<
   React.useLayoutEffect(() => {
     const el = innerRef.current;
     if (!el) return;
-    // The phone layer (mobile.css) stacks the rows full-width, where
-    // nothing is ever cut off; only the horizontal strip can overflow.
+    // The phone layer (mobile.css) stacks most tab rows full-width,
+    // where nothing is ever cut off; only the horizontal strips (the
+    // default, and data-variant="segmented") can overflow.
     const horizontal = getComputedStyle(el).flexDirection !== "column";
     setFadeRight(
       horizontal && el.scrollWidth - el.clientWidth - el.scrollLeft > 4,
