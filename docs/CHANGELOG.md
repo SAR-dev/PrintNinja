@@ -45,6 +45,8 @@ Only use the headings you actually have entries for.
 
 ## Unreleased
 
+## [2026.1118.1] - 2026-11-18
+
 ### Added
 
 - **Encrypted phone-to-PC printing.** When your phone sends a print to your PC over Wi-Fi, everything between the two is now encrypted, so other devices on the same network can no longer read what you print.
