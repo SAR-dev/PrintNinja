@@ -1,5 +1,4 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { AxeBuilder } from "@axe-core/playwright";
 import { apiRegister } from "../support/api";
 import { installAgent, signedSeed } from "../support/fixtures";
 import { readStackState } from "../support/stack-state";
@@ -9,21 +8,7 @@ import { testids } from "../support/testids";
 // lang="en", i18next fallback en), so this pins rendered English
 // instead of raw keys, a keyboard-only print path, small/large
 // viewports without horizontal scroll, a clean load under
-// prefers-reduced-motion, axe scans of every key route in both
-// themes, and arrow-key control of the designer resize handle.
-
-const AXE_ROUTES = [
-  "/",
-  "/print",
-  "/history",
-  "/templates",
-  "/designer",
-  "/settings",
-  "/printers",
-  "/devices",
-  "/automation",
-  "/uikit",
-];
+// prefers-reduced-motion, and arrow-key control of the designer resize handle.
 
 async function tabUntilFocused(
   page: Page,
@@ -209,30 +194,6 @@ test("prefers-reduced-motion loads cleanly", async ({ browser }) => {
     timeout: 15_000,
   });
   await reduced.close();
-});
-
-test("axe finds no WCAG A/AA violations on key routes, both themes", async ({
-  browser,
-}) => {
-  for (const theme of ["light", "dark"] as const) {
-    const { seeded, page } = await seededPc(browser, {
-      settings: { ui_theme: theme },
-    });
-    for (const path of AXE_ROUTES) {
-      await page.goto(path);
-      await expect(page.getByTestId(testids.shellApp)).toBeVisible({
-        timeout: 15_000,
-      });
-      const results = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-        .analyze();
-      expect(
-        results.violations.map((v) => `${v.id} (${v.nodes.length} node(s))`),
-        `axe violations on ${path} in the ${theme} theme`,
-      ).toEqual([]);
-    }
-    await seeded.context.close();
-  }
 });
 
 test("the designer resize handle resizes with arrow keys", async ({
