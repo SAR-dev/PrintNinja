@@ -429,7 +429,8 @@ describe("sign-in gate", () => {
   it("suggests a random handle as the placeholder on sign in and register", async () => {
     renderGate();
     const signInHandle = await screen.findByLabelText("Handle");
-    const suggestion = /^e\.g\. [a-z]+_[a-z]+\d{2}$/;
+    // Name-style, like the Suggest picks: "e.g. SayedRafi" or "e.g. Rafi001".
+    const suggestion = /^e\.g\. [A-Z][a-z]+(?:[A-Z][a-z]+|\d{2})$/;
     expect(signInHandle.getAttribute("placeholder")).toMatch(suggestion);
     // It is only a hint: nothing is filled in, and submitting still needs a handle.
     expect(signInHandle).toHaveValue("");
@@ -446,7 +447,7 @@ describe("sign-in gate", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue as guest" }));
     const guestHandle = screen.getByTestId("auth-guest-handle");
     expect(guestHandle.getAttribute("placeholder")).toMatch(
-      /^e\.g\. [a-z]+_[a-z]+\d{2}$/,
+      /^e\.g\. [A-Z][a-z]+(?:[A-Z][a-z]+|\d{2})$/,
     );
     expect(guestHandle).toHaveValue("");
 

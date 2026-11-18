@@ -72,7 +72,6 @@ export const NAV_GROUPS: NavGroup[] = [
         path: "/devices",
         icon: Smartphone,
         labelKey: "nav.devices",
-        phoneLabelKey: "nav.connect_pc",
         shortcut: "n",
       },
       {

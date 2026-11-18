@@ -22,6 +22,7 @@ const en = {
     apply: "Apply",
     reset: "Reset",
     clear: "Clear",
+    learn_more: "Learn more",
     sort_by: "Sort by {{column}}",
     select_all_rows: "Select all rows",
     select_row: "Select row {{id}}",
@@ -36,7 +37,6 @@ const en = {
     templates: "Templates",
     automation: "Automation",
     devices: "Devices",
-    connect_pc: "Connect to PC",
     more: "More",
     more_title: "More",
     group_work: "Work",
@@ -237,6 +237,20 @@ const en = {
     private_open: "Private network open",
     private_open_detail:
       "Blocking of private IP addresses is off, so data URLs may reach devices on your network. Select to change it.",
+    error_title: "Something went wrong",
+    error_body:
+      "This page ran into a problem. Nothing was lost — try again, or go back to Print.",
+    error_try_again: "Try again",
+    error_back_to_print: "Back to Print",
+    error_copy_diagnostics: "Copy diagnostics",
+    error_copied: "Copied",
+    error_chunk_title: "This page could not be loaded",
+    error_chunk_body:
+      "The page files are missing or out of date. Reloading the app usually fixes it.",
+    error_reload: "Reload the app",
+    app_error_title: "PrintNinja ran into a problem",
+    app_error_body:
+      "Reload the app to pick up where you left off. If it keeps happening, copy the diagnostics and send them to the team.",
   },
   designer: {
     title: "Designer",
@@ -414,6 +428,7 @@ const en = {
     search_templates: "Search templates…",
     no_template_match: "No template matches",
     unsaved: "Unsaved changes",
+    saved: "Saved",
     swap_dimensions: "Swap width and height",
     discard_title: "Discard unsaved changes?",
     discard_body:
@@ -491,9 +506,7 @@ const en = {
     print: "Print",
     job_title: "Print job",
     refresh: "Refresh printers",
-    ready_title: "Printer is ready",
-    ready_detail: "Ready to print on {{printer}}.",
-    ready_empty: "Choose a printer and a template to start.",
+    ready_chip: "Ready",
     sent: "Print sent",
     rendered_on: "Rendered on {{peer}}",
     finished: "Finished in {{seconds}}.",
@@ -553,8 +566,8 @@ const en = {
     paper_mismatch_paper:
       "Paper is {{pw2}} × {{ph2}} mm; this printer uses {{pw}} mm paper.",
     paper_size_action: "Set paper size",
-    paper_set_to: "Set to {{w}} mm",
-    paper_other: "Other…",
+    paper_set_to: "Set printer paper to {{w}} mm",
+    paper_other: "Choose a different paper size…",
     paper_not_now: "Not now",
     paper_width_missing:
       "{{name}} has no paper width saved. This print uses a {{w}} mm sheet.",
@@ -839,6 +852,7 @@ const en = {
     delete_confirm: "Delete job",
     delete_menu_item: "Delete job {{id}}",
     delete_title: "Delete job #{{id}}?",
+    done: "Done",
     empty_clear_hint: "Clear a filter to see more.",
     empty_filtered: "No jobs match these filters",
     empty_hint: "Jobs appear here after you print.",
@@ -862,6 +876,7 @@ const en = {
     save_title: "Save current filters",
     saved_filters: "Saved filters",
     saved_none: "None yet",
+    select: "Select",
     selected_count: "{{count}} selected",
     settings_title: "Settings",
     source_url: "Source URL",
@@ -1097,7 +1112,7 @@ const en = {
     devices_step_2:
       "Click Pair my phone (your own phone) or Invite guest (someone else's).",
     devices_step_3:
-      "On the phone, open Settings → Shared rendering and type the code shown here.",
+      "On the phone, open Devices → Shared rendering and type the code shown here.",
     devices_status_on: "Sharing is on · Paired phones: {{count}}",
     devices_lan_warning:
       "Phones can only reach this PC while the server is running with Wi-Fi (LAN) access on.",
@@ -1121,6 +1136,8 @@ const en = {
     devices_nearby_hint:
       "Tap a PC to fill its address, then enter the 8-character code.",
     devices_remove: "Remove {{name}}",
+    devices_phone_hint_short:
+      "Your phone prints through your PC: the PC prepares every job, then either prints it or sends it back for the phone to print.",
     devices_phone_hint:
       "Your phone prints through your PC: the PC prepares every job and either sends it back for the phone to print, or — with Print via PC on — prints it on its own printers. If the PC is off, asleep or blocked, prints fail until it answers; retry them from History.",
     devices_pc_hint:
@@ -1135,7 +1152,7 @@ const en = {
     devices_pair_my_phone: "Pair my phone",
     devices_pair_phone_hide: "Hide pairing code",
     devices_code_hint:
-      "On the phone: Settings → Shared rendering → type this code. It expires after a short time; a new one appears by itself for a few minutes, then use New code.",
+      "On the phone: open Devices → Shared rendering and type this code. It expires after a short time; a new one appears by itself for a few minutes, then use New code.",
     devices_code_expires: "Expires in {{count}} seconds",
     devices_code_gone:
       "This code is used or expired. Get a new one to keep pairing.",
@@ -1325,8 +1342,8 @@ const en = {
     profile_loading: "Checking your account…",
     profile_member_since: "Member since {{date}}",
     profile_signed_out:
-      "You are not signed in to the share service. Sign in from the Share section.",
-    profile_open_share: "Open Share settings",
+      "You are not signed in to the share service. Sign in from the Account & sync section.",
+    profile_open_share: "Open Account & sync",
     profile_unreachable:
       "Cannot reach the share service at {{url}} to confirm who is signed in.",
     profile_sign_out_offline:
@@ -1386,7 +1403,7 @@ const en = {
     detail_available: "available",
     detail_history: "in History",
     printer_title: "Add a printer",
-    printer_desc: "Network, USB, Bluetooth, or a system printer.",
+    printer_desc: "Network, USB, Bluetooth, or System printer.",
     printer_action: "Open Printers",
     template_title: "Make a template available",
     template_desc:
@@ -1478,14 +1495,9 @@ const en = {
       "Save a community template to keep a copy that works offline.",
     empty_saved_action: "Browse community",
     col_size: "Page size",
-    col_sync_id: "Sync ID",
-    local_only: "local only",
     action_save_server: "Save {{name}} to the server",
-    action_save_server_title: "Save to the server",
     action_refresh_server: "Refresh {{name}} from the server",
-    action_refresh_server_title: "Refresh from the server",
     action_delete_everywhere: "Delete {{name}} everywhere",
-    action_delete_title: "Delete from the server and this computer",
     action_print: "Print",
     action_remove: "Remove",
     action_clone: "Clone",
@@ -1571,6 +1583,7 @@ const en = {
     web_notice:
       "The API tools need the desktop app: it calls the local server on this machine, which the browser preview cannot reach.",
     spec_version: "spec v{{version}}",
+    running: "server running",
     stopped: "server stopped",
     not_running_title: "Server is not running",
     not_running_hint:
@@ -1677,7 +1690,7 @@ const en = {
     peer_refused:
       "{{name}} refused the connection on port {{port}}: the PC is reachable but PrintNinja is not sharing there. Open PrintNinja on it and turn on Wi-Fi access.",
     peer_cert:
-      "{{name}} could not be verified: its certificate no longer matches. Pair it again in Settings → Devices.",
+      "{{name}} could not be verified: its certificate no longer matches. Pair it again in the Devices page.",
     peer_removed: "{{name}} removed this phone. Pair again.",
     cups_http: "CUPS returned HTTP {{status}}",
     ipp_http: "The IPP server returned HTTP {{status}}",

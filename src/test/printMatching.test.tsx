@@ -143,7 +143,7 @@ describe("paper size mismatch warning", () => {
     ).toBeInTheDocument();
   });
 
-  it('opens the dialog from "Other…" to set a different width', async () => {
+  it("opens the dialog to set a different width", async () => {
     invoke.mockImplementation(async (cmd: string) => {
       if (cmd === "get_printer") {
         return {
@@ -214,7 +214,9 @@ describe("paper width, automated", () => {
     mockRows();
     renderPage();
     await screen.findByText(/this printer uses 80 mm paper/);
-    fireEvent.click(screen.getByRole("button", { name: "Set to 100 mm" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Set printer paper to 100 mm" }),
+    );
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith(
         "update_printer",

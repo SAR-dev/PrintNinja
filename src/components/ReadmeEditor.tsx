@@ -278,7 +278,7 @@ export function ReadmeEditor({
         placeholder={t("readme.placeholder")}
         spellCheck={false}
         data-slot="textarea"
-        className={`min-h-[240px] w-full flex-1 resize-none bg-card px-5 py-4 font-mono text-[13px] leading-6 [tab-size:2] placeholder:text-muted-foreground focus-visible:outline-none ${
+        className={`min-h-[240px] w-full flex-1 resize-none bg-card px-5 py-4 font-mono text-body-sm leading-6 [tab-size:2] placeholder:text-muted-foreground focus-visible:outline-none ${
           readOnly ? "cursor-default bg-muted/40" : ""
         }`}
       />

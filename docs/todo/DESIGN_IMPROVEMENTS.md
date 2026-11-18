@@ -374,20 +374,21 @@ Route loading is a bare spinner (`PageLoading`), and one nested Suspense uses `f
 ## 9. Rollout plan
 
 **Phase 1: quick wins (about 1–2 weeks)**
-1. Error boundaries (5.1).
-2. Quiet the Print "ready" banner and clarify the paper warning (4.6, 4.7).
-3. Templates row simplification: one primary action, labeled menu, hide Sync ID (4.2).
-4. Tab discoverability on phone (4.3) and History row fixes (4.4).
-5. Naming and copy fixes (4.11).
-6. Type scale tokens, 12px floor, width and height tokens (5.3, 5.4).
-7. Add narrow-width presets to the screenshot script (8.1).
+1. ✅ Error boundaries (5.1).
+2. ✅ Quiet the Print "ready" banner and clarify the paper warning (4.6, 4.7).
+3. ✅ Templates row simplification: one primary action, labeled menu, hide Sync ID (4.2).
+4. ✅ Tab discoverability on phone (4.3) and History row fixes (4.4).
+5. ✅ Naming and copy fixes (4.11).
+6. ✅ Type scale tokens, 12px floor, width and height tokens (5.3, 5.4).
+7. ✅ Add narrow-width presets to the screenshot script (8.1).
 
 **Phase 2: foundation (about 3–5 weeks)**
-1. The compact layout for 768–1100px and table card mode (4.1, 5.10).
-2. Phone header slimming and dismissible banners (4.5).
-3. Designer improvements: save state, canvas balance, collapsed sample data (4.8).
-4. Automation and Devices phone cleanup (4.9).
-5. Accessibility pass: focus ring, keyboard, axe, selection cues (4.10, 5.7).
+1. ✅ The compact layout for 768–1100px and table card mode (4.1, 5.10).
+2. ✅ Phone header slimming and dismissible banners (4.5).
+3. ✅ Designer improvements: save state, canvas balance, collapsed sample data (4.8).
+4. ✅ Automation and Devices phone cleanup (4.9).
+5. ✅ Accessibility pass: focus ring, keyboard, axe, selection cues (4.10, 5.7); 44 px touch
+   targets and label-in-name on compact top-bar controls and notice dismiss buttons.
 6. Page skeletons and motion tokens (5.8, 5.9).
 7. Visual regression tests (8.2).
 

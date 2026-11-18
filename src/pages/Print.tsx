@@ -40,6 +40,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
+import { ReadyChip } from "@/components/print/ReadyChip";
 import { TimingBreakdown } from "@/components/TimingBreakdown";
 import { formatSeconds } from "@/lib/timings";
 import { cn } from "@/lib/utils";
@@ -1662,28 +1663,10 @@ function PrintForm() {
           </div>
         ))}
 
-      {/* The one place a print's outcome is reported: a single banner
-          of constant height in every state (see StatusBanner), so the
-          form below never moves when a print starts, ends or fails. */}
-      {(store.status === "idle" || store.status === "queued") && (
-        <StatusBanner
-          tone="success"
-          role="status"
-          icon={
-            <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
-          }
-          summary={
-            <>
-              {t("print.ready_title")} —{" "}
-              {store.printerId
-                ? t("print.ready_detail", { printer: store.printerId })
-                : t("print.ready_empty")}
-            </>
-          }
-        />
-      )}
-      {/* Printing keeps the slot (same height, so nothing moves) and
-          says so, instead of leaving it empty until the result lands. */}
+      {/* The one place a print's outcome is reported: a banner of constant
+          height while printing and for the result (see StatusBanner), so
+          the form below never moves. Being ready is the normal state, so
+          it gets a quiet chip next to the printer select, not a banner. */}
       {store.status === "printing" && (
         <StatusBanner
           tone="neutral"
@@ -1828,7 +1811,11 @@ function PrintForm() {
             <CardContent className="space-y-4">
               <div className={field}>
                 <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="print-printer">{t("print.printer")}</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="print-printer">{t("print.printer")}</Label>
+                    {(store.status === "idle" || store.status === "queued") &&
+                      store.printerId && <ReadyChip />}
+                  </div>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -2073,7 +2060,7 @@ function PrintForm() {
                 </p>
               ) : previewPages.length > 0 ? (
                 <div
-                  className="max-h-[60vh] overflow-auto rounded-md border bg-muted p-4"
+                  className="max-h-sheet overflow-auto rounded-md border bg-muted p-4"
                   tabIndex={0}
                   role="region"
                   aria-label={t("print.preview_region")}

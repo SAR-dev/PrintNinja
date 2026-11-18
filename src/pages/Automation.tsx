@@ -68,18 +68,24 @@ export function AutomationPage() {
         onValueChange={(v) => openTab(v as AutomationTab)}
         className="space-y-4"
       >
+        {/* data-variant="segmented": on a phone the strip stays one
+            horizontal segmented control (the labels fit, so it never
+            pans sideways) instead of the stacked full-width rows mobile.css
+            gives other pages' tab strips (DESIGN IMPROVEMENTS 4.9). */}
         <TabsList
           aria-label={t("automation.tabs_aria")}
-          className="h-auto w-full flex-wrap justify-start"
+          data-variant="segmented"
         >
           {TAB_META.map(({ key, label, icon: Icon }) => (
             <TabsTrigger
               key={key}
               value={key}
               data-testid={`automation-tab-${key}`}
-              className="gap-1.5"
+              className="gap-1.5 px-2 sm:px-3"
             >
-              <Icon className="h-4 w-4" aria-hidden="true" />
+              {/* Icons only from sm up: on a 360px phone the three
+                  labels fit the strip without scrolling sideways. */}
+              <Icon className="hidden h-4 w-4 sm:block" aria-hidden="true" />
               {label}
             </TabsTrigger>
           ))}

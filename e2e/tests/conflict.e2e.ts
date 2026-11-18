@@ -57,7 +57,9 @@ async function setHtml(
   page: import("@playwright/test").Page,
   html: string,
 ): Promise<string> {
-  const content = page.getByLabel("HTML editor").locator(".cm-content");
+  // The editor's accessible name lives on `.cm-content` itself (the
+  // role=textbox node), so the label resolves straight to it.
+  const content = page.getByLabel("HTML editor");
   await content.click();
   // Select-all + delete can leave a fragment when the editor is still
   // settling; repeat until the document is empty, then type.
@@ -180,7 +182,7 @@ test("F6 conflict: take server copy", async ({ browser }) => {
   await expect(pageB.getByTestId(testids.saveConflictDialog)).toBeHidden({
     timeout: 15_000,
   });
-  const editor = pageB.getByLabel("HTML editor").locator(".cm-content");
+  const editor = pageB.getByLabel("HTML editor");
   await expect(async () => {
     const editorText = (await editor.textContent()) ?? "";
     expect(editorText.replace(/\s+/g, "")).toContain(aHtml.replace(/\s+/g, ""));
