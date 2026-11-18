@@ -73,12 +73,17 @@ export function CodeEditors({
             <CodeMirror
               value={htmlCode}
               height="auto"
-              extensions={[html(), CmView.lineWrapping]}
+              extensions={[
+                html(),
+                CmView.lineWrapping,
+                CmView.contentAttributes.of({
+                  "aria-label": t("designer.editor_html_label"),
+                }),
+              ]}
               onChange={onHtmlChange}
               theme="light"
               style={{ fontSize: "13px", maxHeight: "60vh" }}
               basicSetup={BASIC_SETUP}
-              aria-label={t("designer.editor_html_label")}
             />
           </CardContent>
         </Card>
@@ -92,12 +97,17 @@ export function CodeEditors({
             <CodeMirror
               value={cssCode}
               height="auto"
-              extensions={[css(), CmView.lineWrapping]}
+              extensions={[
+                css(),
+                CmView.lineWrapping,
+                CmView.contentAttributes.of({
+                  "aria-label": t("designer.editor_css_label"),
+                }),
+              ]}
               onChange={onCssChange}
               theme="light"
               style={{ fontSize: "13px", maxHeight: "60vh" }}
               basicSetup={BASIC_SETUP}
-              aria-label={t("designer.editor_css_label")}
             />
           </CardContent>
         </Card>
@@ -231,12 +241,17 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
             className="h-full"
             value={htmlCode}
             height="100%"
-            extensions={[html(), CmView.lineWrapping]}
+            extensions={[
+              html(),
+              CmView.lineWrapping,
+              CmView.contentAttributes.of({
+                "aria-label": t("designer.editor_html_label"),
+              }),
+            ]}
             onChange={onHtmlChange}
             theme="light"
             style={{ fontSize: "14px" }}
             basicSetup={BASIC_SETUP}
-            aria-label={t("designer.editor_html_label")}
           />
         </TabsContent>
         <TabsContent value="css" forceMount className={pane}>
@@ -244,12 +259,17 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
             className="h-full"
             value={cssCode}
             height="100%"
-            extensions={[css(), CmView.lineWrapping]}
+            extensions={[
+              css(),
+              CmView.lineWrapping,
+              CmView.contentAttributes.of({
+                "aria-label": t("designer.editor_css_label"),
+              }),
+            ]}
             onChange={onCssChange}
             theme="light"
             style={{ fontSize: "14px" }}
             basicSetup={BASIC_SETUP}
-            aria-label={t("designer.editor_css_label")}
           />
         </TabsContent>
         {/* Edge to edge like the code tabs: the editor draws its own

@@ -75,7 +75,8 @@
     --secondary: 200 18% 20%;
     --secondary-foreground: 180 14% 91%;
     --muted: 200 18% 20%;
-    --muted-foreground: 190 12% 66%;
+    /* 68% keeps muted text at >=4.5:1 on `bg-accent` cards in dark mode. */
+    --muted-foreground: 190 12% 68%;
     --accent: 180 25% 22%;
     --accent-foreground: 170 65% 72%;
 
