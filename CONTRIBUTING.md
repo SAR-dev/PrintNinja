@@ -66,8 +66,7 @@ You do not have to know how it could be built. Describing the problem is the mos
 
 Printers are all a little different, and we cannot own every model. If you have a receipt, label or office printer, you can help by trying it out and telling us what happened, good or bad.
 
-- 📋 The [real-printer test checklist](docs/TEST_CHECKLIST.md) lists simple things to print (text, a barcode, an image, a long job). It has not been run on real hardware yet, so your results are valuable.
-- 🗺️ [`docs/MISSING_FEATURES.md`](docs/MISSING_FEATURES.md) lists what is known not to work yet, by system and connection type.
+- 📋 The [real-printer test checklist](docs/todo/TEST_CHECKLIST.md) lists simple things to print (text, a barcode, an image, a long job). It has not been run on real hardware yet, so your results are valuable.
 
 When you report back, say which printer you used, how it was connected and which of the checks worked. A short "it worked" is useful too! 🎉
 

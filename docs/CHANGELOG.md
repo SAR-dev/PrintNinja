@@ -45,6 +45,10 @@ Only use the headings you actually have entries for.
 
 ## Unreleased
 
+### Added
+
+- **Encrypted phone-to-PC printing.** When your phone sends a print to your PC over Wi-Fi, everything between the two is now encrypted, so other devices on the same network can no longer read what you print.
+
 ## [2026.1118.0] - 2026-11-17
 
 ### Changed
@@ -85,99 +89,3 @@ Only use the headings you actually have entries for.
 
 - **Links open the app on Android.** Tapping a PrintNinja link in a browser or another app now opens the app on your phone — a page, a template or a ready-to-go Print screen — just like it already did on a computer.
 
-## [2026.1115.0] - 2026-11-15
-
-### Added
-
-- **See where you're signed in.** Settings → Profile lists every device using your account and lets you end one — a lost laptop, say — without signing out your other devices.
-
-### Changed
-
-- **Fewer printers need a paired PC.** Most labels now print straight from your phone. Only PDF printing still needs a computer, so you no longer pair one you don't need.
-- **New limits for busy accounts.** Each template keeps its 100 newest saved versions (autosaves keep 50), and an account can hold 1,000 templates, 500 sample datasets and 500 printer profiles.
-
-### Fixed
-
-- **Notification settings that stick.** If you turned notifications off, Settings now shows that and lets you turn them back on — or opens Android's settings when the prompt won't appear again.
-- **A truthful update badge on Android.** It now shows only when the update has an Android app to download, links straight to it and tells you to open it to install.
-
-## [2026.1113.4] - 2026-11-13
-
-### Fixed
-
-- **Previews that show your template.** If your sample data has none of a template's fields — a kitchen ticket opened with shipping-label data, say — the preview now shows the template's own sample data instead of a blank page, and tells you so.
-
-## [2026.1113.3] - 2026-11-13
-
-### Changed
-
-- **A clearer Bluetooth address field.** When a printer uses your computer's own printer driver, the address is dimmed and explained: it isn't used for those jobs, but the value is kept for the day you switch back to direct printing.
-
-## [2026.1113.2] - 2026-11-13
-
-### Changed
-
-- **Fix paper width in one tap.** If a label is wider than a printer's saved paper width, the warning now offers to update the saved width with one click. A printer without a saved width gets a one-time offer to set it from the template.
-- **A steadier Print screen.** Ready, sending, sent and failed now share one line, so the form stops jumping when a print starts or ends. Timings, the full error and warnings open under "Details".
-
-## [2026.1113.1] - 2026-11-13
-
-### Changed
-
-- **A simpler Print page.** The main card now holds just the printer, template, test data and copies. Paper size, margins and other fine-tuning sit in an "Advanced options" section that stays folded until you open it, and remembers your choice.
-- **Fewer pop-ups.** Saved settings, removed rows and copied text no longer show a confirmation message — the screen already shows the result. Errors and updates you can't see otherwise still notify you.
-- **Errors next to the field.** Invalid printer details or paper sizes now explain themselves right where you typed them, instead of in a pop-up.
-
-## [2026.1113.0] - 2026-11-13
-
-### Changed
-
-- **Every barcode type prints.** UPC-E, ITF-14, Data Matrix, PDF417 and Aztec used to be preview only. Now they print like the rest.
-- **What you see is what prints.** Every screen now shows the label exactly as it will come out of the printer.
-- **Consistent dates.** Dates no longer change with your browser's region. The default is `2026-11-13`, and you can pick styles like `short` (17 Oct 2026) or `time` (24-hour).
-- **Clearer Designer errors.** The banner tells you what went wrong without pointing at a specific line.
-- **One sample data set.** The Designer now uses a single shared sample data set per account, edited with one button. Older sets are kept safe and still sync.
-
-### Fixed
-
-- **Correct check digits.** UPC-A, UPC-E and ITF-14 barcodes are now checked properly.
-
-## [2026.1112.0] - 2026-11-12
-
-### Added
-
-- **Bluetooth printing on Windows and Linux, no driver needed.** Pair the printer with your computer, then add it using its Bluetooth address. Classic Bluetooth only (not BLE).
-- **Optional driver mode for Bluetooth printers.** Print through your computer's usual printer system instead — this also allows PDFs. Off unless you turn it on.
-- **Search and sort templates.** Now available on all three My templates tabs.
-
-### Changed
-
-- **A tidier Add Printer screen.** Printers found on your computer, on the network and over Bluetooth are grouped into short lists with one Rescan button. Tap a group to expand it.
-- **Bluetooth addresses checked as you type.** You'll see right away if one doesn't look right.
-- **PDF printing works again** on Bluetooth printers in driver mode.
-- **More reliable Bluetooth test prints.** The test confirms the printer connection before printing.
-- **Updated help guides** for the new Bluetooth setup.
-
-### Fixed
-
-- **The right timeout message on Windows.**
-- **Tidier printer window fields.** Misaligned fields in Add/Edit Printer line up again.
-
-## [2026.1110.3] - 2026-11-10
-
-### Added
-
-- **Print a PDF directly.** Send a PDF instead of a template (up to 5 MB). PDF printers get the whole file; other printers print the first page, with a warning if there are more.
-- **PDF printing on Linux and Android.**
-- **Printers suggest their own settings.** When you add a printer, PrintNinja asks what it supports and suggests the right language. If it can't be reached, you can still add it.
-- **Edit printers without re-adding.** Change settings in place, so your saved profiles stay linked.
-
-### Changed
-
-- **Easier-to-read printer lists.** Sections in Add Printer collapse to a count; tap to expand.
-- **A clearer example pairing code.** The sample is now `XYZ7K4MP`.
-- **Larger print requests accepted**, up to 10 MB.
-
-### Fixed
-
-- **Android app fixes.** Problems that could stop the app building or running properly.

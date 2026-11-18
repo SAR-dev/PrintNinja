@@ -113,29 +113,65 @@ fn phone_db(port: u16) -> (Db, i64) {
 }
 
 async fn live_pc(db: &Db) -> u16 {
+    use printninja_lib::api::cert;
+
     let cache =
         std::env::temp_dir().join(format!("printninja_remote_cache_{}", uuid::Uuid::new_v4()));
+    // The phone dials https: the fake PC serves TLS on a real
+    // self-signed cert, so these tests exercise the cert bootstrap and
+    // the pinned-client path exactly like a real pairing.
+    let tls_dir =
+        std::env::temp_dir().join(format!("printninja_remote_tls_{}", uuid::Uuid::new_v4()));
+    let pair = cert::ensure_cert(&tls_dir, "127.0.0.1").expect("cert");
     let app = printninja_lib::api::routes::router_with_state(
         printninja_lib::api::routes::ApiState {
             db: db.clone(),
             queue: Arc::new(printninja_lib::queue::PrintQueue::new()),
             cache_dir: cache,
             window: Arc::new(Mutex::new(None)),
+            cert_pem: Some(pair.cert_pem.clone()),
         },
         false,
         None,
     );
+    // Claim an ephemeral port, then hand it to the TLS server. The gap
+    // can only collide if another process takes the port in between —
+    // loopback, tests only.
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let port = listener.local_addr().expect("addr").port();
+    drop(listener);
+    let config = cert::server_config(&pair).expect("server config");
     tokio::spawn(async move {
-        axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        axum_server::bind_rustls(
+            std::net::SocketAddr::new("127.0.0.1".parse().unwrap(), port),
+            axum_server::tls_rustls::RustlsConfig::from_config(Arc::new(config)),
         )
+        .serve(app.into_make_service_with_connect_info::<std::net::SocketAddr>())
         .await
         .expect("serve");
     });
+    // The TLS server binds lazily inside serve(), so it is not listening
+    // yet right after the spawn: wait for it before the phone dials.
+    wait_listening(port).await;
     port
+}
+
+/// Wait until a socket on `127.0.0.1:port` accepts connections. A TCP
+/// connect completing is enough — the TLS listener accepts the socket
+/// before the handshake, and the aborted handshake on our probe connection
+/// does not stop the server.
+async fn wait_listening(port: u16) {
+    use tokio::net::TcpStream;
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(5);
+    loop {
+        if TcpStream::connect(("127.0.0.1", port)).await.is_ok() {
+            return;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            panic!("no server listening on 127.0.0.1:{port} within 5s");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
 }
 
 fn args(template_id: i64) -> RemotePrintArgs {

@@ -79,9 +79,18 @@ Three rules keep this safe:
   five wrong guesses close it, and comparison leaks nothing about how close a
   guess was.
 
-The code is an introduction, not proof of identity, and traffic is plain HTTP
-on the local network. Pinned encryption is a planned hardening, not part of
-this design.
+The code is an introduction, not proof of identity. Traffic between phone and
+PC is TLS-encrypted: the PC serves its phone-facing port with a self-signed
+certificate (its Wi-Fi IP plus loopback), and a phone fetches that certificate
+once and pins it as its root of trust (trust on first use). The PC's own UI
+stays plain HTTP on a separate loopback-only port, so a desktop never has to
+trust a self-signed certificate. Because the pinned root was fetched over the
+same link it protects, this stops a passive sniffer and an attacker who
+appears after pairing — but not one present at the moment of pairing, who can
+make the phone pin their own certificate. Every request is still gated by the
+per-device token, so nothing seen in flight can be used to act as another
+phone. When the PC's certificate changes (fresh install, Wi-Fi IP change),
+the phone re-fetches it once and retries before reporting the mismatch.
 
 ## Who may use the API
 
@@ -219,8 +228,8 @@ Windows and Linux desktops can act as the PC for now (they are the ones with a
 browser engine to render with); phones and macOS report that they cannot
 render and are never chosen. Discovery is by typed pairing code (backed by a
 /24 hello probe, with a typed address as fallback); finding PCs automatically
-on the network, and encrypting the traffic with a pinned certificate, are
-future work.
+on the network is future work. Traffic encryption is live (above); its
+known limit is first contact, by design of trust on first use.
 
 The design decisions behind every rule above are recorded in
 [Design decisions](#design-decisions) below.

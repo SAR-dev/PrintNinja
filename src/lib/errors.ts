@@ -89,6 +89,7 @@ const PATTERNS: Array<[RegExp, string, string[]]> = [
     "errors.peer_refused",
     ["name", "port"],
   ],
+  [/^(.+) could not be verified: .+$/, "errors.peer_cert", ["name"]],
   // The PC removed this phone (per-device token unknown): pair again.
   [PEER_REMOVED_RE, "errors.peer_removed", ["name"]],
   [/^CUPS returned HTTP (\d+)$/, "errors.cups_http", ["status"]],
