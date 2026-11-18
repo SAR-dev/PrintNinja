@@ -18,6 +18,7 @@ import { DesignerPage } from "@/pages/Designer";
 import { CanvasWorkspace } from "@/components/designer/CanvasWorkspace";
 import { usePrintStore } from "@/lib/store/printStore";
 import { useHistoryStore, type HistoryJob } from "@/lib/store/historyStore";
+import { CARD_QUERY, PHONE_QUERY } from "@/lib/hooks/useMediaQuery";
 
 // Templates page talks to the share service; stub it like templates.test.tsx.
 const shareMock = vi.hoisted(() => ({
@@ -52,11 +53,13 @@ const saveMock = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/share/save", () => saveMock);
 
-// Phone-width matchMedia: only PHONE_QUERY ("max-width: 767px") matches.
-// Desktop and jsdom default to no match, like the other suites.
+// Phone-width matchMedia: the `max-width` queries above phone width match —
+// PHONE_QUERY ("max-width: 767px") and CARD_QUERY ("max-width: 1099px").
+// `min-width` queries (DESKTOP/NARROW/WIDE) do not. Desktop and jsdom default
+// to no match, like the other suites.
 const phoneMatchMedia = (query: string) =>
   ({
-    matches: query.includes("767"),
+    matches: query === PHONE_QUERY || query === CARD_QUERY,
     media: query,
     onchange: null,
     addListener: vi.fn(),
@@ -151,7 +154,7 @@ function Where() {
 }
 
 describe("phone shell", () => {
-  it("bottom bar has five slots and More opens Designer, Connect to PC and Settings", async () => {
+  it("bottom bar has five slots and More opens Designer, Devices and Settings", async () => {
     window.matchMedia = phoneMatchMedia as typeof window.matchMedia;
     render(
       <MemoryRouter initialEntries={["/history"]}>
@@ -171,9 +174,9 @@ describe("phone shell", () => {
 
     fireEvent.click(within(bar).getByRole("button", { name: "More" }));
     const dialog = await screen.findByRole("dialog");
-    // Connect to PC is the phone name of the /devices page, which now
-    // also carries the PC-side pairing UI.
-    for (const name of ["Designer", "Connect to PC", "Automation", "Settings"])
+    // The /devices page keeps one name on every platform (DESIGN
+    // IMPROVEMENTS 4.9), phone nav included.
+    for (const name of ["Designer", "Devices", "Automation", "Settings"])
       expect(within(dialog).getByRole("link", { name })).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("link", { name: "Designer" }));
     await waitFor(() =>
@@ -216,7 +219,7 @@ describe("phone shell", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).queryByRole("link", { name: "Designer" })).toBeNull();
     expect(
-      within(dialog).getByRole("link", { name: "Connect to PC" }),
+      within(dialog).getByRole("link", { name: "Devices" }),
     ).toBeInTheDocument();
   });
 });

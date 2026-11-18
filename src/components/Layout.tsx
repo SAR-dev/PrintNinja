@@ -41,7 +41,11 @@ import { useGlobalShortcuts } from "@/lib/shell/useGlobalShortcuts";
 import { useShareStatus } from "@/lib/shell/useShareStatus";
 import { useShellStatus, type ShellStatus } from "@/lib/shell/useShellStatus";
 import { cacheNow, useSyncStatus } from "@/lib/sync/useSyncStatus";
-import { LANDSCAPE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import {
+  LANDSCAPE_QUERY,
+  NARROW_QUERY,
+  useMediaQuery,
+} from "@/lib/hooks/useMediaQuery";
 import { usePrefs } from "@/lib/prefs/PrefsProvider";
 import { agent } from "@/lib/agent/commands";
 import { getAppVersion } from "@/lib/appUpdate";
@@ -324,7 +328,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // active by width, but there is no room for an open sidebar or the wide
   // search field — force the icon rail and the palette icon button instead.
   const shortLandscape = useMediaQuery(LANDSCAPE_QUERY);
-  const rail = collapsed || shortLandscape;
+  // Narrow desktop band (768-1099px, DESIGN_IMPROVEMENTS 4.1): the sidebar is
+  // forced to the icon rail so content gets the width back; tables there fall
+  // back to card lists instead.
+  const narrow = useMediaQuery(NARROW_QUERY);
+  const rail = collapsed || shortLandscape || narrow;
   const [reprintJob, setReprintJob] = useState<HistoryJob | null>(null);
   const [reprinting, setReprinting] = useState(false);
   const [appVersion, setAppVersion] = useState("");
@@ -583,8 +591,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </div>
             ))}
           </nav>
-          {/* No room to expand in a short landscape viewport. */}
-          {!shortLandscape && (
+          {/* No room to expand in a short landscape viewport or the narrow
+              band (the rail is forced there by width, not preference). */}
+          {!shortLandscape && !narrow && (
             <div className="border-t p-2">
               <Button
                 variant="ghost"

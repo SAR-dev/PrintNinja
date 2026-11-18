@@ -1,4 +1,4 @@
-import { History, Plus, Save } from "lucide-react";
+import { Check, History, Plus, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -146,16 +146,6 @@ export function DesignerToolbar({
       ) : (
         <div className="flex-1" />
       )}
-      {dirty && !readOnly && !noTemplate && (
-        <span className="flex h-8 items-center gap-1.5 text-xs text-muted-foreground">
-          <span
-            className="h-2 w-2 rounded-full bg-warning"
-            aria-hidden="true"
-          />
-          {t("designer.unsaved")}
-        </span>
-      )}
-
       {/* Group 2: the workspace. */}
       {layout && onLayoutChange && (
         <LayoutToggle value={layout} onChange={onLayoutChange} />
@@ -256,6 +246,36 @@ export function DesignerToolbar({
           <Plus className="h-4 w-4" aria-hidden="true" />
           {t("designer.newTemplate")}
         </Button>
+        {/* The save state sits with the button it belongs to: a warning
+            while edits wait, a confirmation once the server has them. A
+            local-only template has no "saved" to say — its label is the
+            "Only on this computer" note in the group above. One stable
+            aria-live region announces the change to screen readers
+            (DESIGN IMPROVEMENTS 5.7). */}
+        {!noTemplate && (
+          <span
+            aria-live="polite"
+            className="flex h-8 items-center gap-1.5 text-xs text-muted-foreground"
+          >
+            {dirty && !readOnly ? (
+              <>
+                <span
+                  className="h-2 w-2 rounded-full bg-warning"
+                  aria-hidden="true"
+                />
+                {t("designer.unsaved")}
+              </>
+            ) : !dirty && !readOnly && remoteId ? (
+              <>
+                <Check
+                  className="h-3.5 w-3.5 text-success"
+                  aria-hidden="true"
+                />
+                {t("designer.saved")}
+              </>
+            ) : null}
+          </span>
+        )}
         {!noTemplate && (
           <DisabledReason
             reason={saveReason}

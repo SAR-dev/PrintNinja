@@ -224,10 +224,27 @@ describe("DesignerToolbar", () => {
     expect(
       screen.getByRole("textbox", { name: "Template name" }),
     ).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    const unsaved = screen.getByText("Unsaved changes");
+    expect(unsaved).toBeInTheDocument();
+    // The state lives in one stable aria-live region, so a screen
+    // reader announces the change (DESIGN IMPROVEMENTS 5.7).
+    expect(unsaved.closest('[aria-live="polite"]')).not.toBeNull();
     rerender(<DesignerToolbar {...base} onNew={vi.fn()} onSave={vi.fn()} />);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText("Unsaved changes")).toBeNull();
+  });
+
+  it("announces the saved state in the same live region", () => {
+    render(
+      <DesignerToolbar
+        {...base}
+        remoteId="t_1"
+        onNew={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    const saved = screen.getByText("Saved");
+    expect(saved.closest('[aria-live="polite"]')).not.toBeNull();
   });
 
   it("shows the name of a read-only saved copy in a disabled field, and keeps Save disabled", () => {
@@ -1142,15 +1159,40 @@ describe("LayoutToggle", () => {
   it("marks the current layout and reports a change", () => {
     const onChange = vi.fn();
     render(<LayoutToggle value="side" onChange={onChange} />);
-    expect(
-      screen.getByRole("button", { name: "Side by side" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Stacked" })).toHaveAttribute(
-      "aria-pressed",
+    expect(screen.getByRole("radio", { name: "Side by side" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("radio", { name: "Stacked" })).toHaveAttribute(
+      "aria-checked",
       "false",
     );
-    fireEvent.click(screen.getByRole("button", { name: "Canvas only" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Canvas only" }));
     expect(onChange).toHaveBeenCalledWith("canvas");
+  });
+
+  it("keeps one tab stop; arrows move and select", () => {
+    const onChange = vi.fn();
+    render(<LayoutToggle value="side" onChange={onChange} />);
+    const [side, stacked, canvas] = screen.getAllByRole("radio");
+    expect(side).toHaveAttribute("tabindex", "0");
+    expect(stacked).toHaveAttribute("tabindex", "-1");
+    expect(canvas).toHaveAttribute("tabindex", "-1");
+
+    // Arrow keys select the next layout and move focus with it.
+    side.focus();
+    fireEvent.keyDown(side, { key: "ArrowRight" });
+    expect(onChange).toHaveBeenLastCalledWith("stacked");
+    fireEvent.keyDown(stacked, { key: "ArrowRight" });
+    expect(onChange).toHaveBeenLastCalledWith("canvas");
+
+    // The group wraps around; Home and End jump to the ends.
+    fireEvent.keyDown(canvas, { key: "ArrowRight" });
+    expect(onChange).toHaveBeenLastCalledWith("side");
+    fireEvent.keyDown(side, { key: "End" });
+    expect(onChange).toHaveBeenLastCalledWith("canvas");
+    fireEvent.keyDown(canvas, { key: "Home" });
+    expect(onChange).toHaveBeenLastCalledWith("side");
   });
 
   it("only accepts the three known layouts from storage", () => {

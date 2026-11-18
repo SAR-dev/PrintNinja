@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { InfoNotice } from "@/components/InfoNotice";
 import { PrintPreview } from "@/components/PrintPreview";
 import { MarkdownPreview } from "@/components/ReadmeEditor";
 import { useRenderedPages } from "@/lib/hooks/useRenderedPages";
@@ -74,13 +75,12 @@ export function PhoneDesignerViewer(props: PhoneDesignerViewerProps) {
 
   return (
     <div className="space-y-4">
-      <div
+      <InfoNotice
+        id="designer.viewer_notice"
         data-testid="designer-phone-notice"
-        role="note"
-        className="rounded-lg border border-info/30 bg-info-soft px-4 py-3 text-sm text-info"
       >
         {t("designer.viewer_notice")}
-      </div>
+      </InfoNotice>
 
       <Select
         value={section}

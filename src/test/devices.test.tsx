@@ -10,6 +10,7 @@ import {
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import "@/lib/i18n";
+import { CARD_QUERY, PHONE_QUERY } from "@/lib/hooks/useMediaQuery";
 
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -48,10 +49,12 @@ afterEach(() => {
   window.matchMedia = undefined as unknown as typeof window.matchMedia;
 });
 
-// Phone-width matchMedia: only PHONE_QUERY ("max-width: 767px") matches.
+// Phone-width matchMedia: the `max-width` queries above phone width match —
+// PHONE_QUERY ("max-width: 767px") and CARD_QUERY ("max-width: 1099px").
+// `min-width` queries (DESKTOP/NARROW/WIDE) do not.
 const phoneMatchMedia = (query: string) =>
   ({
-    matches: query.includes("767"),
+    matches: query === PHONE_QUERY || query === CARD_QUERY,
     media: query,
     onchange: null,
     addListener: vi.fn(),
@@ -305,11 +308,13 @@ describe("Devices page", () => {
     ).toBeInTheDocument();
   });
 
-  it("titles the page Connect to PC on a phone", () => {
+  it("titles the page Devices on a phone too", () => {
+    // One name on every platform (DESIGN IMPROVEMENTS 4.9): the page and
+    // the navigation agree, phone included.
     window.matchMedia = phoneMatchMedia as typeof window.matchMedia;
     renderDevices();
     expect(
-      screen.getByRole("heading", { name: "Connect to PC" }),
+      screen.getByRole("heading", { name: "Devices" }),
     ).toBeInTheDocument();
   });
 
@@ -889,6 +894,31 @@ describe("Devices page", () => {
         expect(screen.getByTestId("devices-advanced")).not.toHaveAttribute(
           "open",
         );
+      } finally {
+        webMode();
+      }
+    });
+
+    it("keeps the card intro short, the rest behind Learn more", async () => {
+      appMode();
+      try {
+        phoneBackend();
+        renderDevices();
+        await screen.findByTestId("devices-code-input");
+        // The pairing core on one or two lines — not the five-line
+        // paragraph that used to sit before any control
+        // (DESIGN IMPROVEMENTS 4.9).
+        expect(
+          screen.getByText(/the PC prepares every job, then/),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByText(/retry them from History/),
+        ).not.toBeInTheDocument();
+        const learnMore = screen.getByRole("button", { name: "Learn more" });
+        expect(learnMore).toHaveAttribute("aria-expanded", "false");
+        fireEvent.click(learnMore);
+        expect(learnMore).toHaveAttribute("aria-expanded", "true");
+        expect(screen.getByText(/retry them from History/)).toBeInTheDocument();
       } finally {
         webMode();
       }

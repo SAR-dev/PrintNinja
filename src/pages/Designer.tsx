@@ -185,7 +185,10 @@ export function DesignerPage() {
   );
   const [openSections, setOpenSections] = usePersistentState<string[]>(
     "printninja.designer.openSections",
-    ["page", "sample"],
+    // Page setup stays open; Sample data starts collapsed so the controls
+    // column doesn't scroll before a template is even loaded (DESIGN
+    // IMPROVEMENTS 4.8).
+    ["page"],
     (v): v is string[] =>
       Array.isArray(v) && v.every((x) => typeof x === "string"),
   );
@@ -1294,13 +1297,13 @@ export function DesignerPage() {
             <ResizablePanelGroup
               key={layout}
               direction={layout === "stacked" ? "vertical" : "horizontal"}
-              autoSaveId={`printninja.designer.split.v2.${layout}`}
+              autoSaveId={`printninja.designer.split.v3.${layout}`}
               className="min-w-0 flex-1"
             >
               <ResizablePanel
                 id="editor"
                 order={1}
-                defaultSize={layout === "stacked" ? 55 : 58}
+                defaultSize={layout === "stacked" ? 55 : 45}
                 minSize={30}
               >
                 {editorPane(layout === "stacked" ? "pb-2" : "pr-2")}
@@ -1309,7 +1312,7 @@ export function DesignerPage() {
               <ResizablePanel
                 id="canvas"
                 order={2}
-                defaultSize={layout === "stacked" ? 45 : 42}
+                defaultSize={layout === "stacked" ? 45 : 55}
                 minSize={25}
               >
                 <div

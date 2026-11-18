@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Upload } from "lucide-react";
+import { Check, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/AppLogo";
 import { SUPPORTED_LANGUAGES, currentLanguage, setLanguage } from "@/lib/i18n";
+import { useRovingRadio } from "@/lib/hooks/useRovingRadio";
 import { usePrefs } from "@/lib/prefs/PrefsProvider";
 import {
   DEFAULT_APP_NAME,
@@ -25,6 +26,25 @@ function readAsDataUrl(file: File): Promise<string> {
     r.readAsDataURL(file);
   });
 }
+
+/** Filled radio mark in the corner of the selected card (4.10). */
+function SelectedMark() {
+  return (
+    <span
+      aria-hidden="true"
+      className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground"
+    >
+      <Check className="h-3 w-3" strokeWidth={3} />
+    </span>
+  );
+}
+
+/** Shared look of an appearance option card: 2px border, light teal
+    fill and a check mark when selected (DESIGN IMPROVEMENTS 4.10). */
+const optionCardClass =
+  "relative rounded-md border-2 p-3 text-left transition-colors";
+const selectedCardClass = "border-primary bg-accent";
+const unselectedCardClass = "border-input bg-card hover:bg-muted";
 
 /** Density and optional branding. Both apply immediately and are stored in settings. */
 export function AppearanceSettings() {
@@ -76,6 +96,25 @@ export function AppearanceSettings() {
     },
   ];
 
+  // Roving tabindex per group: one tab stop, arrows move and select.
+  const langRadio = useRovingRadio(
+    SUPPORTED_LANGUAGES.length,
+    SUPPORTED_LANGUAGES.findIndex((l) => l.code === language),
+    (i) => {
+      void setLanguage(SUPPORTED_LANGUAGES[i].code);
+    },
+  );
+  const themeRadio = useRovingRadio(
+    themes.length,
+    themes.findIndex((th) => th.value === theme),
+    (i) => setTheme(themes[i].value),
+  );
+  const densityRadio = useRovingRadio(
+    densities.length,
+    densities.findIndex((d) => d.value === density),
+    (i) => setDensity(densities[i].value),
+  );
+
   useEffect(() => setName(appName), [appName]);
 
   // No toast: the typed name stays in the field — the save is visible.
@@ -115,25 +154,31 @@ export function AppearanceSettings() {
             data-testid="settings-language"
             className="grid gap-2 sm:grid-cols-2"
           >
-            {SUPPORTED_LANGUAGES.map((l) => {
+            {SUPPORTED_LANGUAGES.map((l, i) => {
               const selected = language === l.code;
+              const radio = langRadio.register(i);
               return (
                 <button
                   key={l.code}
+                  ref={radio.ref}
                   type="button"
                   role="radio"
                   lang={l.code}
+                  tabIndex={radio.tabIndex}
                   aria-checked={selected}
                   data-testid={`settings-language-${l.code}`}
                   onClick={() => void setLanguage(l.code)}
+                  onKeyDown={radio.onKeyDown}
                   className={cn(
-                    "rounded-md border p-3 text-left font-medium transition-colors",
-                    selected
-                      ? "border-primary bg-accent"
-                      : "border-input bg-card hover:bg-muted",
+                    optionCardClass,
+                    "font-medium",
+                    selected ? selectedCardClass : unselectedCardClass,
                   )}
                 >
-                  {l.label}
+                  {selected && <SelectedMark />}
+                  <span className={cn("block", selected && "pr-6")}>
+                    {l.label}
+                  </span>
                 </button>
               );
             })}
@@ -158,25 +203,30 @@ export function AppearanceSettings() {
             data-testid="settings-theme"
             className="grid gap-2 sm:grid-cols-3"
           >
-            {themes.map((th) => {
+            {themes.map((th, i) => {
               const selected = theme === th.value;
+              const radio = themeRadio.register(i);
               return (
                 <button
                   key={th.value}
+                  ref={radio.ref}
                   type="button"
                   role="radio"
                   aria-label={th.label}
                   aria-checked={selected}
+                  tabIndex={radio.tabIndex}
                   data-testid={`settings-theme-${th.value}`}
                   onClick={() => setTheme(th.value)}
+                  onKeyDown={radio.onKeyDown}
                   className={cn(
-                    "rounded-md border p-3 text-left transition-colors",
-                    selected
-                      ? "border-primary bg-accent"
-                      : "border-input bg-card hover:bg-muted",
+                    optionCardClass,
+                    selected ? selectedCardClass : unselectedCardClass,
                   )}
                 >
-                  <span className="block font-medium">{th.label}</span>
+                  {selected && <SelectedMark />}
+                  <span className={cn("block font-medium", selected && "pr-6")}>
+                    {th.label}
+                  </span>
                   <span className="block text-sm text-muted-foreground">
                     {th.hint}
                   </span>
@@ -204,23 +254,28 @@ export function AppearanceSettings() {
             data-testid="settings-density"
             className="grid gap-2 sm:grid-cols-2"
           >
-            {densities.map((d) => {
+            {densities.map((d, i) => {
               const selected = density === d.value;
+              const radio = densityRadio.register(i);
               return (
                 <button
                   key={d.value}
+                  ref={radio.ref}
                   type="button"
                   role="radio"
                   aria-checked={selected}
+                  tabIndex={radio.tabIndex}
                   onClick={() => setDensity(d.value)}
+                  onKeyDown={radio.onKeyDown}
                   className={cn(
-                    "rounded-md border p-3 text-left transition-colors",
-                    selected
-                      ? "border-primary bg-accent"
-                      : "border-input bg-card hover:bg-muted",
+                    optionCardClass,
+                    selected ? selectedCardClass : unselectedCardClass,
                   )}
                 >
-                  <span className="block font-medium">{d.label}</span>
+                  {selected && <SelectedMark />}
+                  <span className={cn("block font-medium", selected && "pr-6")}>
+                    {d.label}
+                  </span>
                   <span className="block text-sm text-muted-foreground">
                     {d.hint}
                   </span>
