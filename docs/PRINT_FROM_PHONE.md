@@ -27,6 +27,8 @@ On the PC, choose **Invite guest**. You decide how long the invite lasts (24 hou
 
 The PC lists every paired phone. You can rename a phone, turn printing off for it, or remove it. Turning sharing off disconnects all phones.
 
+Everything between your phone and the PC is encrypted, so other devices on the same network cannot read what you print. The one catch: the phone trusts the first certificate it sees when pairing, so pair on a network you trust ([known limitations](./LIMITATIONS.md#phone-and-pc)).
+
 ## 🔋 Keep printing after you close the app (Android)
 
 A background service keeps the print queue going even after you swipe the app away. Allow PrintNinja to ignore battery optimization in your Android settings so your prints are not delayed.

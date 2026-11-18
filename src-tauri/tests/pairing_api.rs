@@ -73,6 +73,9 @@ fn router(db: &Db, window: &Window) -> axum::Router {
             queue: Arc::new(printninja_lib::queue::PrintQueue::new()),
             cache_dir: cache,
             window: window.clone(),
+            // No TLS listener in this test: pairing runs on the plain
+            // loopback route, cert fetch must 503.
+            cert_pem: None,
         },
         false,
         None,

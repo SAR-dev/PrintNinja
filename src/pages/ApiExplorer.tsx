@@ -157,9 +157,11 @@ const PRINT_URL_EXAMPLE = `{
   "data_url": "https://pos.local/ticket/1042"
 }`;
 
-/** Loopback is always reachable; 0.0.0.0 (LAN mode) is not a destination. */
+/** Loopback is always reachable; 0.0.0.0 (LAN mode) is not a destination.
+ *  In LAN mode the UI's plain listener is `local_port` — the phone's
+ *  port serves TLS, and this page does not trust self-signed certs. */
 function baseUrl(status: ApiStatus): string {
-  return `http://127.0.0.1:${status.port}`;
+  return `http://127.0.0.1:${status.local_port ?? status.port}`;
 }
 
 /** Method badges reuse status semantics: safe, side-effecting, destructive. */
@@ -329,7 +331,7 @@ export function ApiExplorerPanel({
             {t("settings_page.api_curl_title")}
           </p>
           <pre className="text-[11px] overflow-x-auto whitespace-pre-wrap break-all">{`curl -X POST http://127.0.0.1:${
-            status?.port ?? 17717
+            status?.local_port ?? status?.port ?? 17717
           }/v1/print \\
   -H "Content-Type: application/json" \\
   -d '{"template":"Receipt","printer":"Front Desk","data":{"order":1042}}'`}</pre>

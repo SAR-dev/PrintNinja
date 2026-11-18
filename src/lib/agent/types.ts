@@ -549,7 +549,13 @@ export interface BrowserShellStatus {
 export interface ApiStatus {
   running: boolean;
   address: string;
+  /** The phone-facing port. When Wi-Fi access is on it serves TLS for
+   *  phones; the PC's own UI talks to `local_port` instead. */
   port: number;
+  /** The plain loopback port the PC's own UI talks to. Equals `port`
+   *  unless Wi-Fi access is on, where it is `port + 1`. Optional only
+   *  because the Rust side defaults it for older serialized statuses. */
+  local_port?: number;
   lan_access: boolean;
 }
 

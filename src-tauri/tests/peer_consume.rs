@@ -51,6 +51,90 @@ fn closed_port() -> u16 {
     }
 }
 
+/// The mock peers' TLS identity, shared by every test: like a real PC,
+/// each mock serves TLS plus the `/v1/cert` bootstrap the phone fetches
+/// once and pins as its root of trust.
+struct PeerTls {
+    pem: &'static str,
+    config: Arc<rustls::ServerConfig>,
+}
+
+fn peer_tls() -> &'static PeerTls {
+    static TLS: std::sync::OnceLock<PeerTls> = std::sync::OnceLock::new();
+    TLS.get_or_init(|| {
+        let dir =
+            std::env::temp_dir().join(format!("printninja_peer_tls_{}", uuid::Uuid::new_v4()));
+        let pair = printninja_lib::api::cert::ensure_cert(&dir, "127.0.0.1").expect("cert");
+        let config = printninja_lib::api::cert::server_config(&pair).expect("server config");
+        // Served by /v1/cert for the life of the process.
+        let pem = Box::leak(pair.cert_pem.clone().into_boxed_str());
+        PeerTls {
+            pem,
+            config: Arc::new(config),
+        }
+    })
+}
+
+/// Serve `app` over TLS, with the `/v1/cert` bootstrap route a real PC
+/// serves. `port` 0 picks an ephemeral one; otherwise `port` is used
+/// (rebinding a freed `closed_port`).
+async fn serve_tls(app: Router, port: u16) -> u16 {
+    let (pem, config) = {
+        let t = peer_tls();
+        (t.pem, t.config.clone())
+    };
+    let app = app.route(
+        "/v1/cert",
+        get(move || async move {
+            (
+                [(axum::http::header::CONTENT_TYPE, "application/x-pem-file")],
+                pem,
+            )
+        }),
+    );
+    let listener = if port == 0 {
+        tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("ephemeral port")
+    } else {
+        tokio::net::TcpListener::bind(format!("127.0.0.1:{port}"))
+            .await
+            .expect("rebind freed port")
+    };
+    let port = listener.local_addr().expect("addr").port();
+    // The listener only claimed the port; axum-server binds it itself.
+    drop(listener);
+    tokio::spawn(async move {
+        axum_server::bind_rustls(
+            std::net::SocketAddr::new("127.0.0.1".parse().unwrap(), port),
+            axum_server::tls_rustls::RustlsConfig::from_config(config),
+        )
+        .serve(app.into_make_service_with_connect_info::<std::net::SocketAddr>())
+        .await
+        .expect("mock peer");
+    });
+    // bind_rustls binds lazily inside serve(): wait until the port accepts
+    // before a test dials it, so the startup race cannot read as "refused".
+    wait_listening(port).await;
+    port
+}
+
+async fn wait_listening(port: u16) {
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(5);
+    loop {
+        if tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .is_ok()
+        {
+            return;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            panic!("no server listening on 127.0.0.1:{port} within 5s");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
 #[derive(Clone)]
 struct MockPeer {
     secret: String,
@@ -65,14 +149,7 @@ async fn serve_mock(peer: MockPeer) -> u16 {
         .route("/v1/capabilities", get(mock_caps))
         .route("/v1/render", axum::routing::post(mock_render))
         .with_state(peer);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("ephemeral port");
-    let port = listener.local_addr().expect("addr").port();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.expect("mock peer");
-    });
-    port
+    serve_tls(app, 0).await
 }
 
 fn mock_authed(req: &axum::extract::Request, secret: &str) -> bool {
@@ -344,13 +421,7 @@ async fn try_peer_render_caches_successful_probes() {
                     .into_response()
             }),
         );
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("ephemeral port");
-    let port = listener.local_addr().expect("addr").port();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.expect("counting peer");
-    });
+    let port = serve_tls(app, 0).await;
 
     let out = try_peer_render(&[pair("cached", port, "s")], &job())
         .await
@@ -399,12 +470,7 @@ async fn failed_probes_are_remembered_and_fresh_probe_bypasses_them() {
             render_status: 200,
             body: b"%PDF-awake".to_vec(),
         });
-    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}"))
-        .await
-        .expect("rebind freed port");
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.expect("awake peer");
-    });
+    serve_tls(app, port).await;
 
     // Within the memory window the phone still skips it: no probe, no wait.
     let started = std::time::Instant::now();
@@ -449,12 +515,7 @@ async fn a_failed_render_marks_the_provider_down_for_a_while() {
             render_status: 200,
             body: b"%PDF-back".to_vec(),
         });
-    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}"))
-        .await
-        .expect("rebind freed port");
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.expect("recovered peer");
-    });
+    serve_tls(app, port).await;
 
     assert!(
         try_peer_render(std::slice::from_ref(&p), &job())
@@ -606,13 +667,7 @@ async fn required_mode_retries_a_busy_peer() {
             render_status: 200,
             body: vec![],
         });
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("ephemeral port");
-    let port = listener.local_addr().expect("addr").port();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.expect("busy peer");
-    });
+    let port = serve_tls(app, 0).await;
 
     let mut thermal = job();
     thermal.language = "zpl".into();
@@ -663,13 +718,7 @@ async fn required_mode_gives_up_on_a_permanently_busy_peer() {
             render_status: 200,
             body: vec![],
         });
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("ephemeral port");
-    let port = listener.local_addr().expect("addr").port();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.expect("always-busy peer");
-    });
+    let port = serve_tls(app, 0).await;
 
     let err = try_peer_render_required(&[pair("jammed", port, "s")], &job())
         .await
@@ -721,13 +770,7 @@ async fn best_effort_does_not_wait_out_a_busy_peer() {
             render_status: 200,
             body: vec![],
         });
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("ephemeral port");
-    let port = listener.local_addr().expect("addr").port();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.expect("busy peer");
-    });
+    let port = serve_tls(app, 0).await;
 
     let started = std::time::Instant::now();
     assert!(try_peer_render(&[pair("busy", port, "s")], &job())
@@ -769,12 +812,7 @@ async fn required_mode_asks_despite_a_remembered_failure() {
             render_status: 200,
             body: b"%PDF-back".to_vec(),
         });
-    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}"))
-        .await
-        .expect("rebind freed port");
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.expect("awake peer");
-    });
+    serve_tls(app, port).await;
 
     // Required mode asks anyway (fail memory bypassed) and serves.
     let out = try_peer_render_required(std::slice::from_ref(&p), &job())
