@@ -13,6 +13,7 @@ import { AuthGate } from "./components/AuthGate";
 import { ErrorBoundary, RouteErrorFallback } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
 import { Onboarding } from "./components/Onboarding";
+import { PageLoading } from "./components/PageLoading";
 // Each page is its own chunk: the app opens on a single route, and the
 // rest (designer canvas, print flow, template management) should not
 // block first paint — on a phone, or a desktop cold start.
@@ -53,15 +54,6 @@ import { PairingGate } from "./components/PairingGate";
 const UiKitPage = import.meta.env.DEV
   ? lazy(() => import("./pages/UiKit"))
   : null;
-
-/** Full-screen spinner shown while a route's chunk is loading. */
-function PageLoading() {
-  return (
-    <div className="min-h-dvh-safe flex items-center justify-center bg-background">
-      <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
-}
 
 /** Nothing renders until there is a session the server accepts. */
 export default function App() {
@@ -160,7 +152,7 @@ function AppRoutes() {
             <Route
               path="/__ui"
               element={
-                <Suspense fallback={null}>
+                <Suspense fallback={<PageLoading />}>
                   <UiKitPage />
                 </Suspense>
               }

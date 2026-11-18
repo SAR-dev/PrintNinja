@@ -55,6 +55,16 @@
     --control-h: 2.25rem;
     --head-h: 2.5rem;
     --cell-py: 0.625rem;
+
+    /* Motion: easing and duration are shared across every breakpoint (the
+       phone sheet used to carry --ease-out for itself alone). Reduced motion
+       zeroes all of these in @layer base below. */
+    --ease-out: cubic-bezier(0.22, 0.8, 0.24, 1);
+    --ease-in: cubic-bezier(0.4, 0, 1, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --dur-fast: 120ms;
+    --dur-base: 200ms;
+    --dur-slow: 320ms;
   }
 
   /* Dark theme: the same tokens on dark slate surfaces. The brand teal
