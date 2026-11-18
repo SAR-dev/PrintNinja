@@ -45,6 +45,8 @@ Only use the headings you actually have entries for.
 
 ## Unreleased
 
+## [2026.1118.2] - 2026-11-18
+
 ### Changed
 
 - **A broken page no longer takes the whole app down.** If a page runs into a problem or its files fail to load, you get a short message with "Try again" or "Back to Print" instead of a blank window — and you can copy the diagnostics to share with the team.
