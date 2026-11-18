@@ -1,6 +1,6 @@
 # Transport gaps: where the printing paths diverge
 
-**Status:** code review of the encoder and transport layer, not a hardware test. Gaps 1–3 and 5–7 are implemented on branch `fix/transport-gaps`; gap 4 is deferred. See "Implementation status" below. Nothing is yet verified on real hardware or a full Windows/Android build.
+**Status:** code review of the encoder and transport layer, not a hardware test. Gaps marked ✅ below are implemented; gap 4 is deferred. Nothing is yet verified on real hardware or a full Windows/Android build.
 
 **Scope reviewed:** the shared encoder (`src-tauri/src/transport/mod.rs`, `escpos.rs`, `label_langs.rs`), the transport implementations (`ipp.rs`, `raw_tcp.rs`, `cups.rs`, `windows_spooler.rs`, `windows_usb.rs`, `windows_bluetooth.rs`, `linux_bluetooth.rs`, `android_usb.rs`, `android_bluetooth.rs`), the status/precheck module (`status.rs`), and the dispatch layer (`src-tauri/src/commands/print.rs`).
 
@@ -10,15 +10,15 @@ All jobs flow through two layers — **encoding** (`encode_for_language_tuned`) 
 
 ## Summary table
 
-| # | Gap | Severity | Where |
-|---|-----|----------|-------|
-| 1 | `IppPrinter::send` hardcodes `application/pdf`, ignoring the job's MIME type | High | `transport/ipp.rs` |
-| 2 | Windows USB always sends `RAW`, bypassing datatype selection | High | `transport/windows_usb.rs` |
-| 3 | Windows USB blocks tokio workers (no `spawn_blocking`) | Medium | `transport/windows_usb.rs` |
-| 4 | No pre-send fault detection (status precheck) on any Windows path | High | `windows_*.rs` |
-| 5 | `IppPrinter::test()` sends a real document, unlike every other `test()` | Low | `transport/ipp.rs`, `transport/mod.rs` |
-| 6 | Two encoders exist; `LabelPrinterTransport` is dead and divergent | Low | `transport/label_langs.rs` |
-| 7 | Android mDNS discovery silently drops raw-TCP printers | Medium | `transport/android_bridge.rs` |
+| # | Gap | Severity | Where | Status |
+|---|-----|----------|-------|--------|
+| 1 | `IppPrinter::send` hardcodes `application/pdf`, ignoring the job's MIME type | High | `transport/ipp.rs` | ✅ |
+| 2 | Windows USB always sends `RAW`, bypassing datatype selection | High | `transport/windows_usb.rs` | ✅ |
+| 3 | Windows USB blocks tokio workers (no `spawn_blocking`) | Medium | `transport/windows_usb.rs` | ✅ |
+| 4 | No pre-send fault detection (status precheck) on any Windows path | High | `windows_*.rs` | ⏸ |
+| 5 | `IppPrinter::test()` sends a real document, unlike every other `test()` | Low | `transport/ipp.rs`, `transport/mod.rs` | ✅ |
+| 6 | Two encoders exist; `LabelPrinterTransport` is dead and divergent | Low | `transport/label_langs.rs` | ✅ |
+| 7 | Android mDNS discovery silently drops raw-TCP printers | Medium | `transport/android_bridge.rs` | ✅ |
 
 ---
 
@@ -54,7 +54,7 @@ Gap 4 (no pre-send fault detection on Windows) is the only High gap still open a
 
 ---
 
-## 1. `IppPrinter::send` ignores the job's MIME type
+## 1. ✅ `IppPrinter::send` ignores the job's MIME type
 
 **Current condition.** `IppPrinter::send` routes through `send_pdf` → `send_bytes(..., "application/pdf")` and never reads `job.mime_type` or `job.language` (`ipp.rs:155-157, 609-611`). A network IPP printer whose `language` column is set to a command language (ESC/POS, ZPL, TSPL, CPCL, raster) therefore has its command bytes declared to the endpoint as `application/pdf`.
 
@@ -69,7 +69,7 @@ Gap 4 (no pre-send fault detection on Windows) is the only High gap still open a
 
 ---
 
-## 2. Windows USB always sends `RAW`, bypassing datatype selection
+## 2. ✅ Windows USB always sends `RAW`, bypassing datatype selection
 
 **Current condition.** `WindowsSpooler::send` runs the PDF-vs-RAW decision via `choose_datatype` (`windows_spooler.rs:609-644, 100-111`): it inspects the queue's offered datatypes and declares `PDF` only when the print processor supports it. `WindowsBluetooth` in driver mode delegates to that same path (`windows_bluetooth.rs:154-159`).
 
@@ -83,7 +83,7 @@ But `WindowsUsbPrinter::send` → `send_raw` → `send_raw_with_datatype(data, "
 
 ---
 
-## 3. Windows USB blocks tokio workers (missing `spawn_blocking`)
+## 3. ✅ Windows USB blocks tokio workers (missing `spawn_blocking`)
 
 **Current condition.** `WindowsSpooler` wraps `check_ready` and the send in `spawn_blocking` (the "W4" pattern, `windows_spooler.rs:599-607, 609-644`), because the Win32 spooler calls block and a wedged queue would stall a tokio worker.
 
@@ -119,7 +119,7 @@ The Windows paths have no equivalent on the send path:
 
 ---
 
-## 5. `IppPrinter::test()` actually prints, unlike every other `test()`
+## 5. ✅ `IppPrinter::test()` actually prints, unlike every other `test()`
 
 **Current condition.** Every transport's `test()` is connectivity-only: raw TCP `reach`, Windows `check_ready`, Bluetooth/USB open-and-close, CUPS Get-Printer-Attributes. But `IppPrinter::test()` POSTs a real hardcoded PDF test page (`ipp.rs:603-607`).
 
@@ -134,7 +134,7 @@ This is now effectively dead in the live app: the `test_printer` command was ref
 
 ---
 
-## 6. Two encoders exist; `LabelPrinterTransport` is dead and divergent
+## 6. ✅ Two encoders exist; `LabelPrinterTransport` is dead and divergent
 
 **Current condition.** The live path is `encode_for_language_tuned` (`mod.rs:233`). `label_langs.rs` also defines `LabelPrinterTransport::encode` (`label_langs.rs:236-271`) with its own match, referenced nowhere outside its own file (dead code). It diverges from the live path in two ways:
 
@@ -149,7 +149,7 @@ This is now effectively dead in the live app: the `test_printer` command was ref
 
 ---
 
-## 7. Android mDNS discovery silently drops raw-TCP printers
+## 7. ✅ Android mDNS discovery silently drops raw-TCP printers
 
 **Current condition.** `AndroidBridge::discover` filters the Kotlin plugin's network results with `kind != "raw_tcp"` (`android_bridge.rs:40`), so on Android only IPP printers appear in the network scan. Meanwhile `docs/architecture/PRINTERS_AND_TRANSPORTS.md:51-52` says the mDNS browse finds both `_ipp._tcp`/`_ipps._tcp` (→ `ipp`) and `_pdl-datastream._tcp`/`_printer._tcp` (→ `raw_tcp`). The code and the documented behavior disagree: a raw-TCP (JetDirect/9100) printer is never listed on Android and must be added by address manually.
 
