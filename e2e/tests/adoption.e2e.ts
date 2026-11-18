@@ -66,8 +66,10 @@ test("F14 migrated local templates stay local drafts until explicitly saved", as
   }).toPass({ timeout: 30_000 });
 
   // The manual path still works: saving one row from the list uploads it.
+  // The row's sync and delete actions live in its labeled ⋯ menu.
+  await page.getByRole("button", { name: "Actions for Local one" }).click();
   await page
-    .getByRole("button", { name: "Save Local one to the server" })
+    .getByRole("menuitem", { name: "Save Local one to the server" })
     .click();
   await expect(async () => {
     const mine = await apiMine(auth.token);

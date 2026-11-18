@@ -282,9 +282,15 @@ describe("Templates page", () => {
 
   it("Save pushes the local copy to the server", async () => {
     renderPage();
-    await screen.findByText("Shipping label");
+    const row = (await screen.findByText("Shipping label")).closest("tr")!;
+    fireEvent.pointerDown(
+      within(row).getByRole("button", { name: "Actions for Shipping label" }),
+      { button: 0, ctrlKey: false },
+    );
     fireEvent.click(
-      screen.getByRole("button", { name: "Save Shipping label to the server" }),
+      await screen.findByRole("menuitem", {
+        name: "Save Shipping label to the server",
+      }),
     );
     await waitFor(() =>
       expect(save.saveRowToServer).toHaveBeenCalledWith(
@@ -295,9 +301,15 @@ describe("Templates page", () => {
 
   it("Refresh asks first, then pulls the server copy over the local one", async () => {
     renderPage();
-    await screen.findByText("Receipt");
+    const row = (await screen.findByText("Receipt")).closest("tr")!;
+    fireEvent.pointerDown(
+      within(row).getByRole("button", { name: "Actions for Receipt" }),
+      { button: 0, ctrlKey: false },
+    );
     fireEvent.click(
-      screen.getByRole("button", { name: "Refresh Receipt from the server" }),
+      await screen.findByRole("menuitem", {
+        name: "Refresh Receipt from the server",
+      }),
     );
     const dialog = await screen.findByRole("dialog");
     expect(
@@ -319,9 +331,15 @@ describe("Templates page", () => {
       new Error("Cannot reach the server"),
     );
     renderPage();
-    await screen.findByText("Receipt");
+    const row = (await screen.findByText("Receipt")).closest("tr")!;
+    fireEvent.pointerDown(
+      within(row).getByRole("button", { name: "Actions for Receipt" }),
+      { button: 0, ctrlKey: false },
+    );
     fireEvent.click(
-      screen.getByRole("button", { name: "Refresh Receipt from the server" }),
+      await screen.findByRole("menuitem", {
+        name: "Refresh Receipt from the server",
+      }),
     );
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(
@@ -329,7 +347,6 @@ describe("Templates page", () => {
     );
     await waitFor(() => expect(save.takeServerCopy).toHaveBeenCalled());
     // Nothing local is written on the way out, so the copy still prints.
-    const row = screen.getByText("Receipt").closest("tr")!;
     expect(
       within(row).getByRole("button", { name: /Print/ }),
     ).toBeInTheDocument();
@@ -346,14 +363,19 @@ describe("Templates page", () => {
       within(row).queryByRole("button", { name: /^Save/ }),
     ).not.toBeInTheDocument();
     expect(
-      within(row).getByRole("button", {
-        name: "Refresh Saved A from the server",
-      }),
-    ).toBeInTheDocument();
-    expect(
       within(row).getByRole("button", { name: /Print/ }),
     ).toBeInTheDocument();
     expect(screen.getByText("Withdrawn by author")).toBeInTheDocument();
+    // The sync and delete actions hide in the labeled ⋯ menu.
+    fireEvent.pointerDown(
+      within(row).getByRole("button", { name: "Actions for Saved A" }),
+      { button: 0, ctrlKey: false },
+    );
+    expect(
+      await screen.findByRole("menuitem", {
+        name: "Refresh Saved A from the server",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("marks a saved copy withdrawn when the server says it is gone", async () => {
@@ -404,7 +426,11 @@ describe("Templates page", () => {
     renderPage();
     await screen.findByText("Shipping label");
     const row = screen.getByText("Shipping label").closest("tr")!;
-    fireEvent.click(within(row).getByRole("button", { name: /Delete/ }));
+    fireEvent.pointerDown(
+      within(row).getByRole("button", { name: "Actions for Shipping label" }),
+      { button: 0, ctrlKey: false },
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Delete/ }));
     const dialog = await screen.findByRole("dialog");
     expect(
       within(dialog).getByText("Delete “Shipping label” everywhere?"),
@@ -429,7 +455,11 @@ describe("Templates page", () => {
         "Withdrawn by author",
       ),
     ).toBeInTheDocument();
-    fireEvent.click(within(row).getByRole("button", { name: "Remove" }));
+    fireEvent.pointerDown(
+      within(row).getByRole("button", { name: "Actions for Saved A" }),
+      { button: 0, ctrlKey: false },
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Remove" }));
     const dialog = await screen.findByRole("dialog");
     expect(
       within(dialog).getByText("Remove “Saved A” from Saved?"),
@@ -452,7 +482,11 @@ describe("Templates page", () => {
     renderPage();
     fireEvent.mouseDown(await screen.findByRole("tab", { name: /Saved/ }));
     const row = (await screen.findByText("Saved A")).closest("tr")!;
-    fireEvent.click(within(row).getByRole("button", { name: "Remove" }));
+    fireEvent.pointerDown(
+      within(row).getByRole("button", { name: "Actions for Saved A" }),
+      { button: 0, ctrlKey: false },
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Remove" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "Remove template" }),
     );
@@ -475,7 +509,11 @@ describe("Templates page", () => {
     const listsBefore = invoke.mock.calls.filter(
       (c) => c[0] === "list_templates",
     ).length;
-    fireEvent.click(within(row).getByRole("button", { name: "Clone" }));
+    fireEvent.pointerDown(
+      within(row).getByRole("button", { name: "Actions for Saved A" }),
+      { button: 0, ctrlKey: false },
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Clone" }));
     await waitFor(() =>
       expect(save.cloneSavedTemplate).toHaveBeenCalledWith(
         expect.objectContaining({ id: 4, name: "Saved A" }),
@@ -494,7 +532,11 @@ describe("Templates page", () => {
     renderPage();
     fireEvent.mouseDown(await screen.findByRole("tab", { name: /Saved/ }));
     const row = (await screen.findByText("Saved A")).closest("tr")!;
-    fireEvent.click(within(row).getByRole("button", { name: "Clone" }));
+    fireEvent.pointerDown(
+      within(row).getByRole("button", { name: "Actions for Saved A" }),
+      { button: 0, ctrlKey: false },
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Clone" }));
     await waitFor(() => expect(share.getServiceUrl).toHaveBeenCalled());
     expect(save.cloneSavedTemplate).not.toHaveBeenCalled();
   });

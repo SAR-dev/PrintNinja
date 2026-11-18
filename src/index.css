@@ -75,7 +75,8 @@
     --secondary: 200 18% 20%;
     --secondary-foreground: 180 14% 91%;
     --muted: 200 18% 20%;
-    --muted-foreground: 190 12% 66%;
+    /* 68% keeps muted text at >=4.5:1 on `bg-accent` cards in dark mode. */
+    --muted-foreground: 190 12% 68%;
     --accent: 180 25% 22%;
     --accent-foreground: 170 65% 72%;
 
@@ -298,4 +299,20 @@
   .readme-preview hr {
     border-color: hsl(var(--border));
   }
+}
+
+/* A tab strip that overflows horizontally (the phone layer stacks its
+   rows instead) fades out at the right edge, so hidden tabs stay
+   discoverable. TabsList sets data-fade while there is more to scroll to. */
+[data-slot="tabs-list"][data-fade="right"] {
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 2.5rem),
+    transparent
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 2.5rem),
+    transparent
+  );
 }

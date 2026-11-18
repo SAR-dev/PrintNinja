@@ -46,7 +46,8 @@ describe("API Explorer and the server", () => {
       return null;
     });
     renderPage();
-    expect(await screen.findByText("127.0.0.1:17717")).toBeInTheDocument();
+    // The badge is status only; the address sits in the curl example.
+    expect(await screen.findByText("server running")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /start server|stop server/i }),
     ).not.toBeInTheDocument();
@@ -158,7 +159,7 @@ describe("API Explorer and the server", () => {
       return null;
     });
     renderPage();
-    await screen.findByText("127.0.0.1:17717");
+    await screen.findByText("server running");
 
     // The introduction needs no token and no body.
     fireEvent.click(screen.getByText("/v1/pair/hello"));

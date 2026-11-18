@@ -81,6 +81,12 @@ type TestState =
 export function DevicesCard({ onPaired }: { onPaired?: () => void } = {}) {
   const { t } = useTranslation();
   const phone = isAndroid();
+  // On the phone the card is the whole pairing surface, so the intro says
+  // only what the pairing needs: the rest of the explanation (Print via
+  // PC, what happens when the PC is off) stays behind Learn more — a
+  // five-line paragraph was pushing the first control below the fold
+  // (DESIGN IMPROVEMENTS 4.9).
+  const [hintExpanded, setHintExpanded] = useState(false);
 
   if (isWebMode()) {
     return (
@@ -109,11 +115,27 @@ export function DevicesCard({ onPaired }: { onPaired?: () => void } = {}) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <p className="text-sm text-muted-foreground">
-          {phone
-            ? t("settings_page.devices_phone_hint")
-            : t("settings_page.devices_pc_hint")}
-        </p>
+        {phone ? (
+          <div className="text-sm text-muted-foreground">
+            <p>{t("settings_page.devices_phone_hint_short")}</p>
+            {hintExpanded && (
+              <p className="mt-1">{t("settings_page.devices_phone_hint")}</p>
+            )}
+            <button
+              type="button"
+              data-testid="devices-learn-more"
+              aria-expanded={hintExpanded}
+              onClick={() => setHintExpanded((v) => !v)}
+              className="text-xs underline underline-offset-2 hover:text-foreground"
+            >
+              {t("common.learn_more")}
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {t("settings_page.devices_pc_hint")}
+          </p>
+        )}
         {phone ? <PhoneSection onPaired={onPaired} /> : <PcSection />}
       </CardContent>
     </Card>
@@ -1567,11 +1589,14 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
         </details>
       </div>
 
-      {/* Step 3: pairing is done — the only thing left is to print. */}
+      {/* Pairing is done — the only thing left is to print. The step
+          numbers above (1. find the PC, 2. type the code) belong to the
+          unpaired flow, where both are visible; once paired there is no
+          third step, so this block keeps no number (DESIGN IMPROVEMENTS
+          4.9 — a lone "3." read as an error). */}
       {firstPair && (
         <div className="space-y-2 rounded-md border p-3">
           <p className="text-sm">
-            <span className="mr-1 font-semibold">3.</span>
             {t("settings_page.devices_pair_step_done", {
               name: firstPair.name,
             })}

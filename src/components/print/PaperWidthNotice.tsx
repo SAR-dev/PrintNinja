@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
  * phone layouts.
  *
  * - "mismatch": the sheet is wider than the printer's saved width. One tap
- *   sets the saved width to the sheet's; "Other…" opens the dialog for a
- *   different number.
+ *   sets the saved width to the sheet's; the second button opens the
+ *   dialog for a different number.
  * - "missing": a saved printer has no width yet. The same one-tap fix is
  *   offered once ("Not now" is remembered).
  *
@@ -45,7 +45,7 @@ export function PaperWidthNotice({
     >
       <p
         role="status"
-        className={`min-w-0 flex-1 basis-48 text-xs ${warn ? "text-warning" : "text-muted-foreground"}`}
+        className={`min-w-0 flex-1 basis-48 text-body-sm ${warn ? "text-warning" : "text-muted-foreground"}`}
       >
         {message}
       </p>
@@ -54,7 +54,7 @@ export function PaperWidthNotice({
           <Button
             variant="outline"
             size="sm"
-            className="h-6 px-2 text-xs"
+            className="h-6 px-2 text-body-sm"
             disabled={busy}
             onClick={onApply}
             data-testid={warn ? "set-paper-size" : "paper-width-set"}
@@ -67,7 +67,7 @@ export function PaperWidthNotice({
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-xs"
+              className="h-6 px-2 text-body-sm"
               disabled={busy}
               onClick={onOther}
               data-testid="set-paper-size-other"
@@ -79,7 +79,7 @@ export function PaperWidthNotice({
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-xs"
+              className="h-6 px-2 text-body-sm"
               disabled={busy}
               onClick={onDismiss}
               data-testid="paper-width-dismiss"

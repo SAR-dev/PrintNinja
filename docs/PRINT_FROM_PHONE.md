@@ -11,7 +11,7 @@ For printing normal documents (PDF) from the phone, or for using your PC's print
 
 1. On the PC, open **Devices** and switch sharing on. This one switch does everything for you.
 2. The PC shows an 8-character code. It runs out after about 90 seconds; ask for a new one if it does.
-3. On the phone, open **Connect to PC** and type the code. The phone usually finds the PC by itself under **Nearby PCs**. If not, type the PC's address.
+3. On the phone, open **Devices** and type the code. The phone usually finds the PC by itself under **Nearby PCs**. If not, type the PC's address.
 4. Both devices must be signed in to the same account on the same server.
 
 ## 🎟️ Let someone borrow your PC without an account

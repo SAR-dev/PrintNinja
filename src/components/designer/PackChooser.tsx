@@ -79,7 +79,7 @@ export function PackChooser({ selectedId, onSelect }: PackChooserProps) {
               <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
                 {desc}
               </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="mt-1 text-caption text-muted-foreground">
                 {t("designer.pack_size", {
                   w: pack.page_w_mm,
                   h: pack.page_h_mm,
@@ -87,7 +87,7 @@ export function PackChooser({ selectedId, onSelect }: PackChooserProps) {
               </p>
             </div>
             {isSelected && (
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-primary">
+              <span className="text-caption font-semibold uppercase tracking-widest text-primary">
                 {t("designer.pack_selected")}
               </span>
             )}

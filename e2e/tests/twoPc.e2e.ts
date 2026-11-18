@@ -45,7 +45,9 @@ async function setHtml(
   page: import("@playwright/test").Page,
   html: string,
 ): Promise<string> {
-  const content = page.getByLabel("HTML editor").locator(".cm-content");
+  // The accessible name lives on `.cm-content` itself, so the label
+  // resolves directly to the editable node.
+  const content = page.getByLabel("HTML editor");
   await content.click();
   await expect(async () => {
     await page.keyboard.press("ControlOrMeta+a");
@@ -211,8 +213,9 @@ test("F5 delete on PC A removes the template on PC B", async ({ browser }) => {
 
   // A deletes from the list: server copy and cache go together, after
   // a confirm. Nothing is queued — the server round-trip happens now.
+  await pageA.getByRole("button", { name: "Actions for Shared Idea" }).click();
   await pageA
-    .getByRole("button", { name: "Delete Shared Idea everywhere" })
+    .getByRole("menuitem", { name: "Delete Shared Idea everywhere" })
     .click();
   const dialog = await pageA.getByRole("dialog");
   await expect(

@@ -4,11 +4,11 @@ import { installAgent, signedSeed } from "../support/fixtures";
 import { readStackState } from "../support/stack-state";
 import { testids } from "../support/testids";
 
-// Accessibility + i18n floor (no axe in the harness): the app is
-// English-only (index.html lang="en", i18next fallback en), so this
-// pins rendered English instead of raw keys, a keyboard-only print
-// path, small/large viewports without horizontal scroll, and a clean
-// load under prefers-reduced-motion.
+// Accessibility + i18n floor: the app is English-only (index.html
+// lang="en", i18next fallback en), so this pins rendered English
+// instead of raw keys, a keyboard-only print path, small/large
+// viewports without horizontal scroll, a clean load under
+// prefers-reduced-motion, and arrow-key control of the designer resize handle.
 
 async function tabUntilFocused(
   page: Page,
@@ -36,7 +36,10 @@ async function tabUntilFocused(
 
 async function seededPc(
   browser: Browser,
-  viewport?: { width: number; height: number },
+  opts?: {
+    viewport?: { width: number; height: number };
+    settings?: Record<string, string>;
+  },
 ) {
   const seeded = await signedSeed(browser, "a11y", {
     printers: [{ name: "E2E A11y Printer" }],
@@ -48,10 +51,11 @@ async function seededPc(
         sync_state: "synced",
       },
     ],
+    settings: opts?.settings,
   });
   const page = await seeded.context.newPage();
-  if (viewport) {
-    await page.setViewportSize(viewport);
+  if (opts?.viewport) {
+    await page.setViewportSize(opts.viewport);
   }
   return { seeded, page };
 }
@@ -158,7 +162,7 @@ test("small and large viewports do not scroll sideways", async ({
     { width: 390, height: 844 },
     { width: 1440, height: 900 },
   ]) {
-    const { seeded, page } = await seededPc(browser, viewport);
+    const { seeded, page } = await seededPc(browser, { viewport });
     await page.goto("/print");
     await expect(page.getByTestId(testids.shellApp)).toBeVisible({
       timeout: 15_000,
@@ -190,4 +194,26 @@ test("prefers-reduced-motion loads cleanly", async ({ browser }) => {
     timeout: 15_000,
   });
   await reduced.close();
+});
+
+test("the designer resize handle resizes with arrow keys", async ({
+  browser,
+}) => {
+  const { page } = await seededPc(browser, {
+    viewport: { width: 1440, height: 900 },
+  });
+  await page.goto("/designer");
+  await expect(page.getByTestId(testids.shellApp)).toBeVisible({
+    timeout: 15_000,
+  });
+  // The default "side" layout splits editor and canvas with a
+  // focusable handle (react-resizable-panels): role=separator.
+  const handle = page.getByRole("separator").first();
+  await expect(handle).toBeVisible({ timeout: 15_000 });
+  const before = (await handle.boundingBox())!.x;
+  await handle.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect
+    .poll(async () => (await handle.boundingBox())!.x, { timeout: 10_000 })
+    .not.toBe(before);
 });

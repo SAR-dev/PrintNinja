@@ -327,10 +327,10 @@ describe("Print page", () => {
     );
   });
 
-  it("shows that the printer is ready before anything is printed", async () => {
+  it("marks a ready printer with a quiet chip next to the select", async () => {
     renderPage();
-    // One truncated line now, not a two-line card.
-    expect(await screen.findByText(/Printer is ready/)).toBeInTheDocument();
+    // Ready is the normal state, so it is a small chip, not a banner.
+    expect(await screen.findByTestId("print-ready-chip")).toBeInTheDocument();
   });
 
   it("shows a printing banner in the status slot while the job runs", async () => {
@@ -361,17 +361,33 @@ describe("Print page", () => {
     expect(screen.queryByText("Printing…", { selector: "span" })).toBeNull();
   });
 
-  it("keeps the status banner the same height from ready to sent", async () => {
+  it("keeps the status banner the same height from printing to sent", async () => {
+    let finish: (v: unknown) => void = () => {};
+    const base = invoke.getMockImplementation() as (
+      cmd: string,
+      args?: unknown,
+    ) => Promise<unknown>;
+    invoke.mockImplementation((cmd: string, args?: unknown) =>
+      cmd === "print_html"
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : base(cmd, args),
+    );
     renderPage();
     const print = await screen.findByRole("button", { name: /^Print$/ });
     await waitFor(() => expect(print).toBeEnabled());
-    const ready = screen.getByText(/Printer is ready/).closest("[role=status]");
     const fixed = (el: Element | null) =>
       el?.firstElementChild?.className.match(/\bh-11\b/);
-    expect(fixed(ready)).toBeTruthy();
     fireEvent.click(print);
-    await screen.findByText("Print sent");
-    const sent = screen.getByText("Print sent").closest("[role=status]");
+    const printing = (
+      await screen.findAllByText("Printing…", { selector: "span" })
+    )[0].closest("[role=status]");
+    expect(fixed(printing)).toBeTruthy();
+    finish({ success: true, job_id: "9", duration_ms: 120 });
+    const sent = (await screen.findByText("Print sent")).closest(
+      "[role=status]",
+    );
     expect(fixed(sent)).toBeTruthy();
   });
 
@@ -381,7 +397,7 @@ describe("Print page", () => {
     await waitFor(() => expect(print).toBeEnabled());
     fireEvent.click(print);
     expect(await screen.findByText("Print sent")).toBeInTheDocument();
-    expect(screen.queryByText("Printer is ready")).toBeNull();
+    expect(screen.queryByTestId("print-ready-chip")).toBeNull();
     // The banner stays one line; the stage timings open on request.
     expect(screen.queryByTestId("timing-breakdown")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Details/ }));

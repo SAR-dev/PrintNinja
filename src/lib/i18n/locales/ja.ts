@@ -24,6 +24,7 @@ const ja: Translation = {
     apply: "適用",
     reset: "リセット",
     clear: "クリア",
+    learn_more: "詳しくはこちら",
     sort_by: "{{column}}で並べ替え",
     select_all_rows: "すべての行を選択",
     select_row: "行 {{id}} を選択",
@@ -38,7 +39,6 @@ const ja: Translation = {
     templates: "テンプレート",
     automation: "自動化",
     devices: "デバイス",
-    connect_pc: "PCに接続",
     more: "その他",
     more_title: "その他",
     group_work: "作業",
@@ -242,6 +242,20 @@ const ja: Translation = {
     private_open: "プライベートネットワーク許可",
     private_open_detail:
       "プライベートIPのブロックが無効のため、データURLが同じネットワーク上の機器に届く可能性があります。選択すると変更できます。",
+    error_title: "問題が発生しました",
+    error_body:
+      "このページで問題が発生しました。データは失われていません。もう一度試すか、印刷ページに戻ってください。",
+    error_try_again: "再試行",
+    error_back_to_print: "印刷へ戻る",
+    error_copy_diagnostics: "診断情報をコピー",
+    error_copied: "コピーしました",
+    error_chunk_title: "このページを読み込めませんでした",
+    error_chunk_body:
+      "ページファイルがないか、古い可能性があります。アプリを再読み込みすると解決します。",
+    error_reload: "アプリを再読み込み",
+    app_error_title: "PrintNinjaで問題が発生しました",
+    app_error_body:
+      "アプリを再読み込みすると、続きから再開できます。繰り返す場合は、診断情報をコピーしてチームにお送りください。",
   },
   designer: {
     title: "デザイナー",
@@ -425,6 +439,7 @@ const ja: Translation = {
     search_templates: "テンプレートを検索…",
     no_template_match: "一致するテンプレートがありません",
     unsaved: "未保存の変更",
+    saved: "保存済み",
     swap_dimensions: "幅と高さを入れ替える",
     discard_title: "未保存の変更を破棄しますか？",
     discard_body:
@@ -503,9 +518,7 @@ const ja: Translation = {
     print: "印刷",
     job_title: "印刷ジョブ",
     refresh: "プリンターを更新",
-    ready_title: "プリンターの準備ができました",
-    ready_detail: "{{printer}}で印刷できます。",
-    ready_empty: "プリンターとテンプレートを選択して開始してください。",
+    ready_chip: "準備完了",
     sent: "印刷を送信しました",
     rendered_on: "{{peer}}でレンダリングしました",
     finished: "{{seconds}}で完了しました。",
@@ -568,8 +581,8 @@ const ja: Translation = {
     paper_mismatch_paper:
       "用紙は {{pw2}}×{{ph2}} mm です。このプリンターは {{pw}} mm の用紙です。",
     paper_size_action: "用紙サイズを設定",
-    paper_set_to: "{{w}} mm に設定",
-    paper_other: "その他…",
+    paper_set_to: "プリンターの用紙を {{w}} mm に設定",
+    paper_other: "別の用紙サイズを選択…",
     paper_not_now: "今はしない",
     paper_width_missing:
       "{{name}} には用紙幅が保存されていません。この印刷は {{w}} mm の用紙を使います。",
@@ -857,6 +870,7 @@ const ja: Translation = {
     delete_confirm: "ジョブを削除",
     delete_menu_item: "ジョブ {{id}} を削除",
     delete_title: "ジョブ #{{id}} を削除しますか？",
+    done: "完了",
     empty_clear_hint: "フィルターを解除すると、より多く表示されます。",
     empty_filtered: "条件に一致するジョブがありません",
     empty_hint: "印刷するとジョブがここに表示されます。",
@@ -880,6 +894,7 @@ const ja: Translation = {
     save_title: "現在のフィルターを保存",
     saved_filters: "保存済みフィルター",
     saved_none: "まだありません",
+    select: "選択",
     selected_count: "{{count}}件を選択中",
     settings_title: "設定",
     source_url: "送信元URL",
@@ -1119,7 +1134,7 @@ const ja: Translation = {
     devices_step_2:
       "「自分の電話をペアリング」（自分のスマートフォン）または「ゲストを招待」（他の人のスマートフォン）をクリックします。",
     devices_step_3:
-      "スマートフォンで 設定 → 共有レンダリング を開き、ここに表示されたコードを入力します。",
+      "スマートフォンで「デバイス」→ 共有レンダリング を開き、ここに表示されたコードを入力します。",
     devices_status_on:
       "共有はオンです・ペアリング済みのスマートフォン：{{count}}",
     devices_lan_warning:
@@ -1145,6 +1160,8 @@ const ja: Translation = {
     devices_nearby_hint:
       "PCをタップしてアドレスを入力し、8文字のコードを入力してください。",
     devices_remove: "{{name}}を削除",
+    devices_phone_hint_short:
+      "スマートフォンはPCを経由して印刷します。PCがすべてのジョブを準備し、自分で印刷するか、スマートフォンに返して印刷します。",
     devices_phone_hint:
       "スマートフォンはPCを経由して印刷します。PCがすべてのジョブを準備し、電話が印刷するか — PC経由印刷がオンならPC自身のプリンターで印刷します。PCがオフ・スリープ中・ブロックされているときは、応答があるまで印刷は失敗します。履歴から再試行できます。",
     devices_pc_hint:
@@ -1159,7 +1176,7 @@ const ja: Translation = {
     devices_pair_my_phone: "自分の電話をペアリング",
     devices_pair_phone_hide: "ペアリングコードを隠す",
     devices_code_hint:
-      "スマートフォン側：設定 → 共有レンダリング → このコードを入力。まもなく期限切れになります。しばらくは新しいコードが自動で表示され、その後は「新しいコード」で取得できます。",
+      "スマートフォン側：「デバイス」→ 共有レンダリング を開いてこのコードを入力。まもなく期限切れになります。しばらくは新しいコードが自動で表示され、その後は「新しいコード」で取得できます。",
     devices_code_expires: "有効期限まであと{{count}}秒",
     devices_code_gone:
       "このコードは使用済みか期限切れです。続けるには新しいコードを取得してください。",
@@ -1355,8 +1372,8 @@ const ja: Translation = {
     profile_loading: "アカウントを確認しています…",
     profile_member_since: "{{date}} から利用",
     profile_signed_out:
-      "共有サービスにサインインしていません。共有セクションからサインインしてください。",
-    profile_open_share: "共有設定を開く",
+      "共有サービスにサインインしていません。「アカウントと同期」セクションからサインインしてください。",
+    profile_open_share: "「アカウントと同期」を開く",
     profile_unreachable:
       "{{url}} の共有サービスに接続できないため、サインイン中のアカウントを確認できません。",
     profile_sign_out_offline:
@@ -1513,14 +1530,9 @@ const ja: Translation = {
       "コミュニティのテンプレートを保存すると、オフラインでも使えるコピーが手元に残ります。",
     empty_saved_action: "コミュニティを見る",
     col_size: "ページサイズ",
-    col_sync_id: "同期ID",
-    local_only: "ローカルのみ",
     action_save_server: "{{name}}をサーバーに保存",
-    action_save_server_title: "サーバーに保存",
     action_refresh_server: "{{name}}をサーバーから更新",
-    action_refresh_server_title: "サーバーから更新",
     action_delete_everywhere: "{{name}}をすべての場所から削除",
-    action_delete_title: "サーバーとこのコンピューターから削除",
     action_print: "印刷",
     action_remove: "削除",
     action_clone: "複製",
@@ -1606,6 +1618,7 @@ const ja: Translation = {
     web_notice:
       "API機能にはデスクトップアプリが必要です。このマシン上のローカルサーバーを呼び出すため、ブラウザープレビューからは接続できません。",
     spec_version: "仕様 v{{version}}",
+    running: "サーバー稼働中",
     stopped: "サーバー停止中",
     not_running_title: "サーバーが起動していません",
     not_running_hint:
@@ -1717,7 +1730,7 @@ const ja: Translation = {
     peer_refused:
       "{{name}}がポート{{port}}への接続を拒否しました。PCには届いていますが、PrintNinjaが共有していません。PCでPrintNinjaを開き、Wi-Fiアクセスをオンにしてください。",
     peer_cert:
-      "{{name}}を検証できませんでした：証明書が一致しなくなりました。設定 → デバイスでもう一度ペアリングしてください。",
+      "{{name}}を検証できませんでした：証明書が一致しなくなりました。「デバイス」ページでもう一度ペアリングしてください。",
     peer_removed:
       "{{name}}はこのスマートフォンを削除しました。もう一度ペアリングしてください。",
     cups_http: "CUPSがHTTP {{status}}を返しました",

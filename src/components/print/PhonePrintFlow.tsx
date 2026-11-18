@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { formatSeconds } from "@/lib/timings";
 import type { PaperKey } from "@/lib/paperPresets";
 import { PaperSizeFields } from "@/components/print/PaperSizeFields";
+import { ReadyChip } from "@/components/print/ReadyChip";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
 import type { TemplateListRow } from "@/lib/templates/listTemplates";
 import type {
@@ -262,21 +263,8 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
           </div>
         ))}
 
-      {/* The one place a print's outcome is reported. */}
-      {(store.status === "idle" || store.status === "queued") && (
-        <div
-          role="status"
-          className="flex items-center gap-3 rounded-lg border border-success/30 bg-success-soft px-4 py-2 text-success"
-        >
-          <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
-          <p className="min-w-0 flex-1 truncate text-sm">
-            {t("print.ready_title")} —{" "}
-            {store.printerId
-              ? t("print.ready_detail", { printer: store.printerId })
-              : t("print.ready_empty")}
-          </p>
-        </div>
-      )}
+      {/* The one place a print's outcome is reported; being ready is
+          quiet, so it gets a chip next to the printer select. */}
       {store.status === "success" && (
         <div
           role="status"
@@ -391,7 +379,11 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="print-printer">{t("print.printer")}</Label>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="print-printer">{t("print.printer")}</Label>
+                {(store.status === "idle" || store.status === "queued") &&
+                  store.printerId && <ReadyChip />}
+              </div>
               <Button
                 type="button"
                 variant="ghost"
@@ -656,7 +648,7 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
             <div
               className={cn(
                 "overflow-auto rounded-md border bg-muted p-4",
-                previewExpanded ? "max-h-[70vh]" : "max-h-[40vh]",
+                previewExpanded ? "max-h-sheet-lg" : "max-h-sheet-sm",
               )}
               tabIndex={0}
               role="region"
@@ -894,7 +886,7 @@ function TemplatePickerSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="flex max-h-[80vh] w-full flex-col gap-0 p-0"
+        className="flex max-h-sheet-xl w-full flex-col gap-0 p-0"
       >
         <DialogHeader className="border-b p-5 pr-12">
           <DialogTitle>{t("print.phone.template_picker")}</DialogTitle>
@@ -1020,7 +1012,7 @@ function LayoutOptionsSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="flex max-h-[85vh] w-full flex-col gap-0 p-0"
+        className="flex max-h-sheet-xl w-full flex-col gap-0 p-0"
       >
         <DialogHeader className="border-b p-5 pr-12">
           <DialogTitle>{t("print.phone.layout_options")}</DialogTitle>
