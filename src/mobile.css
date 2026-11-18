@@ -38,7 +38,6 @@
     --shadow-bar:
       0 -1px 0 hsl(var(--border)),
       0 -12px 32px -14px hsl(var(--foreground) / 0.14);
-    --ease-out: cubic-bezier(0.22, 0.8, 0.24, 1);
   }
 
   body {
@@ -132,8 +131,8 @@
   [data-slot="app-main"] a.rounded-lg.border.bg-card,
   [data-slot="app-main"] button.rounded-lg.border.bg-card {
     transition:
-      transform 120ms var(--ease-out),
-      box-shadow 120ms var(--ease-out);
+      transform var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out);
   }
   [data-slot="app-main"] a.rounded-lg.border.bg-card:active,
   [data-slot="app-main"] button.rounded-lg.border.bg-card:active {
@@ -145,7 +144,7 @@
   [data-slot="button"] {
     font-weight: 600;
     transition:
-      transform 120ms var(--ease-out),
+      transform var(--dur-fast) var(--ease-out),
       background-color 150ms,
       opacity 150ms;
   }
@@ -263,7 +262,7 @@
     border-radius: 9999px;
     background-color: transparent;
     transition:
-      background-color 200ms var(--ease-out),
+      background-color var(--dur-base) var(--ease-out),
       transform 150ms var(--ease-out);
   }
   [data-slot="mobile-nav"] a[aria-current="page"] svg,
@@ -290,8 +289,8 @@
     padding: 1rem;
     gap: 0.75rem;
     transition:
-      transform 120ms var(--ease-out),
-      box-shadow 120ms var(--ease-out);
+      transform var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out);
   }
   [data-card]:active {
     transform: scale(0.985);
@@ -386,10 +385,10 @@
     box-shadow: 0 -12px 40px -12px hsl(var(--foreground) / 0.3);
   }
   [data-slot="dialog-content"][data-state="open"] {
-    animation: phone-sheet-up 320ms var(--ease-out);
+    animation: phone-sheet-up var(--dur-slow) var(--ease-out);
   }
   [data-slot="dialog-content"][data-state="closed"] {
-    animation: phone-sheet-down 200ms ease-in forwards;
+    animation: phone-sheet-down var(--dur-base) var(--ease-in) forwards;
   }
   /* Bottom-sheet link lists (the "More" sheet): roomy rows, icons on tonal
      tiles. */
@@ -399,7 +398,7 @@
     padding-inline: 0.75rem;
     border-radius: 1rem;
     font-size: 0.9375rem;
-    transition: background-color 120ms;
+    transition: background-color var(--dur-fast);
   }
   [data-slot="sheet-content"][data-side="bottom"] li > a:active {
     background-color: hsl(var(--muted));

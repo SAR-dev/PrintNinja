@@ -389,8 +389,8 @@ Route loading is a bare spinner (`PageLoading`), and one nested Suspense uses `f
 4. ✅ Automation and Devices phone cleanup (4.9).
 5. ✅ Accessibility pass: focus ring, keyboard, axe, selection cues (4.10, 5.7); 44 px touch
    targets and label-in-name on compact top-bar controls and notice dismiss buttons.
-6. Page skeletons and motion tokens (5.8, 5.9).
-7. Visual regression tests (8.2).
+6. ✅ Page skeletons and motion tokens (5.8, 5.9).
+7. ✅ Visual regression tests (8.2) — desktop light/dark screenshot + axe spec added; baselines mint in CI.
 
 **Phase 3: structural (ongoing, one page per pull request)**
 1. Split large pages and group state: Settings, then Print, Designer, PrinterSetup (5.2).
