@@ -641,13 +641,20 @@ const en = {
       "Local printers sit unused while Print via PC is on — jobs go to the PC's printers.",
     add_printer: "Add Printer",
     test_print: "Test Print",
+    test_text: "Text test",
     paper_width_mm: "Printable width (mm)",
     paper_width_hint:
-      "The printable width, not the roll width — e.g. 72 mm for an 80 mm receipt printer.",
+      "The printable width, not the roll width — e.g. 72 mm for an 80 mm receipt printer. 2-inch printers usually print 48 to 54 mm.",
     dpi: "DPI",
     label_gap_mm: "Label gap (mm)",
     label_gap_hint:
       "Only for TSPL labels. Blank keeps the built-in default (2 mm).",
+    bt_chunk_bytes: "Bluetooth chunk size (bytes)",
+    bt_chunk_bytes_hint:
+      "Driverless Bluetooth only: how many bytes go to the printer per write. Blank keeps the built-in default (512). Smaller is safer for slow 2-inch heads.",
+    bt_chunk_pause_ms: "Bluetooth write pause (ms)",
+    bt_chunk_pause_hint:
+      "Driverless Bluetooth only: the pause between writes, giving a slow printer time to keep up. Blank keeps the built-in default (50).",
     ipp_signin: "Sign-in (optional)",
     ipp_username: "Username",
     ipp_password: "Password",
@@ -658,6 +665,7 @@ const en = {
     ipp_skip_cert: "Skip certificate verification",
     ipp_skip_cert_hint:
       "https:// endpoints only. Lets a self-signed or otherwise unverifiable certificate through.",
+    direct_mode: "Direct printing (no driver)",
     bt_driver: "Print through the OS driver",
     bt_driver_hint_windows:
       "Off prints straight to the printer's COM port — no driver, no queue. On prints through this printer's Windows queue (installed under the same name) — the driver rasterizes, so PDF works too. PrintNinja never switches between the two on its own.",
@@ -761,6 +769,7 @@ const en = {
       "Pairing happens in Android itself: the button opens the system screen where you pair the printer, then come back and rescan.",
     edit_printer: "Edit {{name}}",
     test_action: "Test print on {{name}}",
+    test_text_action: "Text test on {{name}}",
     testing: "Testing…",
     remove_printer: "Remove {{name}}",
     remove_action: "Remove",
@@ -774,6 +783,9 @@ const en = {
     toast_removed: 'Removed "{{name}}"',
     toast_remove_failed: "Failed to remove: {{error}}",
     toast_test_sent: "Test page sent to {{name}}",
+    toast_text_sent: "Text test sent to {{name}}",
+    test_sent_hint:
+      "Nothing printed? Check the printer's language mode and the paper width.",
     toast_test_failed: "Test print failed: {{error}}",
     toast_test_timeout:
       "Test print on {{name}} did not answer within {{seconds}} s — check that the printer is powered on and reachable",
@@ -795,6 +807,14 @@ const en = {
     err_gap_number: "Label gap must be a number",
     err_gap_min: "Label gap must be at least 0.1",
     err_gap_max: "Label gap must be at most 50",
+    err_bt_chunk_number: "Bluetooth chunk size must be a number",
+    err_bt_chunk_int: "Bluetooth chunk size must be a whole number",
+    err_bt_chunk_min: "Bluetooth chunk size must be at least 32",
+    err_bt_chunk_max: "Bluetooth chunk size must be at most 8192",
+    err_bt_pause_number: "Bluetooth write pause must be a number",
+    err_bt_pause_int: "Bluetooth write pause must be a whole number",
+    err_bt_pause_min: "Bluetooth write pause must be at least 0",
+    err_bt_pause_max: "Bluetooth write pause must be at most 2000",
     err_invalid: "Invalid printer",
     lang_pdf: "PDF",
     lang_escpos: "ESC/POS (receipt)",
@@ -919,6 +939,7 @@ const en = {
   status: {
     engine_missing: "Browser missing",
     success: "Printed",
+    sent: "Sent",
     failed: "Failed",
     queued: "Queued",
     printing: "Printing",

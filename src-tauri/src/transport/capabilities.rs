@@ -408,6 +408,8 @@ async fn probe_bluetooth(name: &str, address: &str) -> ProbeCapabilities {
         name.to_string(),
         address.to_string(),
         false,
+        // Detection is a pre-save path with no row, so no stored pacing.
+        Default::default(),
     );
     probe_on_android_wire_bluetooth(&p).await
 }

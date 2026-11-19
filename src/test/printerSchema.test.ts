@@ -17,6 +17,8 @@ const base = {
   paper_width_mm: "80",
   dpi: "203",
   label_gap_mm: "",
+  bt_chunk_bytes: "",
+  bt_chunk_pause_ms: "",
   username: "",
   password: "",
   skip_tls_verification: false,
@@ -111,6 +113,41 @@ describe("validatePrinterForm", () => {
         false,
       );
     }
+  });
+
+  it("keeps the Bluetooth pace fields blank or an integer in range", () => {
+    // Blank is the built-in default (512 bytes / 50 ms), like the gap.
+    expect(validatePrinterForm({ ...base }).ok).toBe(true);
+    const r = validatePrinterForm({
+      ...base,
+      bt_chunk_bytes: "256",
+      bt_chunk_pause_ms: "100",
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.req.bt_chunk_bytes).toBe(256);
+      expect(r.req.bt_chunk_pause_ms).toBe(100);
+    }
+    for (const chunk of ["31", "8193", "512.5", "abc"]) {
+      expect(
+        validatePrinterForm({ ...base, bt_chunk_bytes: chunk }).ok,
+        chunk,
+      ).toBe(false);
+    }
+    for (const pause of ["-1", "2001", "50.5", "abc"]) {
+      expect(
+        validatePrinterForm({ ...base, bt_chunk_pause_ms: pause }).ok,
+        pause,
+      ).toBe(false);
+    }
+    // The bounds themselves are valid, including a zero pause.
+    expect(
+      validatePrinterForm({
+        ...base,
+        bt_chunk_bytes: "32",
+        bt_chunk_pause_ms: "0",
+      }).ok,
+    ).toBe(true);
   });
 
   it("passes the IPP sign-in fields through untouched", () => {

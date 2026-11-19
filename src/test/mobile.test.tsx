@@ -134,6 +134,8 @@ const job = (over: Partial<HistoryJob>): HistoryJob => ({
   requested_by_device_id: null,
   template_revision: null,
   printed_by: null,
+  printer_type: null,
+  via_driver: null,
   ...over,
 });
 
@@ -467,7 +469,10 @@ describe("phone Printers page", () => {
       screen.getByRole("button", { name: "Test print on Dock Zebra" }),
     );
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("test_printer", { id: 1 }),
+      expect(invoke).toHaveBeenCalledWith("test_printer", {
+        id: 1,
+        kind: "page",
+      }),
     );
     fireEvent.pointerDown(
       screen.getByRole("button", { name: "Actions for Dock Zebra" }),

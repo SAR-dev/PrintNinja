@@ -53,6 +53,24 @@ test("printers add, reject duplicates, test and remove", async ({
   await expect(page.getByText("Test page sent to E2E JetDirect")).toBeVisible({
     timeout: 15_000,
   });
+  // Success toasts are 3 s: let it go so the next assertion is unambiguous.
+  await expect(page.getByText("Test page sent to E2E JetDirect")).toBeHidden({
+    timeout: 15_000,
+  });
+
+  // The cheap sibling: the ESC/POS row also offers a plain text test, and
+  // its "sent" toast carries the nothing-printed hint.
+  await page
+    .getByRole("button", { name: "Text test on E2E JetDirect" })
+    .click();
+  await expect(page.getByText("Text test sent to E2E JetDirect")).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(
+    page.getByText(
+      "Nothing printed? Check the printer's language mode and the paper width.",
+    ),
+  ).toBeVisible();
 
   // Edit changes the address in place: no duplicate row, no re-add.
   await page.getByRole("button", { name: "Edit E2E JetDirect" }).click();

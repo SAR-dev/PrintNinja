@@ -353,6 +353,12 @@ pub struct BluetoothWriteOnRequest {
     pub handle: String,
     pub data_base64: Option<String>,
     pub data_path: Option<String>,
+    /// Bytes per RFCOMM write on the Kotlin side; `None` keeps the
+    /// plugin's default (512).
+    pub chunk_bytes: Option<u64>,
+    /// Pause between RFCOMM writes in milliseconds; `None` keeps the
+    /// plugin's default (50).
+    pub chunk_pause_ms: Option<u64>,
 }
 
 /// Release a held RFCOMM socket. Idempotent: unknown handles resolve
@@ -383,13 +389,16 @@ pub struct ApiServerState {
 /// The outcome of one finished background print job, posted to the
 /// notification shade by `postJobNotification` (item 41). `kind` is
 /// "success" or "failure"; `subject` is the job's name (its template)
-/// and `detail` the failure's reason.
+/// and `detail` the failure's reason. `sent_only` marks a success on a
+/// raw-wire printer (USB, driverless Bluetooth), whose notification says
+/// "sent to the printer" instead of "printed".
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobNotificationRequest {
     pub kind: String,
     pub subject: Option<String>,
     pub detail: Option<String>,
+    pub sent_only: Option<bool>,
 }
 
 /// What `startBackgroundService` / `isBackgroundServiceRunning` resolve
@@ -558,19 +567,29 @@ mod tests {
             handle: "h".into(),
             data_base64: Some("AA==".into()),
             data_path: None,
+            chunk_bytes: Some(256),
+            chunk_pause_ms: Some(100),
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"dataBase64\""), "{json}");
+        assert!(json.contains("\"chunkBytes\":256"), "{json}");
+        assert!(json.contains("\"chunkPauseMs\":100"), "{json}");
         let req = BluetoothWriteOnRequest {
             handle: "h".into(),
             data_base64: None,
             data_path: Some("/cache/payload.bin".into()),
+            // Unset pacing: the Kotlin side falls back to its defaults,
+            // like the other Option fields it already defaults.
+            chunk_bytes: None,
+            chunk_pause_ms: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"dataPath\""), "{json}");
         // Absent side serializes as null, like the existing Option fields
         // (reply_timeout_ms) the Kotlin side already defaults.
         assert!(json.contains("\"dataBase64\":null"), "{json}");
+        assert!(json.contains("\"chunkBytes\":null"), "{json}");
+        assert!(json.contains("\"chunkPauseMs\":null"), "{json}");
     }
 
     fn printer(kind: &str, host: &str, rp: Option<&str>) -> DiscoveredPrinter {
@@ -713,21 +732,24 @@ mod tests {
             kind: "failure".into(),
             subject: Some("Order #12".into()),
             detail: None,
+            sent_only: None,
         })
         .unwrap();
         assert_eq!(
             json,
-            serde_json::json!({"kind": "failure", "subject": "Order #12", "detail": null})
+            serde_json::json!({"kind": "failure", "subject": "Order #12", "detail": null, "sentOnly": null})
         );
+        // A raw-wire success says "sent", never "printed" (B3).
         let json = serde_json::to_value(JobNotificationRequest {
             kind: "success".into(),
             subject: None,
             detail: None,
+            sent_only: Some(true),
         })
         .unwrap();
         assert_eq!(
             json,
-            serde_json::json!({"kind": "success", "subject": null, "detail": null})
+            serde_json::json!({"kind": "success", "subject": null, "detail": null, "sentOnly": true})
         );
     }
 

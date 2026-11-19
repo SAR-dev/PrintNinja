@@ -7,7 +7,7 @@ import { isPrintViaPc } from "@/lib/printViaPc";
 import { TimeoutError, withTimeout } from "@/lib/withTimeout";
 import { agent } from "@/lib/agent/commands";
 import type { PrinterRow } from "@/lib/agent/types";
-import { TEST_TIMEOUT_MS } from "./constants";
+import { TEST_TIMEOUT_MS, type TestKind } from "./constants";
 import type { usePrinterDiscovery } from "./usePrinterDiscovery";
 
 /**
@@ -137,15 +137,26 @@ export function usePrinters(discovery: ReturnType<typeof usePrinterDiscovery>) {
     }
   };
 
-  const testPrinter = async (p: PrinterRow) => {
+  const testPrinter = async (p: PrinterRow, kind: TestKind = "page") => {
     setTesting(p.id);
     try {
       await withTimeout(
-        agent("test_printer", { id: p.id }),
+        agent("test_printer", { id: p.id, kind }),
         TEST_TIMEOUT_MS,
         "test_printer",
       );
-      notifySuccess(t("printers.toast_test_sent", { name: p.name }));
+      notifySuccess(
+        t(
+          kind === "text"
+            ? "printers.toast_text_sent"
+            : "printers.toast_test_sent",
+          { name: p.name },
+        ),
+        // A silent success is the worst case: the bytes left the phone
+        // and the platen stayed still. Point at the two knobs that cause
+        // exactly that.
+        { description: t("printers.test_sent_hint") },
+      );
     } catch (e) {
       // A backend that never answers used to leave this button on
       // "Testing…" for ever; say so instead of spinning.

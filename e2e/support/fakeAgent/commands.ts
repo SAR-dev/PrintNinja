@@ -728,6 +728,10 @@ const acknowledgedStubs: string[] = [
   // row by Rust and read back by the print pipeline; no browser code calls
   // it yet, so the fake agent only acknowledges it for the contract test.
   "set_printer_tspl_tuning",
+  // Driverless Bluetooth pacing (B4) is stored on the printer row by Rust
+  // and read back by the Android print path; the e2e browser never sends a
+  // Bluetooth job, so the fake agent only acknowledges it.
+  "set_printer_bluetooth_delivery",
   // mDNS discovery is implemented above
 ];
 

@@ -7,6 +7,7 @@ import {
   TestTube,
   Trash2,
   MoreHorizontal,
+  Type,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/DataTable";
@@ -19,7 +20,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { PrinterRow } from "@/lib/agent/types";
-import { LANGUAGES, PRINTER_TYPES, TYPE_ICONS } from "./constants";
+import {
+  LANGUAGES,
+  PRINTER_TYPES,
+  supportsTextTest,
+  TYPE_ICONS,
+  type TestKind,
+} from "./constants";
 
 type Group = { key: string; labelKey: string; types: string[] | null };
 
@@ -52,7 +59,7 @@ export function PrinterTable({
   testing: number | null;
   openAdd: () => void;
   openEdit: (p: PrinterRow) => void;
-  testPrinter: (p: PrinterRow) => void;
+  testPrinter: (p: PrinterRow, kind?: TestKind) => void;
   setRemoveTarget: (p: PrinterRow) => void;
 }) {
   const { t } = useTranslation();
@@ -162,6 +169,23 @@ export function PrinterTable({
                     : t("printers.test_print")}
                 </span>
               </Button>
+              {/* The cheap test: one line, no render. Only the languages
+                  that can print text natively have it. */}
+              {supportsTextTest(p.language) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={testing === p.id}
+                  onClick={() => testPrinter(p, "text")}
+                  aria-label={t("printers.test_text_action", { name: p.name })}
+                  title={t("printers.test_text")}
+                >
+                  <Type className="h-4 w-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">
+                    {t("printers.test_text")}
+                  </span>
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -256,6 +280,19 @@ export function PrinterTable({
           <TestTube className="h-4 w-4" aria-hidden="true" />
           {testing === p.id ? t("printers.testing") : t("printers.test_print")}
         </Button>
+        {supportsTextTest(p.language) && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="w-full"
+            disabled={testing === p.id}
+            onClick={() => testPrinter(p, "text")}
+            aria-label={t("printers.test_text_action", { name: p.name })}
+          >
+            <Type className="h-4 w-4" aria-hidden="true" />
+            {t("printers.test_text")}
+          </Button>
+        )}
       </div>
     );
   };

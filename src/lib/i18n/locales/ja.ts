@@ -654,13 +654,20 @@ const ja: Translation = {
       "PC経由印刷がオンの間、ローカルプリンターは使われません — ジョブはPCのプリンターに送られます。",
     add_printer: "プリンターを追加",
     test_print: "テスト印刷",
+    test_text: "テキストテスト",
     paper_width_mm: "印字幅 (mm)",
     paper_width_hint:
-      "ロール幅ではなく印字幅です。例: 80 mm のレシートプリンターなら 72 mm。",
+      "ロール幅ではなく印字幅です。例: 80 mm のレシートプリンターなら 72 mm。2インチプリンターは通常 48〜54 mm が印字幅です。",
     dpi: "DPI",
     label_gap_mm: "ラベルギャップ (mm)",
     label_gap_hint:
       "TSPLラベル専用。空欄のままにすると組み込み既定値 (2 mm) が使われます。",
+    bt_chunk_bytes: "Bluetoothチャンクサイズ (バイト)",
+    bt_chunk_bytes_hint:
+      "ドライバーなしBluetooth専用: 1回の書き込みでプリンターに送るバイト数。空欄なら組み込み既定値 (512) が使われます。遅い2インチヘッドでは小さめが安全です。",
+    bt_chunk_pause_ms: "Bluetooth書き込みの間隔 (ms)",
+    bt_chunk_pause_hint:
+      "ドライバーなしBluetooth専用: 書き込みと書き込みの間隔。遅いプリンターが追いつける時間をつくる。空欄なら組み込み既定値 (50) が使われます。",
     ipp_signin: "サインイン（任意）",
     ipp_username: "ユーザー名",
     ipp_password: "パスワード",
@@ -671,6 +678,7 @@ const ja: Translation = {
     ipp_skip_cert: "証明書検証をスキップ",
     ipp_skip_cert_hint:
       "https:// のエンドポイント専用。自己署名など検証できない証明書を通します。",
+    direct_mode: "直接印刷（ドライバーなし）",
     bt_driver: "OSドライバーで印刷する",
     bt_driver_hint_windows:
       "オフ = プリンターのCOMポートへ直接印刷（ドライバーもキューも不要）。オン = 同名でWindowsにインストールした印刷キュー経由で印刷 — ドライバーがラスタライズするためPDFも印刷できます。PrintNinjaがこの2つを勝手に切り替えることはありません。",
@@ -777,6 +785,7 @@ const ja: Translation = {
       "ペアリングはAndroid本体で行います。ボタンでシステムのBluetooth画面が開くので、そこでプリンターをペアリングしてから戻って再スキャンしてください。",
     edit_printer: "{{name}}を編集",
     test_action: "{{name}}でテスト印刷",
+    test_text_action: "{{name}}でテキストテスト",
     testing: "テストしています…",
     remove_printer: "{{name}}を削除",
     remove_action: "削除",
@@ -790,6 +799,9 @@ const ja: Translation = {
     toast_removed: "「{{name}}」を削除しました",
     toast_remove_failed: "削除に失敗しました: {{error}}",
     toast_test_sent: "{{name}}にテストページを送信しました",
+    toast_text_sent: "{{name}}にテキストテストを送信しました",
+    test_sent_hint:
+      "何も印刷されない場合は、プリンターの言語モードと印字幅を確認してください。",
     toast_test_failed: "テスト印刷に失敗しました: {{error}}",
     toast_test_timeout:
       "{{name}}へのテスト印刷が{{seconds}}秒以内に応答しませんでした。プリンターの電源と接続状況を確認してください",
@@ -812,6 +824,14 @@ const ja: Translation = {
     err_gap_number: "ラベルギャップは数値で入力してください",
     err_gap_min: "ラベルギャップは0.1以上にしてください",
     err_gap_max: "ラベルギャップは50以下にしてください",
+    err_bt_chunk_number: "Bluetoothチャンクサイズは数値で入力してください",
+    err_bt_chunk_int: "Bluetoothチャンクサイズは整数で入力してください",
+    err_bt_chunk_min: "Bluetoothチャンクサイズは32以上にしてください",
+    err_bt_chunk_max: "Bluetoothチャンクサイズは8192以下にしてください",
+    err_bt_pause_number: "Bluetooth書き込みの間隔は数値で入力してください",
+    err_bt_pause_int: "Bluetooth書き込みの間隔は整数で入力してください",
+    err_bt_pause_min: "Bluetooth書き込みの間隔は0以上にしてください",
+    err_bt_pause_max: "Bluetooth書き込みの間隔は2000以下にしてください",
     err_invalid: "プリンターの設定が正しくありません",
     lang_pdf: "PDF",
     lang_escpos: "ESC/POS（レシート）",
@@ -937,6 +957,7 @@ const ja: Translation = {
   status: {
     engine_missing: "ブラウザー未検出",
     success: "印刷済み",
+    sent: "送信済み",
     failed: "失敗",
     queued: "待機中",
     printing: "印刷中",

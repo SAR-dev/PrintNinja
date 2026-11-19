@@ -37,6 +37,7 @@ import { DataTable } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
 import { JobStatusBadge } from "@/components/StatusBadge";
+import { isRawWire } from "@/pages/printer-setup/constants";
 import { TimingBreakdown } from "@/components/TimingBreakdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -489,6 +490,16 @@ export function HistoryPage() {
     persistSaved(next);
   };
 
+  // Raw-wire success (USB, driverless Bluetooth): the bytes left the app,
+  // but nothing confirms the paper came out, so the badge says "Sent"
+  // instead of "Printed" (B3).
+  const jobStatusLabel = (job: HistoryJob) =>
+    job.status === "success" &&
+    job.printer_type != null &&
+    isRawWire(job.printer_type, job.via_driver ?? false)
+      ? t("status.sent")
+      : undefined;
+
   const columns = useMemo<ColumnDef<HistoryJob>[]>(
     () => [
       {
@@ -556,7 +567,7 @@ export function HistoryPage() {
             : null;
           return (
             <div>
-              <JobStatusBadge status={j.status} />
+              <JobStatusBadge status={j.status} label={jobStatusLabel(j)} />
               {j.printed_by && (
                 <p className="text-xs text-muted-foreground">
                   {t("history.printed_via", { pc: j.printed_by })}
@@ -897,7 +908,7 @@ export function HistoryPage() {
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm font-semibold">#{job.id}</span>
-          <JobStatusBadge status={job.status} />
+          <JobStatusBadge status={job.status} label={jobStatusLabel(job)} />
         </div>
         <p className="truncate text-xs text-muted-foreground">
           {printerName(job.printer_id)}
@@ -1347,7 +1358,10 @@ export function HistoryPage() {
                     {t("common.status")}
                   </dt>
                   <dd>
-                    <JobStatusBadge status={job.status} />
+                    <JobStatusBadge
+                      status={job.status}
+                      label={jobStatusLabel(job)}
+                    />
                   </dd>
                 </div>
                 <div>

@@ -71,50 +71,47 @@ export function usePrintLists() {
   // the ref keeps reloadLists (and its listeners) stable.
   const refreshRef = useRef(refreshSystemPrinters);
   refreshRef.current = refreshSystemPrinters;
-  const reloadLists = useCallback(
-    async (first: boolean) => {
-      const cancelled = () => !aliveRef.current;
-      try {
-        // Saved printers plus OS ones, merged by the hook; this also
-        // updates the list the dropdown shows.
-        const [p, tpl, prefs] = await Promise.all([
-          refreshRef.current().catch(() => []),
-          listTemplates().catch(() => []),
-          loadPrintPrefs().catch((): PrintPrefsMap => ({})),
-        ]);
-        if (cancelled()) return;
-        setTemplates(tpl);
-        setPrinterPrefs(prefs);
-        const st = usePrintStore.getState();
-        // The preselected printer's remembered template beats the plain
-        // first-template fallback; its paper is restored on the first load
-        // only, and only over an unset paper (a focus/pull reload must not
-        // clobber a live session's explicit choice).
-        const hadPaper = st.paperW != null || st.paperH != null;
-        const effPrinter = st.printerId || (p.length > 0 ? p[0].name : "");
-        if (effPrinter) st.setPrinterId(effPrinter);
-        const remembered = effPrinter ? prefs[prefsKey(effPrinter)] : undefined;
-        const rememberedTplOk =
-          !!remembered &&
-          tpl.some((x) => String(x.id) === remembered.template_id);
-        if (
-          tpl.length > 0 &&
-          !tpl.some((x) => String(x.id) === String(st.templateId))
-        )
-          st.setTemplateId(
-            rememberedTplOk ? remembered.template_id : String(tpl[0].id),
-          );
-        if (first && rememberedTplOk && !hadPaper) {
-          st.setPaper(remembered.paper_w, remembered.paper_h);
-        }
-      } catch (e) {
-        console.error("Failed to load printers/templates:", e);
-      } finally {
-        if (first && !cancelled()) setLoading(false);
+  const reloadLists = useCallback(async (first: boolean) => {
+    const cancelled = () => !aliveRef.current;
+    try {
+      // Saved printers plus OS ones, merged by the hook; this also
+      // updates the list the dropdown shows.
+      const [p, tpl, prefs] = await Promise.all([
+        refreshRef.current().catch(() => []),
+        listTemplates().catch(() => []),
+        loadPrintPrefs().catch((): PrintPrefsMap => ({})),
+      ]);
+      if (cancelled()) return;
+      setTemplates(tpl);
+      setPrinterPrefs(prefs);
+      const st = usePrintStore.getState();
+      // The preselected printer's remembered template beats the plain
+      // first-template fallback; its paper is restored on the first load
+      // only, and only over an unset paper (a focus/pull reload must not
+      // clobber a live session's explicit choice).
+      const hadPaper = st.paperW != null || st.paperH != null;
+      const effPrinter = st.printerId || (p.length > 0 ? p[0].name : "");
+      if (effPrinter) st.setPrinterId(effPrinter);
+      const remembered = effPrinter ? prefs[prefsKey(effPrinter)] : undefined;
+      const rememberedTplOk =
+        !!remembered &&
+        tpl.some((x) => String(x.id) === remembered.template_id);
+      if (
+        tpl.length > 0 &&
+        !tpl.some((x) => String(x.id) === String(st.templateId))
+      )
+        st.setTemplateId(
+          rememberedTplOk ? remembered.template_id : String(tpl[0].id),
+        );
+      if (first && rememberedTplOk && !hadPaper) {
+        st.setPaper(remembered.paper_w, remembered.paper_h);
       }
-    },
-    [],
-  );
+    } catch (e) {
+      console.error("Failed to load printers/templates:", e);
+    } finally {
+      if (first && !cancelled()) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     aliveRef.current = true;

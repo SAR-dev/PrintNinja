@@ -9,9 +9,14 @@ import {
 import { MemoryRouter } from "react-router-dom";
 import "@/lib/i18n";
 
+import { toast } from "sonner";
+
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...a: unknown[]) => invoke(...a),
+}));
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
 }));
 
 import { PrinterSetupPage } from "@/pages/PrinterSetup";
@@ -51,6 +56,9 @@ beforeAll(() => {
 });
 beforeEach(() => {
   invoke.mockReset();
+  vi.mocked(toast.success).mockClear();
+  vi.mocked(toast.info).mockClear();
+  vi.mocked(toast.error).mockClear();
   invoke.mockImplementation(async (cmd: string) => {
     if (cmd === "list_printers") return PRINTERS;
     if (cmd === "enumerate_system_printers") return [];
@@ -85,15 +93,78 @@ describe("Printers page", () => {
     expect(screen.getByText("Office HP")).toBeInTheDocument();
   });
 
-  it("sends a test page from the row", async () => {
+  it("sends a test page from the row and points at the two silent-failure knobs", async () => {
     renderPage();
     await screen.findByText("Dock Zebra");
     fireEvent.click(
       screen.getByRole("button", { name: "Test print on Dock Zebra" }),
     );
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("test_printer", { id: 1 }),
+      expect(invoke).toHaveBeenCalledWith("test_printer", {
+        id: 1,
+        kind: "page",
+      }),
     );
+    // "Sent" is not "printed": a silent head drops the page. The toast
+    // names the two settings that cause exactly that.
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "Test page sent to Dock Zebra",
+        expect.objectContaining({
+          description:
+            "Nothing printed? Check the printer's language mode and the paper width.",
+        }),
+      ),
+    );
+  });
+
+  it("sends the plain text test from a row whose language can print text", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers")
+        return [
+          ...PRINTERS,
+          P({
+            id: 4,
+            name: "Thermal 58",
+            printer_type: "bluetooth",
+            address: "AA:BB:CC:DD:EE:FF",
+            language: "escpos",
+          }),
+        ];
+      return null;
+    });
+    renderPage();
+    await screen.findByText("Thermal 58");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Text test on Thermal 58" }),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("test_printer", {
+        id: 4,
+        kind: "text",
+      }),
+    );
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "Text test sent to Thermal 58",
+        expect.objectContaining({
+          description:
+            "Nothing printed? Check the printer's language mode and the paper width.",
+        }),
+      ),
+    );
+  });
+
+  it("has no text test for a language that only prints bitmaps", async () => {
+    renderPage();
+    await screen.findByText("Dock Zebra");
+    // Dock Zebra is a pdf row: the image page is its only test.
+    expect(
+      screen.getByRole("button", { name: "Test print on Dock Zebra" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Text test on / }),
+    ).not.toBeInTheDocument();
   });
 
   it("names the printer before removing it", async () => {
@@ -352,7 +423,7 @@ describe("Bluetooth in the add dialog", () => {
     }
   });
 
-  it("adds a bonded printer in one tap on Android", async () => {
+  it("fills the form instead of saving when a bonded printer is one-tapped on Android", async () => {
     const done = phoneMode();
     invoke.mockImplementation(async (cmd: string) => {
       if (cmd === "list_printers") return PRINTERS;
@@ -367,21 +438,25 @@ describe("Bluetooth in the add dialog", () => {
         "discovered-bluetooth-A4:77:17:22:33:44",
       );
       fireEvent.click(within(row).getByRole("button", { name: /Add/ }));
+      // B1: a one-tap no longer saves a 2-inch thermal printer at a
+      // blind 80 mm — it fills the form and leaves the sheet open so
+      // the width can be confirmed, at a safe 2-inch default under the
+      // user's eyes (Advanced opened).
       await waitFor(() =>
-        expect(invoke).toHaveBeenCalledWith(
-          "add_printer",
-          expect.objectContaining({
-            req: expect.objectContaining({
-              name: "Ruijie 80",
-              address: "A4:77:17:22:33:44",
-              printer_type: "bluetooth",
-              // Android rasterizes thermal locally: the add starts at
-              // ESC/POS, not PDF.
-              language: "escpos",
-            }),
-          }),
+        expect(within(panel).getByLabelText("Printer name")).toHaveValue(
+          "Ruijie 80",
         ),
       );
+      expect(
+        within(panel).getByLabelText("Bluetooth MAC or COM port"),
+      ).toHaveValue("A4:77:17:22:33:44");
+      expect(within(panel).getByLabelText("Printable width (mm)")).toHaveValue(
+        54,
+      );
+      expect(
+        within(panel).getByText("Direct printing (no driver)"),
+      ).toBeInTheDocument();
+      expect(invoke).not.toHaveBeenCalledWith("add_printer", expect.anything());
     } finally {
       done();
     }

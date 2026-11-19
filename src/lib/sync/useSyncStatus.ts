@@ -29,10 +29,10 @@ let current: {
  * Resolves with the outcome (so a manual refresh can report it); no-op
  * before the scheduler starts.
  */
-export function cacheNow(opts?: {
-  force?: boolean;
-}): Promise<RefreshOutcome> {
-  return current?.refreshNow(opts) ?? Promise.resolve({ ok: true, error: null });
+export function cacheNow(opts?: { force?: boolean }): Promise<RefreshOutcome> {
+  return (
+    current?.refreshNow(opts) ?? Promise.resolve({ ok: true, error: null })
+  );
 }
 
 export function useSyncStatus(deps?: {
