@@ -366,7 +366,10 @@ fn build_template_css(user_css: &str, compiled_css: &str) -> String {
     if !user_css.trim().is_empty() {
         parts.push(user_css);
     }
-    parts.join("\n")
+    // Scrub remote `@import` / `url()` from the assembled stylesheet: this
+    // CSS is injected verbatim into the rendered document and is not
+    // covered by the HTML sanitizer (`sanitize_html` sees only the markup).
+    crate::render::handlebars::sanitize_css(&parts.join("\n"))
 }
 
 /// Wrap one record's rendered HTML in the template's stylesheet, as a
@@ -1090,6 +1093,20 @@ struct JobRun {
     started: Instant,
 }
 
+/// The first page's size in millimetres, from the PDF's own page
+/// dimensions (see [`crate::render::pdfium::pdf_page_size_mm`]). `None`
+/// when the size cannot be read, or on Android where the platform plugin
+/// renders PDFs and there is no bundled PDFium to ask.
+#[cfg(not(target_os = "android"))]
+fn pdf_page_size_mm(pdf: &[u8]) -> Option<(f64, f64)> {
+    crate::render::pdfium::pdf_page_size_mm(pdf)
+}
+
+#[cfg(target_os = "android")]
+fn pdf_page_size_mm(_pdf: &[u8]) -> Option<(f64, f64)> {
+    None
+}
+
 /// Step 1: the document to print — the pinned template version's HTML and
 /// CSS, or the request's own HTML — plus the page size it prints at.
 fn resolve_content(db: &DbState, req: &PrintRequest) -> AppResult<ResolvedContent> {
@@ -1104,10 +1121,15 @@ fn resolve_content(db: &DbState, req: &PrintRequest) -> AppResult<ResolvedConten
         }
         None => {
             // A PDF-input job has no design size; the best guess at its
-            // paper is the printer's stored media width (label printers
-            // record their label width there). Height has no stored
-            // column — a caller that needs a specific label height sends
-            // `page_height_mm`.
+            // paper is the PDF's own page size, then the printer's stored
+            // media width (label printers record their label width there),
+            // then A4. Reading the PDF's page size keeps a label PDF from
+            // being rasterized at the A4 fallback (wrong size / clipped).
+            let pdf_size = req
+                .pdf
+                .as_deref()
+                .filter(|p| !p.is_empty())
+                .and_then(pdf_page_size_mm);
             let row_w = req
                 .pdf
                 .as_ref()
@@ -1121,8 +1143,13 @@ fn resolve_content(db: &DbState, req: &PrintRequest) -> AppResult<ResolvedConten
             (
                 req.html.clone(),
                 String::new(),
-                req.page_width_mm.or(row_w).unwrap_or(DEFAULT_PAPER_W_MM),
-                req.page_height_mm.unwrap_or(DEFAULT_PAPER_H_MM),
+                req.page_width_mm
+                    .or_else(|| pdf_size.map(|(w, _)| w))
+                    .or(row_w)
+                    .unwrap_or(DEFAULT_PAPER_W_MM),
+                req.page_height_mm
+                    .or_else(|| pdf_size.map(|(_, h)| h))
+                    .unwrap_or(DEFAULT_PAPER_H_MM),
                 None,
             )
         }

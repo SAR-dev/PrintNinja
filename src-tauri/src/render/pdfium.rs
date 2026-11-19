@@ -166,6 +166,27 @@ pub fn pdf_to_raster(pdf: &[u8], w_px: usize, h_px: usize) -> Result<(RasterImag
     Ok((raster, page_count))
 }
 
+/// The first page's size in millimetres, read from the PDF's own page
+/// dimensions. Used by the print pipeline to size the raster for a
+/// PDF-input job when the caller supplied no explicit paper size, instead
+/// of silently falling back to A4 (which mis-scales or clips a label).
+/// `None` when the engine cannot be loaded or the document is unreadable.
+pub fn pdf_page_size_mm(pdf: &[u8]) -> Option<(f64, f64)> {
+    let engine = pdfium().ok()?;
+    let doc = engine.load_pdf_from_byte_slice(pdf, None).ok()?;
+    let pages = doc.pages();
+    if pages.len() == 0 {
+        return None;
+    }
+    let page = pages.first().ok()?;
+    let width = page.width().to_mm() as f64;
+    let height = page.height().to_mm() as f64;
+    if !(width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0) {
+        return None;
+    }
+    Some((width, height))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

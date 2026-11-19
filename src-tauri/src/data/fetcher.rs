@@ -190,7 +190,7 @@ async fn validate_url(url: &reqwest::Url, allow_private: bool) -> Result<()> {
 /// link-local (which includes the cloud metadata endpoint 169.254.169.254),
 /// RFC1918 private, carrier-grade NAT, unique-local (fc00::/7), unspecified
 /// and multicast.
-fn is_forbidden_addr(ip: IpAddr) -> bool {
+pub(crate) fn is_forbidden_addr(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
             v4.is_loopback()

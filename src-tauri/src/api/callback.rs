@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::net::ToSocketAddrs;
 use std::time::Duration;
 
 /// Maximum callback URL length (SSRF hardening).
@@ -114,11 +115,32 @@ pub fn validate_callback_url_with_config(
         }
     }
 
-    // Private / loopback / link-local block
-    if !allow_private && crate::api::peer_consume::is_private_host(host) {
-        return Err(format!(
-            "callback_url must not target private/loopback/link-local address (host `{host}` blocked; set PRINTNINJA_CALLBACK_ALLOW_PRIVATE=1 to allow)"
-        ));
+    // Private / loopback / link-local block. Two layers:
+    // 1. A string check for IP literals, localhost, `.local` and
+    //    single-label names — fast, and it names the obvious cases before
+    //    any socket work.
+    // 2. A DNS-resolution check for every *hostname* that the string check
+    //    did not already refuse, so a name resolving to a private /
+    //    loopback / link-local address (e.g. `169.254.169.254.nip.io`) is
+    //    refused too. Without this a rebindable name passes validation and
+    //    the callback POST reaches an internal target.
+    if !allow_private {
+        if crate::api::peer_consume::is_private_host(host) {
+            return Err(format!(
+                "callback_url must not target private/loopback/link-local address (host `{host}` blocked; set PRINTNINJA_CALLBACK_ALLOW_PRIVATE=1 to allow)"
+            ));
+        }
+        if let Ok(addrs) = (host, parsed.port_or_known_default().unwrap_or(443)).to_socket_addrs()
+        {
+            for addr in addrs {
+                if crate::data::fetcher::is_forbidden_addr(addr.ip()) {
+                    return Err(format!(
+                        "callback_url host `{host}` resolves to {} (private/loopback/link-local); set PRINTNINJA_CALLBACK_ALLOW_PRIVATE=1 to allow",
+                        addr.ip()
+                    ));
+                }
+            }
+        }
     }
 
     Ok(())
