@@ -99,6 +99,14 @@ fun dotsFromArgb(pixels: IntArray, widthPx: Int, heightPx: Int): ByteArray {
 private const val TAG = "AndroidPrintPlugin"
 
 /**
+ * The Android 17 local network permission, by name. The plugin compiles
+ * against API 36, where `Manifest.permission.ACCESS_LOCAL_NETWORK` does not
+ * exist yet (referencing it fails the build with "Unresolved reference"),
+ * and the permission check and request APIs take the plain string anyway.
+ */
+private const val ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
+
+/**
  * One render's deadline, in ms: a page that never finishes still gets an
  * answer. Shared by the class's PDF watchdog (`renderTimeoutMs`) and
  * [renderDots].
@@ -2088,7 +2096,7 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
         if (Build.VERSION.SDK_INT >= 34 &&
             ContextCompat.checkSelfPermission(
                 activity,
-                Manifest.permission.ACCESS_LOCAL_NETWORK,
+                ACCESS_LOCAL_NETWORK,
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             return false
@@ -2128,7 +2136,7 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
             if (Build.VERSION.SDK_INT >= 34) {
                 arrayOf(
                     Manifest.permission.NEARBY_WIFI_DEVICES,
-                    Manifest.permission.ACCESS_LOCAL_NETWORK,
+                    ACCESS_LOCAL_NETWORK,
                 )
             } else {
                 arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES)
