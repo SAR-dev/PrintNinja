@@ -63,6 +63,9 @@ const config: Config = {
         danger: { DEFAULT: "hsl(var(--danger))", soft: "hsl(var(--danger-soft))" },
         info: { DEFAULT: "hsl(var(--info))", soft: "hsl(var(--info-soft))" },
         neutral: { DEFAULT: "hsl(var(--neutral))", soft: "hsl(var(--neutral-soft))" },
+        // Non-status accent ("new", "recommended", brand moments) — see the
+        // highlight tokens in index.css; never used for state.
+        highlight: { DEFAULT: "hsl(var(--highlight))", soft: "hsl(var(--highlight-soft))" },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

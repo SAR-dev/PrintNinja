@@ -987,7 +987,7 @@ export function HistoryPage() {
           on a phone the six controls move into the bottom sheet below, leaving
           Search, the Filters button, and removable chips here. */}
       <div
-        className="-mx-1 rounded-lg border bg-card p-3 shadow-[0_1px_0_hsl(var(--border))] md:sticky md:top-0 md:z-20"
+        className="-mx-1 rounded-lg border bg-card p-3 shadow-[0_1px_0_hsl(var(--border))] md:sticky md:top-0 md:z-20 max-md:mx-0 max-md:p-0 max-md:border-transparent max-md:bg-transparent max-md:shadow-none max-md:[&_input]:rounded-full max-md:[&_button]:rounded-full max-md:[&_button]:h-12"
         role="search"
         aria-label={t("history.filter_heading")}
       >

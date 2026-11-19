@@ -174,7 +174,10 @@ export function SignInScreen({
       >
         <Card className="w-full max-w-md">
           <CardHeader className="space-y-3">
-            <AppLogo src={logo} className="h-10 w-10" />
+            {/* Brand moment: the mark sits on a brand-soft tile. */}
+            <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-accent">
+              <AppLogo src={logo} className="h-9 w-9" />
+            </div>
             <h1 className="text-xl font-semibold leading-none tracking-tight">
               {afterReset
                 ? t("auth.recovery_save_reset_title")
@@ -221,7 +224,10 @@ export function SignInScreen({
       >
         <Card className="w-full max-w-md">
           <CardHeader className="space-y-3">
-            <AppLogo src={logo} className="h-10 w-10" />
+            {/* Brand moment: the mark sits on a brand-soft tile. */}
+            <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-accent">
+              <AppLogo src={logo} className="h-9 w-9" />
+            </div>
             <h1 className="text-xl font-semibold leading-none tracking-tight">
               {t("auth.continue_as_guest")}
             </h1>
@@ -292,7 +298,10 @@ export function SignInScreen({
     >
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-3">
-          <AppLogo src={logo} className="h-10 w-10" />
+          {/* Brand moment: the mark sits on a brand-soft tile. */}
+          <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-accent">
+            <AppLogo src={logo} className="h-9 w-9" />
+          </div>
           <h1 className="text-xl font-semibold leading-none tracking-tight">
             {resetting
               ? t("auth.reset_title")

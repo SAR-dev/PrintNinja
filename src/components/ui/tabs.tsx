@@ -15,15 +15,17 @@ const TabsList = React.forwardRef<
     if (typeof ref === "function") ref(node);
     else if (ref) ref.current = node;
   };
+  // On phones, non-segmented tab rows stack full-width (max-md: classes
+  // below), where nothing is ever cut off; only segmented strips can
+  // overflow.
+  const phoneStacked =
+    "data-variant" in props ? props["data-variant"] !== "segmented" : true;
   // Recompute after every render: tab labels carry counts that change
   // width, and the active tab can move programmatically (not just by
   // tapping a visible trigger).
   React.useLayoutEffect(() => {
     const el = innerRef.current;
     if (!el) return;
-    // The phone layer (mobile.css) stacks most tab rows full-width,
-    // where nothing is ever cut off; only the horizontal strips (the
-    // default, and data-variant="segmented") can overflow.
     const horizontal = getComputedStyle(el).flexDirection !== "column";
     setFadeRight(
       horizontal && el.scrollWidth - el.clientWidth - el.scrollLeft > 4,
@@ -57,6 +59,8 @@ const TabsList = React.forwardRef<
         // instead of being clipped by the screen edge. On coarse pointers the strip
         // grows so its 44px triggers are not clipped (h-10 still wins on fine pointers).
         "inline-flex h-10 max-w-full items-center justify-start overflow-x-auto rounded-md bg-muted p-1 text-muted-foreground [@media(pointer:coarse)]:min-h-[3.25rem] sm:justify-center",
+        phoneStacked &&
+          "max-md:flex max-md:flex-col max-md:w-full max-md:gap-1 max-md:rounded-[1rem]",
         className,
       )}
       {...props}
