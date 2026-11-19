@@ -245,7 +245,7 @@ export function DataTable<T>({
                   data-state={selectedRowId === row.id ? "selected" : undefined}
                   tabIndex={onRowActivate || cardSelection ? 0 : undefined}
                   className={cn(
-                    "flex gap-1 rounded-lg border bg-card p-3",
+                    "flex gap-1 rounded-lg border bg-card p-3 max-md:p-4 max-md:gap-3 max-md:transition-[transform_var(--dur-fast)_var(--ease-out),box-shadow_var(--dur-fast)_var(--ease-out)] max-md:active:scale-[0.985] max-md:active:shadow-none max-md:[&_input[type=checkbox]]:h-[1.375rem] max-md:[&_input[type=checkbox]]:w-[1.375rem] max-md:[&_input[type=checkbox]]:rounded-[0.5rem] max-md:[&_button[aria-label^='Actions for']]:rounded-full max-md:[&_button[class*=w-control]]:rounded-full",
                     (onRowActivate || cardSelection) &&
                       "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                     selectedRowId === row.id && "bg-accent",

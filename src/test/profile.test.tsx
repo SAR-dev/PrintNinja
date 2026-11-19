@@ -19,6 +19,7 @@ const client = vi.hoisted(() => ({
   changePassword: vi.fn(),
   changeHandle: vi.fn(),
   setSessionHandle: vi.fn(),
+  getSessionHandle: vi.fn(),
   listSessions: vi.fn(),
   revokeSession: vi.fn(),
   onSessionStarted: vi.fn((cb: () => void) => {
@@ -45,6 +46,7 @@ beforeEach(() => {
     created_at: "2026-03-01T10:00:00.000Z",
   });
   client.logout.mockResolvedValue(undefined);
+  client.getSessionHandle.mockReturnValue(null);
   client.listSessions.mockResolvedValue({ items: [] });
   client.revokeSession.mockResolvedValue({ revoked: 1 });
   vi.mocked(toast.success).mockClear();
@@ -67,6 +69,15 @@ describe("Profile section", () => {
     ).toBeInTheDocument();
     // The password form moved here from the Account & sync section.
     expect(screen.getByLabelText("Current password")).toBeInTheDocument();
+  });
+
+  it("shows the local session handle on first paint, before fetchMe", async () => {
+    // A stored handle means a live session, so the identity must not wait
+    // on the network: no "not signed in" / "checking" flash on landing.
+    client.getSessionHandle.mockReturnValue("rafi");
+    client.fetchMe.mockReturnValue(new Promise(() => {})); // never settles
+    renderCard();
+    expect(screen.getByTestId("profile-handle")).toHaveTextContent("rafi");
   });
 
   it("reloads when a new session starts without remounting", async () => {
