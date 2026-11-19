@@ -380,7 +380,7 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Label htmlFor="print-printer">{t("print.printer")}</Label>
                 {(store.status === "idle" || store.status === "queued") &&
@@ -469,7 +469,12 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
                     : "border-border",
                 )}
               >
-                <span className="truncate">{t("print.phone.data_sample")}</span>
+                {/* A label, not data: it wraps (max two lines) instead of
+                    truncating, so Japanese and any future language keep the
+                    whole word visible. */}
+                <span className="line-clamp-2 text-center">
+                  {t("print.phone.data_sample")}
+                </span>
               </button>
               <button
                 type="button"

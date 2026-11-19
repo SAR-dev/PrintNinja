@@ -217,6 +217,20 @@ you if it broke AA (4.5:1 for text, 3:1 for control borders and the focus ring).
 IBM Plex Sans for the UI, IBM Plex Mono for IDs, addresses, JSON, code and `kbd` (bundled via
 `@fontsource`, so it works offline). Body text is 14 px with a 1.5 line height. Sizes in use:
 
+Japanese pairs IBM Plex Sans with the platform's own CJK face — Yu Gothic UI / Meiryo on
+Windows, Noto Sans CJK JP on Android (the `sans` stack in `tailwind.config.ts` and the
+`body` rule in `src/index.css` both list them; nothing is bundled, the target platforms
+ship the fonts). `src/index.css` also carries the Japanese rules, scoped to
+`html[lang="ja"]` (i18n keeps `lang` in step with the UI language):
+
+- body line height rises to 1.7 — CJK reads better with more air;
+- `text-transform: uppercase` is off, and letter-spacing is zeroed on every
+  tracking utility (named and the arbitrary `max-md:` values) — those Latin
+  display treatments look wrong on Japanese text;
+- translated **labels** wrap instead of truncating (two-line cap where the
+  control needs one); user **data** (names, handles, addresses) still truncates
+  with `min-w-0` + `truncate`, because it can be arbitrarily long in any language.
+
 | Class | Size | Use |
 |---|---|---|
 | `text-xs` | 12 px | Badges, hints, table meta, keyboard hints |
@@ -586,8 +600,10 @@ Be aware of these before copying existing code:
   `Dialog` close label, `DataTable` checkbox labels), so they do not translate yet.
 - `Tooltip` and `Progress` exist as primitives but nothing uses them yet; the app uses native
   `title` hints.
-- The Designer and Print pages are large single files. Prefer extracting pieces into
-  `src/components/designer/` rather than growing them.
+- The big pages (Settings, Print, Designer, PrinterSetup) are thin shells composing
+  section components in `src/pages/{settings,print,designer,printer-setup}/`. Keep it that
+  way: a page stays under ~300 lines, and new behaviour goes in a section component or a
+  small state hook, not the shell.
 
 ## Finding a setting
 
