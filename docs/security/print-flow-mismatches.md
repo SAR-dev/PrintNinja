@@ -27,43 +27,37 @@ mode like the local path.
 
 ---
 
-## 2. `records` (Pages) ignored via PC when `data_url` is used — open
+## 2. `records` (Pages) ignored via PC when `data_url` is used — FIXED
 
 The "Pages" count (`records`) is communicated differently per path:
 
 - **Local / API** — the raw `records` value is sent (top-level, or
   `settings.records`), and the pipeline repeats one fetched object `records`
   times (or prints an array's own length).
-- **Via PC** — the phone *expands* `records` into the inline `data` array up
-  front (`remote_print_inner` → `expand_records`), and `records` is **not** in
+- **Via PC** — the phone *expanded* `records` into the inline `data` array up
+  front (`remote_print_inner` → `expand_records`), and `records` was **not** in
   `settings`.
 
-When a `data_url` is used, the inline `data` is empty (`None`), so
-`expand_records(None, records)` produces `records` blank objects. The PC's
-pipeline then fetches `data_url` and **overwrites** that array with the fetched
-value (`run_stages`: `fetched = fetch(url)`). The expansion is lost, and because
-`records` was never in `settings`, the PC prints the fetched value's own length —
-one page for a single object — instead of `records` pages.
+With a `data_url`, the inline `data` is empty (`None`), so the expansion produced
+blank objects that the PC then overwrote with the fetched URL value, and the page
+count was lost.
 
-Consequence: with **Pages = 5** and a **data URL**, a local print yields 5 pages
-and a via-PC print yields 1. Inline `data` (test data) is unaffected because the
-expansion lands on real data there.
-
-Root cause: `records` is expressed only as an expanded array, and `data_url`
-overrides `data` on the PC. Fix options: send `records` through `settings` (the
-PC already reads `settings.records`), or apply the expansion to the fetched
-value on the PC. The `records` field comment in `remote_print.rs` notes the
-expansion was kept for backward compatibility with older PCs.
+Fixed on this branch: `remote_settings` now also emits `settings.records` (when
+`> 1`), and `POST /v1/print` already read `settings.records`, so the PC repeats
+a fetched `data_url` object `records` times — matching the local path. The
+client-side `expand_records` fallback is retained for older PCs (it only covers
+inline `data`); see finding 3 for its residual size cap.
 
 ---
 
-## 3. `records` expansion can hit the inline-data size cap via PC — minor
+## 3. `records` expansion can hit the inline-data size cap via PC — minor (open)
 
-Because via-PC expands a single object into an array client-side, a large
-`records` × a moderately sized object can exceed `MAX_API_DATA_BYTES` (1 MiB) and
-be refused ("use `data_url`"), where the local path (which expands server-side)
-prints the same job without issue. Edge case, but a direct consequence of the
-expansion strategy above.
+Because the via-PC path still expands a single inline object into an array
+client-side (retained for older PCs), a large `records` × a moderately sized
+object can exceed `MAX_API_DATA_BYTES` (1 MiB) and be refused ("use `data_url`"),
+where the local path (which expands server-side) prints the same job without
+issue. With finding 2 fixed, the workaround is sound: use a `data_url` (which now
+repeats `records` correctly). Edge case.
 
 ---
 

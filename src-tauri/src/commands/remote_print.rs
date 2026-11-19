@@ -519,6 +519,7 @@ fn remote_settings(
     http_method: Option<&str>,
     margins: (Option<f64>, Option<f64>, Option<f64>, Option<f64>),
     page: (Option<f64>, Option<f64>),
+    records: Option<u32>,
 ) -> serde_json::Value {
     let mut settings = serde_json::json!({ "copies": copies });
     for (k, v) in [
@@ -545,6 +546,14 @@ fn remote_settings(
             "width_mm": page.0,
             "height_mm": page.1,
         });
+    }
+    // Records rides in settings so the PC repeats a fetched `data_url`
+    // object `records` times (the client-side expansion is a legacy fallback
+    // for older PCs and only covers inline `data`). Omitted when 1.
+    if let Some(r) = records {
+        if r > 1 {
+            settings["records"] = serde_json::Value::from(r);
+        }
     }
     settings
 }
@@ -672,6 +681,7 @@ pub async fn remote_print_inner(
         args.http_method.as_deref(),
         margins,
         (args.page_width_mm, args.page_height_mm),
+        args.records,
     );
     let mut body = serde_json::json!({
         "template": template_name,
@@ -1210,6 +1220,7 @@ mod tests {
             Some("POST"),
             (Some(5.0), Some(6.0), Some(7.0), Some(8.0)),
             (None, None),
+            None,
         );
         let local = serde_json::json!({
             "copies": 2,
@@ -1234,6 +1245,7 @@ mod tests {
             None,
             (Some(12.5), None, None, None),
             (None, None),
+            None,
         );
         assert_eq!(
             phone["margins"],
@@ -1251,15 +1263,15 @@ mod tests {
             None,
             (None, None, None, None),
             (Some(58.0), None),
+            None,
         );
         assert_eq!(
             phone["paper"],
             serde_json::json!({"width_mm": 58.0, "height_mm": null})
         );
 
-        // No margin or paper touched at all: no `margins`/`paper` key —
-        // the PC keeps the template defaults exactly as a local job with
-        // all-`null` margins does.
+        // Records > 1 rides in `settings` so the PC repeats a fetched
+        // `data_url` object; records = 1 is omitted (the default).
         let phone = remote_settings(
             1,
             None,
@@ -1269,6 +1281,35 @@ mod tests {
             None,
             (None, None, None, None),
             (None, None),
+            Some(5),
+        );
+        assert_eq!(phone["records"], serde_json::json!(5));
+        let phone = remote_settings(
+            1,
+            None,
+            None,
+            None,
+            None,
+            None,
+            (None, None, None, None),
+            (None, None),
+            Some(1),
+        );
+        assert!(phone.get("records").is_none());
+
+        // No margin, paper or records touched at all: no `margins`/`paper`/
+        // `records` key — the PC keeps the template defaults exactly as a
+        // local job with all-`null` margins does.
+        let phone = remote_settings(
+            1,
+            None,
+            None,
+            None,
+            None,
+            None,
+            (None, None, None, None),
+            (None, None),
+            None,
         );
         assert_eq!(phone, serde_json::json!({ "copies": 1 }));
     }

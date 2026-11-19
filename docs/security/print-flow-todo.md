@@ -87,5 +87,9 @@ Worth a careful look:
 - **Via-PC paper round-trip.** Confirm a phone-set paper override reaches the PC
   and changes the output: phone `remote_print` → PC `POST /v1/print`
   `settings.paper` → `PrintRequest.page_width_mm`/`page_height_mm`.
+- **Via-PC `records` round-trip.** Confirm a Pages > 1 job with a `data_url`
+  prints that many pages through the PC (the phone now sends `settings.records`
+  and the PC repeats the fetched object), and that inline `data` still prints the
+  right count via the retained `expand_records` fallback.
 - **`paper_via_pc` i18n key** is now unused (the "not sent via PC" note was
   removed); safe to delete from `en.ts`/`ja.ts` if desired.
