@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { CheckCircle2, Loader2, TriangleAlert, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FirstPrintMoment } from "@/components/FirstPrintMoment";
 import { TimingBreakdown } from "@/components/TimingBreakdown";
 import { formatSeconds } from "@/lib/timings";
 import type { PrintState } from "./types";
@@ -79,6 +80,7 @@ export function PrintResultBanners({
               )}
               {store.warnings.length > 0 &&
                 ` · ${t("print.warnings_title")}: ${store.warnings[0]}`}
+              <FirstPrintMoment />
             </>
           }
           details={

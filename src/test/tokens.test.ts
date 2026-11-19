@@ -73,6 +73,11 @@ const TEXT_PAIRS: Array<[string, string]> = [
   ["danger", "danger-soft"],
   ["info", "info-soft"],
   ["neutral", "neutral-soft"],
+  // The highlight accent is violet on its own tint, and may stand on a
+  // plain surface (the one-time first-print line).
+  ["highlight", "highlight-soft"],
+  ["highlight", "background"],
+  ["highlight", "card"],
 ];
 
 // Non-text UI (form control borders, focus ring) needs 3:1 (WCAG 1.4.11).

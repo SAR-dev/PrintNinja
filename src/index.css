@@ -48,6 +48,12 @@
     --neutral: 194 16% 32%;               /* #44575D */
     --neutral-soft: 180 14% 93%;          /* #EBF0F0 */
 
+    /* Highlight: the non-status brand accent, used only for attention that
+       is not a state (a "new" badge, a one-time first-print moment). The
+       violet is deliberately off every status hue (green/amber/red/teal). */
+    --highlight: 262 70% 40%;             /* #531FAD */
+    --highlight-soft: 262 60% 95%;        /* #F0EBFA */
+
     --radius: 0.375rem;
 
     /* Density. Comfortable is the default; Compact is set from Settings via
@@ -107,6 +113,10 @@
     --info-soft: 180 25% 18%;
     --neutral: 190 12% 66%;
     --neutral-soft: 200 18% 20%;
+
+    /* The violet lifts to stay >=4.5:1 on the dark surfaces. */
+    --highlight: 262 80% 72%;             /* #A87EF1 */
+    --highlight-soft: 262 40% 20%;        /* #2E1F47 */
   }
 
   :root[data-density="compact"] {

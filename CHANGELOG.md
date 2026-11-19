@@ -7,6 +7,11 @@ and this project adheres to [Calendar Versioning](YYYY.MMDD.patch) — see the c
 
 ## [Unreleased]
 
+### Added
+
+- **Brand moments and a non-status accent.** A `highlight` token (violet, off every status hue, with a lifted dark-theme value) plus a matching `Badge` variant marks attention that is not a state: community templates published in the last 14 days wear a "New" badge, and a one-time "First print — nice job" pill appears on the first completed print (desktop banner and phone card, shown once via a localStorage flag). Empty-state and sign-in screens now carry the logo/icon on a brand-soft tile. All additions are tokens covered by the contrast tests, and `docs/UI_GUIDE.md` documents them.
+- **Toasts on phones get a close button.** Every toast on Android shows a visible ✕ (the Toaster's `closeButton`); swipe-down at the bottom edge was the only dismissal and is cramped for a thumb. Desktop toasts are unchanged.
+
 ### Fixed
 
 - **Windows USB printers now declare PDF when the queue supports it.** USB sends previously always went out as `RAW`, which garbled PDF-language printers on GDI-only drivers; they now use the same datatype selection as the spooler path.
