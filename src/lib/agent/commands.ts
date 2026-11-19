@@ -146,7 +146,24 @@ export interface AgentCommands {
   update_printer: [{ id: number; req: AddPrinterReq }, PrinterRow];
   delete_printer: [{ id: number }, null];
   get_printer: [{ id: number }, PrinterRow];
-  test_printer: [{ id: number }, null];
+  /**
+   * Driverless Bluetooth pacing (B4): the chunk size and the pause
+   * between RFCOMM writes, stored on the row's settings JSON. `null`
+   * (or a blank half) resets to the built-in defaults.
+   */
+  set_printer_bluetooth_delivery: [
+    {
+      id: number;
+      /**
+       * A half left out takes the built-in default (the struct deserializes
+       * with `#[serde(default)]`), so a cleared field is omitted, never
+       * sent as `null`. `delivery: null` clears the whole key.
+       */
+      delivery?: { chunkBytes?: number; chunkPauseMs?: number } | null;
+    },
+    null,
+  ];
+  test_printer: [{ id: number; kind?: "page" | "text" }, null];
   /**
    * What the printer speaks, asked before its row is saved (never an
    * error: a silent or refusing query comes back `detected: false`).

@@ -4,6 +4,7 @@ import "@/lib/i18n";
 import type { PrinterRow } from "@/lib/agent/types";
 import { usePrinterForm } from "@/pages/printer-setup/usePrinterForm";
 import type { SystemPrinter } from "@/pages/printer-setup/constants";
+import type { LoosePrinterForm } from "@/lib/printerSchema";
 
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -51,11 +52,41 @@ const savedRow: PrinterRow = {
   dpi: 203,
 };
 
+const btRowSaved: PrinterRow = {
+  id: 9,
+  name: "Bonded BT",
+  address: "AA:BB:CC:DD:EE:FF",
+  printer_type: "bluetooth",
+  language: "escpos",
+  paper_width_mm: 54,
+  dpi: 203,
+  default_settings_json: '{"bluetooth":{"chunkBytes":256,"chunkPauseMs":100}}',
+};
+
+/** A valid driverless Bluetooth form; the pace fields default to blank. */
+const btForm = (over: Partial<LoosePrinterForm> = {}): LoosePrinterForm => ({
+  name: "Bonded BT",
+  printer_type: "bluetooth",
+  address: "AA:BB:CC:DD:EE:FF",
+  language: "escpos",
+  paper_width_mm: "54",
+  dpi: "203",
+  label_gap_mm: "",
+  bt_chunk_bytes: "",
+  bt_chunk_pause_ms: "",
+  username: "",
+  password: "",
+  skip_tls_verification: false,
+  via_driver: false,
+  ...over,
+});
+
 describe("usePrinterForm sheet lifecycle", () => {
   beforeEach(() => {
     invoke.mockImplementation(async (cmd: string) => {
       if (cmd === "add_printer") return { ...savedRow, id: 8 };
-      if (cmd === "update_printer") return null;
+      if (cmd === "update_printer") return { ...savedRow };
+      if (cmd === "set_printer_bluetooth_delivery") return null;
       return null;
     });
   });
@@ -87,26 +118,31 @@ describe("usePrinterForm sheet lifecycle", () => {
     expect(list.load).toHaveBeenCalledTimes(1);
   });
 
-  it("closes the sheet after a one-tap add from the Bluetooth list", async () => {
+  it("fills the form instead of saving on a one-tap add from the Bluetooth list", async () => {
     const discovery = makeDiscovery();
     const list = makeList();
     const { result } = renderHook(() => usePrinterForm(discovery, list));
     act(() => result.current.openAdd());
     expect(result.current.showAdd).toBe(true);
 
-    await act(async () => {
-      await result.current.addDiscovered(btRow);
+    act(() => {
+      result.current.addDiscovered(btRow);
     });
 
-    expect(invoke).toHaveBeenCalledWith(
-      "add_printer",
-      expect.objectContaining({
-        req: expect.objectContaining({ name: "Bonded BT" }),
-      }),
-    );
-    expect(result.current.showAdd).toBe(false);
-    expect(result.current.form).toEqual(result.current.blankForm);
-    expect(list.load).toHaveBeenCalledTimes(1);
+    // B1: the paper width decides whether the page fits, so a bonded
+    // row is confirmed before saving — no add_printer, the sheet stays
+    // open, and the width is a safe 2-inch default under the user's
+    // eyes (Advanced opened), never a blind 80 mm.
+    expect(invoke).not.toHaveBeenCalledWith("add_printer", expect.anything());
+    expect(result.current.showAdd).toBe(true);
+    expect(result.current.editingId).toBeNull();
+    expect(result.current.form.name).toBe("Bonded BT");
+    expect(result.current.form.address).toBe("AA:BB:CC:DD:EE:FF");
+    expect(result.current.form.printer_type).toBe("bluetooth");
+    expect(result.current.form.language).toBe("escpos");
+    expect(result.current.form.paper_width_mm).toBe("54");
+    expect(result.current.advancedOpen).toBe(true);
+    expect(list.load).not.toHaveBeenCalled();
   });
 
   it("keeps the sheet open when a one-tap add fails", async () => {
@@ -167,6 +203,114 @@ describe("usePrinterForm sheet lifecycle", () => {
       "update_printer",
       expect.objectContaining({ id: 7 }),
     );
+    expect(result.current.showAdd).toBe(false);
+    expect(result.current.editingId).toBeNull();
+    expect(result.current.form).toEqual(result.current.blankForm);
+    expect(list.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefills the Bluetooth pace fields from the row's settings when editing", () => {
+    const discovery = makeDiscovery();
+    const list = makeList();
+    const { result } = renderHook(() => usePrinterForm(discovery, list));
+    act(() => result.current.openEdit(btRowSaved));
+    expect(result.current.form.bt_chunk_bytes).toBe("256");
+    expect(result.current.form.bt_chunk_pause_ms).toBe("100");
+  });
+
+  it("saves the pace after the row for a driverless Bluetooth add", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "add_printer") return { ...btRowSaved };
+      if (cmd === "set_printer_bluetooth_delivery") return null;
+      return null;
+    });
+    const discovery = makeDiscovery();
+    const list = makeList();
+    const { result } = renderHook(() => usePrinterForm(discovery, list));
+    act(() => result.current.openAdd());
+    act(() => result.current.setForm(btForm({ bt_chunk_bytes: "256" })));
+
+    await act(async () => {
+      await result.current.addPrinter();
+    });
+
+    // Only the filled half is sent; the missing one stays at its default.
+    expect(invoke).toHaveBeenCalledWith("set_printer_bluetooth_delivery", {
+      id: 9,
+      delivery: { chunkBytes: 256 },
+    });
+    expect(result.current.showAdd).toBe(false);
+    expect(list.load).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends delivery null when a driverless Bluetooth row is saved blank", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "add_printer") return { ...btRowSaved };
+      if (cmd === "set_printer_bluetooth_delivery") return null;
+      return null;
+    });
+    const discovery = makeDiscovery();
+    const list = makeList();
+    const { result } = renderHook(() => usePrinterForm(discovery, list));
+    act(() => result.current.openAdd());
+    act(() => result.current.setForm(btForm()));
+
+    await act(async () => {
+      await result.current.addPrinter();
+    });
+
+    // Both fields blank clears the stored pace: the built-in defaults apply.
+    expect(invoke).toHaveBeenCalledWith("set_printer_bluetooth_delivery", {
+      id: 9,
+      delivery: null,
+    });
+  });
+
+  it("leaves the pace alone for a driver-mode Bluetooth row", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "add_printer") return { ...btRowSaved };
+      return null;
+    });
+    const discovery = makeDiscovery();
+    const list = makeList();
+    const { result } = renderHook(() => usePrinterForm(discovery, list));
+    act(() => result.current.openAdd());
+    act(() =>
+      result.current.setForm(
+        btForm({ via_driver: true, bt_chunk_bytes: "256" }),
+      ),
+    );
+
+    await act(async () => {
+      await result.current.addPrinter();
+    });
+
+    // The driver in between buffers on its own — no raw-wire pacing.
+    expect(invoke).not.toHaveBeenCalledWith(
+      "set_printer_bluetooth_delivery",
+      expect.anything(),
+    );
+    expect(result.current.showAdd).toBe(false);
+  });
+
+  it("keeps the saved row when only the pace call fails", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "add_printer") return { ...btRowSaved };
+      if (cmd === "set_printer_bluetooth_delivery") throw new Error("boom");
+      return null;
+    });
+    const discovery = makeDiscovery();
+    const list = makeList();
+    const { result } = renderHook(() => usePrinterForm(discovery, list));
+    act(() => result.current.openAdd());
+    act(() => result.current.setForm(btForm({ bt_chunk_bytes: "256" })));
+
+    await act(async () => {
+      await result.current.addPrinter();
+    });
+
+    // The row is already saved and prints fine at the defaults; the sheet
+    // closes and the list refreshes — only the custom pace is lost.
     expect(result.current.showAdd).toBe(false);
     expect(result.current.editingId).toBeNull();
     expect(result.current.form).toEqual(result.current.blankForm);

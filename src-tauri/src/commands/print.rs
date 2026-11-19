@@ -1449,6 +1449,7 @@ async fn run_stages(
             password: p.password.clone(),
             skip_tls_verification: p.skip_tls_verification,
             via_driver: p.via_driver,
+            bluetooth: p.bluetooth,
         })
         .unwrap_or_default();
 
@@ -2038,6 +2039,9 @@ pub struct StoredPrinter {
     /// TSPL darkness, speed and media type from the row's
     /// `default_settings_json`; defaults send nothing extra.
     pub tspl: crate::transport::label_langs::tspl::TsplTuning,
+    /// Driverless Bluetooth pacing from the row's
+    /// `default_settings_json`; defaults are the built-in pace.
+    pub bluetooth: crate::transport::BluetoothDelivery,
     /// IPP sign-in user; `None` keeps the built-in `PrintNinja`.
     pub username: Option<String>,
     /// IPP password; `None` sends no HTTP authentication.
@@ -2076,6 +2080,9 @@ pub fn lookup_printer(db: &DbState, name: &str) -> Option<StoredPrinter> {
                 skip_tls_verification: r.get(8)?,
                 via_driver: r.get(9)?,
                 tspl: crate::transport::label_langs::tspl::TsplTuning::from_settings_json(
+                    r.get::<_, Option<String>>(10)?.as_deref(),
+                ),
+                bluetooth: crate::transport::BluetoothDelivery::from_settings_json(
                     r.get::<_, Option<String>>(10)?.as_deref(),
                 ),
             })
@@ -2146,7 +2153,15 @@ fn redact_with_secrets(html: &str, secrets: &[String]) -> String {
 /// unique index on `idempotency_key` makes this INSERT the point where the
 /// key is taken — before render and before send — so two simultaneous
 /// requests with one key insert once and print once.
-fn begin_job(db: &DbState, req: &PrintRequest, copies: i64, page_mm: (f64, f64)) -> AppResult<i64> {
+/// Open a `printing` job row before anything slow. `pub(crate)` because
+/// the plain-text test in `commands::printer` runs the send itself and
+/// needs the same row.
+pub(crate) fn begin_job(
+    db: &DbState,
+    req: &PrintRequest,
+    copies: i64,
+    page_mm: (f64, f64),
+) -> AppResult<i64> {
     let guard = db
         .lock()
         .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
@@ -2286,12 +2301,14 @@ fn secrets_of(req: &PrintRequest) -> Vec<String> {
 
 /// Close a claimed job row: terminal status, error, the (secret-redacted)
 /// HTML, the finish time and the real duration. Shared by the direct
-/// pipeline ([`finish_job`]) and the worker's claimed-job path.
+/// pipeline ([`finish_job`]) and the worker's claimed-job path, and by
+/// the plain-text test in `commands::printer`, which runs the send
+/// itself and closes its own row.
 ///
 /// The `status = 'printing'` guard keeps a row that was already terminal —
 /// cancelled out from under a running print — from being resurrected; such a
 /// row keeps its state.
-fn close_job(
+pub(crate) fn close_job(
     db: &DbState,
     job_id: i64,
     status: &str,

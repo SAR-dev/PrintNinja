@@ -20,6 +20,7 @@ export const LANGUAGES = [
 
 export const PAPERS = [
   { value: "48", label: "48 mm" },
+  { value: "54", label: "54 mm" },
   { value: "72", label: "72 mm" },
   { value: "100", label: "100 mm" },
   { value: "152", label: "4x6 in (152 mm)" },
@@ -65,6 +66,23 @@ export const TYPE_ICONS: Record<string, typeof Printer> = {
  */
 export function isRawWire(printerType: string, viaDriver: boolean): boolean {
   return printerType === "usb" || (printerType === "bluetooth" && !viaDriver);
+}
+
+/** Which test print to send: the image page, or one line of plain text. */
+export type TestKind = "page" | "text";
+
+/**
+ * Whether Test Print can send the plain-text test on top of the image
+ * page. The command languages print text natively; pdf and raster only
+ * accept bitmaps, so they have the page test and nothing cheaper.
+ */
+export function supportsTextTest(language: string): boolean {
+  return (
+    language === "escpos" ||
+    language === "tspl" ||
+    language === "zpl" ||
+    language === "cpcl"
+  );
 }
 
 /**

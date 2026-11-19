@@ -15,7 +15,7 @@
 //! for the driver path, and quietly ignoring that would print on a
 //! path they did not choose.
 
-use crate::transport::{status, PrinterInfo, PrinterTransport, RenderedJob};
+use crate::transport::{status, BluetoothDelivery, PrinterInfo, PrinterTransport, RenderedJob};
 use async_trait::async_trait;
 use std::time::{Duration, Instant};
 
@@ -36,14 +36,23 @@ pub struct AndroidBluetoothPrinter {
     /// can only be `false` from the app (the toggle is hidden there);
     /// `true` would come from a row edited elsewhere and is refused.
     pub via_driver: bool,
+    /// Pacing for the RFCOMM write (chunk size + pause). The default is
+    /// the built-in 512-byte / 50-ms pace; a stored value tunes it.
+    pub delivery: BluetoothDelivery,
 }
 
 impl AndroidBluetoothPrinter {
-    pub fn new(name: String, address: String, via_driver: bool) -> Self {
+    pub fn new(
+        name: String,
+        address: String,
+        via_driver: bool,
+        delivery: BluetoothDelivery,
+    ) -> Self {
         Self {
             name,
             address,
             via_driver,
+            delivery,
         }
     }
 
@@ -207,6 +216,12 @@ impl AndroidBluetoothPrinter {
                 ))
             },
             data_path: staged.as_ref().map(|p| p.to_string_lossy().into_owned()),
+            // The Kotlin side writes the job in paced chunks instead of
+            // one flood; unset would make it fall back to the same
+            // defaults, but the settings are validated on save, so pass
+            // them through explicitly.
+            chunk_bytes: Some(self.delivery.chunk_bytes as u64),
+            chunk_pause_ms: Some(self.delivery.chunk_pause_ms as u64),
         };
         let t = Instant::now();
         let result = tokio::time::timeout(
@@ -342,7 +357,12 @@ mod tests {
     #[cfg(not(target_os = "android"))]
     #[tokio::test]
     async fn bluetooth_is_android_only() {
-        let p = AndroidBluetoothPrinter::new("t".into(), "00:11:22:33:44:55".into(), false);
+        let p = AndroidBluetoothPrinter::new(
+            "t".into(),
+            "00:11:22:33:44:55".into(),
+            false,
+            Default::default(),
+        );
         let err = p.reach().await.unwrap_err();
         assert!(err.contains("Android"), "{err}");
         assert!(p.discover().await.is_empty());
@@ -353,7 +373,12 @@ mod tests {
     /// driverless on the path the user did not choose.
     #[tokio::test]
     async fn driver_mode_is_refused_not_ignored() {
-        let p = AndroidBluetoothPrinter::new("t".into(), "00:11:22:33:44:55".into(), true);
+        let p = AndroidBluetoothPrinter::new(
+            "t".into(),
+            "00:11:22:33:44:55".into(),
+            true,
+            Default::default(),
+        );
         let err = p.reach().await.unwrap_err();
         assert!(err.contains("not available on Android"), "{err}");
         let err = p
@@ -372,14 +397,25 @@ mod tests {
 
     #[test]
     fn the_address_names_the_printer() {
-        let p = AndroidBluetoothPrinter::new("t".into(), "00:11:22:33:44:55".into(), false);
+        let p = AndroidBluetoothPrinter::new(
+            "t".into(),
+            "00:11:22:33:44:55".into(),
+            false,
+            Default::default(),
+        );
         assert!(p.what().contains("00:11:22:33:44:55"));
     }
 
     #[test]
     fn driver_mode_defaults_off() {
         assert!(
-            !AndroidBluetoothPrinter::new("t".into(), "00:11:22:33:44:55".into(), false).via_driver
+            !AndroidBluetoothPrinter::new(
+                "t".into(),
+                "00:11:22:33:44:55".into(),
+                false,
+                Default::default(),
+            )
+            .via_driver
         );
     }
 }

@@ -210,6 +210,33 @@ const finitePositiveInt = (
       }),
   );
 
+/**
+ * {@link finitePositiveInt} with a blankable center: blank is the
+ * built-in default, not an error. An outer `.optional()` alone would not
+ * do — it accepts only an `undefined` input, while the panel always sends
+ * a string, so a blank field still reached the required `z.number()`.
+ */
+const blankableFinitePositiveInt = (
+  notNumberKey: string,
+  notIntKey: string,
+  minKey: string,
+  maxKey: string,
+  min: number,
+  max: number,
+) =>
+  z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : Number(v)),
+    z
+      .number({ invalid_type_error: notNumberKey })
+      .int(notIntKey)
+      .min(min, minKey)
+      .max(max, maxKey)
+      .refine((n) => Number.isFinite(n), {
+        message: notNumberKey,
+      })
+      .optional(),
+  );
+
 export const printerFormSchema = z
   .object({
     name: z.string().trim().min(1, "printers.err_name_required"),
@@ -247,6 +274,28 @@ export const printerFormSchema = z
       "printers.err_gap_max",
       0.1,
       50,
+    ),
+    // Driverless Bluetooth pacing (B4): the RFCOMM write is split into
+    // chunks with a pause between them so a slow thermal head keeps up.
+    // Blank means the built-in defaults (512 bytes / 50 ms); the values
+    // are only meaningful for a driverless Bluetooth row, but accepting
+    // them for other types costs nothing and keeps one rulebook. The
+    // bounds mirror the Rust `BluetoothDelivery::validate()`.
+    bt_chunk_bytes: blankableFinitePositiveInt(
+      "printers.err_bt_chunk_number",
+      "printers.err_bt_chunk_int",
+      "printers.err_bt_chunk_min",
+      "printers.err_bt_chunk_max",
+      32,
+      8192,
+    ),
+    bt_chunk_pause_ms: blankableFinitePositiveInt(
+      "printers.err_bt_pause_number",
+      "printers.err_bt_pause_int",
+      "printers.err_bt_pause_min",
+      "printers.err_bt_pause_max",
+      0,
+      2000,
     ),
     // IPP sign-in: blank user means the built-in `PrintNinja` identity,
     // blank password means no HTTP authentication at all.
@@ -286,6 +335,8 @@ export interface LoosePrinterForm {
   paper_width_mm: string;
   dpi: string;
   label_gap_mm: string;
+  bt_chunk_bytes: string;
+  bt_chunk_pause_ms: string;
   username: string;
   password: string;
   skip_tls_verification: boolean;

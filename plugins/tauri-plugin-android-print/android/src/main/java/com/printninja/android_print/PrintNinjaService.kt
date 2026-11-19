@@ -265,17 +265,27 @@ class PrintNinjaService : Service() {
          * Title and body for the one-shot job-result notification
          * (item 41). `kind` is "success" or "failure", `subject` the
          * job's name (its template) and `detail` the failure's reason.
-         * Split out so the contract test can pin the wording without an
-         * Android [Context], like [notificationText].
+         * `sentOnly` marks a success on a raw-wire printer (USB,
+         * driverless Bluetooth): the body says "sent to the printer",
+         * never "printed". Split out so the contract test can pin the
+         * wording without an Android [Context], like [notificationText].
          */
         fun jobNotificationText(
             kind: String,
             subject: String?,
             detail: String?,
+            sentOnly: Boolean = false,
         ): Pair<String, String> =
             if (kind == "success") {
                 "Print finished" to
-                    (subject?.let { "$it was printed." } ?: "Your print job finished.")
+                    (subject?.let {
+                        if (sentOnly) "$it was sent to the printer."
+                        else "$it was printed."
+                    } ?: if (sentOnly) {
+                        "Your print job was sent to the printer."
+                    } else {
+                        "Your print job finished."
+                    })
             } else {
                 "Print failed" to when {
                     subject != null && detail != null -> "$subject: $detail"
@@ -300,6 +310,7 @@ class PrintNinjaService : Service() {
             kind: String,
             subject: String?,
             detail: String?,
+            sentOnly: Boolean = false,
         ) {
             try {
                 if (Build.VERSION.SDK_INT >= 33 &&
@@ -313,7 +324,7 @@ class PrintNinjaService : Service() {
                     context.getSystemService(NotificationManager::class.java) ?: return
                 manager.notify(
                     JOB_NOTIFICATION_ID,
-                    buildJobNotification(context, kind, subject, detail),
+                    buildJobNotification(context, kind, subject, detail, sentOnly),
                 )
             } catch (e: Exception) {
                 android.util.Log.w(
@@ -423,6 +434,7 @@ class PrintNinjaService : Service() {
             kind: String,
             subject: String?,
             detail: String?,
+            sentOnly: Boolean = false,
         ): Notification {
             // Tapping opens History (solution d of the item): the app's
             // own deep link, handled exactly like an external one.
@@ -431,7 +443,7 @@ class PrintNinjaService : Service() {
                 Intent(Intent.ACTION_VIEW, Uri.parse("printninja://open/history")),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
-            val (title, text) = jobNotificationText(kind, subject, detail)
+            val (title, text) = jobNotificationText(kind, subject, detail, sentOnly)
             return NotificationCompat.Builder(context, JOB_CHANNEL_ID)
                 .setContentTitle(title)
                 .setContentText(text)

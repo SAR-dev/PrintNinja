@@ -272,6 +272,72 @@ pub fn set_printer_tspl_tuning_conn(
     Ok(())
 }
 
+/// Save a printer's driverless Bluetooth delivery pacing (chunk size and
+/// pause). `None` clears it, so the built-in pace applies again. Stored
+/// under the `bluetooth` key of the row's `default_settings_json`; other
+/// keys there are kept.
+#[tauri::command]
+pub fn set_printer_bluetooth_delivery(
+    db: State<DbState>,
+    id: i64,
+    delivery: Option<crate::transport::BluetoothDelivery>,
+) -> AppResult<()> {
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    set_printer_bluetooth_delivery_conn(guard.connection(), id, delivery.as_ref())
+}
+
+/// Test seam for [`set_printer_bluetooth_delivery`].
+pub fn set_printer_bluetooth_delivery_conn(
+    conn: &rusqlite::Connection,
+    id: i64,
+    delivery: Option<&crate::transport::BluetoothDelivery>,
+) -> AppResult<()> {
+    if let Some(d) = delivery {
+        d.validate().map_err(AppError::Validation)?;
+    }
+    let current: Option<String> = conn
+        .query_row(
+            "SELECT default_settings_json FROM printers WHERE id = ?1",
+            [id],
+            |r| r.get(0),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => {
+                AppError::NotFound(format!("Printer {} not found", id))
+            }
+            other => other.into(),
+        })?;
+    let mut root = current
+        .as_deref()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+        .filter(|v| v.is_object())
+        .unwrap_or_else(|| serde_json::json!({}));
+    let obj = root.as_object_mut().expect("object");
+    match delivery {
+        Some(d) => {
+            obj.insert(
+                "bluetooth".to_string(),
+                serde_json::to_value(d).map_err(|e| AppError::Internal(e.to_string()))?,
+            );
+        }
+        None => {
+            obj.remove("bluetooth");
+        }
+    }
+    let stored = if obj.is_empty() {
+        None
+    } else {
+        Some(root.to_string())
+    };
+    conn.execute(
+        "UPDATE printers SET default_settings_json = ?1, updated_at = datetime('now') WHERE id = ?2",
+        rusqlite::params![stored, id],
+    )?;
+    Ok(())
+}
+
 /// Test seam for the edit path: the Tauri command only adds the lock.
 /// Public so integration tests can drive validation and the duplicate
 /// check against a real database without a Tauri runtime.
@@ -403,13 +469,16 @@ pub fn get_printer(db: State<DbState>, id: i64) -> AppResult<Printer> {
     get_printer_inner(&db, id)
 }
 
-/// Send a small test page to a configured printer.
+/// Send a small test to a configured printer: the full test page, or —
+/// for the command languages — one line of plain text (`kind: "text"`),
+/// the fastest way to tell whether the language mode is right.
 #[tauri::command]
 pub async fn test_printer(
     app: tauri::AppHandle,
     db: State<'_, DbState>,
     queue: State<'_, crate::queue::PrintQueue>,
     id: i64,
+    kind: Option<String>,
 ) -> AppResult<()> {
     // Load the printer so we know where to send and which language to speak.
     let printer = {
@@ -446,6 +515,25 @@ pub async fn test_printer(
         .map_err(|_| AppError::NotFound(format!("Printer {} not found", id)))?
     };
 
+    let printer_type = crate::transport::parse_printer_type(&printer.printer_type);
+    let settings = crate::transport::TransportSettings {
+        username: printer.username.clone(),
+        password: printer.password.clone(),
+        skip_tls_verification: printer.skip_tls_verification,
+        via_driver: printer.via_driver,
+        bluetooth: crate::transport::BluetoothDelivery::from_settings_json(
+            printer.default_settings_json.as_deref(),
+        ),
+    };
+
+    if kind
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|k| k.eq_ignore_ascii_case("text"))
+    {
+        return test_printer_text(&db, &printer, &printer_type, &settings).await;
+    }
+
     let html = TEST_PAGE_HTML.replace("{{name}}", &printer.name);
 
     // Ask the printer whether it is there *before* rendering the page.
@@ -454,20 +542,16 @@ pub async fn test_printer(
     // was dead — the operator stared at a spinning button to learn the
     // printer was offline. The probe only opens and closes a connection:
     // it cannot print, so nothing is put on paper by looking.
-    let printer_type = crate::transport::parse_printer_type(&printer.printer_type);
-    crate::transport::TransportRegistry::probe(
-        &printer_type,
-        &printer.name,
-        &printer.address,
-        &crate::transport::TransportSettings {
-            username: printer.username.clone(),
-            password: printer.password.clone(),
-            skip_tls_verification: printer.skip_tls_verification,
-            via_driver: printer.via_driver,
-        },
-    )
-    .await
-    .map_err(AppError::Internal)?;
+    if test_print_probes(&printer_type, printer.via_driver) {
+        crate::transport::TransportRegistry::probe(
+            &printer_type,
+            &printer.name,
+            &printer.address,
+            &settings,
+        )
+        .await
+        .map_err(AppError::Internal)?;
+    }
 
     let req = crate::commands::print::PrintRequest {
         printer_name: printer.name.clone(),
@@ -505,6 +589,99 @@ pub async fn test_printer(
     }
 }
 
+/// Whether the image test asks the printer whether it is there before
+/// sending. Driverless Bluetooth is the only no: its RFCOMM socket is
+/// stateful, and a probe would be a second connect right before the real
+/// send — some heads treat the connect, close, reconnect as a full
+/// session and drop what comes after. The send opens the one connection
+/// it needs and reports a dead address itself.
+fn test_print_probes(printer_type: &crate::transport::PrinterType, via_driver: bool) -> bool {
+    printer_type != &crate::transport::PrinterType::Bluetooth || via_driver
+}
+
+/// The plain-text test: one line in the printer's own language, sent
+/// straight to the wire (no render, no probe) with a history row like
+/// any other job.
+async fn test_printer_text(
+    db: &DbState,
+    printer: &Printer,
+    printer_type: &crate::transport::PrinterType,
+    settings: &crate::transport::TransportSettings,
+) -> AppResult<()> {
+    let start = std::time::Instant::now();
+    let language = crate::transport::parse_printer_language(&printer.language);
+    let label_w_mm = printer.paper_width_mm.map(|v| v as f64).unwrap_or(40.0);
+    let Some(data) = crate::transport::text_test_bytes(&language, &printer.name, label_w_mm) else {
+        return Err(AppError::Validation(
+            "Text tests are only available for ESC/POS, TSPL, ZPL and CPCL printers".into(),
+        ));
+    };
+
+    // A history row like the image test gets, so both show up in History.
+    let req = crate::commands::print::PrintRequest {
+        printer_name: printer.name.clone(),
+        html: String::new(),
+        pdf: None,
+        page_width_mm: None,
+        page_height_mm: None,
+        orientation: Some("portrait".into()),
+        copies: Some(1),
+        records: None,
+        margin_top: None,
+        margin_right: None,
+        margin_bottom: None,
+        margin_left: None,
+        fit_mode: None,
+        page_range: None,
+        grayscale: None,
+        template_id: None,
+        data: None,
+        data_url: None,
+        http_method: None,
+        test: Some(true),
+        source: Some("test".into()),
+        idempotency_key: None,
+        requested_by_device_id: None,
+    };
+    let job_id = crate::commands::print::begin_job(db, &req, 1, (label_w_mm, 30.0))?;
+    let job = crate::transport::RenderedJob {
+        job_id: job_id.to_string(),
+        printer_id: printer.id.to_string(),
+        data,
+        mime_type: "application/octet-stream".into(),
+        copies: 1,
+        language,
+    };
+    let result = crate::transport::TransportRegistry::send_to(
+        printer_type,
+        &printer.name,
+        &printer.address,
+        job,
+        settings,
+    )
+    .await;
+    let duration_ms = start.elapsed().as_millis() as i64;
+    match result {
+        Ok(()) => {
+            crate::commands::print::close_job(db, job_id, "success", None, "", &[], duration_ms)?;
+            Ok(())
+        }
+        Err(error) => {
+            // Leave a failed row with the reason, like every other path.
+            let _ = crate::commands::print::close_job(
+                db,
+                job_id,
+                "failed",
+                Some(error.clone()),
+                "",
+                &[],
+                duration_ms,
+            );
+            Err(AppError::Internal(error))
+        }
+    }
+}
+
 /// What the printer understands, asked *before* its row is saved (TODO
 /// items 2 + 4): the document formats it accepts (IPP), its
 /// make-and-model, and the language suggested by either.
@@ -533,6 +710,8 @@ pub async fn probe_printer_capabilities(
             // Pre-save detection asks the wire itself; the row's manual
             // mode does not exist yet, so the driverless path answers.
             via_driver: false,
+            // No row yet, so no stored pacing either.
+            bluetooth: Default::default(),
         },
     )
     .await
@@ -562,10 +741,50 @@ pub async fn probe_printer_capabilities_inner(
     .await)
 }
 
+/// The border is the width check: the page is rendered at the printer's
+/// stored width, so if that number is wider than the real paper, the
+/// right side of the border comes off the edge (or the whole page shifts
+/// and the left side is clipped). Garbled text means the language mode
+/// is wrong — the plain-text test pinpoints that one.
 const TEST_PAGE_HTML: &str = r#"<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
-<body style="font-family:sans-serif;padding:24px;text-align:center">
-  <h1 style="font-size:24px;margin:0 0 8px">PrintNinja</h1>
-  <p style="margin:0;color:#555">{{name}}</p>
-  <hr style="margin:24px 0">
-  <p style="font-size:12px;color:#888">Test page — if you can read this, printing works.</p>
+<body style="font-family:sans-serif;margin:0;background:#fff">
+  <div style="box-sizing:border-box;border:2px solid #000;height:140mm;padding:10px">
+    <h1 style="font-size:24px;margin:16px 0 8px;text-align:center">PrintNinja</h1>
+    <p style="margin:0;text-align:center;color:#555">{{name}}</p>
+    <hr style="margin:24px 0">
+    <p style="font-size:12px;text-align:center;color:#888">
+      If any side of the border is cut off, the paper width is set too wide.<br>
+      If the text is garbled, the printer's language mode is wrong.
+    </p>
+  </div>
 </body></html>"#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::transport::PrinterType;
+
+    /// A driverless Bluetooth test must open one connection (the send),
+    /// not two (probe + send): the second connect is what wedges the
+    /// B-FP2D's head.
+    #[test]
+    fn bluetooth_test_opens_one_connection_not_two() {
+        // Driverless: no probe, the send is the only connection.
+        assert!(!test_print_probes(&PrinterType::Bluetooth, false));
+        // Driver mode goes through the OS queue, where a probe is cheap.
+        assert!(test_print_probes(&PrinterType::Bluetooth, true));
+    }
+
+    #[test]
+    fn every_other_test_kind_still_probes() {
+        for ty in [
+            PrinterType::Ipp,
+            PrinterType::RawTcp,
+            PrinterType::Usb,
+            PrinterType::System,
+        ] {
+            assert!(test_print_probes(&ty, false), "{ty:?}");
+            assert!(test_print_probes(&ty, true), "{ty:?}");
+        }
+    }
+}

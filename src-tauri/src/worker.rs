@@ -242,6 +242,16 @@ fn batch_of(db: &DbState, job_id: i64) -> Option<i64> {
         .flatten()
 }
 
+/// The finished job's row for the result notification: status, subject,
+/// error, and the printer's raw-wire flag (B3's "sent" wording).
+type JobResultRow = (
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<bool>,
+);
+
 /// Post the one-shot result notification for a finished job (item 41).
 ///
 /// The `print_jobs` row plus its template name is the payload; the
@@ -257,19 +267,20 @@ fn notify_job_finished(worker: &Worker, job_id: i64) {
     let Some(guard) = worker.db.lock().ok() else {
         return;
     };
-    let row: Option<(String, Option<String>, Option<String>)> = guard
+    let row: Option<JobResultRow> = guard
         .connection()
         .query_row(
-            "SELECT j.status, t.name, j.error
-             FROM print_jobs j
-             LEFT JOIN templates t ON t.id = j.template_id
-             WHERE j.id = ?1",
+            "SELECT j.status, t.name, j.error, p.type, p.via_driver
+                 FROM print_jobs j
+                 LEFT JOIN templates t ON t.id = j.template_id
+                 LEFT JOIN printers p ON p.id = j.printer_id
+                 WHERE j.id = ?1",
             [job_id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
         )
         .ok();
     drop(guard);
-    let Some((status, subject, error)) = row else {
+    let Some((status, subject, error, printer_type, via_driver)) = row else {
         return;
     };
     if status == "cancelled" {
@@ -283,14 +294,26 @@ fn notify_job_finished(worker: &Worker, job_id: i64) {
     if !failed && mode != "all" {
         return;
     }
+    // Raw-wire printers (USB, or driverless Bluetooth) cannot report
+    // whether the paper came out, so a success says "sent", never
+    // "printed" (B3). The failure wording is unchanged.
+    let sent_only = !failed && is_raw_wire(printer_type.as_deref(), via_driver.unwrap_or(false));
     let request = JobNotificationRequest {
         kind: if failed { "failure" } else { "success" }.to_string(),
         subject,
         detail: failed.then_some(error).flatten(),
+        sent_only: sent_only.then_some(true),
     };
     if let Err(e) = app.android_print().post_job_notification(request) {
         tracing::debug!(job_id, error = %e, "job result notification not posted");
     }
+}
+
+/// A printer that takes a raw byte stream the app cannot confirm —
+/// USB, or Bluetooth without the OS driver. Mirrors the frontend's
+/// `isRawWire`.
+fn is_raw_wire(printer_type: Option<&str>, via_driver: bool) -> bool {
+    matches!(printer_type, Some("usb")) || (printer_type == Some("bluetooth") && !via_driver)
 }
 
 /// The `notify_on` setting: `"failures"` (the default) posts only

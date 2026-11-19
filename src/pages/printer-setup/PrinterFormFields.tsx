@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { FoldSection } from "@/components/printers/FoldSection";
 import { DisabledReason } from "@/components/ui/disabled-reason";
-import { PAPERS } from "./constants";
+import { PAPERS, isRawWire } from "./constants";
 
 const field = "space-y-1.5";
 
@@ -48,6 +48,8 @@ export function PrinterFormFields({
   formErrorIsPaper,
   formErrorIsDpi,
   formErrorIsGap,
+  formErrorIsChunk,
+  formErrorIsPause,
   formErrorIsName,
   gdiWarning,
   ippNonPdfWarning,
@@ -79,6 +81,8 @@ export function PrinterFormFields({
   formErrorIsPaper: boolean;
   formErrorIsDpi: boolean;
   formErrorIsGap: boolean;
+  formErrorIsChunk: boolean;
+  formErrorIsPause: boolean;
   formErrorIsName: boolean;
   gdiWarning: boolean;
   ippNonPdfWarning: boolean;
@@ -238,6 +242,17 @@ export function PrinterFormFields({
                   "",
               })
             : t("printers.detect_unknown")}
+        </p>
+      )}
+      {/* Names the mode for raw-wire connections (B3): the bytes go
+          straight to the printer, and nothing can confirm the paper
+          came out, so results read "sent", not "printed". */}
+      {isRawWire(form.printer_type, form.via_driver) && (
+        <p
+          data-testid="printer-direct-mode"
+          className="text-xs text-muted-foreground"
+        >
+          {t("printers.direct_mode")}
         </p>
       )}
 
@@ -604,6 +619,95 @@ export function PrinterFormFields({
                   {t(formErrorKey)}
                 </p>
               )}
+            </div>
+          )}
+
+          {/* Bluetooth pacing (B4): only a driverless row dials the
+              socket itself, so only it has a pace to tune. */}
+          {form.printer_type === "bluetooth" && !form.via_driver && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className={field}>
+                  <Label htmlFor="printer-bt-chunk">
+                    {t("printers.bt_chunk_bytes")}
+                  </Label>
+                  <Input
+                    id="printer-bt-chunk"
+                    type="number"
+                    min="32"
+                    max="8192"
+                    value={form.bt_chunk_bytes}
+                    aria-invalid={formErrorIsChunk || undefined}
+                    aria-describedby={
+                      formErrorIsChunk
+                        ? "printer-bt-chunk-hint printer-bt-chunk-error"
+                        : "printer-bt-chunk-hint"
+                    }
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        bt_chunk_bytes: e.target.value,
+                      }))
+                    }
+                  />
+                  {formErrorIsChunk && formErrorKey && (
+                    <p
+                      id="printer-bt-chunk-error"
+                      role="alert"
+                      data-testid="printer-bt-chunk-error"
+                      className="text-xs text-destructive"
+                    >
+                      {t(formErrorKey)}
+                    </p>
+                  )}
+                </div>
+                <div className={field}>
+                  <Label htmlFor="printer-bt-pause">
+                    {t("printers.bt_chunk_pause_ms")}
+                  </Label>
+                  <Input
+                    id="printer-bt-pause"
+                    type="number"
+                    min="0"
+                    max="2000"
+                    value={form.bt_chunk_pause_ms}
+                    aria-invalid={formErrorIsPause || undefined}
+                    aria-describedby={
+                      formErrorIsPause
+                        ? "printer-bt-pause-hint printer-bt-pause-error"
+                        : "printer-bt-pause-hint"
+                    }
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        bt_chunk_pause_ms: e.target.value,
+                      }))
+                    }
+                  />
+                  {formErrorIsPause && formErrorKey && (
+                    <p
+                      id="printer-bt-pause-error"
+                      role="alert"
+                      data-testid="printer-bt-pause-error"
+                      className="text-xs text-destructive"
+                    >
+                      {t(formErrorKey)}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <p
+                id="printer-bt-chunk-hint"
+                className="text-xs text-muted-foreground"
+              >
+                {t("printers.bt_chunk_bytes_hint")}
+              </p>
+              <p
+                id="printer-bt-pause-hint"
+                className="text-xs text-muted-foreground"
+              >
+                {t("printers.bt_chunk_pause_hint")}
+              </p>
             </div>
           )}
         </div>

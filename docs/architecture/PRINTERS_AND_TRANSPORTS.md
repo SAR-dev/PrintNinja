@@ -43,6 +43,20 @@ A printer is configured with a **type** (how to reach it) and a
   the device, and Android has no driver path yet — the option is hidden
   in its UI and a row carrying it is refused with a clear message.
 
+  A driverless send is **paced**: the job is written in small chunks
+  (default 512 bytes) with a short pause between them (default 50 ms),
+  and the connection is flushed and given a moment to settle before it
+  closes. A head that is slower than the RFCOMM pipe drops the bytes a
+  one-shot write overruns — the classic "the app said success but only a
+  couple of characters came out" failure — so the pacing keeps the pipe
+  ahead of the head instead. The total pause time is budget-capped so
+  even a 1 MiB raster job stays under the 30 s Bluetooth timeout, and a
+  failed chunk names how many bytes made it. The chunk size (32–8192
+  bytes) and pause (0–2000 ms) are per-printer advanced settings —
+  `BluetoothDelivery`, stored under the `bluetooth` key of the row's
+  `default_settings_json` — settable from the printer form's Advanced
+  section, where blank means the built-in default.
+
 ## Discovery
 
 Discovery lists the machine's OS queues (Windows spooler, CUPS) and, on
@@ -58,9 +72,14 @@ after the page opens), never a continuous scan.
 A **test print** runs the entire pipeline end to end with mock data to prove
 a new printer works. The connectivity check that precedes it never puts
 anything on paper: Windows system and USB queues report their status,
-Bluetooth opens the COM port or the RFCOMM connection and closes it again
-(or checks its OS queue's status when the row prints through the driver),
-and network printers only connect.
+Bluetooth checks the COM port's status (or its OS queue's status when the
+row prints through the driver), and network printers only connect. A
+driverless RFCOMM row skips the separate check — its socket is stateful and
+a probe right before the real send can make some heads drop the job, so the
+send itself reports a dead address. What the test puts on paper depends on
+the language: a command-language printer (ESC/POS, TSPL, ZPL, CPCL) gets one
+plain line of text in its own language — if it reads, the wire works — and
+everything else gets a bordered test page, so a blank sheet is obvious.
 
 ## Languages: two fundamentally different paths
 

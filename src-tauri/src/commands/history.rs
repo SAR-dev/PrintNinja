@@ -30,6 +30,12 @@ pub struct PrintJob {
     /// Which paired PC printed this job (`None` when printed locally).
     /// The phone's history reads it as "printed by <PC name>".
     pub printed_by: Option<String>,
+    /// The job's printer type (`None` when the printer was deleted).
+    /// History uses it to say "Sent" instead of "Printed" for raw-wire
+    /// printers, where the app cannot know the paper came out.
+    pub printer_type: Option<String>,
+    /// The job's printer's `via_driver` flag; `None` when the printer is gone.
+    pub via_driver: Option<bool>,
     pub is_test: bool,
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
@@ -160,9 +166,9 @@ pub fn purge_old_jobs(
 
 pub fn list_jobs_conn(conn: &Connection) -> AppResult<Vec<PrintJob>> {
     // ORDER BY lives here, not in the shared column list: `get_job`,
-    // `reprint_job` and `retry_job` append `WHERE id = ?1`, which after an
+    // `reprint_job` and `retry_job` append `WHERE print_jobs.id = ?1`, which after an
     // `ORDER BY` is a syntax error (P1).
-    let sql = format!("{} ORDER BY id DESC", SELECT_JOB_COLUMNS);
+    let sql = format!("{} ORDER BY print_jobs.id DESC", SELECT_JOB_COLUMNS);
     let mut stmt = conn.prepare(&sql)?;
     let jobs = stmt
         .query_map([], map_job)?
@@ -172,7 +178,7 @@ pub fn list_jobs_conn(conn: &Connection) -> AppResult<Vec<PrintJob>> {
 }
 
 pub fn get_job_conn(conn: &Connection, id: i64) -> AppResult<PrintJob> {
-    let sql = format!("{} WHERE id = ?1", SELECT_JOB_COLUMNS);
+    let sql = format!("{} WHERE print_jobs.id = ?1", SELECT_JOB_COLUMNS);
     conn.query_row(&sql, [id], map_job).map_err(|e| match e {
         // Consistent with retry_job/delete_job and the REST 404 (P1 follow-up).
         rusqlite::Error::QueryReturnedNoRows => AppError::NotFound(format!("Job {} not found", id)),
@@ -186,7 +192,7 @@ pub fn reprint_job_conn(conn: &Connection, id: i64) -> AppResult<PrintJob> {
     // in the batch module — a batch job is the same row-to-row copy with
     // a `batch_id` — so there is one place the copy is defined (P3).
     let new_id = crate::commands::batch::clone_job_as_queued(conn, id, None, None)?;
-    let sql = format!("{} WHERE id = ?1", SELECT_JOB_COLUMNS);
+    let sql = format!("{} WHERE print_jobs.id = ?1", SELECT_JOB_COLUMNS);
     Ok(conn.query_row(&sql, [new_id], map_job)?)
 }
 
@@ -216,7 +222,7 @@ pub fn retry_job_conn(conn: &Connection, id: i64) -> AppResult<PrintJob> {
         ));
     }
 
-    let sql = format!("{} WHERE id = ?1", SELECT_JOB_COLUMNS);
+    let sql = format!("{} WHERE print_jobs.id = ?1", SELECT_JOB_COLUMNS);
     Ok(conn.query_row(&sql, [id], map_job)?)
 }
 
@@ -228,12 +234,14 @@ pub fn delete_job_conn(conn: &Connection, id: i64) -> AppResult<()> {
     Ok(())
 }
 
-const SELECT_JOB_COLUMNS: &str = "SELECT id, batch_id, record_index, template_id,
+const SELECT_JOB_COLUMNS: &str = "SELECT print_jobs.id, batch_id, record_index, template_id,
             printer_id, source, source_url, status, error,
             copies, settings_json, rendered_html, idempotency_key, is_test,
             started_at, finished_at, duration_ms, timings_json, requested_by_device_id,
-            template_revision, printed_by
-     FROM print_jobs";
+            template_revision, printed_by,
+            p.type AS printer_type, p.via_driver AS via_driver
+     FROM print_jobs
+     LEFT JOIN printers p ON p.id = print_jobs.printer_id";
 
 fn map_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
     Ok(PrintJob {
@@ -258,5 +266,7 @@ fn map_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
         requested_by_device_id: row.get(18)?,
         template_revision: row.get(19)?,
         printed_by: row.get(20)?,
+        printer_type: row.get(21)?,
+        via_driver: row.get(22)?,
     })
 }

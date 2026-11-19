@@ -442,6 +442,10 @@ class BluetoothWriteOnArgs {
     var handle: String? = null
     var dataBase64: String? = null
     var dataPath: String? = null
+    /** Bytes per RFCOMM write; `null` keeps the plugin default (512). */
+    var chunkBytes: Long? = null
+    /** Pause between RFCOMM writes, in ms; `null` keeps 50. */
+    var chunkPauseMs: Long? = null
 }
 
 @InvokeArg
@@ -458,12 +462,15 @@ class ApiServerStateArgs {
 }
 
 /** One finished background print job, for the one-shot result
- *  notification (item 41; see PrintNinjaService). */
+ *  notification (item 41; see PrintNinjaService). `sentOnly` marks a
+ *  success on a raw-wire printer: the text says "sent", never
+ *  "printed". */
 @InvokeArg
 class JobNotificationArgs {
     var kind: String? = null
     var subject: String? = null
     var detail: String? = null
+    var sentOnly: Boolean? = null
 }
 
 @TauriPlugin
@@ -1804,10 +1811,29 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 }
                 return@execute
             }
+            // Paced write (B4): one flood is exactly what a slow 2-inch
+            // thermal head drops, so the bytes go out in small slices
+            // with a short drain pause between them. The whole send —
+            // pauses included — stays far under the Rust side's 30 s
+            // Bluetooth deadline (see BluetoothPacing).
+            val chunkBytes = clampChunkBytes(args.chunkBytes ?: BT_CHUNK_BYTES_DEFAULT)
+            val pauseMs =
+                pacedChunkPauseMs(data.size, chunkBytes,
+                    clampChunkPauseMs(args.chunkPauseMs ?: BT_CHUNK_PAUSE_MS_DEFAULT))
+            val ranges = chunkRanges(data.size, chunkBytes)
+            var written = 0
             try {
                 val out = socket.outputStream
-                out.write(data)
+                ranges.forEachIndexed { index, range ->
+                    out.write(data, range.first, range.last - range.first + 1)
+                    written = range.last + 1
+                    if (index < ranges.lastIndex && pauseMs > 0L) Thread.sleep(pauseMs)
+                }
                 out.flush()
+                // Settle before answering: Rust closes the socket as
+                // soon as this resolves, and a platen mid-stroke at
+                // close time prints only the first letters of the job.
+                if (data.isNotEmpty()) Thread.sleep(settleDelayMs(data.size))
                 answer(invoke) {
                     invoke.resolve(JSObject().put("bytesWritten", data.size))
                 }
@@ -1815,7 +1841,9 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 answer(invoke) { invoke.reject(bluetoothDenied()) }
             } catch (e: Exception) {
                 answer(invoke) {
-                    invoke.reject("Bluetooth write failed: ${e.message}")
+                    invoke.reject(
+                        "Bluetooth write failed after $written of ${data.size} bytes: ${e.message}"
+                    )
                 }
             }
         }
@@ -1891,6 +1919,7 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 kind,
                 args.subject,
                 args.detail,
+                args.sentOnly ?: false,
             )
         }
         invoke.resolve()

@@ -133,6 +133,34 @@ class ServiceContractTest {
         assertEquals("Your print job finished.", text)
     }
 
+    // B3: a raw-wire success (USB, driverless Bluetooth) cannot know the
+    // paper came out, so it says "sent", never "printed".
+
+    @Test
+    fun aRawWireSuccessSaysSentNotPrinted() {
+        val (title, text) =
+            PrintNinjaService.jobNotificationText("success", "Order #12", null, sentOnly = true)
+        assertEquals("Print finished", title)
+        assertEquals("Order #12 was sent to the printer.", text)
+        assertFalse(text.contains("printed"))
+    }
+
+    @Test
+    fun aRawWireSuccessWithoutANameStillSaysSent() {
+        val (title, text) =
+            PrintNinjaService.jobNotificationText("success", null, null, sentOnly = true)
+        assertEquals("Print finished", title)
+        assertEquals("Your print job was sent to the printer.", text)
+    }
+
+    @Test
+    fun aRawWireFailureKeepsTheFailureWording() {
+        val (title, text) =
+            PrintNinjaService.jobNotificationText("failure", "Order #12", null, sentOnly = true)
+        assertEquals("Print failed", title)
+        assertEquals("Order #12 could not be printed.", text)
+    }
+
     @Test
     fun aFailedJobShowsTheReasonWithTheName() {
         val (title, text) =

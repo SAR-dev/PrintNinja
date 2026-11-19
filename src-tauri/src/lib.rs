@@ -370,6 +370,7 @@ pub fn run() {
             commands::printer::add_printer,
             commands::printer::update_printer,
             commands::printer::set_printer_tspl_tuning,
+            commands::printer::set_printer_bluetooth_delivery,
             commands::printer::delete_printer,
             commands::printer::get_printer,
             commands::printer::test_printer,
