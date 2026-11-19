@@ -1,7 +1,7 @@
 {
   "name": "printninja",
   "private": true,
-  "version": "2026.1118.2",
+  "version": "2026.1119.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
