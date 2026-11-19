@@ -1525,8 +1525,8 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
           </p>
         )}
         {/* One large input, no button: a complete code pairs by itself
-            (auto-advance). !-important beats the 3rem phone rule in
-            mobile.css, which wins the cascade at equal specificity. */}
+            (auto-advance). The !-important on !h-14 beats the Input
+            component's non-important phone rule max-md:h-12. */}
         <Input
           id="devices-code"
           ref={codeInputRef}

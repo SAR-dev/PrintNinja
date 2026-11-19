@@ -68,6 +68,7 @@ import {
   saveRowToServer,
   takeServerCopy,
 } from "@/lib/share/save";
+import { isRecentlyPublished } from "@/lib/share/recent";
 import type { ReactNode } from "react";
 
 type ServerSummary = share.CommunitySummary;
@@ -1051,19 +1052,29 @@ export function TemplatesPage() {
                 const own = mine.some(
                   (m) => m.remote_id === tpl.id || m.server_id === tpl.id,
                 );
+                // "New" is a non-status highlight: recently published by
+                // someone else. Your own rows carry the published state.
+                const isNew = !own && isRecentlyPublished(tpl.published_at);
                 return (
                   <li key={tpl.id}>
                     <Card className="h-full">
                       <CardContent className="space-y-2 p-4">
                         <div className="flex items-start justify-between gap-2">
-                          <h2 className="truncate font-medium">{tpl.name}</h2>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <h2 className="truncate font-medium">{tpl.name}</h2>
+                            {isNew && (
+                              <Badge variant="highlight" className="shrink-0">
+                                {t("templates.badge_new")}
+                              </Badge>
+                            )}
+                          </div>
                           {own ? (
                             <StatusBadge
                               status="published"
                               label={t("templates.server_mine")}
                             />
                           ) : (
-                            <Badge variant="outline">
+                            <Badge variant="outline" className="shrink-0">
                               {t("templates.badge_community")}
                             </Badge>
                           )}

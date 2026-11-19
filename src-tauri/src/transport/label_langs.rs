@@ -232,43 +232,10 @@ pub mod cpcl {
     }
 }
 
-/// Printer connection and data sending
-pub struct LabelPrinterTransport {
-    pub language: String,
-    pub dpi: u32,
-    pub label_w_mm: f64,
-    pub label_h_mm: f64,
-    pub gap_mm: f64,
-    pub address: String,
-    pub port: u16,
-}
-
-impl LabelPrinterTransport {
-    pub fn encode(&self, image: &crate::render::raster::RasterImage) -> Vec<u8> {
-        match self.language.as_str() {
-            "tspl" => tspl::print_bitmap(
-                image,
-                self.label_w_mm,
-                self.label_h_mm,
-                self.gap_mm,
-                self.dpi,
-            ),
-            "zpl" => {
-                zpl::print_bitmap(image, self.label_w_mm, self.label_h_mm, self.dpi).into_bytes()
-            }
-            "cpcl" => cpcl::print_bitmap(image, self.label_w_mm, self.dpi).into_bytes(),
-            _ => {
-                // Fallback: raw ESC/POS
-                let mut data = Vec::new();
-                data.extend_from_slice(&crate::transport::escpos::EscPosEncoder::init());
-                data.extend_from_slice(&crate::transport::escpos::EscPosEncoder::print_raster(
-                    image,
-                ));
-                data
-            }
-        }
-    }
-}
+// The live encoder is `encode_for_language_tuned` in `transport/mod.rs`; the
+// `LabelPrinterTransport` that used to live here duplicated it (with an
+// "unknown → ESC/POS" fallback and no TSPL tuning) and is gone — see
+// docs/todo/TRANSPORT_GAPS.md gap 6.
 
 #[cfg(test)]
 mod tests {

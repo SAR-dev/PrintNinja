@@ -38,7 +38,17 @@ function formatSince(iso: string, locale: string): string {
  */
 export function ProfileCard() {
   const { t, i18n } = useTranslation();
-  const [account, setAccount] = useState<Account>({ kind: "loading" });
+  const [account, setAccount] = useState<Account>(() => {
+    // The handle is written at sign-in and cleared at every sign-out /
+    // expired session (both funnel through endSession), so a local handle
+    // means a live session: show who is signed in on the first paint
+    // instead of flashing the signed-out face while fetchMe confirms.
+    // load() still fetches the member-since date and catches expiry.
+    const handle = share.getSessionHandle();
+    return handle
+      ? { kind: "signed_in", handle, createdAt: "" }
+      : { kind: "loading" };
+  });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {

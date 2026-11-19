@@ -73,6 +73,11 @@ const TEXT_PAIRS: Array<[string, string]> = [
   ["danger", "danger-soft"],
   ["info", "info-soft"],
   ["neutral", "neutral-soft"],
+  // The highlight accent is violet on its own tint, and may stand on a
+  // plain surface (the one-time first-print line).
+  ["highlight", "highlight-soft"],
+  ["highlight", "background"],
+  ["highlight", "card"],
 ];
 
 // Non-text UI (form control borders, focus ring) needs 3:1 (WCAG 1.4.11).
@@ -105,5 +110,15 @@ describe("design tokens", () => {
   it("declares the dark theme on data-theme with its own color-scheme", () => {
     const dark = themeBody(':root[data-theme="dark"]');
     expect(dark).toMatch(/color-scheme:\s*dark/);
+  });
+
+  it("declares shared motion tokens in the root :root", () => {
+    // Easing and duration live at the top level (not in a media query), so
+    // desktop and phone share them — the phone sheet used to carry its own
+    // --ease-out. Regressing to a phone-only token fails this.
+    expect(css).toMatch(/--ease-out:\s*cubic-bezier/);
+    expect(css).toMatch(/--dur-fast:\s*120ms/);
+    expect(css).toMatch(/--dur-base:\s*200ms/);
+    expect(css).toMatch(/--dur-slow:\s*320ms/);
   });
 });

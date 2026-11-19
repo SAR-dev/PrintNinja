@@ -16,6 +16,8 @@ const badgeVariants = cva(
         outline: "text-foreground",
         success: "border-transparent bg-success-soft text-success",
         warning: "border-transparent bg-warning-soft text-warning",
+        // Non-status attention only ("new", "recommended") — never a state.
+        highlight: "border-transparent bg-highlight-soft text-highlight",
       },
     },
     defaultVariants: {

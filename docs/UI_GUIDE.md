@@ -31,7 +31,9 @@ guide names a file, open it for the exact behaviour.
 ## Principles
 
 - Restrained and legible. Teal marks the brand and the active place; it is never used for success or failure.
-- One light theme. No dark variants, no `dark:` classes.
+- Light is the default theme. A dark token set lives in `src/index.css`
+  (`data-theme="dark"` on `<html>`); theming always goes through tokens, never
+  `dark:` Tailwind classes.
 - State is always colour **and** icon **and** word.
 - Sentence case. Buttons name the action ("Save changes", "Publish template"), and the toast repeats the verb.
 - Printing is physical, so anything that sends a job or deletes data names the thing and asks first.
@@ -181,6 +183,7 @@ exposed as Tailwind colours in `tailwind.config.ts`. Use these, never raw palett
 | `border` | `#D6E0E0` | Dividers and card borders (decorative) |
 | `input` | `#7A8C91` | Form-control borders (3:1 against the surface) |
 | `primary` | `#0F6B6B` | Primary actions, focus ring, active nav, links |
+| `highlight` | `#531FAD` (dark: `#A87EF1`) | Non-status accent: "new", "recommended", one-time brand moments. Never a state — its violet sits off every status hue |
 | `accent` | `#E3F1F0` | Selected row, active nav background, hover on quiet controls |
 | `ring` | `#0F6B6B` | Focus ring |
 | `destructive` | `#B42318` | Destructive buttons and form errors |
@@ -201,6 +204,10 @@ Each state is a text colour on its own tint. Use them through `StatusBadge`, not
 
 `info` shares the brand teal, so an info state never means "good" or "bad". Success and
 failure always use green and red, together with an icon and a word.
+
+`highlight` is the one accent that is **not** a status. It marks attention — a "New"
+badge, a one-time first-print line — and never a state, so a state UI that needs a
+colour always comes from the table above.
 
 Contrast pairs are asserted in `src/test/tokens.test.ts`; change a token and that test tells
 you if it broke AA (4.5:1 for text, 3:1 for control borders and the focus ring).
@@ -314,7 +321,9 @@ action on the right. Set `destructive` for deletes.
 `Separator`, `Tooltip`, and the `Toaster`.
 
 - Use `Button` with `asChild` around a `Link` when a button navigates.
-- Use `Badge` only for plain labels. For states use `StatusBadge`.
+- Use `Badge` only for plain labels. For states use `StatusBadge`. The `highlight`
+  variant is for non-status attention only ("New", "recommended") — a state never
+  wears it.
 - Icons come from `lucide-react`, sized `h-4 w-4` inside buttons and `aria-hidden="true"` when
   next to text.
 - For short hints on icon buttons the app uses the native `title` attribute. The `Tooltip`
@@ -348,6 +357,9 @@ directly (a guard test enforces it). The `Toaster` is mounted once in
   states no other UI shows. Errors keep their toasts.
 - At most two visible; repeats replace by id. One summarized toast
   beats a loop of them.
+- Phones give every toast a visible ✕ close button (`closeButton` on the
+  `Toaster`): swipe-down at the bottom edge is cramped for a thumb. Desktop
+  toasts dismiss by swipe.
 - Error: say what failed, not just "Error" ("Template name required"). When an exception
   has a useful message, show it.
 - Toasts disappear, so never put the only copy of important information in one. Errors that
@@ -423,6 +435,24 @@ Optional. Settings → General stores an app name and logo (PNG, JPEG, WebP or S
 as the `brand_name` and `brand_logo` settings. They apply to the top bar, the window title and
 the welcome screen. Leaving them empty gives PrintNinja. Read them with `usePrefs()` rather
 than hardcoding the product name in new UI, and use `AppLogo` to show the logo.
+
+### Brand moments
+
+Small, low-key places where the brand shows up. Each is a token-based component,
+never a one-off style:
+
+- **Empty states** (`EmptyState`): the icon or logo mark sits on a brand-soft tile
+  (`bg-accent`, `text-accent-foreground`) at every size.
+- **Sign-in screens** (`SignInScreen`): the logo sits on a brand-soft tile in each
+  view (sign-in, register, guest).
+- **First print** (`FirstPrintMoment`): a one-time highlight pill — `text-highlight`
+  on `bg-highlight-soft`, with a sparkle icon — that appears in the success banner
+  (desktop) and success card (phone) on the person's first completed print. The
+  flag lives in localStorage (`printninja-first-print-seen`); it shows once and
+  never again, and blocked storage counts as already seen.
+- **"New" badge** (Templates → Community): community templates published within
+  14 days (`isRecentlyPublished`, `src/lib/share/recent.ts`) wear a `highlight`
+  `Badge` next to their name. Own templates never show it.
 
 ## Responsive and touch
 
@@ -517,7 +547,7 @@ failing one blocks the release.
 | Test | What it enforces |
 |---|---|
 | `src/test/noRawColors.test.ts` | No raw palette classes (`bg-emerald-500`, `text-slate-600`…) in `src/pages` or `src/components`. It does not catch arbitrary values like `bg-[#fff]`, so review those by eye |
-| `src/test/tokens.test.ts` | Contrast pairs meet AA, the stylesheet has one light theme and no `.dark` block |
+| `src/test/tokens.test.ts` | Contrast pairs meet AA in both themes; the stylesheet defaults to light and declares the dark set on `data-theme="dark"` with its own `color-scheme` |
 | `src/test/smoke.test.tsx` | Every route renders in the shell with no console errors, exactly one `main`, an `h1`, and no axe violations. Colour contrast and landmark-region rules are off because jsdom has no layout; contrast is covered by `tokens.test.ts` |
 | `src/test/components.test.tsx` | `StatusBadge` (word and icon for every state), `PageHeader`, `DataTable` (sorting, keyboard, loading, empty) and `ConfirmDialog` |
 | `src/test/shell.test.tsx` | Navigation groups, unique go-to keys, `Ctrl+K`, `G` then a letter, the help dialog, and that nothing fires while typing |

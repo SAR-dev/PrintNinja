@@ -46,7 +46,7 @@ export function PageHeader({
       ref={ref}
       data-slot="page-header"
       className={cn(
-        "sticky top-0 z-20 -mx-4 border-b bg-background px-4 transition-[padding] duration-150 md:-mx-6 md:px-6",
+        "sticky top-0 z-20 -mx-4 border-b bg-background px-4 transition-[padding] duration-150 md:-mx-6 md:px-6 max-md:gap-3.5 max-md:border-b-0 max-md:pb-0",
         // Phone: one row (title + actions, wrapping when they do not fit).
         "flex flex-wrap items-center gap-x-3 gap-y-2",
         // Desktop: the original two-part row, bottom aligned.
@@ -56,7 +56,7 @@ export function PageHeader({
       )}
     >
       <div className="min-w-0 flex-1 space-y-1 md:flex-none">
-        <h1 className="truncate text-xl font-semibold leading-tight tracking-tight">
+        <h1 className="truncate text-xl font-semibold leading-tight tracking-tight max-md:text-2xl max-md:leading-[1.1] max-md:font-bold max-md:tracking-[-0.03em]">
           {title}
         </h1>
         {description && !scrolled && (

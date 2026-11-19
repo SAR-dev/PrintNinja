@@ -37,15 +37,24 @@ impl AndroidBridge {
             };
             found
                 .into_iter()
-                .filter(|d| d.kind != "raw_tcp")
-                .map(|d| PrinterInfo {
-                    id: format!("net:{}:{}", d.host, d.port),
-                    address: d.address(),
-                    name: d.name,
-                    printer_type: crate::transport::PrinterType::Ipp,
-                    language: crate::transport::PrinterLanguage::Pdf,
-                    status: "unknown".to_string(),
-                    pdf_datatype: None,
+                .map(|d| {
+                    // mDNS advertises raw-TCP (JetDirect/9100) printers under
+                    // _pdl-datastream._tcp/_printer._tcp in addition to IPP;
+                    // keep them as raw_tcp instead of dropping them.
+                    let printer_type = if d.kind == "raw_tcp" {
+                        crate::transport::PrinterType::RawTcp
+                    } else {
+                        crate::transport::PrinterType::Ipp
+                    };
+                    PrinterInfo {
+                        id: format!("net:{}:{}", d.host, d.port),
+                        address: d.address(),
+                        name: d.name,
+                        printer_type,
+                        language: crate::transport::PrinterLanguage::Pdf,
+                        status: "unknown".to_string(),
+                        pdf_datatype: None,
+                    }
                 })
                 .collect()
         }

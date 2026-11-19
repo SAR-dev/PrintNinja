@@ -14,6 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
+import { FirstPrintMoment } from "@/components/FirstPrintMoment";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -274,6 +275,7 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
             <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
             {t("print.sent")}
           </p>
+          <FirstPrintMoment />
           {store.renderedBy && (
             <p className="text-xs">
               {t("print.rendered_on", { peer: store.renderedBy })}
@@ -752,13 +754,13 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
 
       {/* Sticky Print bar: full-width, always a thumb-reach away. */}
       <div
-        className="sticky bottom-0 z-10 -mx-4 border-t bg-card/95 px-4 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pt-2 backdrop-blur md:hidden"
+        className="sticky bottom-0 z-10 -mx-4 border-t bg-card/95 px-4 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pt-2 backdrop-blur md:hidden max-md:border-t-0 max-md:pt-3 max-md:pb-[calc(0.75rem_+_env(safe-area-inset-bottom,0px))] max-md:bg-[hsl(var(--card)/0.92)] max-md:shadow-[var(--shadow-bar)] max-md:backdrop-blur-[14px] max-md:backdrop-saturate-[1.4]"
         data-slot="action-bar"
         data-testid="print-action-bar"
       >
         <Button
           size="lg"
-          className="min-h-11 w-full"
+          className="min-h-11 w-full max-md:h-[3.25rem] max-md:rounded-full max-md:text-[0.9375rem] max-md:shadow-[0_6px_16px_-6px_hsl(var(--primary)/0.55)] max-md:disabled:shadow-none"
           onClick={props.onPrint}
           disabled={!props.canPrint}
           title={props.blocker || undefined}

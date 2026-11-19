@@ -1,110 +1,16 @@
-import { describeError } from "@/lib/errors";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import { PageHeader } from "@/components/PageHeader";
-import { agent } from "@/lib/agent/commands";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Printer,
-  Zap,
-  CheckCircle2,
-  XCircle,
-  RefreshCw,
-  TriangleAlert,
-  ChevronDown,
-  Loader2,
-} from "lucide-react";
-import { ExitViaPcButton } from "@/components/ExitViaPcButton";
-import { ReadyChip } from "@/components/print/ReadyChip";
-import { TimingBreakdown } from "@/components/TimingBreakdown";
-import { formatSeconds } from "@/lib/timings";
-import { cn } from "@/lib/utils";
-import { useSystemPrinters } from "@/lib/hooks/useSystemPrinters";
-import {
-  fetchPcPrinters,
-  fetchPcTemplates,
-  getPrintViaPcDevice,
-  isPrintViaPc,
-  listPhonePairs,
-  resolvePhonePair,
-  setPrintViaPcDevice,
-} from "@/lib/printViaPc";
-import type {
-  PcPrinterInfo,
-  PcTemplateInfo,
-  RenderPair,
-} from "@/lib/agent/types";
-import { cacheNow } from "@/lib/sync/useSyncStatus";
-import { usePcStatus } from "@/lib/shell/usePcStatus";
-import { Link } from "react-router-dom";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { isAndroid } from "@/lib/platform";
-import { hasPairedProvider } from "@/lib/pairing";
-import {
-  applyPendingDeepLinkPrint,
-  getPendingPrint,
-  subscribePendingPrint,
-  takePendingDeepLinkPrint,
-} from "@/lib/deeplink";
-import { notifyError } from "@/lib/notify";
 import { usePrintStore } from "@/lib/store/printStore";
-import {
-  loadPrintAdvancedOpen,
-  loadPaperWidthDismissed,
-  loadPrintPrefs,
-  prefsKey,
-  savePaperWidthDismissed,
-  savePrintAdvancedOpen,
-  PRINT_PREFS_KEY,
-  type PrintPrefsMap,
-} from "@/lib/printPrefs";
-import { writeSetting } from "@/lib/settings";
-import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
-import { listTemplates } from "@/lib/templates/listTemplates";
-import type { TemplateListRow } from "@/lib/templates/listTemplates";
-import { compileTemplateCss } from "@/lib/templates/compileTemplateCss";
-import { PrintPreview } from "@/components/PrintPreview";
-import { renderDesignPagesRust } from "@/lib/render/rustPreview";
-import { computePrintLayout, resolvePaper } from "@/lib/render/printLayout";
-import { derivePaperKey, PAPER_PRESETS } from "@/lib/paperPresets";
-import { PaperSizeFields } from "@/components/print/PaperSizeFields";
-import { PhonePrintFlow } from "@/components/print/PhonePrintFlow";
-import { PaperWidthNotice } from "@/components/print/PaperWidthNotice";
-import { FoldSection } from "@/components/printers/FoldSection";
-
-/** Fit mode → label key, for the Advanced fold's header summary. */
-const FIT_MODE_LABELS = {
-  actual: "print.fit_actual",
-  "fit-width": "print.fit_width",
-  "fit-page": "print.fit_page",
-  shrink: "print.fit_shrink",
-  fill: "print.fit_fill",
-} as const;
+import { usePrintLists } from "./print/usePrintLists";
+import { useViaPc } from "./print/useViaPc";
+import { usePrintPreview } from "./print/usePrintPreview";
+import { usePrintPaper } from "./print/usePrintPaper";
+import { usePrintActions } from "./print/usePrintActions";
+import { PhoneLayout } from "./print/PhoneLayout";
+import { DesktopLayout } from "./print/DesktopLayout";
+import { PaperSizeDialog } from "./print/PaperSizeDialog";
 
 /**
  * The print form, always. An unpaired phone can still print: thermal
@@ -113,75 +19,6 @@ const FIT_MODE_LABELS = {
  * pair — a PDF printer — says so on the form (the `pdfNeedsPair`
  * blocker) instead of a redirect.
  */
-const BANNER_TONES = {
-  neutral: "border-border bg-muted text-foreground",
-  success: "border-success/30 bg-success-soft text-success",
-  danger: "border-danger/30 bg-danger-soft text-danger",
-  warning: "border-warning/30 bg-warning-soft text-warning",
-} as const;
-
-/**
- * The Print page's one status slot. Every state (ready, sent, failed,
- * warned) is the same fixed-height single line, so the form below never
- * jumps when the state changes; whatever does not fit on the line (stage
- * timings, the full error, every warning) opens in place, and only when
- * the person asks for it.
- */
-function StatusBanner({
-  tone,
-  role,
-  icon,
-  summary,
-  title,
-  actions,
-  details,
-}: {
-  tone: keyof typeof BANNER_TONES;
-  role: "status" | "alert";
-  icon: React.ReactNode;
-  summary: React.ReactNode;
-  title?: string;
-  actions?: React.ReactNode;
-  details?: React.ReactNode;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  return (
-    <div role={role} className={cn("rounded-lg border", BANNER_TONES[tone])}>
-      <div className="flex h-11 items-center gap-3 px-4">
-        {icon}
-        <p className="min-w-0 flex-1 truncate text-sm" title={title}>
-          {summary}
-        </p>
-        {actions}
-        {details && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="shrink-0 gap-1 px-2 text-current hover:text-current"
-            aria-expanded={open}
-            onClick={() => setOpen((o) => !o)}
-          >
-            {open ? t("print.details_hide") : t("print.details_show")}
-            <ChevronDown
-              className={cn(
-                "h-4 w-4 transition-transform",
-                open && "rotate-180",
-              )}
-              aria-hidden="true"
-            />
-          </Button>
-        )}
-      </div>
-      {details && open && (
-        <div className="space-y-2 border-t border-current/15 px-4 py-3">
-          {details}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function PrintPage() {
   return <PrintForm />;
 }
@@ -189,533 +26,9 @@ export function PrintPage() {
 function PrintForm() {
   const { t } = useTranslation();
   const store = usePrintStore();
-  const { printers, refresh: refreshSystemPrinters } = useSystemPrinters();
-  const [templates, setTemplates] = useState<TemplateListRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  // Per-printer remembered choices (F3); persisted under PRINT_PREFS_KEY.
-  const [printerPrefs, setPrinterPrefs] = useState<PrintPrefsMap>({});
-  // Printers whose "no paper width saved" prompt was dismissed (asked once).
-  const [paperPromptDismissed, setPaperPromptDismissed] = useState<string[]>(
-    [],
-  );
-  useEffect(() => {
-    let alive = true;
-    void loadPaperWidthDismissed().then((v) => {
-      if (alive) setPaperPromptDismissed(v);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  // F3: the paper-width dialog, opened from the mismatch warning below.
-  const [paperDlg, setPaperDlg] = useState(false);
-  const [paperDlgValue, setPaperDlgValue] = useState("");
-  const [paperDlgBusy, setPaperDlgBusy] = useState(false);
-  // The failed-width message, shown inline under the input (no toast).
-  const [paperDlgError, setPaperDlgError] = useState<string | null>(null);
-  // The Advanced fold: closed by default, its state remembered globally
-  // (not per printer) so the choice survives navigation.
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void loadPrintAdvancedOpen()
-      .then((open) => {
-        if (!cancelled) setAdvancedOpen(open);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  const toggleAdvanced = () => {
-    const next = !advancedOpen;
-    setAdvancedOpen(next);
-    void savePrintAdvancedOpen(next);
-  };
-
-  // One complete design document per record, laid out as in the Designer.
-  // Paper, orientation, fit mode and margins are applied when drawing, so
-  // changing them never re-renders the template.
-  const [previewPages, setPreviewPages] = useState<string[]>([]);
-  const [previewError, setPreviewError] = useState<string>("");
-  const [previewNotice, setPreviewNotice] = useState<string>("");
-  // Version ids already backfilled with compiled CSS this session, so the
-  // preview effect does not write a "Compiled Tailwind CSS" version on
-  // every render of the same template.
-  const cssBackfilled = useRef<Set<number>>(new Set());
-  // The phone renders its own single-column flow (PhonePrintFlow, PLAN §6)
-  // from the same handlers and derived values; the JSX below is desktop
-  // and tablet only. jsdom has no matchMedia, so tests see that one too.
-  const isPhone = useMediaQuery(PHONE_QUERY);
-
-  // Print via PC (ARCHITECTURE §9): when the flag is on, the dialog talks to the
-  // chosen paired PC instead of the local pipeline — no local transport
-  // call happens while it is on.
-  const [viaPc, setViaPc] = useState(false);
-  const [pairs, setPairs] = useState<RenderPair[]>([]);
-  const [viaPcDevice, setViaPcDevice] = useState<string | null>(null);
-  const [pcPrinters, setPcPrinters] = useState<PcPrinterInfo[]>([]);
-  const [pcCached, setPcCached] = useState(false);
-  // Via-PC template picker: the PC's printable rows, not this phone's.
-  // Chosen by server_id; history links a local row only when one exists.
-  const [pcTemplates, setPcTemplates] = useState<PcTemplateInfo[]>([]);
-  const [pcTemplate, setPcTemplate] = useState("");
-  const [pcTemplatesCached, setPcTemplatesCached] = useState(false);
-  // The initial list fetch fails quietly: hammering an unreachable PC
-  // with an error toast on every page open is noise — the banner below
-  // already says the PC did not answer. Manual refreshes still toast.
-  const [pcFailed, setPcFailed] = useState(false);
   const [remoteCode, setRemoteCode] = useState<string | null>(null);
   const [printedVia, setPrintedVia] = useState<string | null>(null);
   const keyRef = useRef<string>("");
-  const viaPcPair = resolvePhonePair(pairs, viaPcDevice);
-  const { status: pcStatus } = usePcStatus();
-  const pcUnpaired = pcStatus.state === "down" && pcStatus.kind === "unpaired";
-  // "Never paired" state for the PDF blocker below (a removed pair
-  // already shows through `pcUnpaired`). Desktop renders PDF locally,
-  // so it never checks.
-  const [hasPair, setHasPair] = useState<boolean | null>(null);
-  useEffect(() => {
-    if (!isAndroid()) return;
-    let cancelled = false;
-    void hasPairedProvider().then((paired) => {
-      if (!cancelled) setHasPair(paired);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const refreshPcPrinters = async (pairId?: string | null) => {
-    try {
-      const r = await fetchPcPrinters(pairId ?? viaPcDevice, true);
-      setPcPrinters(r.printers);
-      setPcCached(r.cached);
-      setPcFailed(false);
-    } catch (e) {
-      setPcFailed(true);
-      notifyError(describeError(e));
-    }
-  };
-
-  const refreshPcTemplates = async (pairId?: string | null, quiet = false) => {
-    try {
-      const r = await fetchPcTemplates(pairId ?? viaPcDevice, true);
-      setPcTemplates(r.templates);
-      setPcTemplatesCached(r.cached);
-      if (!quiet) setPcFailed(false);
-      if (
-        r.templates.length > 0 &&
-        !r.templates.some((x) => x.server_id === pcTemplate)
-      ) {
-        setPcTemplate(r.templates[0].server_id);
-      }
-    } catch (e) {
-      if (!quiet) {
-        setPcFailed(true);
-        notifyError(describeError(e));
-      }
-    }
-  };
-
-  // Choosing here resolves the block in place: no trip to Automation.
-  const pickViaPcDevice = async (id: string) => {
-    resetOutcome();
-    try {
-      await setPrintViaPcDevice(id);
-      setViaPcDevice(id);
-      await refreshPcPrinters(id);
-      await refreshPcTemplates(id);
-    } catch (e) {
-      notifyError(describeError(e));
-    }
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [flag, list, chosen] = await Promise.all([
-          isPrintViaPc(),
-          listPhonePairs(),
-          getPrintViaPcDevice(),
-        ]);
-        if (cancelled) return;
-        setViaPc(flag);
-        setPairs(list);
-        setViaPcDevice(chosen);
-        if (flag) {
-          try {
-            const r = await fetchPcPrinters(chosen, false);
-            if (!cancelled) {
-              setPcPrinters(r.printers);
-              setPcCached(r.cached);
-              setPcFailed(false);
-            }
-          } catch {
-            if (!cancelled) setPcFailed(true);
-          }
-          try {
-            const r = await fetchPcTemplates(chosen, false);
-            if (!cancelled) {
-              setPcTemplates(r.templates);
-              setPcTemplatesCached(r.cached);
-              if (r.templates.length > 0) {
-                setPcTemplate((cur) =>
-                  cur && r.templates.some((x) => x.server_id === cur)
-                    ? cur
-                    : r.templates[0].server_id,
-                );
-              }
-            }
-          } catch {
-            /* printers path already flagged the PC */
-          }
-        }
-      } catch {
-        /* settings unreadable: stay local */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Fetch printers + templates fresh every time (mount, sync pull,
-  // window focus) so a height saved in Designer is visible here.
-  useEffect(() => {
-    let cancelled = false;
-    const load = async (first: boolean) => {
-      try {
-        // Saved printers plus OS ones, merged by the hook; this also
-        // updates the list the dropdown shows.
-        const [p, tpl, prefs] = await Promise.all([
-          refreshSystemPrinters().catch(() => []),
-          listTemplates().catch(() => []),
-          loadPrintPrefs().catch((): PrintPrefsMap => ({})),
-        ]);
-        if (cancelled) return;
-        setTemplates(tpl);
-        setPrinterPrefs(prefs);
-        const st = usePrintStore.getState();
-        // The preselected printer's remembered template beats the plain
-        // first-template fallback; its paper is restored on the first load
-        // only, and only over an unset paper (a focus/pull reload must not
-        // clobber a live session's explicit choice).
-        const hadPaper = st.paperW != null || st.paperH != null;
-        const effPrinter = st.printerId || (p.length > 0 ? p[0].name : "");
-        if (effPrinter) st.setPrinterId(effPrinter);
-        const remembered = effPrinter ? prefs[prefsKey(effPrinter)] : undefined;
-        const rememberedTplOk =
-          !!remembered &&
-          tpl.some((x) => String(x.id) === remembered.template_id);
-        if (
-          tpl.length > 0 &&
-          !tpl.some((x) => String(x.id) === String(st.templateId))
-        )
-          st.setTemplateId(
-            rememberedTplOk ? remembered.template_id : String(tpl[0].id),
-          );
-        if (first && rememberedTplOk && !hadPaper) {
-          st.setPaper(remembered.paper_w, remembered.paper_h);
-        }
-      } catch (e) {
-        console.error("Failed to load printers/templates:", e);
-      } finally {
-        if (first && !cancelled) setLoading(false);
-      }
-    };
-    void load(true);
-    const onPulled = () => void load(false);
-    const onFocus = () => void load(false);
-    window.addEventListener("sync:pulled", onPulled);
-    window.addEventListener("focus", onFocus);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("sync:pulled", onPulled);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, []);
-
-  // The printer name belongs to one list or the other: flipping the
-  // mode clears the other side's choice, and a landed PC list snaps an
-  // empty choice to its first entry. The local list keeps its own
-  // mount-time preselect below, untouched. Templates work the same way:
-  // via-PC prints choose by the PC's server_id, local prints by row id.
-  const prevViaPc = useRef(viaPc);
-  useEffect(() => {
-    if (prevViaPc.current !== viaPc) {
-      prevViaPc.current = viaPc;
-      usePrintStore.getState().setPrinterId("");
-      setPcTemplate("");
-      if (viaPc) void refreshPcTemplates(null, true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viaPc]);
-  useEffect(() => {
-    if (
-      viaPc &&
-      pcPrinters.length > 0 &&
-      !pcPrinters.some((p) => p.name === store.printerId)
-    ) {
-      usePrintStore.getState().setPrinterId(pcPrinters[0].name);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viaPc, pcPrinters]);
-
-  const selectedTemplate = useMemo(
-    () => templates.find((x) => String(x.id) === store.templateId),
-    [templates, store.templateId],
-  );
-
-  // Via-PC prints choose from the PC's listing: the preview can only
-  // render a local copy, so it uses the same-named one when there is
-  // one — print identity always comes from the PC's server_id.
-  const selectedPcTemplate = useMemo(
-    () =>
-      viaPc ? pcTemplates.find((x) => x.server_id === pcTemplate) : undefined,
-    [viaPc, pcTemplates, pcTemplate],
-  );
-  const previewTemplate = viaPc
-    ? selectedPcTemplate &&
-      templates.find((x) => x.name === selectedPcTemplate.name)
-    : selectedTemplate;
-
-  const selectedTemplateId = selectedTemplate?.id;
-  // The template's orientation is the default; flipping the selector below
-  // overrides it for this print only (never written back).
-  const previewTemplateKey = viaPc
-    ? `pc:${pcTemplate}`
-    : `local:${selectedTemplateId ?? ""}`;
-  useEffect(() => {
-    if (previewTemplate) {
-      store.setOrientation(
-        previewTemplate.orientation === "landscape" ? "landscape" : "portrait",
-      );
-    }
-    // Keyed on the template only: a reload must not clobber a manual flip.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewTemplateKey]);
-
-  // A `printninja://print` deep link: dispatch stashes the values here
-  // before navigating, and this form consumes them. The apply lands
-  // after the page's own load (which re-defaults the template when the
-  // store's id is unknown to the fresh list) and after the
-  // template-orientation reset above, so the link's values win.
-  // `deepLinkAppliedKey` records which template key the apply happened
-  // for: setting the template id changes that key, which runs the reset
-  // above for the new template — so the link is applied once more
-  // (idempotently) and only then consumed.
-  const pendingDeepLink = useSyncExternalStore(
-    subscribePendingPrint,
-    getPendingPrint,
-    getPendingPrint,
-  );
-  const [deepLinkAppliedKey, setDeepLinkAppliedKey] = useState<string | null>(
-    null,
-  );
-  useEffect(() => {
-    if (!pendingDeepLink || !previewTemplate) return;
-    if (deepLinkAppliedKey !== previewTemplateKey) {
-      applyPendingDeepLinkPrint(pendingDeepLink);
-      setDeepLinkAppliedKey(previewTemplateKey);
-    } else {
-      // Applied for this template, and its orientation reset already ran:
-      // consume so the effect settles.
-      takePendingDeepLinkPrint();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingDeepLink, previewTemplateKey, deepLinkAppliedKey]);
-
-  // The preview follows the selected template and data source, so
-  // operators see what will print. With test data it renders the bundled
-  // mock; otherwise it fetches the data URL (same GET/POST choice the
-  // pipeline uses) and falls back to the mock with a notice when the
-  // fetch fails.
-  const dataUrl = store.dataUrl;
-  const useTestData = store.useTestData;
-  const httpMethod = store.httpMethod;
-  const pageCount = Math.min(500, Math.max(1, Math.floor(store.records || 1)));
-  const PREVIEW_PAGE_CAP = 10;
-  /** A hanging data URL stalls the preview; the print fetches server-side. */
-  const PREVIEW_DATA_TIMEOUT_MS = 10_000;
-  // The preview fetches on every keystroke without this — with POST that
-  // repeats a side-effecting call against the user's endpoint.
-  const [debouncedDataUrl, setDebouncedDataUrl] = useState(dataUrl);
-  useEffect(() => {
-    const id = window.setTimeout(() => setDebouncedDataUrl(dataUrl), 500);
-    return () => window.clearTimeout(id);
-  }, [dataUrl]);
-  // Pages rendered for one template must never be drawn with another
-  // template's geometry (or under its error/notice) while the new render is
-  // still running — a slow data URL can take up to 10 s.
-  const renderedPreviewKey = useRef<string | null>(null);
-  useEffect(() => {
-    const template = previewTemplate;
-    if (renderedPreviewKey.current !== previewTemplateKey) {
-      renderedPreviewKey.current = previewTemplateKey;
-      setPreviewPages([]);
-      setPreviewError("");
-      setPreviewNotice("");
-    }
-    if (!template) {
-      setPreviewPages([]);
-      setPreviewError("");
-      // A PC template with no local same-named copy has nothing to
-      // render from — but it still prints; say so instead of blankness.
-      setPreviewNotice(
-        viaPc && pcTemplate
-          ? t("print.preview_pc_template", {
-              pc: viaPcPair?.name ?? t("print.via_pc_no_pair"),
-            })
-          : "",
-      );
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const html = template.html ?? "";
-        const css = template.css ?? "";
-        if (!html.trim()) {
-          if (!cancelled) {
-            setPreviewPages([]);
-            setPreviewError(t("print.preview_empty_template"));
-          }
-          return;
-        }
-        // Templates saved before per-template compilation have no stored
-        // Tailwind CSS. Compile on the fly so the preview matches.
-        let compiledCss = template.compiled_css ?? "";
-        if (!compiledCss.trim() && !cssBackfilled.current.has(template.id)) {
-          cssBackfilled.current.add(template.id);
-          const built = await compileTemplateCss(html);
-          compiledCss = built.css;
-          if (built.css.trim() && !cancelled) {
-            agent("update_template_meta", {
-              req: {
-                id: template.id,
-                name: template.name,
-                page_w_mm: template.page_w_mm,
-                page_h_mm: template.page_h_mm,
-                compiled_css: built.css,
-                compiled_key: built.key,
-              },
-            }).catch((e) => console.warn("Could not store compiled CSS:", e));
-          }
-        }
-
-        let data: unknown = DEFAULT_MOCK_DATA;
-        let notice = "";
-        if (!useTestData && debouncedDataUrl.trim()) {
-          const ctrl = new AbortController();
-          const timeout = window.setTimeout(
-            () => ctrl.abort(),
-            PREVIEW_DATA_TIMEOUT_MS,
-          );
-          try {
-            const res = await fetch(
-              debouncedDataUrl.trim(),
-              httpMethod === "POST"
-                ? {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: "{}",
-                    signal: ctrl.signal,
-                  }
-                : { signal: ctrl.signal },
-            );
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            data = await res.json();
-          } catch (e) {
-            notice =
-              e instanceof DOMException && e.name === "AbortError"
-                ? t("print.preview_data_timeout")
-                : t("print.preview_data_failed", {
-                    error: describeError(e),
-                  });
-            data = DEFAULT_MOCK_DATA;
-          } finally {
-            window.clearTimeout(timeout);
-          }
-        }
-
-        if (Array.isArray(data) && data.length === 0) {
-          if (!cancelled) {
-            setPreviewPages([]);
-            setPreviewError(t("print.preview_empty_data"));
-            setPreviewNotice(notice);
-          }
-          return;
-        }
-        // One object repeats `records` times; an array prints its own
-        // length. The preview shows at most a few pages so a big N stays
-        // light — the print itself renders them all.
-        const totalPages = Array.isArray(data) ? data.length : pageCount;
-        const shownData = Array.isArray(data)
-          ? data.slice(0, PREVIEW_PAGE_CAP)
-          : Array<unknown>(Math.min(pageCount, PREVIEW_PAGE_CAP)).fill(data);
-        if (totalPages > shownData.length) {
-          notice += `${notice ? " " : ""}${t("print.preview_truncated", { shown: shownData.length, total: totalPages })}`;
-        }
-
-        // The Rust engine is the one that prints, so the preview is what
-        // will print; a broken template falls back to raw-source pages
-        // instead of throwing.
-        const { pages } = await renderDesignPagesRust(
-          html,
-          css,
-          shownData,
-          compiledCss,
-        );
-        if (!cancelled) {
-          setPreviewPages(pages);
-          setPreviewError("");
-          setPreviewNotice(notice);
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setPreviewPages([]);
-          setPreviewError(
-            t("print.preview_unavailable", { error: describeError(e) }),
-          );
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    previewTemplate,
-    debouncedDataUrl,
-    useTestData,
-    httpMethod,
-    pageCount,
-    viaPc,
-    pcTemplate,
-    viaPcPair?.name,
-  ]);
-
-  const [refreshingPrinters, setRefreshingPrinters] = useState(false);
-  const loadPrinters = async () => {
-    if (refreshingPrinters) return;
-    setRefreshingPrinters(true);
-    // Via PC, the phone's own printers are not in play: asking the OS
-    // would only toast "Found 0 system printers" next to the real result.
-    try {
-      if (viaPc) {
-        await refreshPcPrinters();
-        await refreshPcTemplates();
-        return;
-      }
-      // The result is the list itself: the dropdown updates, so no toast.
-      await refreshSystemPrinters();
-    } catch (e) {
-      notifyError(t("settings_page.toast_failed", { error: describeError(e) }));
-    } finally {
-      setRefreshingPrinters(false);
-    }
-  };
 
   // A print's outcome (banner, warnings, timings, the PC's reply) belongs to
   // the printer + template it ran with. Once either changes it is stale, and
@@ -735,244 +48,61 @@ function PrintForm() {
     keyRef.current = "";
   };
 
-  // A page range like "3-4" is meant for one document: a different template
-  // starts from all pages again instead of printing (or failing on) pages
-  // that were typed for the previous one.
-  const changeTemplate = (id: string) => {
-    if (id === usePrintStore.getState().templateId) return;
-    store.setTemplateId(id);
-    store.setPageRange("");
-    resetOutcome();
-  };
-  const changePcTemplate = (serverId: string) => {
-    if (serverId === pcTemplate) return;
-    setPcTemplate(serverId);
-    store.setPageRange("");
-    resetOutcome();
-  };
+  const lists = usePrintLists();
+  const {
+    printers,
+    refreshSystemPrinters,
+    templates,
+    loading,
+    printerPrefs,
+    setPrinterPrefs,
+    paperPromptDismissed,
+    setPaperPromptDismissed,
+  } = lists;
 
-  // Picking a printer brings back its last local choices (F3): the
-  // remembered template when it still exists, plus the remembered paper.
-  // Via-PC choices are the PC's own ids and never remembered here.
-  const onPrinterChange = (name: string) => {
-    store.setPrinterId(name);
-    resetOutcome();
-    if (viaPc) return;
-    const remembered = printerPrefs[prefsKey(name)];
-    const tpl = remembered
-      ? templates.find((x) => String(x.id) === remembered.template_id)
-      : undefined;
-    if (!remembered || !tpl) {
-      // Nothing usable remembered for this printer (never printed here, or
-      // its template is gone): drop the previous printer's paper rather
-      // than silently carrying it over.
-      store.selectPaper("auto");
-      return;
-    }
-    changeTemplate(String(tpl.id));
-    store.setPaper(remembered.paper_w, remembered.paper_h);
-  };
+  // The phone renders its own single-column flow (PhonePrintFlow, PLAN §6)
+  // from the same handlers and derived values; the JSX below is desktop
+  // and tablet only. jsdom has no matchMedia, so tests see that one too.
+  const isPhone = useMediaQuery(PHONE_QUERY);
 
-  const handlePrint = (retry = false) => {
-    if (!store.printerId) {
-      notifyError(t("print.blocker_printer"));
-      return;
-    }
-    if (!templateChosen) {
-      notifyError(t("print.blocker_template"));
-      return;
-    }
-    if (store.copies < 1) {
-      notifyError(t("print.blocker_copies"));
-      return;
-    }
-    void doPrint(retry);
-  };
+  const viaPcApi = useViaPc(resetOutcome);
+  const {
+    viaPc,
+    setViaPc,
+    pairs,
+    viaPcPair,
+    pcUnpaired,
+    pcPrinters,
+    pcCached,
+    pcTemplates,
+    pcTemplate,
+    pcTemplatesCached,
+    pcFailed,
+    hasPair,
+    refreshPcPrinters,
+    refreshPcTemplates,
+    pickViaPcDevice,
+    changePcTemplate,
+    viaPcDevice,
+  } = viaPcApi;
 
-  const doPrint = async (retry: boolean) => {
-    // Remember this printer's choices for its next visit (F3). Saved
-    // before the transport call so the prefs survive a failed print too.
-    if (!viaPc) {
-      const next: PrintPrefsMap = {
-        ...printerPrefs,
-        [prefsKey(store.printerId)]: {
-          template_id: store.templateId,
-          paper_w: store.paperW,
-          paper_h: store.paperH,
-        },
-      };
-      setPrinterPrefs(next);
-      void writeSetting(PRINT_PREFS_KEY, JSON.stringify(next));
-    }
-    // Print via PC: no local pipeline or transport call from here on.
-    if (viaPc) {
-      await handleRemotePrint(retry);
-      return;
-    }
-
-    store.setStatus("printing");
-    store.setError("");
-    store.setTimings(null);
-    store.setRenderedBy(null);
-    store.setWarnings([]);
-
-    try {
-      const result = await agent("print_html", {
-        req: {
-          printer_name: store.printerId,
-          html: "",
-          template_id: Number(store.templateId),
-          page_width_mm: effPaperW,
-          page_height_mm: effPaperH,
-          orientation: store.orientation,
-          copies: store.copies,
-          records: store.records,
-          margin_top: store.marginTop,
-          margin_right: store.marginRight,
-          margin_bottom: store.marginBottom,
-          margin_left: store.marginLeft,
-          fit_mode: store.fitMode,
-          page_range: store.pageRange.trim() || undefined,
-          grayscale: store.grayscale,
-          test: store.useTestData,
-          source: store.useTestData ? "test" : "ui",
-          data: store.useTestData ? DEFAULT_MOCK_DATA : undefined,
-          data_url: store.useTestData ? undefined : store.dataUrl || undefined,
-          http_method: store.useTestData ? undefined : store.httpMethod,
-        },
-      });
-
-      // The result alert above the form reports the outcome; no toast.
-      store.setDurationMs(result.duration_ms);
-      store.setTimings(result.timings ?? null);
-      store.setRenderedBy(result.rendered_by ?? null);
-      store.setWarnings(result.warnings ?? []);
-      if (result.success) {
-        store.setStatus("success");
-      } else {
-        store.setStatus("failed");
-        store.setError(result.error || "Unknown error");
-      }
-    } catch (e) {
-      store.setStatus("failed");
-      store.setError(describeError(e));
-    }
-  };
-
-  // One print through the paired PC. A fresh attempt mints the
-  // idempotency key; a retry reuses it, so a timeout never prints twice.
-  // Paper size stays home (the API has no field for it), but the four
-  // margins ride along — the same values the local path sends — so a
-  // phone job lays out the page the same way a local one would.
-  const handleRemotePrint = async (retry: boolean) => {
-    const pair = resolvePhonePair(pairs, viaPcDevice);
-    if (!pair) {
-      notifyError(t("print.via_pc_no_pair"));
-      return;
-    }
-    store.setStatus("printing");
-    store.setError("");
-    store.setTimings(null);
-    store.setRenderedBy(null);
-    store.setWarnings([]);
-    setRemoteCode(null);
-    setPrintedVia(null);
-    try {
-      if (!retry || !keyRef.current) {
-        keyRef.current =
-          globalThis.crypto?.randomUUID?.() ??
-          `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      }
-      // Via-PC identity comes from the PC's own listing (matched by
-      // construction); the local row is only history linkage, and may
-      // not exist — e.g. a guest printing a PC template.
-      const pcPick =
-        viaPc && selectedPcTemplate
-          ? {
-              template_id: undefined,
-              template_name: selectedPcTemplate.name,
-              template_server_id: selectedPcTemplate.server_id,
-              template_server_revision:
-                selectedPcTemplate.server_revision ?? undefined,
-            }
-          : {
-              template_id: Number(store.templateId),
-              template_name: undefined,
-              template_server_id: undefined,
-              template_server_revision: undefined,
-            };
-      const result = await agent("remote_print", {
-        args: {
-          ...pcPick,
-          printer_name: store.printerId,
-          copies: store.copies,
-          records: store.records,
-          margin_top: store.marginTop,
-          margin_right: store.marginRight,
-          margin_bottom: store.marginBottom,
-          margin_left: store.marginLeft,
-          orientation: store.orientation,
-          fit_mode: store.fitMode,
-          page_range: store.pageRange.trim() || undefined,
-          grayscale: store.grayscale,
-          test: store.useTestData,
-          data: store.useTestData ? DEFAULT_MOCK_DATA : undefined,
-          data_url: store.useTestData ? undefined : store.dataUrl || undefined,
-          http_method: store.useTestData ? undefined : store.httpMethod,
-          idempotency_key: keyRef.current,
-          pair_id: pair.provider_id || pair.id,
-        },
-      });
-      store.setDurationMs(result.duration_ms);
-      setPrintedVia(result.pc_name);
-      setRemoteCode(result.code);
-      store.setWarnings(result.warnings ?? []);
-      if (result.success) {
-        store.setStatus("success");
-      } else {
-        store.setStatus("failed");
-        store.setError(result.error || "Unknown error");
-      }
-    } catch (e) {
-      store.setStatus("failed");
-      store.setError(describeError(e));
-    }
-  };
-
-  const handleSyncTemplates = async () => {
-    try {
-      // The failed-print card clears as the visible result; the follow-up
-      // is the Retry button that replaces it.
-      await cacheNow();
-      setRemoteCode(null);
-    } catch (e) {
-      notifyError(describeError(e));
-    }
-  };
-
-  const handleSpikeTest = async () => {
-    store.setStatus("printing");
-    store.setError("");
-    store.setTimings(null);
-    store.setRenderedBy(null);
-    store.setWarnings([]);
-    try {
-      const result = await agent("spike_test_print", {});
-      store.setDurationMs(result.duration_ms);
-      store.setTimings(result.timings ?? null);
-      store.setRenderedBy(result.rendered_by ?? null);
-      store.setWarnings(result.warnings ?? []);
-      if (result.success) {
-        store.setStatus("success");
-      } else {
-        store.setStatus("failed");
-        store.setError(result.error || "Unknown error");
-      }
-    } catch (e) {
-      store.setStatus("failed");
-      store.setError(describeError(e));
-    }
-  };
+  const preview = usePrintPreview(
+    store,
+    templates,
+    viaPc,
+    pcTemplates,
+    pcTemplate,
+    viaPcPair,
+    resetOutcome,
+  );
+  const {
+    selectedPcTemplate,
+    previewTemplate,
+    changeTemplate,
+    previewPages,
+    previewError,
+    previewNotice,
+  } = preview;
 
   // Via-PC prints choose from the PC's listing (by server_id); local
   // prints choose a local row. One of them must be chosen.
@@ -987,6 +117,50 @@ function PrintForm() {
   const savedDbId = selectedPrinter?.id.startsWith("saved:")
     ? Number(selectedPrinter.id.slice("saved:".length))
     : null;
+
+  const paper = usePrintPaper({
+    store,
+    previewTemplate,
+    viaPc,
+    previewPages,
+    selectedPrinter,
+    savedDbId,
+    templateChosen,
+    paperPromptDismissed,
+    setPaperPromptDismissed,
+    refreshSystemPrinters,
+  });
+
+  const actions = usePrintActions({
+    store,
+    viaPc,
+    pairs,
+    viaPcDevice,
+    selectedPcTemplate,
+    keyRef,
+    setRemoteCode,
+    setPrintedVia,
+    printerPrefs,
+    setPrinterPrefs,
+    templates,
+    changeTemplate,
+    effPaperW: paper.effPaperW,
+    effPaperH: paper.effPaperH,
+    templateChosen,
+    refreshSystemPrinters,
+    refreshPcPrinters,
+    refreshPcTemplates,
+    resetOutcome,
+  });
+  const {
+    refreshingPrinters,
+    loadPrinters,
+    onPrinterChange,
+    handlePrint,
+    handleSyncTemplates,
+    handleSpikeTest,
+  } = actions;
+
   // PDF is the one language the phone cannot render itself: with no
   // pair, a PDF printer is blocked here while thermal printers go
   // straight to the device. Rust `need_peer` repeats the rule as a
@@ -1027,1070 +201,87 @@ function PrintForm() {
                 : "";
   const field = "space-y-1.5";
 
-  // Paper presets: physical sheets. "auto" means the template's design
-  // size; "custom" is edited in the inputs below.
-  const designW = previewTemplate?.page_w_mm ?? 80;
-  const designH = previewTemplate?.page_h_mm ?? 200;
-  // Explicit paper size wins per axis; null falls back to the design size.
-  // The paper is per-print only — never written back to the template.
-  // Print via PC sends no paper size (the PC prints at the template's
-  // design size), so the explicit choice is ignored there and the preview
-  // shows what will really print.
-  const reqPaperW = viaPc ? null : store.paperW;
-  const reqPaperH = viaPc ? null : store.paperH;
-  const effPaperW = reqPaperW ?? designW;
-  const effPaperH = reqPaperH ?? designH;
-  // The physical sheet the preview draws (and the PDF prints on): the same
-  // mapping the backend applies, so orientation swaps the paper, never the
-  // design.
-  const { paperW: previewPaperW, paperH: previewPaperH } = resolvePaper(
-    designW,
-    designH,
-    store.orientation,
-    reqPaperW,
-    reqPaperH,
-  );
-  // "Custom…" is a deliberate choice kept in the store; every other value
-  // is derived from the size so presets still show when restored.
-  const paperPreset = viaPc
-    ? "auto"
-    : store.paperCustom
-      ? "custom"
-      : derivePaperKey(store.paperW, store.paperH);
-
-  // The fold's header line: the current values, so folding hides the
-  // controls but not what is set. Via PC sends no paper, so the summary
-  // stays at orientation and fit.
-  const paperSummary = viaPc
-    ? null
-    : paperPreset === "auto"
-      ? t("print.paper_auto")
-      : paperPreset === "custom"
-        ? `${store.paperW ?? "—"}×${store.paperH ?? "—"}`
-        : t(
-            PAPER_PRESETS.find((x) => x.key === paperPreset)?.labelKey ??
-              "print.paper_auto",
-          );
-  const advancedSummary = [
-    t(
-      store.orientation === "portrait"
-        ? "designer.portrait"
-        : "designer.landscape",
-    ),
-    t(FIT_MODE_LABELS[store.fitMode]),
-    ...(paperSummary ? [paperSummary] : []),
-  ].join(" · ");
-
-  // F3: warn when the sheet the print will use is wider than the chosen
-  // printer's registered paper width (e.g. an A4 template aimed at an
-  // 80 mm thermal). previewPaperW is the wide axis after the orientation
-  // swap, so landscape is covered too. OS printers have no registered
-  // width and never warn; 1 mm absorbs rounding.
-  const printerPaperWidth = selectedPrinter?.paper_width_mm ?? null;
-  const paperMismatch =
-    Number.isFinite(printerPaperWidth) &&
-    (printerPaperWidth as number) > 0 &&
-    previewPaperW > (printerPaperWidth as number) + 1
-      ? t(
-          reqPaperW == null && reqPaperH == null
-            ? "print.paper_mismatch_template"
-            : "print.paper_mismatch_paper",
-          {
-            tw: designW,
-            th: designH,
-            // The sheet that will print (orientation applied), the same
-            // one the warning compares against.
-            pw2: previewPaperW,
-            ph2: previewPaperH,
-            pw: printerPaperWidth,
-          },
-        )
-      : "";
-
-  // F3: the warning's "Set paper size" action corrects the width the saved
-  // printer is registered with. The row is read first and updated with only
-  // the width changed, so name, address and language stay untouched.
-  const openPaperSizeDialog = () => {
-    setPaperDlgValue(String(previewPaperW));
-    setPaperDlgError(null);
-    setPaperDlg(true);
-  };
-  // The width's one inline error (same four checks the save used to toast,
-  // collapsed into the first failing one).
-  const paperDlgErrorKey = (): string | null => {
-    const w = Number(paperDlgValue.trim());
-    if (!Number.isFinite(w)) return "printers.err_paper_number";
-    if (!Number.isInteger(w)) return "printers.err_paper_int";
-    if (w < 1) return "printers.err_paper_min";
-    if (w > 1000) return "printers.err_paper_max";
-    return null;
-  };
-  // Writes a width onto the saved printer: the row is read first and updated
-  // with only the width changed. Shared by the dialog and the one-tap action.
-  const writePaperWidth = async (w: number): Promise<boolean> => {
-    if (savedDbId == null) return false;
-    setPaperDlgBusy(true);
-    try {
-      const row = await agent("get_printer", { id: savedDbId });
-      await agent("update_printer", {
-        id: savedDbId,
-        req: {
-          name: row.name,
-          printer_type: row.printer_type,
-          address: row.address,
-          language: row.language,
-          paper_width_mm: w,
-          dpi: row.dpi ?? undefined,
-        },
-      });
-      await refreshSystemPrinters();
-      // The notice on the card clears with the new width — the result is
-      // on screen, so no toast.
-      return true;
-    } catch (e) {
-      notifyError(describeError(e));
-      return false;
-    } finally {
-      setPaperDlgBusy(false);
-    }
-  };
-  const savePrinterPaperWidth = async () => {
-    const bad = paperDlgErrorKey();
-    if (bad) {
-      setPaperDlgError(bad);
-      return;
-    }
-    if (await writePaperWidth(Number(paperDlgValue.trim()))) setPaperDlg(false);
-  };
-  // The one-tap action: the whole-mm width the current sheet needs (rounded
-  // up so it always fits), or null when that is not a valid width — then
-  // the dialog is the way to set one.
-  const neededWidth = Math.ceil(previewPaperW - 1e-6);
-  const oneTapWidth =
-    Number.isInteger(neededWidth) && neededWidth >= 1 && neededWidth <= 1000
-      ? neededWidth
-      : null;
-  const applyPaperWidth = () => {
-    if (oneTapWidth == null) openPaperSizeDialog();
-    else void writePaperWidth(oneTapWidth);
-  };
-  // A saved printer with no width yet: offer the sheet's width once.
-  const paperWidthMissing =
-    savedDbId != null &&
-    selectedPrinter != null &&
-    templateChosen &&
-    oneTapWidth != null &&
-    !(Number(printerPaperWidth) > 0) &&
-    !paperPromptDismissed.includes(prefsKey(selectedPrinter.name));
-  const dismissPaperPrompt = () => {
-    if (!selectedPrinter) return;
-    const next = [...paperPromptDismissed, prefsKey(selectedPrinter.name)];
-    setPaperPromptDismissed(next);
-    void savePaperWidthDismissed(next).catch(() => {});
-  };
-  // Item 49 (frontend mitigation): a command-language printer (ESC/POS,
-  // ZPL, TSPL, CPCL, raster) rasterizes a single paper-height bitmap and
-  // sends it once, so a job that spans more than one sheet is cut off after
-  // the first. The preview knows the record count and the sheet count, so
-  // warn before that surprise reaches paper. The real multi-sheet output is
-  // backend work.
-  const commandLanguage =
-    !viaPc &&
-    selectedPrinter != null &&
-    selectedPrinter.language != null &&
-    selectedPrinter.language !== "pdf";
-  const sheetLayout = computePrintLayout(
-    store.fitMode,
-    designW,
-    designH,
-    previewPaperW,
-    previewPaperH,
-    {
-      top: store.marginTop,
-      right: store.marginRight,
-      bottom: store.marginBottom,
-      left: store.marginLeft,
-    },
-  );
-  const thermalTruncates =
-    commandLanguage &&
-    (store.records > 1 ||
-      previewPages.length > 1 ||
-      sheetLayout.placements.length > 1);
-  const thermalWarning = thermalTruncates ? t("print.thermal_truncate") : "";
-
-  // One element for both layouts: the mismatch warning wins over the
-  // "missing" prompt (they never both apply: one needs a saved width).
-  const paperNotice = paperMismatch ? (
-    <PaperWidthNotice
-      kind="mismatch"
-      message={paperMismatch}
-      width={oneTapWidth}
-      busy={paperDlgBusy}
-      onApply={savedDbId != null ? applyPaperWidth : undefined}
-      onOther={savedDbId != null ? openPaperSizeDialog : undefined}
-    />
-  ) : paperWidthMissing ? (
-    <PaperWidthNotice
-      kind="missing"
-      message={t("print.paper_width_missing", {
-        name: selectedPrinter?.name,
-        w: oneTapWidth,
-      })}
-      width={oneTapWidth}
-      busy={paperDlgBusy}
-      onApply={applyPaperWidth}
-      onDismiss={dismissPaperPrompt}
-    />
-  ) : null;
-
   // The small dialog both layouts open from the mismatch warning: one
   // number field, prefilled with the width the current print needs.
   const paperSizeDialog = (
-    <Dialog open={paperDlg} onOpenChange={setPaperDlg}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {t("print.paper_size_title", {
-              name: selectedPrinter?.name ?? "",
-            })}
-          </DialogTitle>
-          <DialogDescription>
-            {t("print.paper_size_hint", {
-              w: previewPaperW,
-              cur: printerPaperWidth ?? 0,
-            })}
-          </DialogDescription>
-        </DialogHeader>
-        <div className={field}>
-          <Label htmlFor="printer-paper-width">
-            {t("printers.paper_width_mm")}
-          </Label>
-          <Input
-            id="printer-paper-width"
-            type="number"
-            min={1}
-            max={1000}
-            step={1}
-            value={paperDlgValue}
-            aria-invalid={paperDlgError ? true : undefined}
-            aria-describedby={
-              paperDlgError ? "printer-paper-width-error" : undefined
-            }
-            onChange={(e) => {
-              setPaperDlgValue(e.target.value);
-              setPaperDlgError(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void savePrinterPaperWidth();
-            }}
-            autoFocus
-          />
-          {paperDlgError && (
-            <p
-              id="printer-paper-width-error"
-              role="alert"
-              data-testid="paper-width-error"
-              className="text-xs text-destructive"
-            >
-              {t(paperDlgError)}
-            </p>
-          )}
-        </div>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => setPaperDlg(false)}
-            disabled={paperDlgBusy}
-          >
-            {t("common.cancel")}
-          </Button>
-          <Button
-            onClick={() => void savePrinterPaperWidth()}
-            disabled={paperDlgBusy}
-            data-testid="save-paper-width"
-          >
-            {t("common.save")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-
-  // The card's surface fields: data URL and copies. Everything else
-  // (method, pages, orientation, fit, paper, range, margins, grayscale,
-  // test page) folds away behind Advanced.
-  const dataFields = (
-    <>
-      <div className={field}>
-        <Label htmlFor="data-url">{t("print.data_url")}</Label>
-        <Input
-          id="data-url"
-          placeholder={t("print.data_url_example")}
-          value={store.dataUrl}
-          onChange={(e) => store.setDataUrl(e.target.value)}
-          disabled={store.useTestData}
-        />
-      </div>
-      <div className={field}>
-        <Label htmlFor="copies">{t("print.copies")}</Label>
-        <Input
-          id="copies"
-          type="number"
-          min="1"
-          value={store.copies}
-          onChange={(e) =>
-            store.setCopies(
-              Math.max(1, Math.floor(Number(e.target.value) || 1)),
-            )
-          }
-        />
-      </div>
-    </>
-  );
-
-  // The Advanced fold's contents: the layout and rarely-touched data
-  // options. The panel unmounts while folded, so nothing here costs a
-  // re-render until opened.
-  const advancedFields = (
-    <>
-      <div className="grid grid-cols-2 gap-3">
-        <div className={field}>
-          <Label htmlFor="print-orientation">{t("print.orientation")}</Label>
-          <Select
-            value={store.orientation}
-            onValueChange={(v) =>
-              store.setOrientation(v as "portrait" | "landscape")
-            }
-          >
-            <SelectTrigger
-              id="print-orientation"
-              aria-label={t("print.orientation")}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="portrait">{t("designer.portrait")}</SelectItem>
-              <SelectItem value="landscape">
-                {t("designer.landscape")}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className={field}>
-          <Label htmlFor="print-fit">{t("print.fit_mode")}</Label>
-          <Select
-            value={store.fitMode}
-            onValueChange={(v) =>
-              store.setFitMode(
-                v as "actual" | "fit-width" | "fit-page" | "shrink" | "fill",
-              )
-            }
-          >
-            <SelectTrigger id="print-fit" aria-label={t("print.fit_mode")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="actual">{t("print.fit_actual")}</SelectItem>
-              <SelectItem value="fit-width">{t("print.fit_width")}</SelectItem>
-              <SelectItem value="fit-page">{t("print.fit_page")}</SelectItem>
-              <SelectItem value="shrink">{t("print.fit_shrink")}</SelectItem>
-              <SelectItem value="fill">{t("print.fit_fill")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      {viaPc ? (
-        <p className="text-xs text-muted-foreground">
-          {t("print.paper_via_pc")}
-        </p>
-      ) : (
-        <>
-          <PaperSizeFields
-            ids={{
-              select: "print-paper",
-              width: "paper-w",
-              height: "paper-h",
-            }}
-            layout="grid"
-            paperPreset={paperPreset}
-            seedW={effPaperW}
-            seedH={effPaperH}
-            designW={designW}
-            designH={designH}
-          />
-          <p className="-mt-2 text-xs text-muted-foreground">
-            {t("print.paper_note", {
-              dw: designW,
-              dh: designH,
-              pw: previewPaperW,
-              ph: previewPaperH,
-            })}
-          </p>
-        </>
-      )}
-      <fieldset className="space-y-1.5">
-        <legend className="text-sm font-medium leading-none">
-          {t("print.margins")} (mm)
-        </legend>
-        <div className="grid grid-cols-4 gap-2 pt-1.5">
-          {(
-            [
-              ["mt", "print.margin_top", store.marginTop, store.setMarginTop],
-              [
-                "mr",
-                "print.margin_right",
-                store.marginRight,
-                store.setMarginRight,
-              ],
-              [
-                "mb",
-                "print.margin_bottom",
-                store.marginBottom,
-                store.setMarginBottom,
-              ],
-              [
-                "ml",
-                "print.margin_left",
-                store.marginLeft,
-                store.setMarginLeft,
-              ],
-            ] as const
-          ).map(([id, key, value, set]) => (
-            <div key={id} className="space-y-1">
-              <Label
-                htmlFor={id}
-                className="text-xs font-normal text-muted-foreground"
-              >
-                {t(key)}
-              </Label>
-              <Input
-                id={id}
-                type="number"
-                value={value}
-                onChange={(e) => set(Number(e.target.value))}
-              />
-            </div>
-          ))}
-        </div>
-      </fieldset>
-      <div className="flex items-center gap-2">
-        <Switch
-          id="grayscale"
-          checked={store.grayscale}
-          onCheckedChange={store.setGrayscale}
-        />
-        <Label htmlFor="grayscale" className="font-normal">
-          {t("print.grayscale")}
-        </Label>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className={field}>
-          <Label htmlFor="http-method">{t("print.method_aria")}</Label>
-          <Select
-            value={store.httpMethod}
-            onValueChange={(v: "GET" | "POST") => store.setHttpMethod(v)}
-            disabled={store.useTestData}
-          >
-            <SelectTrigger id="http-method" aria-label={t("print.method_aria")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="GET">GET</SelectItem>
-              <SelectItem value="POST">POST</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className={field}>
-          <Label htmlFor="pages">{t("print.pages")}</Label>
-          <Input
-            id="pages"
-            type="number"
-            min="1"
-            max="500"
-            value={store.records}
-            onChange={(e) => store.setRecords(Number(e.target.value))}
-          />
-        </div>
-      </div>
-      <p className="-mt-2 text-xs text-muted-foreground">
-        {t("print.pages_hint")}
-      </p>
-      <div className="border-t pt-3">
-        <p className="mb-2 text-xs text-muted-foreground">
-          {t("print.test_hint")}
-        </p>
-        {/* Local test page: hidden while printing through a PC. */}
-        {!viaPc && (
-          <Button
-            variant="outline"
-            size="sm"
-            data-testid="print-spike-test"
-            onClick={handleSpikeTest}
-            disabled={store.status === "printing"}
-          >
-            <Zap className="h-4 w-4" aria-hidden="true" />
-            {t("print.send_test")}
-          </Button>
-        )}
-      </div>
-    </>
+    <PaperSizeDialog
+      open={paper.paperDlg}
+      onOpenChange={paper.setPaperDlg}
+      value={paper.paperDlgValue}
+      onValueChange={paper.setPaperDlgValue}
+      error={paper.paperDlgError}
+      onErrorChange={paper.setPaperDlgError}
+      busy={paper.paperDlgBusy}
+      onSave={() => void paper.savePrinterPaperWidth()}
+      printerName={selectedPrinter?.name ?? ""}
+      previewW={paper.previewPaperW}
+      currentW={paper.printerPaperWidth ?? 0}
+      field={field}
+    />
   );
 
   if (isPhone) {
     return (
-      <>
-        <PhonePrintFlow
-          viaPc={viaPc}
-          viaPcPair={viaPcPair}
-          pcUnpaired={pcUnpaired}
-          pairs={pairs}
-          pcPrinters={pcPrinters}
-          pcCached={pcCached}
-          pcFailed={pcFailed}
-          pcTemplates={pcTemplates}
-          pcTemplate={pcTemplate}
-          onPcTemplateChange={changePcTemplate}
-          onTemplateChange={changeTemplate}
-          pcTemplatesCached={pcTemplatesCached}
-          printedVia={printedVia}
-          remoteCode={remoteCode}
-          onPickViaPcDevice={pickViaPcDevice}
-          onExitViaPc={() => setViaPc(false)}
-          printers={printers}
-          templates={templates}
-          onPrinterChange={onPrinterChange}
-          onRefreshPrinters={() => void loadPrinters()}
-          refreshingPrinters={refreshingPrinters}
-          previewPages={previewPages}
-          previewError={previewError}
-          previewNotice={previewNotice}
-          previewTemplate={previewTemplate}
-          designW={designW}
-          designH={designH}
-          effPaperW={effPaperW}
-          effPaperH={effPaperH}
-          previewPaperW={previewPaperW}
-          previewPaperH={previewPaperH}
-          paperPreset={paperPreset}
-          paperNotice={paperNotice}
-          thermalWarning={thermalWarning}
-          canPrint={canPrint}
-          blocker={blocker}
-          onPrint={() => void handlePrint(false)}
-          onRetry={() => void handlePrint(true)}
-          onSyncTemplates={handleSyncTemplates}
-          onSpikeTest={handleSpikeTest}
-        />
-        {paperSizeDialog}
-      </>
+      <PhoneLayout
+        viaPc={viaPc}
+        viaPcPair={viaPcPair}
+        pcUnpaired={pcUnpaired}
+        pairs={pairs}
+        pcPrinters={pcPrinters}
+        pcCached={pcCached}
+        pcFailed={pcFailed}
+        pcTemplates={pcTemplates}
+        pcTemplate={pcTemplate}
+        changePcTemplate={changePcTemplate}
+        changeTemplate={changeTemplate}
+        pcTemplatesCached={pcTemplatesCached}
+        printedVia={printedVia}
+        remoteCode={remoteCode}
+        pickViaPcDevice={pickViaPcDevice}
+        setViaPc={setViaPc}
+        printers={printers}
+        templates={templates}
+        onPrinterChange={onPrinterChange}
+        loadPrinters={loadPrinters}
+        refreshingPrinters={refreshingPrinters}
+        previewPages={previewPages}
+        previewError={previewError}
+        previewNotice={previewNotice}
+        previewTemplate={previewTemplate}
+        designW={paper.designW}
+        designH={paper.designH}
+        effPaperW={paper.effPaperW}
+        effPaperH={paper.effPaperH}
+        previewPaperW={paper.previewPaperW}
+        previewPaperH={paper.previewPaperH}
+        paperPreset={paper.paperPreset}
+        paperNotice={paper.paperNotice}
+        thermalWarning={paper.thermalWarning}
+        canPrint={canPrint}
+        blocker={blocker}
+        handlePrint={handlePrint}
+        handleSyncTemplates={handleSyncTemplates}
+        handleSpikeTest={handleSpikeTest}
+        paperSizeDialog={paperSizeDialog}
+      />
     );
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader title={t("print.title")} description={t("pages.print")} />
-      {paperSizeDialog}
-
-      {/* Print via PC: the job runs on the paired PC's printers, never on
-          this phone's transports. */}
-      {viaPc &&
-        (viaPcPair ? (
-          <div
-            data-testid="print-via-pc-banner"
-            className="flex items-center gap-3 rounded-lg border border-info/30 bg-info-soft px-4 py-3 text-info"
-          >
-            <Printer className="h-5 w-5 shrink-0" aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">
-                {t("print.via_pc_banner", {
-                  pc: viaPcPair.name || viaPcPair.host,
-                })}
-              </p>
-              {pcCached && (
-                <p className="text-xs">{t("print.via_pc_cached")}</p>
-              )}
-              {pcFailed && pcPrinters.length === 0 && (
-                <p className="text-xs">{t("print.via_pc_unreachable")}</p>
-              )}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <ExitViaPcButton onExited={() => setViaPc(false)} />
-            </div>
-          </div>
-        ) : (
-          <div
-            data-testid="print-via-pc-banner"
-            role="alert"
-            className="flex items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-danger"
-          >
-            <XCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
-            <div className="min-w-0 flex-1 space-y-2">
-              <p className="text-sm font-medium">{t("print.via_pc_no_pair")}</p>
-              <p className="text-xs">{t("print.via_pc_choose_hint")}</p>
-              <div className="flex items-center gap-2">
-                <Label
-                  htmlFor="print-via-pc-picker"
-                  className="shrink-0 text-xs"
-                >
-                  {t("settings_page.via_pc_device")}
-                </Label>
-                <Select value="" onValueChange={(v) => void pickViaPcDevice(v)}>
-                  <SelectTrigger
-                    id="print-via-pc-picker"
-                    data-testid="print-via-pc-picker"
-                    aria-label={t("settings_page.via_pc_device")}
-                    className="min-w-0 flex-1"
-                  >
-                    <SelectValue
-                      placeholder={t("settings_page.via_pc_device_placeholder")}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pairs.map((p) => (
-                      <SelectItem
-                        key={p.provider_id || p.id}
-                        value={p.provider_id || p.id}
-                      >
-                        {p.name || p.host}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <ExitViaPcButton onExited={() => setViaPc(false)} />
-              </div>
-            </div>
-          </div>
-        ))}
-
-      {/* The one place a print's outcome is reported: a banner of constant
-          height while printing and for the result (see StatusBanner), so
-          the form below never moves. Being ready is the normal state, so
-          it gets a quiet chip next to the printer select, not a banner. */}
-      {store.status === "printing" && (
-        <StatusBanner
-          tone="neutral"
-          role="status"
-          icon={
-            <Loader2
-              className="h-5 w-5 shrink-0 animate-spin motion-reduce:animate-none"
-              aria-hidden="true"
-            />
-          }
-          summary={
-            <>
-              <span className="font-medium">{t("print.printing")}</span>
-              {store.printerId &&
-                ` ${t("print.printing_detail", { printer: store.printerId })}`}
-            </>
-          }
-        />
-      )}
-      {store.status === "success" && (
-        <StatusBanner
-          tone={store.warnings.length > 0 ? "warning" : "success"}
-          role={store.warnings.length > 0 ? "alert" : "status"}
-          icon={
-            store.warnings.length > 0 ? (
-              <TriangleAlert className="h-5 w-5 shrink-0" aria-hidden="true" />
-            ) : (
-              <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
-            )
-          }
-          summary={
-            <>
-              <span className="font-medium">{t("print.sent")}</span>
-              {" · "}
-              {store.timings
-                ? `${t("common.total")} ${formatSeconds(store.timings.total_ms)}`
-                : t("print.finished", {
-                    seconds: formatSeconds(store.durationMs),
-                  })}
-              {store.renderedBy &&
-                ` · ${t("print.rendered_on", { peer: store.renderedBy })}`}
-              {printedVia && (
-                <span data-testid="print-printed-via">
-                  {" · "}
-                  {t("print.printed_via", { pc: printedVia })}
-                </span>
-              )}
-              {store.warnings.length > 0 &&
-                ` · ${t("print.warnings_title")}: ${store.warnings[0]}`}
-            </>
-          }
-          details={
-            store.timings || store.warnings.length > 0 ? (
-              <>
-                {store.warnings.length > 0 && (
-                  <div data-testid="print-warnings" className="space-y-1">
-                    <p className="text-sm font-medium">
-                      {t("print.warnings_title")}
-                    </p>
-                    {store.warnings.map((w) => (
-                      <p key={w} className="break-words text-xs">
-                        {w}
-                      </p>
-                    ))}
-                  </div>
-                )}
-                {store.timings && <TimingBreakdown timings={store.timings} />}
-              </>
-            ) : undefined
-          }
-        />
-      )}
-      {store.status === "failed" && (
-        <StatusBanner
-          tone="danger"
-          role="alert"
-          icon={<XCircle className="h-5 w-5 shrink-0" aria-hidden="true" />}
-          title={store.error || t("print.unknown_error")}
-          summary={
-            <>
-              <span className="font-medium">{t("print.failed_title")}</span>
-              {" — "}
-              {store.error || t("print.unknown_error")}
-            </>
-          }
-          actions={
-            <>
-              {/* Sync refreshes this phone only: it can heal a stale
-                  revision, never a template missing on the PC — whose
-                  message now names the PC. */}
-              {remoteCode === "template_stale" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
-                  data-testid="print-sync-templates"
-                  onClick={handleSyncTemplates}
-                >
-                  {t("print.sync_templates")}
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0"
-                onClick={() => void handlePrint(true)}
-                disabled={!canPrint}
-              >
-                {t("print.retry")}
-              </Button>
-            </>
-          }
-          details={
-            <>
-              <p className="break-words text-xs">
-                {store.error || t("print.unknown_error")}
-              </p>
-              {store.warnings.length > 0 && (
-                <div data-testid="print-warnings" className="space-y-1">
-                  <p className="text-sm font-medium">
-                    {t("print.warnings_title")}
-                  </p>
-                  {store.warnings.map((w) => (
-                    <p key={w} className="break-words text-xs">
-                      {w}
-                    </p>
-                  ))}
-                </div>
-              )}
-              {store.timings && <TimingBreakdown timings={store.timings} />}
-            </>
-          }
-        />
-      )}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(340px,420px)_1fr]">
-        {/* Left: choose and print */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("print.job_title")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className={field}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="print-printer">{t("print.printer")}</Label>
-                    {(store.status === "idle" || store.status === "queued") &&
-                      store.printerId && <ReadyChip />}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={loadPrinters}
-                    disabled={refreshingPrinters}
-                    aria-label={t("print.refresh")}
-                    title={t("print.refresh")}
-                  >
-                    <RefreshCw
-                      className={`h-4 w-4${refreshingPrinters ? " animate-spin" : ""}`}
-                      aria-hidden="true"
-                    />
-                    {t("print.refresh")}
-                  </Button>
-                </div>
-                <Select value={store.printerId} onValueChange={onPrinterChange}>
-                  <SelectTrigger
-                    id="print-printer"
-                    aria-label={t("print.printer")}
-                  >
-                    <SelectValue placeholder={t("print.printer_placeholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {viaPc ? (
-                      <>
-                        {pcPrinters.length === 0 && (
-                          <SelectItem value="none" disabled>
-                            {t("print.no_printers")}
-                          </SelectItem>
-                        )}
-                        {pcPrinters.map((p) => (
-                          <SelectItem key={p.name} value={p.name}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </>
-                    ) : (
-                      <>
-                        {printers.length === 0 && (
-                          <SelectItem value="none" disabled>
-                            {t("print.no_printers")}
-                          </SelectItem>
-                        )}
-                        {printers.map((p) => (
-                          <SelectItem key={p.id} value={p.name}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-                {paperNotice}
-              </div>
-              <div className={field}>
-                <Label htmlFor="print-template">{t("print.template")}</Label>
-                {viaPc && viaPcPair ? (
-                  <Select value={pcTemplate} onValueChange={changePcTemplate}>
-                    <SelectTrigger
-                      id="print-template"
-                      aria-label={t("print.template")}
-                    >
-                      <SelectValue
-                        placeholder={t("print.template_placeholder")}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pcTemplates.length === 0 && (
-                        <SelectItem value="none" disabled>
-                          {t("print.no_templates")}
-                        </SelectItem>
-                      )}
-                      {pcTemplates.map((x) => (
-                        <SelectItem key={x.server_id} value={x.server_id}>
-                          {x.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Select
-                    value={store.templateId}
-                    onValueChange={changeTemplate}
-                  >
-                    <SelectTrigger
-                      id="print-template"
-                      aria-label={t("print.template")}
-                    >
-                      <SelectValue
-                        placeholder={t("print.template_placeholder")}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {templates.length === 0 && (
-                        <SelectItem value="none" disabled>
-                          {t("print.no_templates")}
-                        </SelectItem>
-                      )}
-                      {templates.map((x) => (
-                        <SelectItem key={x.id} value={String(x.id)}>
-                          {x.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                {viaPc &&
-                  viaPcPair &&
-                  pcTemplatesCached &&
-                  pcTemplates.length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      {t("print.via_pc_templates_cached")}
-                    </p>
-                  )}
-              </div>
-
-              <div className="flex items-center justify-between">
-                <Label htmlFor="test-data" className="font-normal">
-                  {t("print.test_data")}
-                </Label>
-                <Switch
-                  id="test-data"
-                  checked={store.useTestData}
-                  onCheckedChange={store.setUseTestData}
-                />
-              </div>
-              {store.useTestData && (
-                <p className="text-xs text-muted-foreground">
-                  {t("print.sample_note", {
-                    store: DEFAULT_MOCK_DATA.store.name,
-                    order: DEFAULT_MOCK_DATA.order.id,
-                  })}
-                </p>
-              )}
-              {dataFields}
-
-              <FoldSection
-                id="print-advanced"
-                title={t("print.advanced")}
-                summary={advancedSummary}
-                open={advancedOpen}
-                onToggle={toggleAdvanced}
-                data-testid="print-advanced-toggle"
-              >
-                {advancedFields}
-              </FoldSection>
-
-              <div className="space-y-2 pt-1">
-                <Button
-                  size="lg"
-                  className="w-full"
-                  onClick={() => void handlePrint(false)}
-                  disabled={!canPrint}
-                  title={blocker || undefined}
-                  aria-describedby={blocker ? "print-blocker" : undefined}
-                >
-                  <Printer className="h-5 w-5" aria-hidden="true" />
-                  {store.status === "printing"
-                    ? t("print.printing")
-                    : t("print.print")}
-                </Button>
-                {blocker && (
-                  <p
-                    id="print-blocker"
-                    className="text-xs text-muted-foreground"
-                  >
-                    {blocker}{" "}
-                    {pcUnpaired && (
-                      <Link
-                        to="/devices"
-                        className="underline underline-offset-2"
-                      >
-                        {t("shell.pc_pair_again")}
-                      </Link>
-                    )}
-                    {pdfNeedsPair && (
-                      <Link
-                        to="/pair"
-                        state={{ returnTo: "/print" }}
-                        className="underline underline-offset-2"
-                      >
-                        {t("print.pdf_pair_now")}
-                      </Link>
-                    )}
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right: what will print */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <div className="space-y-1">
-                <CardTitle>{t("print.preview")}</CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  {previewTemplate
-                    ? t("print.preview_subtitle", {
-                        name: previewTemplate.name,
-                        w: previewTemplate.page_w_mm,
-                        h: previewTemplate.page_h_mm,
-                        source: t(
-                          useTestData || !dataUrl.trim()
-                            ? "print.preview_sample"
-                            : "print.preview_live",
-                        ),
-                      })
-                    : t("print.preview_empty")}
-                </p>
-                {previewTemplate ? (
-                  <p className="text-xs text-muted-foreground">
-                    {t("print.paper_note", {
-                      dw: designW,
-                      dh: designH,
-                      pw: effPaperW,
-                      ph: effPaperH,
-                    })}
-                  </p>
-                ) : null}
-              </div>
-            </CardHeader>
-            <CardContent id="print-preview-body">
-              {thermalWarning && (
-                <p
-                  role="alert"
-                  data-testid="thermal-truncate-warning"
-                  className="mb-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning"
-                >
-                  {thermalWarning}
-                </p>
-              )}
-              {previewNotice && !previewError ? (
-                <p className="mb-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning">
-                  {previewNotice}
-                </p>
-              ) : null}
-              {previewError ? (
-                <p className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning">
-                  {previewError}
-                </p>
-              ) : previewPages.length > 0 ? (
-                <div
-                  className="max-h-sheet overflow-auto rounded-md border bg-muted p-4"
-                  tabIndex={0}
-                  role="region"
-                  aria-label={t("print.preview_region")}
-                >
-                  <PrintPreview
-                    pages={previewPages}
-                    designW={designW}
-                    designH={designH}
-                    paperW={previewPaperW}
-                    paperH={previewPaperH}
-                    margins={{
-                      top: store.marginTop,
-                      right: store.marginRight,
-                      bottom: store.marginBottom,
-                      left: store.marginLeft,
-                    }}
-                    fitMode={store.fitMode}
-                    grayscale={store.grayscale}
-                    title={t("print.preview_region")}
-                  />
-                </div>
-              ) : (
-                <p className="py-10 text-center text-sm text-muted-foreground">
-                  {t("print.no_preview")}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+    <DesktopLayout
+      paperSizeDialog={paperSizeDialog}
+      store={store}
+      lists={lists}
+      viaPcApi={viaPcApi}
+      preview={preview}
+      paper={paper}
+      actions={actions}
+      canPrint={canPrint}
+      blocker={blocker}
+      pdfNeedsPair={pdfNeedsPair}
+      printedVia={printedVia}
+      remoteCode={remoteCode}
+      field={field}
+    />
   );
 }
