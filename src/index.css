@@ -164,6 +164,10 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    /* Latin: IBM Plex Sans (bundled). Japanese: the platform's own CJK
+       face — Yu Gothic UI/Meiryo on Windows, Noto Sans CJK JP on Android —
+       so JP text pairs with the Latin face instead of the generic
+       sans-serif fallback. */
     font-family:
       "IBM Plex Sans",
       "Segoe UI",
@@ -171,6 +175,7 @@
       BlinkMacSystemFont,
       Roboto,
       "Noto Sans",
+      "Noto Sans CJK JP",
       "Hiragino Sans",
       "Hiragino Kaku Gothic ProN",
       "Yu Gothic UI",
@@ -335,4 +340,25 @@
     #000 calc(100% - 2.5rem),
     transparent
   );
+}
+
+/* Japanese typography. i18n keeps <html lang> in step with the UI language,
+   so these apply only when the interface is Japanese. CJK text reads better
+   with more line height, and the Latin display treatments look wrong in
+   Japanese: no forced uppercase, and no letter-spacing on tracked headings
+   (both the named utilities and the arbitrary max-md values PageHeader and
+   the top bar use). Unlayered on purpose, so it beats the utility layer. */
+html[lang="ja"] body {
+  line-height: 1.7;
+}
+html[lang="ja"] .uppercase {
+  text-transform: none;
+}
+html[lang="ja"] .tracking-tight,
+html[lang="ja"] .tracking-wide,
+html[lang="ja"] .tracking-wider,
+html[lang="ja"] .tracking-widest,
+html[lang="ja"] .max-md\:tracking-\[-0\.02em\],
+html[lang="ja"] .max-md\:tracking-\[-0\.03em\] {
+  letter-spacing: 0;
 }

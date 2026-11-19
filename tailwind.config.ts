@@ -54,7 +54,9 @@ const config: Config = {
         "sheet-xl": "85dvh",
       },
       fontFamily: {
-        sans: ["IBM Plex Sans", "Segoe UI", "-apple-system", "BlinkMacSystemFont", "Roboto", "Noto Sans", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", "Noto Sans JP", "sans-serif"],
+        // Japanese falls to the platform's own CJK face: Yu Gothic UI /
+        // Meiryo on Windows, Noto Sans CJK JP on Android (see index.css).
+        sans: ["IBM Plex Sans", "Segoe UI", "-apple-system", "BlinkMacSystemFont", "Roboto", "Noto Sans", "Noto Sans CJK JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", "Noto Sans JP", "sans-serif"],
         mono: ["IBM Plex Mono", "ui-monospace", "Cascadia Mono", "Consolas", "monospace"],
       },
       colors: {
