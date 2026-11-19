@@ -13,3 +13,6 @@ Dockerfile text eol=lf
 # `pnpm lint` passes on Windows checkouts (core.autocrlf would CRLF them).
 *.ts       text eol=lf
 *.tsx      text eol=lf
+# Golden fixtures are compared byte-for-byte (packRenders.test.ts builds the
+# expected file with LF newlines); a CRLF working copy fails the test.
+src-tauri/tests/fixtures/*.json text eol=lf

@@ -40,7 +40,11 @@ impl PrinterTransport for WindowsUsbPrinter {
     async fn send(&self, job: RenderedJob) -> Result<(), String> {
         // A USB printer is a Windows queue: run the same datatype-aware,
         // off-tokio send the spooler transport uses (PDF when the queue
-        // offers it, RAW otherwise) instead of always-RAW bytes.
+        // offers it, RAW otherwise) instead of always-RAW bytes. Like the
+        // spooler path this sends with no per-send status precheck — the
+        // spooler queue is durable and always answers a status read, so
+        // fault state is surfaced by `test` instead (see
+        // `WindowsSpooler::send_job`).
         self.spooler().send_job(job).await
     }
 }

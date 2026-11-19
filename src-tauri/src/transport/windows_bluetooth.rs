@@ -170,10 +170,13 @@ impl WindowsBluetoothPrinter {
 
     #[cfg(windows)]
     async fn direct_send(&self, job: RenderedJob) -> Result<(), String> {
-        match self.direct_port() {
-            Some(port) => direct::send(&port, &job.data, send_timeout(DIRECT_SEND_TIMEOUT)).await,
-            None => Err(self.no_com_port_error()),
-        }
+        let Some(port) = self.direct_port() else {
+            return Err(self.no_com_port_error());
+        };
+        // The stored address is the row's identity: the key for the shared
+        // status bookkeeping and the name the precheck's messages carry.
+        let address = self.address.trim().to_string();
+        direct::send(&port, &address, job, send_timeout(DIRECT_SEND_TIMEOUT)).await
     }
 
     #[cfg(not(windows))]
@@ -246,6 +249,13 @@ mod winapi {
             lpNumberOfBytesWritten: *mut DWORD,
             lpOverlapped: *mut c_void,
         ) -> BOOL;
+        pub fn ReadFile(
+            hFile: HANDLE,
+            lpBuffer: *mut c_void,
+            nNumberOfBytesToRead: DWORD,
+            lpNumberOfBytesRead: *mut DWORD,
+            lpOverlapped: *mut c_void,
+        ) -> BOOL;
         pub fn CloseHandle(hObject: HANDLE) -> BOOL;
         pub fn SetCommTimeouts(hFile: HANDLE, lpCommTimeouts: *const COMMTIMEOUTS) -> BOOL;
         pub fn GetLastError() -> DWORD;
@@ -277,6 +287,7 @@ mod winapi {
         pub fn RegCloseKey(hKey: HKEY) -> i32;
     }
 
+    pub const GENERIC_READ: DWORD = 0x8000_0000;
     pub const GENERIC_WRITE: DWORD = 0x4000_0000;
     pub const OPEN_EXISTING: DWORD = 3;
     pub const FILE_ATTRIBUTE_NORMAL: DWORD = 0x80;
@@ -284,6 +295,8 @@ mod winapi {
     pub const ERROR_FILE_NOT_FOUND: DWORD = 2;
     pub const ERROR_ACCESS_DENIED: DWORD = 5;
     pub const ERROR_SHARING_VIOLATION: DWORD = 32;
+    /// `ReadFile`/`WriteFile` failed because the total timeout expired.
+    pub const ERROR_SEM_TIMEOUT: DWORD = 258;
     pub const REG_SZ: DWORD = 1;
     pub const KEY_READ: DWORD = 0x20019;
     pub const HKEY_LOCAL_MACHINE: HKEY = 0x8000_0002usize as HKEY;
@@ -303,29 +316,50 @@ fn wide(s: &str) -> Vec<u16> {
 #[cfg(windows)]
 mod direct {
     use super::winapi::*;
-    use super::{wide, DIRECT_SEND_TIMEOUT};
+    use super::{wide, RenderedJob, DIRECT_SEND_TIMEOUT};
+    use crate::transport::{status, PrinterLanguage};
     use std::ffi::c_void;
     use std::ptr::null_mut;
     use std::time::{Duration, Instant};
 
-    /// Open the port, write every byte, close — all on the blocking
-    /// pool, with the send budget enforced twice: once by the port's
-    /// own write timeout and once by a deadline around the whole call,
-    /// so a driver that ignores `COMMTIMEOUTS` still cannot hang the
-    /// queue.
-    pub(super) async fn send(port: &str, data: &[u8], budget: Duration) -> Result<(), String> {
+    /// How long to wait for a status query's answer. Same generosity as the
+    /// raw-TCP, Linux and Android prechecks: replies are specified to be
+    /// immediate, but the wait is bounded so a silent printer pays seconds,
+    /// not a hung job.
+    const STATUS_REPLY_TIMEOUT: Duration = Duration::from_secs(3);
+
+    /// Open the port, ask the printer about itself, write every byte,
+    /// close — all on one held port, all on the blocking pool, with the
+    /// send budget enforced twice: once by the port's own write timeout
+    /// and once by a deadline around the whole call, so a driver that
+    /// ignores `COMMTIMEOUTS` still cannot hang the queue.
+    ///
+    /// The status precheck shares this one open: the question and the job
+    /// travel the same port, so a send pays one open, not two (the same
+    /// contract as raw TCP, Linux Bluetooth and Android). `address` is the
+    /// row's stored address — the key for the shared status bookkeeping and
+    /// the name the operator sees in the messages.
+    pub(super) async fn send(
+        port: &str,
+        address: &str,
+        job: RenderedJob,
+        budget: Duration,
+    ) -> Result<(), String> {
         // The closure owns its copy of the name; the timeout message
         // below still needs one after the move (the spawn's `move`
         // would otherwise take `port` and leave the format! with a
         // moved value).
         let reported_port = port.to_string();
         let port = port.to_string();
-        let data = data.to_vec();
+        let address = address.to_string();
         let task = tokio::task::spawn_blocking(move || {
             let handle = open_port(&port, budget)?;
-            let result = write_job(handle, &port, &data, budget);
+            let outcome = (|| {
+                precheck(handle, &port, &address, &job.language)?;
+                write_job(handle, &port, &job.data, budget)
+            })();
             unsafe { CloseHandle(handle) };
-            result
+            outcome
         });
         match tokio::time::timeout(budget + Duration::from_secs(5), task).await {
             Err(_) => Err(format!(
@@ -359,10 +393,14 @@ mod direct {
     /// assigned one, an in-use port means another program holds it.
     fn open_port(port: &str, budget: Duration) -> Result<HANDLE, String> {
         let path = wide(&format!(r"\\.\{port}"));
+        // Read as well as write: the precheck asks the printer a status
+        // question and reads its answer on the same port. A Bluetooth SPP
+        // port is full-duplex, so the reply comes back here — the same as
+        // the RFCOMM socket on Linux/Android.
         let handle = unsafe {
             CreateFileW(
                 path.as_ptr(),
-                GENERIC_WRITE,
+                GENERIC_READ | GENERIC_WRITE,
                 0,
                 null_mut(),
                 OPEN_EXISTING,
@@ -385,29 +423,176 @@ mod direct {
                 _ => format!("could not open COM port {port} (Windows error {code})"),
             });
         }
-        // Bound the write at the port itself: a link that stops
-        // draining must fail the job, not park it forever.
-        apply_write_timeout(handle, port, budget)?;
+        // Bound both directions at the port itself: a link that stops
+        // draining (write) or answering (read) must fail the job, not park
+        // it forever.
+        apply_timeouts(handle, port, STATUS_REPLY_TIMEOUT, budget)?;
         Ok(handle)
     }
 
-    /// Put the port's own write deadline in place.
-    fn apply_write_timeout(handle: HANDLE, port: &str, budget: Duration) -> Result<(), String> {
-        let constant = u32::try_from(budget.as_millis()).unwrap_or(u32::MAX).max(1);
+    /// Put the port's own deadlines in place: `read` bounds a status reply,
+    /// `write` bounds the job. SetCommTimeouts is total-timeout based (the
+    /// multipliers stay at 0), so these are hard caps on each direction.
+    fn apply_timeouts(
+        handle: HANDLE,
+        port: &str,
+        read: Duration,
+        write: Duration,
+    ) -> Result<(), String> {
+        let read_constant = u32::try_from(read.as_millis()).unwrap_or(u32::MAX).max(1);
+        let write_constant = u32::try_from(write.as_millis()).unwrap_or(u32::MAX).max(1);
         let timeouts = COMMTIMEOUTS {
             ReadIntervalTimeout: 0,
             ReadTotalTimeoutMultiplier: 0,
-            ReadTotalTimeoutConstant: 0,
+            ReadTotalTimeoutConstant: read_constant,
             WriteTotalTimeoutMultiplier: 0,
-            WriteTotalTimeoutConstant: constant,
+            WriteTotalTimeoutConstant: write_constant,
         };
         if unsafe { SetCommTimeouts(handle, &timeouts) } == 0 {
             let code = unsafe { GetLastError() };
             return Err(format!(
-                "could not set write timeouts on COM port {port} (Windows error {code})"
+                "could not set timeouts on COM port {port} (Windows error {code})"
             ));
         }
         Ok(())
+    }
+
+    /// Ask the printer about itself before the job goes out, and refuse to
+    /// send if it says it cannot print.
+    ///
+    /// Same contract as the raw-TCP, Linux Bluetooth and Android prechecks:
+    /// the printer's own configured language decides which status query, if
+    /// any, it is asked (`status::dialect_for`); a language with no query
+    /// sends nothing and behaves exactly as it did. The question and the job
+    /// share this one held port, so a send pays one open, not two.
+    ///
+    /// The two rules that keep this from being worse than the bug it fixes
+    /// (first silence is not a fault; an unreadable answer is a healthy
+    /// answer) are the shared `status` bookkeeping, so the silence-vs-answer
+    /// semantics are identical to every other platform.
+    fn precheck(
+        handle: HANDLE,
+        port: &str,
+        address: &str,
+        language: &PrinterLanguage,
+    ) -> Result<(), String> {
+        let Some(dialect) = status::dialect_for(language) else {
+            return Ok(());
+        };
+        if !status::should_probe(address, Instant::now()) {
+            return Ok(());
+        }
+        let at = format!("Bluetooth printer {address}");
+        // The query is tiny: bound both directions at the reply budget so a
+        // wedged link fails the question in seconds, not the send budget.
+        apply_timeouts(handle, port, STATUS_REPLY_TIMEOUT, STATUS_REPLY_TIMEOUT)?;
+        let query = dialect.query();
+        // A question that cannot even be written is swallowed: the job's own
+        // write reports a dead link better than a probe's would.
+        let mut written: DWORD = 0;
+        let asked = unsafe {
+            WriteFile(
+                handle,
+                query.as_ptr() as *const c_void,
+                query.len() as DWORD,
+                &mut written,
+                null_mut(),
+            )
+        };
+        if asked == 0 {
+            return Ok(());
+        }
+        let (reply, end) = read_reply(handle, dialect, STATUS_REPLY_TIMEOUT);
+
+        if reply.is_empty() {
+            // Closed mid-question: the job's own write will say that better
+            // than any status message could — not a fault here.
+            if matches!(end, ReplyEnd::Closed) {
+                return Ok(());
+            }
+            let was_answering = status::had_answered(address);
+            status::note_silent(address, Instant::now());
+            return if was_answering {
+                Err(status::silence_message(&at, STATUS_REPLY_TIMEOUT))
+            } else {
+                // Never answered: may not implement status — job goes out.
+                Ok(())
+            };
+        }
+
+        status::note_answered(address);
+        match status::decode(dialect, &reply) {
+            Some(fault) => Err(fault.message(&at)),
+            None => {
+                status::note_healthy(address, Instant::now());
+                Ok(())
+            }
+        }
+    }
+
+    /// How a status question ended.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum ReplyEnd {
+        /// The answer arrived complete.
+        Answered,
+        /// The printer hung up (or the link broke) — possibly mid-answer.
+        Closed,
+        /// The deadline passed with no complete answer.
+        Timeout,
+    }
+
+    /// Read until `dialect.answered` says the reply is complete, the port
+    /// hangs up, or `budget` runs out. Returns everything read and how it
+    /// ended, so the caller can tell silence from a closed port.
+    ///
+    /// The wait is bounded twice: by the port's own read timeout (set in
+    /// [`open_port`]) and by the deadline here, so a driver that ignores
+    /// `COMMTIMEOUTS` still cannot hang the queue.
+    fn read_reply(
+        handle: HANDLE,
+        dialect: status::Dialect,
+        budget: Duration,
+    ) -> (Vec<u8>, ReplyEnd) {
+        let deadline = Instant::now() + budget;
+        let mut reply = Vec::new();
+        let mut chunk = [0u8; 256];
+        loop {
+            if Instant::now() >= deadline {
+                return (reply, ReplyEnd::Timeout);
+            }
+            let mut got: DWORD = 0;
+            let ok = unsafe {
+                ReadFile(
+                    handle,
+                    chunk.as_mut_ptr() as *mut c_void,
+                    chunk.len() as DWORD,
+                    &mut got,
+                    null_mut(),
+                )
+            };
+            if ok == 0 {
+                let code = unsafe { GetLastError() };
+                if got == 0 {
+                    return (
+                        reply,
+                        if code == ERROR_SEM_TIMEOUT {
+                            ReplyEnd::Timeout
+                        } else {
+                            ReplyEnd::Closed
+                        },
+                    );
+                }
+                // Timed out but carried bytes: keep them and read on; the
+                // deadline above ends the wait.
+            }
+            if got == 0 {
+                return (reply, ReplyEnd::Closed);
+            }
+            reply.extend_from_slice(&chunk[..got as usize]);
+            if dialect.answered(&reply) {
+                return (reply, ReplyEnd::Answered);
+            }
+        }
     }
 
     /// Write the job in bounded chunks, each with the time the budget
@@ -426,7 +611,9 @@ mod direct {
                     budget.as_secs()
                 ));
             }
-            apply_write_timeout(handle, port, remaining)?;
+            // The read timeout is irrelevant here (the precheck has run and
+            // nothing reads again); only the write cap matters per chunk.
+            apply_timeouts(handle, port, Duration::ZERO, remaining)?;
             let mut written: DWORD = 0;
             let ok = unsafe {
                 WriteFile(
