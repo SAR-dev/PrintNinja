@@ -587,6 +587,18 @@ impl WindowsSpooler {
     /// shared by the `system` and `usb` transports. A USB printer is installed
     /// as a Windows queue, so it needs the same PDF-vs-RAW decision the spooler
     /// transport makes (see [`choose_datatype`]).
+    ///
+    /// Deliberately no per-send status precheck (unlike the raw-wire
+    /// transports): the job goes into the OS spooler queue, which is durable —
+    /// a faulted printer holds and retries the job rather than silently losing
+    /// it, so the "job lost because nobody asked" bug class the prechecks
+    /// exist to fix does not exist here. And the queue's
+    /// `PRINTER_INFO_2A.Status` always answers (there is no "first silence is
+    /// not a fault" cushion the wire prechecks rely on), so gating the send on
+    /// it would trade one failure mode for false refusals whenever the spooler
+    /// lags the real state. Fault state is still surfaced — by
+    /// [`check_ready`], which `test` and `probe` run — not per send. The
+    /// decision is recorded in `docs/todo/TRANSPORT_GAPS.md` (gap 4).
     pub async fn send_job(&self, job: RenderedJob) -> Result<(), String> {
         let spooler = WindowsSpooler::new(self.printer_name.clone());
         tokio::task::spawn_blocking(move || {

@@ -1,110 +1,36 @@
-import { ApiError } from "@/lib/api/errors";
-import { describeError } from "@/lib/errors";
 import { useTranslation } from "react-i18next";
-import { PageHeader } from "@/components/PageHeader";
+import { useEffect, useMemo, useState } from "react";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { isPrintViaPc } from "@/lib/printViaPc";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { ControlsAccordion } from "@/components/designer/ControlsAccordion";
-import { CanvasWorkspace } from "@/components/designer/CanvasWorkspace";
-import {
-  CodeEditors,
-  EditorPane,
-  type EditorPaneHandle,
-} from "@/components/designer/EditorPane";
-import {
-  ControlsRail,
-  type ControlsSection,
-} from "@/components/designer/ControlsRail";
-import {
-  isDesignerLayout,
-  type DesignerLayout,
-} from "@/components/designer/LayoutToggle";
-import { DesignerActions } from "@/components/designer/DesignerActions";
-import { DesignerOverflowMenu } from "@/components/designer/DesignerOverflowMenu";
-import { DesignerToolbar } from "@/components/designer/DesignerToolbar";
-import { VersionHistoryPanel } from "@/components/designer/VersionHistoryPanel";
-import { HelpersPanel } from "@/components/designer/HelpersPanel";
-import { ReadmePanel } from "@/components/designer/ReadmePanel";
-import { README_MAX_BYTES } from "@/components/ReadmeEditor";
-import {
-  SampleDataPanel,
-  SAMPLE_ORDER_NAME,
-  type Dataset,
-} from "@/components/designer/SampleDataPanel";
-import { ClassWarnings } from "@/components/designer/ClassWarnings";
-import { OfflinePrintHint } from "@/components/designer/OfflinePrintHint";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
 import {
   DESKTOP_QUERY,
   PHONE_QUERY,
   WIDE_QUERY,
   useMediaQuery,
 } from "@/lib/hooks/useMediaQuery";
-import { usePersistentState } from "@/lib/hooks/usePersistentState";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { agent } from "@/lib/agent/commands";
-import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState } from "@/components/EmptyState";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import { PanelLeftClose, QrCode, Save, SlidersHorizontal } from "lucide-react";
-import { notifySuccess, notifyError } from "@/lib/notify";
-import CodeMirror from "@uiw/react-codemirror";
-import { json } from "@codemirror/lang-json";
-import { BARCODE_TYPES, buildBarcodeSnippet } from "@/lib/utils/barcode";
-import {
-  DEFAULT_TEMPLATE_HTML,
-  DEFAULT_TEMPLATE_CSS,
-  DEFAULT_MOCK_DATA,
-  NEW_TEMPLATE_PAGE_W_MM,
-  NEW_TEMPLATE_PAGE_H_MM,
-  newTemplateContent,
-} from "@/lib/templates/defaultTemplate";
-import { PackChooser } from "@/components/designer/PackChooser";
-import { PhoneDesignerViewer } from "@/components/designer/PhoneDesignerViewer";
+import { useShareStatus } from "@/lib/shell/useShareStatus";
+import { isReadOnly } from "@/lib/share/sync";
+import { notifySuccess } from "@/lib/notify";
+import { SampleDataPanel } from "@/components/designer/SampleDataPanel";
+import type { PagePreset } from "@/components/designer/ControlsAccordion";
+import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
 import { PACKS } from "@/lib/templates/packs";
 import { pickCanvasSample } from "@/lib/templates/mustacheCoverage";
-import { useCompiledCss } from "@/lib/templates/useCompiledCss";
-import { listTemplates } from "@/lib/templates/listTemplates";
-import { formatCss, formatHtml } from "@/lib/utils/format";
-import * as share from "@/lib/share/client";
-import { useShareStatus } from "@/lib/shell/useShareStatus";
-import { getLocalTemplate, isReadOnly } from "@/lib/share/sync";
+import { useSampleDataset } from "./designer/useSampleDataset";
 import {
-  createTemplateOnServer,
-  saveTemplateToServer,
-  overwriteWithMine,
-  restoreTemplateVersion,
-  takeServerCopy,
-  TemplateConflictError,
-  type TemplateContent,
-} from "@/lib/share/save";
+  useDesignerDocument,
+  type TemplateRow,
+} from "./designer/useDesignerDocument";
+import { useTemplateSync } from "./designer/useTemplateSync";
+import { useNewTemplate } from "./designer/useNewTemplate";
+import { useDesignerWorkspace } from "./designer/useDesignerWorkspace";
+import { useDebouncedTemplate } from "./designer/useDebouncedTemplate";
+import { DesignerTopBar } from "./designer/DesignerTopBar";
+import { DesignerBody } from "./designer/DesignerBody";
+import { DesignerDialogs } from "./designer/DesignerDialogs";
+import type { Controls } from "./designer/DesignerWorkspace";
 
-const PAGE_PRESETS = [
+const PAGE_PRESETS: PagePreset[] = [
   { labelKey: "designer.preset_a4", width: 210, height: 297 },
   { labelKey: "designer.preset_a5", width: 148, height: 210 },
   { labelKey: "designer.preset_letter", width: 216, height: 279 },
@@ -113,53 +39,11 @@ const PAGE_PRESETS = [
   { labelKey: "designer.preset_label4x6", width: 102, height: 152 },
 ];
 
-/** Which sync action is running. */
-type SyncAction = "save" | "visibility";
-
 export function DesignerPage() {
   const { t } = useTranslation();
-  const [showBarcodeDialog, setShowBarcodeDialog] = useState(false);
-  const [barcodeType, setBarcodeType] = useState("code128");
-  const [barcodeValue, setBarcodeValue] = useState("");
-  // On: the value is a data field (order.id) read at print time. Off: fixed text.
-  const [barcodeFromData, setBarcodeFromData] = useState(true);
-  const [barcodeError, setBarcodeError] = useState<string | null>(null);
-  const [showNewTemplateDialog, setShowNewTemplateDialog] = useState(false);
-  const [newTemplateName, setNewTemplateName] = useState("");
-  // The create round-trip (server PUT + local cache) is async: while it
-  // runs the dialog holds still so a second click cannot double-create.
-  const [creatingTemplate, setCreatingTemplate] = useState(false);
-  // Name problems show under the field, not as a toast.
-  const [newNameError, setNewNameError] = useState("");
-  const [newTemplatePackId, setNewTemplatePackId] = useState(() => {
-    try {
-      return localStorage.getItem("printninja.last_pack") || "receipt";
-    } catch {
-      return "receipt";
-    }
-  });
-  const [newTemplateStep, setNewTemplateStep] = useState<"pack" | "name">(
-    "pack",
-  );
-  const openNewTemplateDialog = useCallback(() => {
-    try {
-      const last = localStorage.getItem("printninja.last_pack");
-      if (last) setNewTemplatePackId(last);
-      else setNewTemplatePackId("receipt");
-    } catch {
-      setNewTemplatePackId("receipt");
-    }
-    setNewTemplateStep("pack");
-    setNewNameError("");
-    setShowNewTemplateDialog(true);
-  }, []);
-  const [htmlCode, setHtmlCode] = useState(DEFAULT_TEMPLATE_HTML);
-  const [cssCode, setCssCode] = useState(DEFAULT_TEMPLATE_CSS);
-  // No template exists until one is opened or made: an empty Designer is
-  // the honest starting point, not a bundled example nobody asked for.
-  const [templateName, setTemplateName] = useState("");
-  const [pageWidth, setPageWidth] = useState(NEW_TEMPLATE_PAGE_W_MM);
-  const [pageHeight, setPageHeight] = useState(NEW_TEMPLATE_PAGE_H_MM);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
+  // Which tab is open on a phone. On desktop the canvas and editor are always both on screen.
+  const [activeTab, setActiveTab] = useState("canvas");
   // Print-via-PC mode: templates sync down, they are not drawn here.
   const [viaPc, setViaPc] = useState(false);
   useEffect(() => {
@@ -173,886 +57,39 @@ export function DesignerPage() {
       cancelled = true;
     };
   }, []);
-  // Which tab is open on a phone. On desktop the canvas and editor are always both on screen.
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
   // Phones get the read-only viewer (PLAN §6, D4); tablets keep the tabs.
   const isPhone = useMediaQuery(PHONE_QUERY);
-  // Desktop workspace preferences, remembered across launches.
-  const [layout, setLayout] = usePersistentState<DesignerLayout>(
-    "printninja.designer.layout",
-    "side",
-    isDesignerLayout,
-  );
-  const [openSections, setOpenSections] = usePersistentState<string[]>(
-    "printninja.designer.openSections",
-    // Page setup stays open; Sample data starts collapsed so the controls
-    // column doesn't scroll before a template is even loaded (DESIGN
-    // IMPROVEMENTS 4.8).
-    ["page"],
-    (v): v is string[] =>
-      Array.isArray(v) && v.every((x) => typeof x === "string"),
-  );
-  // Below ~1440 px the controls column shrinks to an icon rail. Crossing that
-  // width in either direction resets it; the person can still toggle it by hand.
   const isWide = useMediaQuery(WIDE_QUERY);
-  const [controlsExpanded, setControlsExpanded] = useState(isWide);
-  useEffect(() => setControlsExpanded(isWide), [isWide]);
-  const editorRef = useRef<EditorPaneHandle>(null);
-  const pendingInsert = useRef<{ text: string; back: number } | null>(null);
-  useEffect(() => {
-    const pending = pendingInsert.current;
-    if (pending && editorRef.current) {
-      pendingInsert.current = null;
-      editorRef.current.insertAtCursor(pending.text, pending.back);
-    }
-  }, [layout]);
-  const openControlsSection = (section: ControlsSection) => {
-    setOpenSections(
-      openSections.includes(section)
-        ? openSections
-        : [...openSections, section],
-    );
-    setControlsExpanded(true);
-  };
-  const [activeTab, setActiveTab] = useState("canvas");
-  // Phone: Templates / Page Setup / Custom input live in a bottom sheet
-  // opened from a single Settings button.
-  const [controlsOpen, setControlsOpen] = useState(false);
-  // What the editor held when the template was last opened or saved. The
-  // difference from the live values is the "Unsaved" mark, and it asks before
-  // a switch throws the edits away. The README is tracked beside it
-  // (`savedReadme`) because it loads asynchronously, after the rest.
-  const [baseline, setBaseline] = useState<{
-    name: string;
-    html: string;
-    css: string;
-    w: number;
-    h: number;
-  } | null>(null);
-  const [readme, setReadme] = useState("");
-  const [savedReadme, setSavedReadme] = useState("");
-  /** Put README text into the editor as the saved copy (open, take server, load). */
-  const loadReadme = (value: string) => {
-    setReadme(value);
-    setSavedReadme(value);
-  };
-  const [remoteId, setRemoteId] = useState<string | null>(null);
-  const [publishedAt, setPublishedAt] = useState<string | null>(null);
-  const [origin, setOrigin] = useState<"own" | "saved">("own");
-  const [pending, setPending] = useState<SyncAction | null>(null);
-  // A save the server refused because its copy moved since this PC last
-  // synced it. The dialog resolves it: take the server copy, or overwrite.
-  const [conflict, setConflict] = useState<{
-    rowId: number;
-    serverId: string;
-  } | null>(null);
-  // Version history: the sheet shows the server's list for the open
-  // template; a restore asks once, then writes the chosen version back
-  // into the editor like a taken server copy.
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [restorePending, setRestorePending] = useState<number | null>(null);
-  // Bumped after a successful restore so the new version shows at the top.
-  const [historyRefresh, setHistoryRefresh] = useState(0);
   // Offline the cache is view/print only: the server owns the copies, so
   // Save (and creating) has nowhere to go and stays disabled.
   const shareStatus = useShareStatus();
   const offline = shareStatus.state !== "online";
-  const [debouncedHtml, setDebouncedHtml] = useState(htmlCode);
-  const [debouncedCss, setDebouncedCss] = useState(cssCode);
-  useEffect(() => {
-    const id = setTimeout(() => {
-      setDebouncedHtml(htmlCode);
-      setDebouncedCss(cssCode);
-    }, 300);
-    return () => clearTimeout(id);
-  }, [htmlCode, cssCode]);
-  const compiledCss = useCompiledCss(debouncedHtml);
 
-  // Templates available in the designer — persisted in SQLite via
-  // `list_templates` / `create_template`. Nothing is seeded: an empty
-  // list means no templates yet, and the accordion shows the New action.
-  // Local working copies: content for the editor plus the server link
-  // when the row came from a full template (nulls when it did not).
-  const [templates, setTemplates] = useState<
-    Array<{
-      id: number;
-      name: string;
-      html: string;
-      css: string;
-      page_w_mm?: number;
-      page_h_mm?: number;
-      orientation?: string;
-      readme?: string;
-      summary?: string;
-      remote_id?: string | null;
-      server_id?: string | null;
-      published_at?: string | null;
-      origin?: string | null;
-    }>
-  >([]);
-  const [currentTemplateId, setCurrentTemplateId] = useState<number | null>(
-    null,
-  );
-
-  // The active template's DB row id (null until a template is opened or
-  // made — the Designer starts empty).
-  const [currentTemplateDbId, setCurrentTemplateDbId] = useState<number | null>(
-    null,
-  );
-  const [templatesLoading, setTemplatesLoading] = useState(true);
-
-  // Template ids whose html/css in `templates` is already loaded into
-  // the editor. `loadTemplate` writes content directly since rows carry
-  // their own html/css.
-  const contentLoaded = useRef<Set<number>>(new Set());
-
-  // Sample data (variables). The account has one dataset; it is persisted
-  // through the agent and synced like templates. The built-in fallback
-  // stands in until one is stored.
-  const [datasets, setDatasets] = useState<
-    Array<Dataset & { id?: number | null }>
-  >([]);
-
-  const loadDatasets = useCallback(async () => {
-    try {
-      const rows = (await agent("list_datasets", {})) ?? [];
-      setDatasets(
-        rows.map((r) => ({ id: r.id, name: r.name, json: r.data_json })),
-      );
-    } catch {
-      /* web mode or backend unavailable: the fallback below applies */
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadDatasets();
-  }, [loadDatasets]);
-
-  // A completed pull lands rows after mount; reload so the new content
-  // shows with no manual step.
-  useEffect(() => {
-    const onPulled = () => void loadDatasets();
-    window.addEventListener("sync:pulled", onPulled);
-    return () => window.removeEventListener("sync:pulled", onPulled);
-  }, [loadDatasets]);
-
-  // The built-in fallback stands in for the account's dataset until one
-  // is stored.
-  const fallbackDataset: Dataset & { id?: number | null } = {
-    name: SAMPLE_ORDER_NAME,
-    json: JSON.stringify(DEFAULT_MOCK_DATA, null, 2),
-  };
-
-  // The single dataset the Designer shows and edits: "Sample Order" when
-  // present, otherwise the first in name order; the built-in fallback
-  // when the cache holds no rows yet. Other rows stay stored and synced
-  // but are not shown.
-  const activeDataset: Dataset & { id?: number | null } =
-    datasets.find((d) => d.name === SAMPLE_ORDER_NAME) ??
-    datasets[0] ??
-    fallbackDataset;
-
-  // A pending JSON edit only. `null` means no pending change, so the
-  // saved row is what the panel and the canvas see. Save writes the
-  // draft to the database; discarding the edit drops it.
-  const [draftDatasetJson, setDraftDatasetJson] = useState<string | null>(null);
-  const workingDatasetJson = draftDatasetJson ?? activeDataset.json;
-  const datasetsDirty =
-    draftDatasetJson !== null && draftDatasetJson !== activeDataset.json;
-
-  /** Write the draft JSON to the account's single dataset row: update it
-   * in place when it is stored, create it under the fixed name otherwise.
-   * Other rows are left alone. */
-  const commitDataset = async () => {
-    if (draftDatasetJson === null || draftDatasetJson === activeDataset.json) {
-      setDraftDatasetJson(null);
-      return;
-    }
-    const d = activeDataset;
-    await agent("save_dataset", {
-      req:
-        d.id != null
-          ? { id: d.id, name: d.name, data_json: draftDatasetJson }
-          : { name: d.name, data_json: draftDatasetJson },
-    });
-    setDraftDatasetJson(null);
-    await loadDatasets();
-  };
-
-  const loadTemplate = (tpl: {
-    id: number;
-    name: string;
-    html: string;
-    css: string;
-    page_w_mm?: number;
-    page_h_mm?: number;
-    orientation?: string;
-    readme?: string;
-    summary?: string;
-    remote_id?: string | null;
-    server_id?: string | null;
-    published_at?: string | null;
-    origin?: string | null;
-    updated_at?: string;
-  }) => {
-    const html = formatHtml(tpl.html);
-    const css = formatCss(tpl.css);
-    const w = tpl.page_w_mm || pageWidth;
-    const h = tpl.page_h_mm || pageHeight;
-    setCurrentTemplateId(tpl.id);
-    setTemplateName(tpl.name);
-    setHtmlCode(html);
-    setCssCode(css);
-    contentLoaded.current.add(tpl.id);
-    setPageWidth(w);
-    setPageHeight(h);
-    setBaseline({ name: tpl.name, html, css, w, h });
-    setCurrentTemplateDbId(tpl.id);
-    // Load readme and publish info if provided, otherwise fetch from DB
-    if (tpl.readme !== undefined) {
-      loadReadme(tpl.readme);
-      setRemoteId(tpl.server_id ?? tpl.remote_id ?? null);
-      setPublishedAt(tpl.published_at ?? null);
-      setOrigin((tpl.origin ?? "own") === "saved" ? "saved" : "own");
-    } else {
-      (async () => {
-        try {
-          const full = await agent("get_template", { id: tpl.id });
-          loadReadme(full.readme ?? "");
-          setRemoteId(full.server_id ?? full.remote_id ?? null);
-          setPublishedAt(full.published_at ?? null);
-          setOrigin(full.origin === "saved" ? "saved" : "own");
-        } catch {
-          loadReadme("");
-          setRemoteId(null);
-          setPublishedAt(null);
-          setOrigin("own");
-        }
-      })();
-    }
-    // Content now lives on the template row itself; the canvas and the
-    // row update visibly, so the load stays quiet.
-  };
-
-  const dirty =
-    baseline !== null &&
-    (templateName !== baseline.name ||
-      htmlCode !== baseline.html ||
-      cssCode !== baseline.css ||
-      pageWidth !== baseline.w ||
-      pageHeight !== baseline.h ||
-      readme !== savedReadme ||
-      datasetsDirty);
-
-  // The name is edited in one place (the top row), so its problems show there,
-  // live, rather than as a toast on Save.
-  const nameError = (() => {
-    if (currentTemplateDbId == null) return "";
-    const wanted = templateName.trim();
-    if (!wanted) return t("designer.toast_name_required");
-    const taken = templates.some(
-      (x) =>
-        x.id !== currentTemplateDbId &&
-        x.name.trim().toLowerCase() === wanted.toLowerCase(),
-    );
-    return taken ? t("designer.toast_name_exists") : "";
-  })();
-
-  // Anything that would replace the editor asks first when edits are unsaved.
-  const [discardAction, setDiscardAction] = useState<(() => void) | null>(null);
-  const unlessDiscarding = (action: () => void) => {
-    if (dirty) setDiscardAction(() => action);
-    else action();
-  };
-  const switchTemplate = (id: number) => {
-    if (id === currentTemplateId) return;
-    const tpl = templates.find((x) => x.id === id);
-    if (tpl) unlessDiscarding(() => loadTemplate(tpl));
-  };
-
-  /**
-   * Save is the one way content reaches the server: a manual, blocking
-   * push of the editor's state. Success records the copy the server
-   * accepted; a revision conflict asks the user which copy wins; a
-   * failed save leaves nothing behind to rot (the edit stays in the
-   * editor, and the row keeps its old synced content).
-   */
-  const buildContent = async (): Promise<TemplateContent> => {
-    const row = await getLocalTemplate(currentTemplateDbId!);
-    return {
-      name: templateName,
-      summary: row.summary ?? "",
-      page_w_mm: pageWidth,
-      page_h_mm: pageHeight,
-      html: htmlCode,
-      css: cssCode,
-      readme,
-    };
-  };
-
-  const handleSave = async () => {
-    if (!currentTemplateDbId) {
-      notifyError(t("designer.toast_no_template"));
-      return;
-    }
-    if (offline) {
-      notifyError(t("designer.toast_offline_save"));
-      return;
-    }
-    // Names are unique per owner on the server (case-insensitive). Check
-    // here first so a taken name never reaches the local row, which would
-    // otherwise show the rejected name on the Templates page as a draft.
-    const wanted = templateName.trim();
-    if (!wanted) {
-      notifyError(t("designer.toast_name_required"));
-      return;
-    }
-    if (
-      templates.some(
-        (x) =>
-          x.id !== currentTemplateDbId &&
-          x.name.trim().toLowerCase() === wanted.toLowerCase(),
-      )
-    ) {
-      notifyError(t("designer.toast_name_exists"));
-      return;
-    }
-    if (new TextEncoder().encode(readme).length > README_MAX_BYTES) {
-      notifyError(t("designer.toast_readme_too_big"));
-      return;
-    }
-    setPending("save");
-    try {
-      const row = await getLocalTemplate(currentTemplateDbId);
-      if (isReadOnly(row)) {
-        notifyError(t("designer.toast_readonly"));
-        return;
-      }
-      const content = { ...(await buildContent()), name: wanted };
-      const result = await saveTemplateToServer(row, content);
-      setRemoteId(result.remoteId);
-      setPublishedAt(result.published ? result.updatedAt : null);
-      setTemplates((prev) =>
-        prev.map((t) =>
-          t.id === currentTemplateDbId
-            ? {
-                ...t,
-                name: content.name,
-                html: content.html,
-                css: content.css,
-                page_w_mm: content.page_w_mm,
-                page_h_mm: content.page_h_mm,
-                orientation:
-                  content.page_w_mm > content.page_h_mm
-                    ? "landscape"
-                    : "portrait",
-              }
-            : t,
-        ),
-      );
-      setTemplateName(content.name);
-      setBaseline({
-        name: content.name,
-        html: content.html,
-        css: content.css,
-        w: content.page_w_mm,
-        h: content.page_h_mm,
-      });
-      setSavedReadme(content.readme);
-      try {
-        await commitDataset();
-      } catch (e) {
-        // The template is saved; the dataset edit stays in the draft to retry.
-        notifyError(
-          t("designer.toast_save_failed", { error: describeError(e) }),
-        );
-        return;
-      }
-      window.dispatchEvent(new Event("sync:pulled"));
-      notifySuccess(
-        result.published
-          ? t("designer.toast_saved_published")
-          : t("designer.toast_saved"),
-      );
-    } catch (e) {
-      if (e instanceof TemplateConflictError) {
-        setConflict({ rowId: currentTemplateDbId, serverId: e.serverId });
-        return;
-      }
-      if (e instanceof ApiError && e.code === "template_name_taken") {
-        notifyError(t("designer.toast_name_exists"));
-        return;
-      }
-      notifyError(describeError(e));
-    } finally {
-      setPending(null);
-    }
-  };
-
-  /**
-   * Publish is visibility-only: the switch calls publish/unpublish
-   * immediately and updates the badge. Content still goes through Save,
-   * except a never-pushed row is saved first so the server has a copy
-   * to show or hide.
-   */
-  const handleVisibilityChange = async (makePublic: boolean) => {
-    if (!currentTemplateDbId || offline) return;
-    const row = await getLocalTemplate(currentTemplateDbId);
-    if (isReadOnly(row)) return;
-    const serverId = row.server_id ?? row.remote_id;
-    if (!serverId) return;
-    setPending("visibility");
-    /** Write the publish state onto the local row too: the switch is the
-     * source of truth on screen, but after a relogin the row is rebuilt
-     * from the DB — state-only updates made this vanish back to private. */
-    const persistPublish = async (id: string, published: string | null) => {
-      setPublishedAt(published);
-      setRemoteId(id);
-      try {
-        await agent("set_publish_info", {
-          req: {
-            id: currentTemplateDbId,
-            remote_id: id,
-            published_at: published,
-          },
-        });
-      } catch {
-        /* offline race: the next pull repairs it from the server */
-      }
-    };
-    try {
-      let id = serverId;
-      if (row.base_revision == null) {
-        const content = await buildContent();
-        const saved = await saveTemplateToServer(row, content);
-        id = saved.remoteId;
-        await persistPublish(
-          saved.remoteId,
-          saved.published ? saved.updatedAt : null,
-        );
-        setTemplates((prev) =>
-          prev.map((t) =>
-            t.id === currentTemplateDbId
-              ? {
-                  ...t,
-                  name: content.name,
-                  html: content.html,
-                  css: content.css,
-                  page_w_mm: content.page_w_mm,
-                  page_h_mm: content.page_h_mm,
-                  orientation:
-                    content.page_w_mm > content.page_h_mm
-                      ? "landscape"
-                      : "portrait",
-                }
-              : t,
-          ),
-        );
-      }
-      if (makePublic) {
-        const remote = await share.publishRemoteTemplate(id);
-        await persistPublish(
-          id,
-          remote.published_at ?? remote.updated_at ?? null,
-        );
-        // The visibility switch flips to match — visible, no toast.
-      } else {
-        await share.unpublishRemoteTemplate(id);
-        await persistPublish(id, null);
-      }
-      window.dispatchEvent(new Event("sync:pulled"));
-    } catch (e) {
-      notifyError(describeError(e));
-    } finally {
-      setPending(null);
-    }
-  };
-
-  /** Resolve a save conflict by taking the server's copy into the editor. */
-  const resolveTakeServer = async () => {
-    if (!conflict) return;
-    const row = await getLocalTemplate(conflict.rowId);
-    setPending("save");
-    try {
-      const taken = await takeServerCopy(row);
-      setHtmlCode(formatHtml(taken.html));
-      setCssCode(formatCss(taken.css));
-      setTemplateName(taken.name);
-      setPageWidth(taken.page_w_mm);
-      setPageHeight(taken.page_h_mm);
-      loadReadme(taken.readme);
-      setBaseline({
-        name: taken.name,
-        html: formatHtml(taken.html),
-        css: formatCss(taken.css),
-        w: taken.page_w_mm,
-        h: taken.page_h_mm,
-      });
-      setRemoteId(conflict.serverId);
-      setPublishedAt(taken.publishedAt);
-      setConflict(null);
-      // The canvas re-renders with the server copy — visible, no toast.
-    } catch (e) {
-      notifyError(describeError(e));
-    } finally {
-      setPending(null);
-    }
-  };
-
-  /** Resolve a save conflict by overwriting the server with this copy. */
-  const resolveOverwrite = async () => {
-    if (!conflict) return;
-    setPending("save");
-    try {
-      const row = await getLocalTemplate(conflict.rowId);
-      const content = await buildContent();
-      const result = await overwriteWithMine(row, content);
-      setBaseline({
-        name: content.name,
-        html: content.html,
-        css: content.css,
-        w: content.page_w_mm,
-        h: content.page_h_mm,
-      });
-      setSavedReadme(content.readme);
-      setRemoteId(result.remoteId);
-      setPublishedAt(result.published ? result.updatedAt : null);
-      setConflict(null);
-      // The overwrite lands on the server — a new version no other
-      // screen shows, like a normal server save.
-      notifySuccess(t("designer.toast_overwrote"));
-    } catch (e) {
-      if (e instanceof TemplateConflictError) {
-        notifyError(t("designer.toast_moved_again"));
-        return;
-      }
-      notifyError(describeError(e));
-    } finally {
-      setPending(null);
-    }
-  };
-
-  /**
-   * Restore a version: the server copies its body and CSS into the
-   * template as a new revision, and the returned copy takes over the
-   * editor exactly like a taken server copy. A conflict (another PC
-   * saved meanwhile) opens the usual resolve dialog instead of losing
-   * either copy.
-   */
-  const handleRestoreVersion = async (versionNo: number) => {
-    if (!currentTemplateDbId) return;
-    if (offline) {
-      notifyError(t("designer.toast_offline_save"));
-      return;
-    }
-    setPending("save");
-    try {
-      const row = await getLocalTemplate(currentTemplateDbId);
-      if (isReadOnly(row)) {
-        notifyError(t("designer.toast_readonly"));
-        return;
-      }
-      const taken = await restoreTemplateVersion(row, versionNo);
-      setHtmlCode(formatHtml(taken.html));
-      setCssCode(formatCss(taken.css));
-      setTemplateName(taken.name);
-      setPageWidth(taken.page_w_mm);
-      setPageHeight(taken.page_h_mm);
-      loadReadme(taken.readme);
-      setBaseline({
-        name: taken.name,
-        html: formatHtml(taken.html),
-        css: formatCss(taken.css),
-        w: taken.page_w_mm,
-        h: taken.page_h_mm,
-      });
-      setRemoteId(row.server_id ?? row.remote_id ?? remoteId);
-      setPublishedAt(taken.publishedAt);
-      setTemplates((prev) =>
-        prev.map((t) =>
-          t.id === currentTemplateDbId
-            ? {
-                ...t,
-                name: taken.name,
-                html: taken.html,
-                css: taken.css,
-                page_w_mm: taken.page_w_mm,
-                page_h_mm: taken.page_h_mm,
-                orientation:
-                  taken.page_w_mm > taken.page_h_mm ? "landscape" : "portrait",
-              }
-            : t,
-        ),
-      );
-      // The restore lands as a new version — the list shows it on top.
-      setHistoryRefresh((k) => k + 1);
-      notifySuccess(t("designer.history_restored", { n: versionNo }));
-    } catch (e) {
-      if (e instanceof TemplateConflictError) {
-        setConflict({ rowId: currentTemplateDbId, serverId: e.serverId });
-        return;
-      }
-      notifyError(describeError(e));
-    } finally {
-      setPending(null);
-      setRestorePending(null);
-    }
-  };
-
-  const createNewTemplate = async () => {
-    const name = newTemplateName.trim();
-    if (!name) {
-      setNewNameError(t("designer.toast_name_required"));
-      return;
-    }
-    if (templates.some((t) => t.name.toLowerCase() === name.toLowerCase())) {
-      setNewNameError(t("designer.toast_name_exists"));
-      return;
-    }
-    setNewNameError("");
-    // Server-first: the server owns the copies, so a new template starts
-    // there and is cached locally synced. Offline there is no creation.
-    if (offline) {
-      notifyError(t("designer.toast_offline_create"));
-      return;
-    }
-    let keepDialogOpen = false;
-    setCreatingTemplate(true);
-    try {
-      const start = newTemplateContent(name, newTemplatePackId);
-      try {
-        localStorage.setItem("printninja.last_pack", newTemplatePackId);
-      } catch {
-        /* ignore */
-      }
-      const created = await createTemplateOnServer({
-        name,
-        page_w_mm: start.page_w_mm,
-        page_h_mm: start.page_h_mm,
-        orientation: "portrait",
-        html: start.html,
-        css: start.css,
-        readme: start.readme,
-      });
-      const tpl = {
-        id: created.id,
-        name: created.name,
-        html: start.html,
-        css: start.css,
-        page_w_mm: created.page_w_mm,
-        page_h_mm: created.page_h_mm,
-        orientation: created.orientation,
-      };
-      contentLoaded.current.add(tpl.id);
-      setTemplates((prev) => [...prev, tpl]);
-      loadTemplate(tpl);
-      setCurrentTemplateDbId(tpl.id);
-      notifySuccess(t("designer.toast_created_server", { name }));
-    } catch (e) {
-      // The server already has a template with this name (another PC, or
-      // a name this list has not synced yet). Not a fallback case: show
-      // it on the field and keep the dialog open.
-      if (e instanceof ApiError && e.code === "template_name_taken") {
-        keepDialogOpen = true;
-        setNewNameError(t("designer.toast_name_exists"));
-        return;
-      }
-      // Web mode / DB unavailable — keep in-memory fallback so UI stays usable.
-      const id = templates.length
-        ? Math.max(...templates.map((t) => t.id)) + 1
-        : 1;
-      const start = newTemplateContent(name, newTemplatePackId);
-      try {
-        localStorage.setItem("printninja.last_pack", newTemplatePackId);
-      } catch {
-        /* ignore */
-      }
-      const tpl = {
-        id,
-        name,
-        html: start.html,
-        css: start.css,
-        page_w_mm: start.page_w_mm,
-        page_h_mm: start.page_h_mm,
-        orientation: "portrait",
-      };
-      contentLoaded.current.add(tpl.id);
-      setTemplates((prev) => [...prev, tpl]);
-      loadTemplate(tpl);
-      setCurrentTemplateDbId(tpl.id);
-      // The new row appears in the list and the canvas opens on it —
-      // visible, no toast.
-    } finally {
-      setCreatingTemplate(false);
-      if (!keepDialogOpen) {
-        setNewTemplateName("");
-        setShowNewTemplateDialog(false);
-      }
-    }
-  };
-  const [editJson, setEditJson] = useState("");
-  const [showEditDataset, setShowEditDataset] = useState(false);
-
-  // Load the template list from SQLite on mount. Nothing is seeded: an
-  // empty list means no templates yet, and the empty state offers the
-  // one action that matters — make one.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const rows = await listTemplates();
-        if (cancelled) return;
-        const hydrated = rows.map((r) => ({
-          id: r.id,
-          name: r.name,
-          html: r.html || "",
-          css: r.css || "",
-          page_w_mm: r.page_w_mm,
-          page_h_mm: r.page_h_mm,
-          orientation: r.orientation,
-          origin: r.origin ?? null,
-        }));
-        setTemplates(hydrated);
-        const first = hydrated[0];
-        if (!first) return;
-        setCurrentTemplateId(first.id);
-        setTemplateName(first.name);
-        setHtmlCode(formatHtml(first.html));
-        setCssCode(formatCss(first.css));
-        setPageWidth(first.page_w_mm ?? NEW_TEMPLATE_PAGE_W_MM);
-        setPageHeight(first.page_h_mm ?? NEW_TEMPLATE_PAGE_H_MM);
-        setBaseline({
-          name: first.name,
-          html: formatHtml(first.html),
-          css: formatCss(first.css),
-          w: first.page_w_mm ?? NEW_TEMPLATE_PAGE_W_MM,
-          h: first.page_h_mm ?? NEW_TEMPLATE_PAGE_H_MM,
-        });
-        setCurrentTemplateDbId(first.id);
-        // README and publish info live on the full row.
-        try {
-          const full = await agent("get_template", { id: first.id });
-          loadReadme(full.readme ?? "");
-          setRemoteId(full.server_id ?? full.remote_id ?? null);
-          setPublishedAt(full.published_at ?? null);
-          setOrigin(full.origin === "saved" ? "saved" : "own");
-        } catch {
-          loadReadme("");
-          setRemoteId(null);
-          setPublishedAt(null);
-        }
-      } catch {
-        /* web mode / backend unavailable: the empty state applies */
-      } finally {
-        if (!cancelled) setTemplatesLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Templates reload on sync pulls so a save on another PC (or the
-  // topbar sync button) refreshes this list without a remount.
-  const currentTemplateDbIdRef = useRef(currentTemplateDbId);
-  currentTemplateDbIdRef.current = currentTemplateDbId;
-  useEffect(() => {
-    const onPulled = async () => {
-      try {
-        const rows = await listTemplates();
-        if (rows.length === 0) return;
-        setTemplates((prev) => {
-          const byId = new Map(rows.map((r) => [r.id, r]));
-          const next = prev.map((t) => {
-            const r = byId.get(t.id);
-            if (!r) return t;
-            if (r.id === currentTemplateDbIdRef.current) {
-              return {
-                ...t,
-                name: r.name,
-                page_w_mm: r.page_w_mm,
-                page_h_mm: r.page_h_mm,
-                orientation: r.orientation,
-              };
-            }
-            return {
-              ...t,
-              name: r.name,
-              html: r.html || t.html,
-              css: r.css || t.css,
-              page_w_mm: r.page_w_mm,
-              page_h_mm: r.page_h_mm,
-              orientation: r.orientation,
-              origin: r.origin ?? t.origin ?? null,
-            };
-          });
-          for (const r of rows) {
-            if (!next.some((t) => t.id === r.id)) {
-              next.push({
-                id: r.id,
-                name: r.name,
-                html: r.html || "",
-                css: r.css || "",
-                page_w_mm: r.page_w_mm,
-                page_h_mm: r.page_h_mm,
-                orientation: r.orientation,
-                origin: r.origin ?? null,
-              });
-            }
-          }
-          return next;
-        });
-        // Publish state is owned by the server, so a publish made on
-        // another PC lands here: refresh it for the open template.
-        const openId = currentTemplateDbIdRef.current;
-        if (openId != null) {
-          try {
-            const full = await agent("get_template", { id: openId });
-            setRemoteId(full.server_id ?? full.remote_id ?? null);
-            setPublishedAt(full.published_at ?? null);
-            setOrigin(full.origin === "saved" ? "saved" : "own");
-          } catch {
-            /* row gone or backend busy: keep the state we have */
-          }
-        }
-      } catch {
-        /* keep current list on failure */
-      }
-    };
-    window.addEventListener("sync:pulled", onPulled);
-    return () => window.removeEventListener("sync:pulled", onPulled);
-  }, []);
-
-  const handleInsertBarcode = () => {
-    const snippet = buildBarcodeSnippet(
-      barcodeType,
-      barcodeValue,
-      barcodeFromData,
-    );
-    if (!snippet.ok) {
-      setBarcodeError(
-        t(
-          snippet.messageKey,
-          snippet.messageParams as Record<string, string> | undefined,
-        ),
-      );
-      return;
-    }
-    insertHelper(snippet.text);
-    setShowBarcodeDialog(false);
-    setBarcodeValue("");
-    setBarcodeError(null);
-    // The element lands on the canvas — visible, no toast.
-  };
+  const dataset = useSampleDataset();
+  const doc = useDesignerDocument(dataset.datasetsDirty);
+  const sync = useTemplateSync(doc, offline, dataset.commitDataset);
+  const newTemplate = useNewTemplate({
+    templates: doc.templates,
+    offline,
+    addTemplate: (tpl: TemplateRow) => {
+      doc.contentLoaded.current.add(tpl.id);
+      doc.setTemplates((prev) => [...prev, tpl]);
+      doc.loadTemplate(tpl);
+      doc.setCurrentTemplateDbId(tpl.id);
+    },
+  });
+  const workspace = useDesignerWorkspace(isWide);
+  const debounced = useDebouncedTemplate(doc.htmlCode, doc.cssCode);
+  const readOnly = isReadOnly({ origin: doc.origin });
 
   const sampleData = useMemo<Record<string, unknown>>(() => {
     try {
-      return JSON.parse(workingDatasetJson);
+      return JSON.parse(dataset.workingDatasetJson);
     } catch {
       return DEFAULT_MOCK_DATA as Record<string, unknown>;
     }
-  }, [workingDatasetJson]);
+  }, [dataset.workingDatasetJson]);
 
   // The canvas renders with the account's shared sample data. When that data
   // covers none of the template's mustaches — a kitchen ticket opened
@@ -1063,156 +100,82 @@ export function DesignerPage() {
   const canvasSample = useMemo(
     () =>
       pickCanvasSample(
-        debouncedHtml,
+        debounced.debouncedHtml,
         sampleData,
         PACKS.map((p) => ({ name: p.name, mockData: p.mockData })),
       ),
-    [debouncedHtml, sampleData],
+    [debounced.debouncedHtml, sampleData],
   );
+  const canvasData = canvasSample.data;
+  const canvasSampleNote = canvasSample.packName
+    ? t("designer.canvas_sample_note", { name: canvasSample.packName })
+    : undefined;
 
   const handleShowCanvas = () => {
     setActiveTab("canvas");
     notifySuccess(t("designer.toast_showing_canvas"));
   };
 
-  // `canInsert`: the desktop editor is beside the panel, so a click inserts at
-  // its cursor. A phone shows the panel on its own tab with no editor mounted,
-  // so there a click copies instead.
   const renderSampleDataPanel = (canInsert: boolean) => (
     <SampleDataPanel
-      onInsert={canInsert ? insertHelper : undefined}
-      dataset={{ name: activeDataset.name, json: workingDatasetJson }}
+      onInsert={canInsert ? workspace.insertHelper : undefined}
+      dataset={{
+        name: dataset.activeDataset.name,
+        json: dataset.workingDatasetJson,
+      }}
       onEdit={() => {
-        setEditJson(workingDatasetJson);
-        setShowEditDataset(true);
+        dataset.setEditJson(dataset.workingDatasetJson);
+        dataset.setShowEditDataset(true);
       }}
     />
   );
 
-  const controls = {
-    templates,
-    currentTemplateId,
-    loadTemplate: (tpl: (typeof templates)[number]) =>
-      unlessDiscarding(() => loadTemplate(tpl)),
-    onNew: () => openNewTemplateDialog(),
-    templateName,
-    setTemplateName,
-    pageWidth,
-    setPageWidth,
-    pageHeight,
-    setPageHeight,
+  const controls: Controls = {
+    templates: doc.templates,
+    currentTemplateId: doc.currentTemplateId,
+    loadTemplate: (tpl) => doc.unlessDiscarding(() => doc.loadTemplate(tpl)),
+    onNew: () => newTemplate.openNewTemplateDialog(),
+    templateName: doc.templateName,
+    setTemplateName: doc.setTemplateName,
+    pageWidth: doc.pageWidth,
+    setPageWidth: doc.setPageWidth,
+    pageHeight: doc.pageHeight,
+    setPageHeight: doc.setPageHeight,
     presets: PAGE_PRESETS,
-    onBarcode: () => setShowBarcodeDialog(true),
+    onBarcode: () => setBarcodeOpen(true),
   };
-
-  const insertHelper = (text: string, back = 0) => {
-    if (editorRef.current) {
-      editorRef.current.insertAtCursor(text, back);
-      return;
-    }
-    // Canvas only: no editor is mounted. Bring it back, then insert once it is.
-    pendingInsert.current = { text, back };
-    setLayout("side");
-  };
-
-  const editorPane = (padding: string) => (
-    <div className={`flex h-full min-h-0 flex-col gap-2 ${padding}`}>
-      <EditorPane
-        ref={editorRef}
-        className="flex-1"
-        templateName={templateName}
-        htmlCode={htmlCode}
-        cssCode={cssCode}
-        onHtmlChange={setHtmlCode}
-        onCssChange={setCssCode}
-        readme={readme}
-        onReadmeChange={setReadme}
-        readmeReadOnly={isReadOnly({ origin })}
-        notices={
-          <>
-            <ClassWarnings html={debouncedHtml} />
-            <div className="mt-1.5">
-              <OfflinePrintHint />
-            </div>
-          </>
-        }
-      />
-    </div>
-  );
-
-  const canvas = (fill: boolean) => (
-    <CanvasWorkspace
-      fill={fill}
-      html={debouncedHtml}
-      css={debouncedCss}
-      compiledCss={compiledCss}
-      data={canvasSample.data}
-      sampleNote={
-        canvasSample.packName
-          ? t("designer.canvas_sample_note", { name: canvasSample.packName })
-          : undefined
-      }
-      pageWidthMm={pageWidth}
-      pageHeightMm={pageHeight}
-    />
-  );
 
   return (
     // On desktop the page fills the viewport (see Layout) and each pane scrolls on its own.
     <div className="space-y-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:gap-4 lg:space-y-0">
-      {isDesktop ? (
-        // The top row replaces the page header: it names, switches and saves
-        // the open template. The sidebar already says which page this is, so
-        // the title stays for screen readers only.
-        <div data-slot="page-header" className="border-b pb-4">
-          <h1 className="sr-only">{t("designer.title")}</h1>
-          <DesignerToolbar
-            templates={templates}
-            currentTemplateId={currentTemplateId}
-            onSelectTemplate={switchTemplate}
-            noTemplate={templates.length === 0 || currentTemplateDbId == null}
-            nameError={nameError}
-            dirty={dirty}
-            layout={layout}
-            onLayoutChange={setLayout}
-            onNew={() => unlessDiscarding(() => openNewTemplateDialog())}
-            onSave={() => void handleSave()}
-            saveDisabled={offline || isReadOnly({ origin }) || !!nameError}
-            saveTitle={offline ? t("designer.save_offline_title") : undefined}
-            templateName={templateName}
-            onTemplateNameChange={setTemplateName}
-            remoteId={remoteId}
-            publishedAt={publishedAt}
-            readOnly={isReadOnly({ origin })}
-            pending={pending}
-            onVisibilityChange={(v) => void handleVisibilityChange(v)}
-            onHistory={() => setHistoryOpen(true)}
-          />
-        </div>
-      ) : isPhone ? (
-        // The viewer shows the open template: the header names it, and the
-        // overflow menu's editing actions do not exist on a phone.
-        <PageHeader
-          title={templateName || t("designer.title")}
-          description={t("pages.designer")}
-        />
-      ) : (
-        <PageHeader
-          title={t("designer.title")}
-          description={t("pages.designer")}
-        >
-          <DesignerOverflowMenu
-            onNew={() => openNewTemplateDialog()}
-            published={!!remoteId && !!publishedAt}
-            remoteId={remoteId}
-            readOnly={isReadOnly({ origin })}
-            busy={pending != null}
-            dirty={dirty}
-            onVisibilityChange={(v) => void handleVisibilityChange(v)}
-            onHistory={() => setHistoryOpen(true)}
-          />
-        </PageHeader>
-      )}
+      <DesignerTopBar
+        isDesktop={isDesktop}
+        isPhone={isPhone}
+        templates={doc.templates}
+        currentTemplateId={doc.currentTemplateId}
+        noTemplate={
+          doc.templates.length === 0 || doc.currentTemplateDbId == null
+        }
+        onSwitchTemplate={doc.switchTemplate}
+        nameError={doc.nameError}
+        dirty={doc.dirty}
+        layout={workspace.layout}
+        onLayoutChange={workspace.setLayout}
+        onNewDesktop={() =>
+          doc.unlessDiscarding(() => newTemplate.openNewTemplateDialog())
+        }
+        onNewTablet={() => newTemplate.openNewTemplateDialog()}
+        onSave={() => void sync.handleSave()}
+        offline={offline}
+        readOnly={readOnly}
+        templateName={doc.templateName}
+        onTemplateNameChange={doc.setTemplateName}
+        remoteId={doc.remoteId}
+        publishedAt={doc.publishedAt}
+        pending={sync.pending}
+        onVisibilityChange={sync.handleVisibilityChange}
+        onHistory={() => sync.setHistoryOpen(true)}
+      />
 
       {viaPc && (
         <div
@@ -1226,636 +189,36 @@ export function DesignerPage() {
         </div>
       )}
 
-      {/* The list is still loading: hold a neutral state so a new
-          account never flashes the full editor before the empty state.
-          No templates yet: the one action is making one. The toolbar's
-          New button stays, but the nameless editor and canvas wait until
-          there is something to edit. */}
-      {templatesLoading ? (
-        <p className="text-sm text-muted-foreground" role="status">
-          {t("common.loading")}
-        </p>
-      ) : templates.length === 0 ? (
-        <Card>
-          <EmptyState
-            title={t("designer.no_templates_yet")}
-            description={t("designer.no_templates_hint")}
-            // Creating a template is a PC-side action (PLAN §6, D4).
-            action={
-              isPhone
-                ? undefined
-                : {
-                    label: t("designer.newTemplate"),
-                    onClick: () => openNewTemplateDialog(),
-                  }
-            }
-          />
-        </Card>
-      ) : isDesktop ? (
-        <div className="flex min-h-0 flex-1 gap-4">
-          {controlsExpanded ? (
-            // One full-height panel, like the editor and canvas beside it: the
-            // collapse button lives in its header so all three tops line up,
-            // and the sections scroll inside it instead of leaving a gap below.
-            <aside
-              aria-label={t("designer.controls_expanded")}
-              className="flex w-panel shrink-0 flex-col overflow-hidden rounded-lg border bg-card"
-            >
-              <div className="flex h-11 shrink-0 items-center border-b px-2">
-                <button
-                  type="button"
-                  aria-label={t("designer.collapse_controls")}
-                  title={t("designer.collapse_controls")}
-                  onClick={() => setControlsExpanded(false)}
-                  className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <PanelLeftClose className="h-3.5 w-3.5" aria-hidden="true" />
-                  {t("designer.collapse_short")}
-                </button>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <ControlsAccordion
-                  {...controls}
-                  showTemplates={false}
-                  openSections={openSections}
-                  onOpenSectionsChange={setOpenSections}
-                  onInsertHelper={insertHelper}
-                  samplePanel={renderSampleDataPanel(true)}
-                  className="rounded-none border-0 bg-transparent"
-                />
-              </div>
-            </aside>
-          ) : (
-            <ControlsRail
-              onOpenSection={openControlsSection}
-              onExpand={() => setControlsExpanded(true)}
-            />
-          )}
-          {layout === "canvas" ? (
-            <div className="min-h-0 min-w-0 flex-1">{canvas(true)}</div>
-          ) : (
-            <ResizablePanelGroup
-              key={layout}
-              direction={layout === "stacked" ? "vertical" : "horizontal"}
-              autoSaveId={`printninja.designer.split.v3.${layout}`}
-              className="min-w-0 flex-1"
-            >
-              <ResizablePanel
-                id="editor"
-                order={1}
-                defaultSize={layout === "stacked" ? 55 : 45}
-                minSize={30}
-              >
-                {editorPane(layout === "stacked" ? "pb-2" : "pr-2")}
-              </ResizablePanel>
-              <ResizableHandle withHandle />
-              <ResizablePanel
-                id="canvas"
-                order={2}
-                defaultSize={layout === "stacked" ? 45 : 55}
-                minSize={25}
-              >
-                <div
-                  className={
-                    layout === "stacked" ? "h-full pt-2" : "h-full pl-2"
-                  }
-                >
-                  {canvas(true)}
-                </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          )}
-        </div>
-      ) : isPhone ? (
-        // Phones: read-only viewer — preview, sample data (the one edit a
-        // phone makes), README, code and details. PLAN §6, D4.
-        <PhoneDesignerViewer
-          templateName={templateName}
-          pageWidthMm={pageWidth}
-          pageHeightMm={pageHeight}
-          html={htmlCode}
-          css={cssCode}
-          debouncedHtml={debouncedHtml}
-          debouncedCss={debouncedCss}
-          compiledCss={compiledCss}
-          sampleData={sampleData}
-          samplePanel={renderSampleDataPanel(false)}
-          readme={readme}
-          dirty={dirty}
-          offline={offline}
-          readOnly={isReadOnly({ origin })}
-          nameError={nameError}
-          hasTemplate={currentTemplateDbId != null}
-          published={!!remoteId && !!publishedAt}
-          publishedAt={publishedAt}
-          saving={pending === "save"}
-          onSave={() => void handleSave()}
-        />
-      ) : (
-        <div className="space-y-4">
-          {/* The canvas is the first thing on screen: controls live in a
-              bottom sheet opened from this single button. */}
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => setControlsOpen(true)}
-          >
-            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-            {t("designer.settings")}
-          </Button>
-          <Sheet open={controlsOpen} onOpenChange={setControlsOpen}>
-            <SheetContent
-              side="bottom"
-              className="flex max-h-[85dvh] w-full flex-col gap-0 p-0 pb-[env(safe-area-inset-bottom)]"
-            >
-              <DialogHeader className="border-b p-5 pr-12">
-                <DialogTitle>{t("designer.settings")}</DialogTitle>
-                <DialogDescription>
-                  {t("designer.settings_description")}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex-1 overflow-y-auto p-5">
-                <ControlsAccordion
-                  {...controls}
-                  showHelpers={false}
-                  defaultOpen={[]}
-                />
-              </div>
-              <DialogFooter className="gap-2 border-t p-5 sm:space-x-0">
-                <Button onClick={() => setControlsOpen(false)}>
-                  {t("designer.sheet_done")}
-                </Button>
-              </DialogFooter>
-            </SheetContent>
-          </Sheet>
-
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="space-y-4"
-          >
-            {/* Sticky view tabs + Save, so switching views and saving the
-                tweak never need a scroll-up. The header
-                keeps the full toolbar; this is the reachable shortcut. */}
-            <div className="sticky top-0 z-10 -mx-4 bg-background/95 px-4 py-2 backdrop-blur">
-              <div className="flex items-center gap-2">
-                <div className="min-w-0 flex-1 overflow-x-auto">
-                  <TabsList
-                    aria-label={t("designer.views_aria")}
-                    className="min-h-8 w-max gap-0.5 p-0.5"
-                  >
-                    <TabsTrigger
-                      value="canvas"
-                      className="min-h-11 px-3 text-xs"
-                    >
-                      {t("designer.canvas")}
-                    </TabsTrigger>
-                    <TabsTrigger value="code" className="min-h-11 px-3 text-xs">
-                      {t("designer.code")}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="readme"
-                      className="min-h-11 px-3 text-xs"
-                    >
-                      README
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="sample-data"
-                      className="min-h-11 px-3 text-xs"
-                    >
-                      {t("designer.sampleData")}
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
-                {!isReadOnly({ origin }) && (
-                  <Button
-                    size="sm"
-                    className="shrink-0"
-                    onClick={() => void handleSave()}
-                    disabled={offline || pending != null}
-                  >
-                    <Save className="h-4 w-4" aria-hidden="true" />
-                    {t("common.save")}
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <TabsContent value={activeTab} className="mt-0 space-y-4">
-              {(activeTab === "canvas" || activeTab === "code") && (
-                <ClassWarnings html={debouncedHtml} />
-              )}
-              {activeTab === "canvas" && canvas(false)}
-              {activeTab === "code" && (
-                <CodeEditors
-                  templateName={templateName}
-                  htmlCode={htmlCode}
-                  cssCode={cssCode}
-                  onHtmlChange={setHtmlCode}
-                  onCssChange={setCssCode}
-                />
-              )}
-              {activeTab === "readme" && (
-                <Card className="overflow-hidden">
-                  <CardContent className="p-0">
-                    <ReadmePanel
-                      readme={readme}
-                      onChange={setReadme}
-                      templateName={templateName}
-                      readOnly={isReadOnly({ origin })}
-                    />
-                  </CardContent>
-                </Card>
-              )}
-              {activeTab === "sample-data" && (
-                <Card>
-                  <CardContent className="space-y-4 pt-5">
-                    {renderSampleDataPanel(false)}
-                    <div className="space-y-2 border-t pt-3">
-                      <h3 className="text-xs font-semibold">
-                        {t("designer.helpers")}
-                      </h3>
-                      <HelpersPanel />
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-
-            <DesignerActions onShowCanvas={handleShowCanvas} />
-          </Tabs>
-        </div>
-      )}
-
-      {/* Barcode Dialog */}
-      <Dialog open={showBarcodeDialog} onOpenChange={setShowBarcodeDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("designer.barcode_title")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="barcode-type">{t("designer.barcode_type")}</Label>
-              <Select value={barcodeType} onValueChange={setBarcodeType}>
-                <SelectTrigger id="barcode-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {BARCODE_TYPES.map((bc) => (
-                    <SelectItem key={bc.value} value={bc.value}>
-                      {bc.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="barcode-from-data" className="text-sm">
-                {t("designer.barcode_from_data")}
-              </Label>
-              <Switch
-                id="barcode-from-data"
-                checked={barcodeFromData}
-                onCheckedChange={(on) => {
-                  setBarcodeFromData(on);
-                  setBarcodeError(null);
-                }}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="barcode-value">
-                {barcodeFromData
-                  ? t("designer.barcode_field")
-                  : t("designer.barcode_value")}
-              </Label>
-              <Input
-                id="barcode-value"
-                placeholder={
-                  barcodeFromData
-                    ? t("designer.barcode_field_example")
-                    : t("designer.barcode_value_hint")
-                }
-                value={barcodeValue}
-                onChange={(e) => {
-                  setBarcodeValue(e.target.value);
-                  setBarcodeError(null);
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                {barcodeFromData
-                  ? t("designer.barcode_per_print")
-                  : t("designer.barcode_same")}
-              </p>
-              {barcodeError && (
-                <p
-                  id="barcode-error"
-                  role="alert"
-                  className="text-xs text-danger"
-                >
-                  {barcodeError}
-                </p>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowBarcodeDialog(false)}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              id="barcode-insert"
-              onClick={handleInsertBarcode}
-              disabled={!barcodeValue}
-            >
-              <QrCode className="h-4 w-4" />
-              {t("designer.barcode_insert")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit the account's single sample dataset (JSON) */}
-      <Dialog open={showEditDataset} onOpenChange={setShowEditDataset}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("designer.sample_edit")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label>{t("designer.sample_json_label")}</Label>
-              <div className="rounded-md border overflow-hidden">
-                <CodeMirror
-                  value={editJson}
-                  height="200px"
-                  extensions={[json()]}
-                  onChange={setEditJson}
-                  theme="light"
-                  basicSetup={{ lintKeymap: true }}
-                />
-              </div>
-              {(() => {
-                try {
-                  JSON.parse(editJson);
-                  return null;
-                } catch (e) {
-                  return (
-                    <p className="text-xs text-danger">
-                      {describeError(e).split("\n")[0]}
-                    </p>
-                  );
-                }
-              })()}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditDataset(false)}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              onClick={() => {
-                try {
-                  JSON.parse(editJson);
-                } catch {
-                  notifyError(t("designer.toast_invalid_json"));
-                  return;
-                }
-                setDraftDatasetJson(editJson);
-                setShowEditDataset(false);
-                // The panel re-renders with the saved rows — visible.
-              }}
-            >
-              {t("designer.sample_save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* New Template Dialog — two-step chooser */}
-      <Dialog
-        open={showNewTemplateDialog}
-        onOpenChange={(open) => {
-          setShowNewTemplateDialog(open);
-          if (!open) {
-            setNewTemplateStep("pack");
-            setNewNameError("");
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-[620px]">
-          <DialogHeader>
-            <DialogTitle>{t("designer.new_chooser_title")}</DialogTitle>
-            <DialogDescription>
-              {t("designer.new_chooser_hint")}
-            </DialogDescription>
-          </DialogHeader>
-          {newTemplateStep === "pack" ? (
-            <>
-              <div className="space-y-3">
-                <p className="text-sm font-medium">
-                  {t("designer.new_step_pack")}
-                </p>
-                <PackChooser
-                  selectedId={newTemplatePackId}
-                  onSelect={setNewTemplatePackId}
-                />
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowNewTemplateDialog(false)}
-                >
-                  {t("common.cancel")}
-                </Button>
-                <Button
-                  onClick={() => {
-                    if (!newTemplateName.trim()) {
-                      const key =
-                        `designer.pack_${newTemplatePackId}_name` as const;
-                      const hint = t(key, { defaultValue: "" });
-                      if (hint) setNewTemplateName(hint);
-                    }
-                    setNewTemplateStep("name");
-                  }}
-                  data-testid="pack-next"
-                >
-                  {t("designer.new_next")}
-                </Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <>
-              <div className="space-y-3">
-                <p className="text-sm font-medium">
-                  {t("designer.new_step_name")}
-                </p>
-                <div className="space-y-1">
-                  <Label htmlFor="new-template-name">
-                    {t("designer.template_name")}
-                  </Label>
-                  <Input
-                    id="new-template-name"
-                    placeholder={t("designer.new_name_example")}
-                    value={newTemplateName}
-                    onChange={(e) => {
-                      setNewTemplateName(e.target.value);
-                      setNewNameError("");
-                    }}
-                    aria-describedby={
-                      newNameError ? "new-template-name-error" : undefined
-                    }
-                    disabled={creatingTemplate}
-                    autoFocus
-                  />
-                  {newNameError && (
-                    <p
-                      id="new-template-name-error"
-                      role="alert"
-                      className="text-xs text-danger"
-                    >
-                      {newNameError}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setNewTemplateStep("pack")}
-                  disabled={creatingTemplate}
-                >
-                  {t("designer.new_back")}
-                </Button>
-                <Button
-                  onClick={() => void createNewTemplate()}
-                  disabled={creatingTemplate}
-                  data-testid="pack-create"
-                >
-                  {creatingTemplate
-                    ? t("designer.new_creating")
-                    : t("designer.new_create")}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <ConfirmDialog
-        open={discardAction !== null}
-        onOpenChange={(open) => {
-          if (!open) setDiscardAction(null);
-        }}
-        title={t("designer.discard_title")}
-        description={t("designer.discard_body")}
-        confirmLabel={t("designer.discard_confirm")}
-        cancelLabel={t("common.cancel")}
-        destructive
-        onConfirm={() => {
-          const action = discardAction;
-          setDiscardAction(null);
-          setDraftDatasetJson(null);
-          action?.();
-        }}
+      <DesignerBody
+        isDesktop={isDesktop}
+        isPhone={isPhone}
+        doc={doc}
+        sync={sync}
+        newTemplate={newTemplate}
+        workspace={workspace}
+        debounced={debounced}
+        controls={controls}
+        samplePanel={renderSampleDataPanel}
+        canvasData={canvasData}
+        canvasSampleNote={canvasSampleNote}
+        sampleData={sampleData}
+        offline={offline}
+        readOnly={readOnly}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        handleShowCanvas={handleShowCanvas}
       />
 
-      {/* Save conflict: the server copy moved since this PC last synced
-          it. Two ways out, both explicit — nothing is chosen for the
-          user, and nothing is queued to resolve later. */}
-      <Dialog
-        open={conflict !== null}
-        onOpenChange={(open) => {
-          if (!open) setConflict(null);
-        }}
-      >
-        <DialogContent data-testid="save-conflict-dialog">
-          <DialogHeader>
-            <DialogTitle>{t("designer.conflict_title")}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {t("designer.conflict_body")}
-          </p>
-          <DialogFooter className="flex-col gap-2 sm:flex-col">
-            <Button
-              data-testid="save-conflict-overwrite"
-              onClick={() => void resolveOverwrite()}
-              disabled={pending !== null}
-            >
-              {pending === "save"
-                ? t("designer.conflict_overwriting")
-                : t("designer.conflict_overwrite")}
-            </Button>
-            <Button
-              data-testid="save-conflict-take-server"
-              variant="outline"
-              onClick={() => void resolveTakeServer()}
-              disabled={pending !== null}
-            >
-              {pending === "save"
-                ? t("designer.conflict_loading")
-                : t("designer.conflict_take_server")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Version history: the server's list for the open template, with a
-          Restore per row. It stays open after a restore so the new version
-          (created by the restore itself) is visible at the top. */}
-      <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-        <SheetContent
-          side="right"
-          className="flex w-full flex-col gap-0 p-0 sm:max-w-md"
-        >
-          <DialogHeader className="border-b p-5">
-            <DialogTitle>{t("designer.history_title")}</DialogTitle>
-            <DialogDescription>
-              {t("designer.history_description")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {remoteId ? (
-              <VersionHistoryPanel
-                remoteId={remoteId}
-                refreshKey={historyRefresh}
-                disabled={pending != null || offline || isReadOnly({ origin })}
-                onRestore={(n) => setRestorePending(n)}
-              />
-            ) : (
-              <p className="p-4 text-sm text-muted-foreground">
-                {t("designer.history_only_local")}
-              </p>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* Restore asks once: it replaces the editor's content with the
-          chosen version's copy, and says so up front when edits are
-          unsaved. */}
-      <ConfirmDialog
-        open={restorePending !== null}
-        onOpenChange={(open) => {
-          if (!open) setRestorePending(null);
-        }}
-        title={
-          restorePending != null
-            ? t("designer.history_confirm_title", { n: restorePending })
-            : ""
-        }
-        description={
-          t("designer.history_confirm_body") +
-          (dirty ? t("designer.history_confirm_dirty") : "")
-        }
-        confirmLabel={t("designer.history_restore")}
-        cancelLabel={t("common.cancel")}
-        destructive
-        busy={pending === "save"}
-        onConfirm={() => {
-          const n = restorePending;
-          if (n != null) void handleRestoreVersion(n);
-        }}
+      <DesignerDialogs
+        barcodeOpen={barcodeOpen}
+        setBarcodeOpen={setBarcodeOpen}
+        doc={doc}
+        sync={sync}
+        dataset={dataset}
+        newTemplate={newTemplate}
+        insertHelper={workspace.insertHelper}
+        offline={offline}
+        readOnly={readOnly}
       />
     </div>
   );
