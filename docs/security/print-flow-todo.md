@@ -63,3 +63,35 @@ branch, with a short note on why and what a fix would look like.
    bundled PDFium; the platform plugin renders PDFs), so the A4 fallback remains
    there. The Android plugin would need to report the page size, or the phone
    should send explicit `page_height_mm`.
+
+## Paper-size option on the Print page — decision (UX/product)
+
+**Decision: keep it, but scope it to printer type — do not remove it.**
+
+- **Command-language (thermal) printers** (`escpos` / `zpl` / `tspl` / `cpcl` /
+  `raster`): hide the paper-size override and always print at the template's
+  design size. The physical size is fixed by the roll/head, already represented
+  by the printer's registered `paper_width_mm`, so the override only invites
+  mis-scaling (see correctness finding #2) and shows irrelevant presets
+  (A4/Letter/Photo) on a label printer.
+- **Paper-based printers** (`pdf` / `system` / `ipp`): keep the override and the
+  fit modes — this is where "print a small design onto A4/Letter" and
+  `fit-width` / `fit-page` / `fill` are meaningful.
+
+Rationale for not deleting it outright: the fit modes are defined as the
+design→paper mapping (`layout.rs::compute`), so locking paper to the design size
+everywhere collapses them to scale ≈ 1. Desktop/office printing (Windows
+spooler / CUPS / IPP) is a first-class path and genuinely needs the decoupling.
+
+For reference, the paper size **is** used in local printing (not preview-only):
+`usePrintActions.ts` sends `page_width_mm` / `page_height_mm` to `print_html`,
+which `resolve_content` → `effective_geometry` applies to override the template
+design size and size the layout/raster. It is preview-only in **Print via PC**,
+where the API has no paper field — a minor inconsistency worth closing if this
+scoping work is done (either send `paper` through the API or leave it and keep
+the UI honest about it being ignored).
+
+Implementation sketch: in `usePrintPaper.tsx`, treat command-language printers
+like the via-PC path (force `reqPaperW`/`reqPaperH` to `null` and drop the paper
+field from the summary), and gate `PaperSizeFields` visibility on
+`selectedPrinter.language === "pdf"` (or `printer_type` being `system`/`ipp`).
