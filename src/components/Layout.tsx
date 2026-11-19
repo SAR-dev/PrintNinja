@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight,
   CircleHelp,
   MoreHorizontal,
+  RefreshCw,
   Search,
   UserRound,
 } from "lucide-react";
@@ -40,7 +41,10 @@ import {
 import { useGlobalShortcuts } from "@/lib/shell/useGlobalShortcuts";
 import { useShareStatus } from "@/lib/shell/useShareStatus";
 import { useShellStatus, type ShellStatus } from "@/lib/shell/useShellStatus";
-import { cacheNow, useSyncStatus } from "@/lib/sync/useSyncStatus";
+import { useManualRefresh } from "@/lib/refresh/manual";
+import { usePullToRefresh } from "@/lib/refresh/usePullToRefresh";
+import { isAndroid } from "@/lib/platform";
+import { useSyncStatus } from "@/lib/sync/useSyncStatus";
 import {
   LANDSCAPE_QUERY,
   NARROW_QUERY,
@@ -105,77 +109,96 @@ function MoreAccountRow({ onNavigate }: { onNavigate: () => void }) {
   );
 }
 
+/**
+ * Top-bar right of the shell badges: the connection state (when a share
+ * is configured) plus the manual refresh, which shows in every state —
+ * a local reload works even while the server is unreachable or the
+ * person is signed out.
+ */
 function ShareIndicator() {
   const { t } = useTranslation();
   const status = useShareStatus();
   const sync = useSyncStatus();
-  const [busy, setBusy] = useState(false);
-  if (status.state === "unconfigured") return null;
-  if (status.state === "offline") {
-    return (
-      <Link
-        to="/settings"
-        title={t("shell.share_offline")}
-        className="flex items-center justify-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
-      >
-        <StatusBadge
-          status="offline"
-          label={t("shell.share_offline")}
-          compact
-        />
-      </Link>
-    );
-  }
-  if (status.state !== "online") {
-    return (
-      <Link
-        to="/settings"
-        title={t("shell.share_signed_out")}
-        className="flex items-center justify-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:underline [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
-      >
-        {/* Phone: an amber dot keeps the "not signed in" signal visible in the
-            top bar; the word returns from sm up. */}
-        <span
-          className="h-2 w-2 shrink-0 rounded-full bg-warning sm:hidden"
-          aria-hidden="true"
-        />
-        <span className="hidden sm:inline">{t("shell.share_signed_out")}</span>
-        <span className="sr-only sm:hidden">{t("shell.share_signed_out")}</span>
-      </Link>
-    );
-  }
-  // Online: the connection badge always shows, and the cache gets its
-  // own button. Clicking it refreshes the cache from the server (pull
-  // only — saving is a manual action, so there is nothing to push).
-  const syncing = busy || sync.state === "syncing";
+  const { refreshing, run } = useManualRefresh();
+  const syncing = refreshing || sync.state === "syncing";
+
+  // The button's title explains what the server cache last did, so the
+  // old "Synced" badge's information is not lost when the button is an
+  // icon.
   const detail = sync.lastError
     ? t("shell.sync_failed", { error: sync.lastError })
     : sync.drafts > 0
       ? t("shell.sync_drafts", { count: sync.drafts })
       : sync.lastPulledAt
         ? t("shell.sync_synced", { time: sync.lastPulledAt })
-        : t("shell.share_online", { handle: status.handle });
-  // The badge shows this word from `sm` up, so the button's accessible name
-  // must contain it (WCAG 2.5.3 / axe label-content-name-mismatch).
-  const syncWord = t(syncing ? "status.syncing" : "status.synced", {
-    defaultValue: syncing ? "Syncing" : "Synced",
-  });
-  const syncBadge = (
-    <StatusBadge
-      status={syncing ? "syncing" : "synced"}
-      label={syncWord}
-      compact
-    />
+        : status.state === "offline"
+          ? t("shell.share_offline")
+          : status.state === "online"
+            ? t("shell.share_online", { handle: status.handle })
+            : t("shell.share_signed_out");
+  const refreshButton = (
+    <button
+      type="button"
+      data-testid="sync-chip"
+      title={`${t("shell.refresh")} — ${detail}`}
+      aria-label={t("shell.refresh")}
+      onClick={run}
+      disabled={syncing}
+      className="flex items-center justify-center rounded-md hover:opacity-80 disabled:cursor-wait disabled:hover:opacity-100 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
+    >
+      <RefreshCw
+        className={cn("h-4 w-4", syncing && "animate-spin")}
+        aria-hidden="true"
+      />
+    </button>
   );
-  const onCacheNow = async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await cacheNow();
-    } finally {
-      setBusy(false);
-    }
-  };
+
+  if (status.state === "offline") {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <Link
+          to="/settings"
+          title={t("shell.share_offline")}
+          className="flex items-center justify-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
+        >
+          <StatusBadge
+            status="offline"
+            label={t("shell.share_offline")}
+            compact
+          />
+        </Link>
+        {refreshButton}
+      </span>
+    );
+  }
+  if (status.state !== "online") {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <Link
+          to="/settings"
+          title={t("shell.share_signed_out")}
+          className="flex items-center justify-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:underline [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
+        >
+          {/* Phone: an amber dot keeps the "not signed in" signal visible in the
+              top bar; the word returns from sm up. */}
+          <span
+            className="h-2 w-2 shrink-0 rounded-full bg-warning sm:hidden"
+            aria-hidden="true"
+          />
+          <span className="hidden sm:inline">
+            {t("shell.share_signed_out")}
+          </span>
+          <span className="sr-only sm:hidden">
+            {t("shell.share_signed_out")}
+          </span>
+        </Link>
+        {refreshButton}
+      </span>
+    );
+  }
+  // Online: the connection badge always shows; the refresh button takes
+  // over the old cache button and does the shared manual refresh (server
+  // cache plus the lists on screen).
   return (
     <span className="inline-flex items-center gap-2">
       {/* The user badge opens the Profile page, where signing out lives.
@@ -198,17 +221,7 @@ function ShareIndicator() {
           />
         </span>
       </Link>
-      <button
-        type="button"
-        data-testid="sync-chip"
-        title={`${t("shell.sync_now")} — ${detail}`}
-        aria-label={`${syncWord}. ${t("shell.sync_now")}: ${detail}`}
-        onClick={() => void onCacheNow()}
-        disabled={syncing}
-        className="flex items-center justify-center rounded-md hover:opacity-80 disabled:cursor-wait disabled:hover:opacity-100 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
-      >
-        {syncBadge}
-      </button>
+      {refreshButton}
     </span>
   );
 }
@@ -331,6 +344,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  // Android pull-to-refresh on the page scroller: the same shared manual
+  // refresh every refresh button runs.
+  const mainRef = useRef<HTMLElement | null>(null);
+  const { run: runRefresh } = useManualRefresh();
+  const { pull, threshold } = usePullToRefresh(
+    mainRef,
+    isAndroid() ? runRefresh : undefined,
+  );
   // Landscape phone (coarse pointer, short height): the desktop layout is
   // active by width, but there is no room for an open sidebar or the wide
   // search field — force the icon rail and the palette icon button instead.
@@ -637,12 +658,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <main
           id="main"
           data-slot="app-main"
+          ref={mainRef}
           tabIndex={-1}
           className={cn(
             "min-w-0 flex-1 overflow-y-auto focus:outline-none max-md:overscroll-y-contain max-md:[-webkit-overflow-scrolling:touch]",
             fillsViewport && "lg:overflow-hidden",
           )}
         >
+          {pull > 0 && (
+            <div
+              data-testid="pull-to-refresh"
+              aria-hidden="true"
+              className="flex items-end justify-center overflow-hidden"
+              style={{ height: pull }}
+            >
+              <RefreshCw
+                className={cn(
+                  "mb-2 h-5 w-5 text-muted-foreground",
+                  pull >= threshold && "animate-spin",
+                )}
+              />
+            </div>
+          )}
           <div
             data-slot="app-content"
             className={cn(

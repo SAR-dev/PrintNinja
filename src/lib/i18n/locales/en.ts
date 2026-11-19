@@ -227,6 +227,11 @@ const en = {
     sync_syncing: "Refreshing…",
     sync_now: "Refresh cache",
     sync_failed: "Last refresh failed: {{error}}",
+    refresh: "Refresh",
+    refresh_up_to_date: "Up to date",
+    refresh_failed: "Refresh failed: {{what}}",
+    refresh_server: "server",
+    retry: "Retry",
     lan_on: "LAN access is on",
     lan_on_detail:
       "Anyone on your network can reach the local API. Select to turn it off in Automation.",
@@ -536,6 +541,11 @@ const en = {
     blocker_printer: "Choose a printer to enable printing.",
     blocker_template: "Choose a template to enable printing.",
     blocker_copies: "Copies must be at least 1.",
+    // Android LAN permission is off: printing to an IP address or a
+    // paired PC cannot reach the network, so the error names the
+    // permission and where to turn it on.
+    lan_denied:
+      "This print needs Android's local network permission, which is currently off. Allow it from the Printers page or in Android's app settings, then print again.",
     blocker_loading: "Loading printers and templates…",
     pages: "Pages",
     pages_hint:
@@ -688,6 +698,18 @@ const en = {
     no_bluetooth_printers:
       "No paired Bluetooth printers — pair one in Android's Bluetooth settings first.",
     rescan: "Rescan",
+    // Android's local network permission is off: the notice takes the
+    // network section's place, and the prompt explains before the system
+    // dialog fires. Bluetooth and USB never need it.
+    lan_denied:
+      "Network printing is paused: Android's local network permission (Nearby Wi-Fi devices) is off. Bluetooth and USB printers are not affected.",
+    lan_allow: "Allow access",
+    lan_open_settings: "Open settings",
+    lan_prompt_title: "Local network access",
+    lan_prompt_body:
+      "PrintNinja uses your local network to find network printers, reach your paired PC, and print to IP addresses. It never uses this access to determine your location.",
+    lan_prompt_allow: "Allow",
+    lan_prompt_not_now: "Not now",
     signin_set: "Configured",
     signin_unset: "Not needed",
     detected_title: "Detected devices",

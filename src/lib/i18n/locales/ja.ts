@@ -232,6 +232,11 @@ const ja: Translation = {
     sync_syncing: "更新しています…",
     sync_now: "キャッシュを更新",
     sync_failed: "前回の更新に失敗しました: {{error}}",
+    refresh: "更新",
+    refresh_up_to_date: "最新です",
+    refresh_failed: "更新に失敗しました: {{what}}",
+    refresh_server: "サーバー",
+    retry: "再試行",
     lan_on: "LANアクセスが有効です",
     lan_on_detail:
       "同じネットワーク上の誰でもローカルAPIにアクセスできます。選択すると自動化で無効にできます。",
@@ -551,6 +556,11 @@ const ja: Translation = {
     blocker_printer: "印刷するにはプリンターを選択してください。",
     blocker_template: "印刷するにはテンプレートを選択してください。",
     blocker_copies: "部数は1以上にしてください。",
+    // Android の LAN 権限がオフ：IPアドレスへの印刷やペアリング済み
+    // PCへの印刷はネットワークに到達できないため、権限の名前と
+    // 有効にする場所をエラーで示す。
+    lan_denied:
+      "この印刷にはAndroidのローカルネットワークアクセス権が必要ですが、現在オフになっています。プリンター設定ページまたはAndroidのアプリ設定で許可してから、もう一度印刷してください。",
     blocker_loading: "プリンターとテンプレートを読み込んでいます…",
     pages: "ページ数",
     pages_hint:
@@ -702,6 +712,18 @@ const ja: Translation = {
     no_bluetooth_printers:
       "ペアリング済みのBluetoothプリンターがありません。まずAndroidのBluetooth設定でペアリングしてください。",
     rescan: "再スキャン",
+    // Android のローカルネットワーク権限がオフの場合：通知が
+    // ネットワークセクションの代わりに表示され、プロンプトは
+    // システムダイアログの前に説明を表示する。BluetoothとUSBは不要。
+    lan_denied:
+      "ネットワーク印刷は一時停止中です。Androidのローカルネットワークアクセス権（近くのWi-Fiデバイス）がオフになっています。BluetoothとUSBプリンターには影響ありません。",
+    lan_allow: "アクセスを許可",
+    lan_open_settings: "設定を開く",
+    lan_prompt_title: "ローカルネットワークへのアクセス",
+    lan_prompt_body:
+      "PrintNinjaはローカルネットワークを使用して、ネットワークプリンターの検索、ペアリング済みPCへの接続、IPアドレスへの印刷を行います。このアクセスで位置情報を特定することはありません。",
+    lan_prompt_allow: "許可",
+    lan_prompt_not_now: "今はしない",
     signin_set: "設定済み",
     signin_unset: "不要",
     detected_title: "検出されたデバイス",

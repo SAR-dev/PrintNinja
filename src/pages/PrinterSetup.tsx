@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, RefreshCw, Scan } from "lucide-react";
+import { Plus, Scan } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
+import { RefreshButton } from "@/components/RefreshButton";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import { isAndroid } from "@/lib/platform";
+import { useRefreshable } from "@/lib/refresh/useRefreshable";
 import type { PrinterRow } from "@/lib/agent/types";
 import { usePrinterDiscovery } from "./printer-setup/usePrinterDiscovery";
 import { usePrinters } from "./printer-setup/usePrinters";
@@ -29,16 +32,33 @@ export function PrinterSetupPage() {
   const form = usePrinterForm(discovery, printers);
   const [removeTarget, setRemoveTarget] = useState<PrinterRow | null>(null);
 
+  // The shared manual refresh re-reads the saved list and the OS queues,
+  // and runs the network scan — the one part that dials the LAN, so it
+  // declines with a message while the permission is off on Android.
+  useRefreshable("printers", {
+    label: () => t("nav.printers"),
+    run: async () => {
+      await Promise.all([
+        printers.load(),
+        discovery.refreshSystem(),
+        discovery.scanBluetooth(),
+      ]);
+    },
+  });
+  useRefreshable("printers-network", {
+    label: () => t("nav.printers"),
+    run: () => discovery.scanNetwork(),
+    skipReason: () =>
+      isAndroid() && !discovery.lanGranted ? t("printers.lan_denied") : null,
+  });
+
   return (
     <div className="space-y-4">
       <PageHeader
         title={t(isPhone ? "nav.printers" : "printers.title")}
         description={t("pages.printers")}
       >
-        <Button variant="outline" size="sm" onClick={printers.load}>
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          {t("printers.refresh")}
-        </Button>
+        <RefreshButton />
         <Button
           variant="outline"
           size="sm"

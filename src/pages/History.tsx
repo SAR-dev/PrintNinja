@@ -1,5 +1,12 @@
 import { describeError } from "@/lib/errors";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Ban,
@@ -21,12 +28,14 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { currentLanguage } from "@/lib/i18n";
+import { useRefreshable } from "@/lib/refresh/useRefreshable";
 import { notifySuccess, notifyError } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { agent } from "@/lib/agent/commands";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
+import { RefreshButton } from "@/components/RefreshButton";
 import { JobStatusBadge } from "@/components/StatusBadge";
 import { TimingBreakdown } from "@/components/TimingBreakdown";
 import { Badge } from "@/components/ui/badge";
@@ -155,48 +164,61 @@ export function HistoryPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const isPhone = useMediaQuery(PHONE_QUERY);
 
+  const aliveRef = useRef(true);
+  useEffect(
+    () => () => {
+      aliveRef.current = false;
+    },
+    [],
+  );
+
+  const reload = useCallback(async () => {
+    const ok = () => aliveRef.current;
+    try {
+      const jobs = await agent("list_jobs", {});
+      if (ok()) useHistoryStore.getState().setJobs(jobs ?? []);
+    } catch (e) {
+      if (ok())
+        notifyError(
+          t("history.toast_load_failed", { error: describeError(e) }),
+        );
+    } finally {
+      if (ok()) setLoading(false);
+    }
+    try {
+      const list = await agent("list_printers", {});
+      if (ok()) setPrinters(list ?? []);
+    } catch {
+      /* printer names are optional here */
+    }
+    try {
+      const list = await agent("list_templates", {});
+      if (ok()) setTemplates(list ?? []);
+    } catch {
+      /* template names are optional here */
+    }
+    try {
+      const devices = await agent("list_paired_devices", {});
+      if (ok() && devices) {
+        const names: Record<string, string> = {};
+        for (const d of devices) names[d.id] = d.display_name || d.name;
+        setPhoneNames(names);
+      }
+    } catch {
+      /* attribution falls back to the device id */
+    }
+  }, [t]);
+
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const jobs = await agent("list_jobs", {});
-        if (!cancelled) store.setJobs(jobs ?? []);
-      } catch (e) {
-        if (!cancelled)
-          notifyError(
-            t("history.toast_load_failed", { error: describeError(e) }),
-          );
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-      try {
-        const list = await agent("list_printers", {});
-        if (!cancelled) setPrinters(list ?? []);
-      } catch {
-        /* printer names are optional here */
-      }
-      try {
-        const list = await agent("list_templates", {});
-        if (!cancelled) setTemplates(list ?? []);
-      } catch {
-        /* template names are optional here */
-      }
-      try {
-        const devices = await agent("list_paired_devices", {});
-        if (!cancelled && devices) {
-          const names: Record<string, string> = {};
-          for (const d of devices) names[d.id] = d.display_name || d.name;
-          setPhoneNames(names);
-        }
-      } catch {
-        /* attribution falls back to the device id */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void reload();
+  }, [reload]);
+
+  // The shared manual refresh re-reads the job list (local read; the
+  // names it decorates with come along for the ride).
+  useRefreshable("history", {
+    label: () => t("nav.history"),
+    run: () => reload(),
+  });
 
   const printerName = (id: number | null) =>
     id == null
@@ -958,6 +980,7 @@ export function HistoryPage() {
   return (
     <div className="space-y-4">
       <PageHeader title={t("history.title")} description={t("pages.history")}>
+        <RefreshButton />
         {/* Phones: checkboxes live in an explicit selection mode, so the
             rows stay calm until you ask to pick jobs. */}
         <Button

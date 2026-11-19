@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { isAndroid } from "@/lib/platform";
+import { useLocalNetworkPermission } from "@/lib/android/useLocalNetworkPermission";
 import { describeError } from "@/lib/errors";
 import { notifyError } from "@/lib/notify";
 import { agent } from "@/lib/agent/commands";
@@ -43,9 +45,13 @@ export function usePrinterDiscovery() {
     }
   };
 
-  // mDNS scan for the add panel: listens for IPP and JetDirect
-  // advertisements via NsdManager on Android or mdns-sd on desktop.
+  // Android: mDNS needs the local network permission. With it denied the
+  // scan is skipped silently — the inline notice in the detected block
+  // explains why the list is empty, and a Rescan must not fire the
+  // system prompt.
+  const { granted: lanGranted } = useLocalNetworkPermission();
   const scanNetwork = async () => {
+    if (isAndroid() && !lanGranted) return;
     setScanningNet(true);
     try {
       const list = await agent("discover_network_printers", {
@@ -98,6 +104,7 @@ export function usePrinterDiscovery() {
     setNetworkPrinters,
     btPrinters,
     scanningAny,
+    lanGranted,
     refreshSystem,
     scanNetwork,
     scanBluetooth,

@@ -183,4 +183,73 @@ describe("sync scheduler", () => {
     expect(maxConcurrent).toBe(1);
     scheduler.stop();
   });
+
+  it("resolves a joined refresh with the chain's final outcome", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const { scheduler } = setup({
+      api: {
+        fetchChanges: async () => {
+          await gate;
+          return {
+            changes: [],
+            next_cursor: "MQ==",
+            has_more: false,
+            reset: false,
+          };
+        },
+      },
+    });
+    scheduler.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const first = scheduler.refreshNow();
+    const joined = scheduler.refreshNow();
+    release?.();
+    const [a, b] = await Promise.all([first, joined]);
+    expect(a).toEqual({ ok: true, error: null });
+    // The joiner waited for the whole chain, not just the first run.
+    expect(b).toEqual({ ok: true, error: null });
+    scheduler.stop();
+  });
+
+  it("reports the last error to a joined refresh after a failure", async () => {
+    const { scheduler } = setup({
+      api: {
+        fetchChanges: async () => {
+          throw new Error("network down");
+        },
+      },
+    });
+    scheduler.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const first = await scheduler.refreshNow();
+    expect(first).toEqual({ ok: false, error: "network down" });
+    // Inside the backoff window the call is skipped, not failed: it
+    // reports what the last attempt left behind, with no API call.
+    const skipped = await scheduler.refreshNow();
+    expect(skipped).toEqual({ ok: false, error: "network down" });
+    scheduler.stop();
+  });
+
+  it("force clears the backoff window", async () => {
+    let calls = 0;
+    const { scheduler } = setup({
+      api: {
+        fetchChanges: async () => {
+          calls += 1;
+          throw new Error("network down");
+        },
+      },
+    });
+    scheduler.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toBe(1);
+    await scheduler.refreshNow();
+    expect(calls).toBe(1); // inside backoff: skipped
+    await scheduler.refreshNow({ force: true });
+    expect(calls).toBe(2); // force dials the server again
+    scheduler.stop();
+  });
 });

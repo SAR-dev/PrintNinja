@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { isAndroid } from "@/lib/platform";
+import { useLocalNetworkPermission } from "@/lib/android/useLocalNetworkPermission";
 import { agent } from "@/lib/agent/commands";
 import { describeError } from "@/lib/errors";
 import { notifyError } from "@/lib/notify";
@@ -14,6 +16,7 @@ import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
 import type { PrintState } from "./types";
 import { resolvePhonePair } from "@/lib/printViaPc";
 import type { RenderPair, PcTemplateInfo } from "@/lib/agent/types";
+import type { PrintPagePrinter } from "@/lib/hooks/useSystemPrinters";
 
 /**
  * The form's actions: refreshing the printer list, picking a printer
@@ -37,6 +40,9 @@ export function usePrintActions({
   effPaperW,
   effPaperH,
   templateChosen,
+  /** The local row behind `store.printerId` (its connection type
+   * decides whether the print dials the LAN). */
+  selectedPrinter,
   refreshSystemPrinters,
   refreshPcPrinters,
   refreshPcTemplates,
@@ -57,6 +63,7 @@ export function usePrintActions({
   effPaperW: number;
   effPaperH: number;
   templateChosen: boolean;
+  selectedPrinter: PrintPagePrinter | undefined;
   refreshSystemPrinters: () => Promise<unknown>;
   refreshPcPrinters: (pairId?: string | null) => Promise<void>;
   refreshPcTemplates: (
@@ -66,6 +73,7 @@ export function usePrintActions({
   resetOutcome: () => void;
 }) {
   const { t } = useTranslation();
+  const { granted: lanGranted } = useLocalNetworkPermission();
   const [refreshingPrinters, setRefreshingPrinters] = useState(false);
   const loadPrinters = async () => {
     if (refreshingPrinters) return;
@@ -120,6 +128,19 @@ export function usePrintActions({
     }
     if (store.copies < 1) {
       notifyError(t("print.blocker_copies"));
+      return;
+    }
+    // Android: printing to an IP address (ipp / raw_tcp) or through a
+    // paired PC dials the local network. With the permission denied the
+    // network is unreachable, so the result names it instead of
+    // dialing — Retry works once the permission is on.
+    const dialsLan =
+      viaPc ||
+      selectedPrinter?.printer_type === "ipp" ||
+      selectedPrinter?.printer_type === "raw_tcp";
+    if (isAndroid() && dialsLan && !lanGranted) {
+      store.setStatus("failed");
+      store.setError(t("print.lan_denied"));
       return;
     }
     void doPrint(retry);

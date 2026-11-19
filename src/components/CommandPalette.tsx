@@ -5,6 +5,7 @@ import {
   History,
   Printer as PrintIcon,
   Printer,
+  RefreshCw,
   Search,
   Settings2,
   SlidersHorizontal,
@@ -24,6 +25,7 @@ import {
   automationEntryTarget,
 } from "@/lib/shell/automationSearch";
 import { SETTING_SEARCH_ENTRIES } from "@/lib/shell/settingsSearch";
+import { useManualRefresh } from "@/lib/refresh/manual";
 import { isAndroid } from "@/lib/platform";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { agent } from "@/lib/agent/commands";
@@ -77,6 +79,7 @@ export function CommandPalette({
   onReprintJob,
 }: Props) {
   const { t } = useTranslation();
+  const { refreshing, run: runRefresh } = useManualRefresh();
   // Creating a template is a PC-side action (PLAN §6, D4).
   const isPhone = useMediaQuery(PHONE_QUERY);
   const [templates, setTemplates] = useState<
@@ -273,6 +276,18 @@ export function CommandPalette({
                   {t("shell.new_template")}
                 </Command.Item>
               )}
+              <Command.Item
+                value="action refresh"
+                onSelect={() => run(() => runRefresh())}
+                disabled={refreshing}
+                className={ITEM}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+                  aria-hidden="true"
+                />
+                {t("shell.refresh")}
+              </Command.Item>
               <Command.Item
                 value="action reprint last job"
                 onSelect={() => run(onReprintLast)}
