@@ -61,7 +61,7 @@ class BluetoothPacingTest {
         assertEquals(0L, settleDelayMs(0))
         assertEquals(300L, settleDelayMs(100))
         // 1 ms per 1 KiB on top of the 300 ms base…
-        assertEquals(400L, settleDelayMs(1024))
+        assertEquals(301L, settleDelayMs(1024))
         // …and the growth stops, so a 1 MiB job pays 1.3 s, not more.
         assertEquals(1300L, settleDelayMs(1024 * 1024))
         assertEquals(1300L, settleDelayMs(10 * 1024 * 1024))
