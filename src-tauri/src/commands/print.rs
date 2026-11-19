@@ -1510,12 +1510,17 @@ async fn run_stages(
                 .to_string(),
         );
     }
-    let needs_preflight = matches!(
-        printer_type_for_probe,
-        crate::transport::PrinterType::System
-            | crate::transport::PrinterType::Usb
-            | crate::transport::PrinterType::Bluetooth
-    );
+    // Driverless Bluetooth is the exception: its RFCOMM socket is
+    // stateful, and a probe (connect, close) right before the send's own
+    // connect makes some printers drop the second connection ("socket
+    // might be closed or timed out"). The send opens the one connection
+    // it needs and reports a dead address itself — the same reasoning the
+    // test print already applies (`test_print_probes`).
+    let needs_preflight = match printer_type_for_probe {
+        crate::transport::PrinterType::System | crate::transport::PrinterType::Usb => true,
+        crate::transport::PrinterType::Bluetooth => transport_settings.via_driver,
+        _ => false,
+    };
     // A6, second half: a printer whose status query reported healthy
     // moments ago skips the preflight probe too — the probe is a bare
     // connect/disconnect with no fault information, and the send-stage
