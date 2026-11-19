@@ -66,32 +66,37 @@ branch, with a short note on why and what a fix would look like.
 
 ## Paper-size option on the Print page — decision (UX/product)
 
-**Decision: keep it, but scope it to printer type — do not remove it.**
+**Decision: keep the paper-size override for all printer types. Do not remove
+it and do not hide it for thermal printers.**
 
-- **Command-language (thermal) printers** (`escpos` / `zpl` / `tspl` / `cpcl` /
-  `raster`): hide the paper-size override and always print at the template's
-  design size. The physical size is fixed by the roll/head, already represented
-  by the printer's registered `paper_width_mm`, so the override only invites
-  mis-scaling (see correctness finding #2) and shows irrelevant presets
-  (A4/Letter/Photo) on a label printer.
-- **Paper-based printers** (`pdf` / `system` / `ipp`): keep the override and the
-  fit modes — this is where "print a small design onto A4/Letter" and
-  `fit-width` / `fit-page` / `fill` are meaningful.
+An earlier draft of this note proposed hiding the override for command-language
+(thermal) printers and always printing at the design size. Implementing that
+surfaced two problems that overturn it:
 
-Rationale for not deleting it outright: the fit modes are defined as the
-design→paper mapping (`layout.rs::compute`), so locking paper to the design size
-everywhere collapses them to scale ≈ 1. Desktop/office printing (Windows
-spooler / CUPS / IPP) is a first-class path and genuinely needs the decoupling.
+1. **The override is how a design is matched to a different roll width.** For a
+   command-language printer the raster size comes from `page_width_mm` /
+   `page_height_mm` (`raster_width_dots` / `dots_for_mm` in `render/raster.rs`).
+   An 80 mm design on a 58 mm receipt printer must set paper = 58 mm (with
+   `fit-width`) so the design is scaled down to the head; forcing paper =
+   design size instead sends an 80 mm raster and the head clips the right side.
+   So the override has a legitimate thermal use, not just a desktop one.
 
-For reference, the paper size **is** used in local printing (not preview-only):
-`usePrintActions.ts` sends `page_width_mm` / `page_height_mm` to `print_html`,
-which `resolve_content` → `effective_geometry` applies to override the template
-design size and size the layout/raster. It is preview-only in **Print via PC**,
-where the API has no paper field — a minor inconsistency worth closing if this
-scoping work is done (either send `paper` through the API or leave it and keep
-the UI honest about it being ignored).
+2. **The existing tests pin the current behaviour on a thermal printer.**
+   `src/test/print.test.tsx` uses an `escpos` mock printer and asserts
+   "sends an explicit paper size override" (`page_width_mm: 210`) and that the
+   Paper-size dropdown can be re-selected. Hiding the field or changing the
+   presets for thermal printers breaks those tests.
 
-Implementation sketch: in `usePrintPaper.tsx`, treat command-language printers
-like the via-PC path (force `reqPaperW`/`reqPaperH` to `null` and drop the paper
-field from the summary), and gate `PaperSizeFields` visibility on
-`selectedPrinter.language === "pdf"` (or `printer_type` being `system`/`ipp`).
+Conclusion: the paper-size control is a real, output-affecting setting
+(confirmed: `usePrintActions.ts` sends `page_width_mm` / `page_height_mm` to
+`print_html`, which `resolve_content` → `effective_geometry` applies to size the
+layout and raster). It is only preview-only in **Print via PC**, where the API
+has no paper field.
+
+If a change is still wanted, the safe improvement is **additive**: add
+label-width presets (40 / 58 / 80 / 100 mm) alongside A4 / Letter / Photo, so
+thermal users see relevant options without removing A4. This still requires
+updating the two `print.test.tsx` cases above if the preset *set* is made
+printer-type-aware. Any non-additive change (hiding, or replacing the office
+presets for thermal) needs a product decision that thermal roll-width matching
+is out of scope, plus test updates.
