@@ -357,6 +357,50 @@ async fn the_raster_is_sized_in_the_printers_own_dots() {
 /// The document a PDF-input job prints in these tests.
 const SAMPLE_PDF: &[u8] = b"%PDF-1.4 fake document";
 
+/// A real, minimal three-page PDF the bundled PDFium can parse. The
+/// pre-flight warning probes the document's own page count from its bytes,
+/// so a multi-page job in these tests needs a document that actually has
+/// that many pages (the stub rasterizer's `pages` field is no longer the
+/// warning's signal).
+fn three_page_pdf() -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(b"%PDF-1.4\n");
+    let o1 = out.len();
+    out.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    let o2 = out.len();
+    out.extend_from_slice(
+        b"2 0 obj\n<< /Type /Pages /Kids [3 0 R 5 0 R 6 0 R] /Count 3 >>\nendobj\n",
+    );
+    let o3 = out.len();
+    out.extend_from_slice(
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 150 200] /Contents 4 0 R >>\nendobj\n",
+    );
+    let stream = b"0 100 75 100 re f";
+    let o4 = out.len();
+    out.extend_from_slice(b"4 0 obj\n<< /Length ");
+    out.extend_from_slice(stream.len().to_string().as_bytes());
+    out.extend_from_slice(b" >>\nstream\n");
+    out.extend_from_slice(stream);
+    out.extend_from_slice(b"\nendstream\nendobj\n");
+    let o5 = out.len();
+    out.extend_from_slice(
+        b"5 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>\nendobj\n",
+    );
+    let o6 = out.len();
+    out.extend_from_slice(
+        b"6 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>\nendobj\n",
+    );
+    let xref_pos = out.len();
+    out.extend_from_slice(b"xref\n0 7\n0000000000 65535 f \n");
+    for o in [o1, o2, o3, o4, o5, o6] {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(b"trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n");
+    out.extend_from_slice(xref_pos.to_string().as_bytes());
+    out.extend_from_slice(b"\n%%EOF\n");
+    out
+}
+
 /// Serves the PDF-input path with a fixed raster: the pipeline still runs
 /// the layout, the queue permit, the real encoders and the real TCP
 /// transport. It records the document it was given so a test can assert the
@@ -406,15 +450,17 @@ async fn capture_pdf(language: &str, pages: u32) -> (Vec<u8>, Option<Vec<u8>>, V
         pages,
         pdf_seen: pdf_seen.clone(),
     };
-    let res = run_print_with(
-        &cache,
-        &db,
-        &queue,
-        pdf_request("Thermal", SAMPLE_PDF.to_vec()),
-        &renderer,
-    )
-    .await
-    .expect("pipeline");
+    // The pre-flight page-count probe reads the document's bytes, so a
+    // multi-page job gets a document with that many real pages; the
+    // single-page jobs keep the placeholder.
+    let pdf = if pages > 1 {
+        three_page_pdf()
+    } else {
+        SAMPLE_PDF.to_vec()
+    };
+    let res = run_print_with(&cache, &db, &queue, pdf_request("Thermal", pdf), &renderer)
+        .await
+        .expect("pipeline");
     assert!(res.success, "job must succeed: {:?}", res.error);
     let bytes = capture.await.expect("capture");
     let pdf_seen = pdf_seen.lock().unwrap().take();

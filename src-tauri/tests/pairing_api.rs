@@ -99,14 +99,26 @@ fn claim_body(code: &str, device_id: &str) -> serde_json::Value {
 }
 
 async fn post_claim(app: axum::Router, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+    // The whole file shares the loopback address's failure budget; the
+    // per-address budget test uses `post_claim_from` with its own address.
+    post_claim_from(&app, Ipv4Addr::LOCALHOST, body).await
+}
+
+async fn post_claim_from(
+    app: &axum::Router,
+    ip: Ipv4Addr,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
     let res = app
-        .oneshot(with_loopback(
+        .clone()
+        .oneshot(with_remote(
             Request::builder()
                 .method("POST")
                 .uri("/v1/pair/claim")
                 .header("content-type", "application/json")
                 .body(axum::body::Body::from(body.to_string()))
                 .unwrap(),
+            ip,
         ))
         .await
         .unwrap();
@@ -291,6 +303,50 @@ async fn no_window_expired_wrong_locked_and_disabled() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     let (status, _) = get_hello(router(&db2, &window2)).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn per_address_claim_budget_throttles_a_guesser() {
+    // The per-source-address tracker (`CLAIM_FAILURES`), separate from the
+    // window's own 5-wrong-code lock: 10 failures inside a minute, then
+    // 429. Malformed codes note a failure without consuming a window
+    // attempt, so the window lock cannot mask the address budget. A
+    // non-loopback private address keeps this test off the budget that
+    // the rest of the file shares.
+    let (db, window) = setup();
+    open_window(&window, "K7QM4XPD", Instant::now());
+    let app = router(&db, &window);
+    let guesser = Ipv4Addr::new(192, 168, 1, 50);
+    for _ in 0..10 {
+        let (status, _) =
+            post_claim_from(&app, guesser, claim_body("short", "phone-guesser")).await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "malformed, noted, window untouched"
+        );
+    }
+    // The 11th attempt is throttled before any code is checked — the
+    // right code would fail too.
+    let (status, body) =
+        post_claim_from(&app, guesser, claim_body("K7QM4XPD", "phone-guesser")).await;
+    assert_eq!(
+        status,
+        StatusCode::TOO_MANY_REQUESTS,
+        "the 11th failure from one address is throttled: {body}"
+    );
+    // A different address keeps its own budget.
+    let (status, body) = post_claim_from(
+        &app,
+        Ipv4Addr::new(192, 168, 1, 51),
+        claim_body("K7QM4XPD", "phone-1"),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a fresh address can still claim: {body}"
+    );
 }
 
 #[tokio::test]

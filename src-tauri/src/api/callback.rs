@@ -130,8 +130,7 @@ pub fn validate_callback_url_with_config(
                 "callback_url must not target private/loopback/link-local address (host `{host}` blocked; set PRINTNINJA_CALLBACK_ALLOW_PRIVATE=1 to allow)"
             ));
         }
-        if let Ok(addrs) = (host, parsed.port_or_known_default().unwrap_or(443)).to_socket_addrs()
-        {
+        if let Ok(addrs) = (host, parsed.port_or_known_default().unwrap_or(443)).to_socket_addrs() {
             for addr in addrs {
                 if crate::data::fetcher::is_forbidden_addr(addr.ip()) {
                     return Err(format!(

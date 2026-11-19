@@ -402,6 +402,108 @@ async fn two_simultaneous_requests_with_one_key_print_once() {
     );
 }
 
+/// Idempotency keys are scoped to the caller, not global: the same key from
+/// two different paired devices creates **two** jobs — both run the pipeline
+/// — instead of the second silently becoming a `duplicate` of the first's.
+/// (Security finding #4: a globally-unique key let one caller suppress
+/// another's job and learn its `job_id`.)
+#[tokio::test]
+async fn the_same_idempotency_key_from_two_devices_creates_two_jobs() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "scope-token-1");
+
+    // A second paired phone with its own token, so the two requests carry
+    // distinct `requested_by_device_id` stamps.
+    {
+        use sha2::Digest as _;
+        let hash = format!("{:x}", sha2::Sha256::digest(b"scope-token-2"));
+        db.lock()
+            .unwrap()
+            .connection()
+            .execute(
+                "INSERT INTO paired_devices
+                     (id, name, display_name, platform, token_hash, paired_at, last_seen_at,
+                      account_id, service_url)
+                 VALUES ('phone-2', 'Second Phone', NULL, 'android', ?1,
+                         datetime('now'), datetime('now'), 'user-1', 'https://share.test')",
+                [&hash],
+            )
+            .unwrap();
+    }
+
+    // A LAN print carrying an explicit `Idempotency-Key` header.
+    async fn post_with_key(
+        db: &Db,
+        ip: std::net::Ipv4Addr,
+        token: &str,
+        key: &str,
+    ) -> (StatusCode, serde_json::Value) {
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/v1/print")
+            .header("content-type", "application/json")
+            .header("idempotency-key", key)
+            .header("authorization", format!("Bearer {token}"))
+            .body(axum::body::Body::from(
+                serde_json::json!({
+                    "template": "Receipt",
+                    "printer": "Desk",
+                    "data": {"order": 42}
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::new(IpAddr::V4(ip), 50000)));
+        let res = router(db).oneshot(req).await.unwrap();
+        let status = res.status();
+        let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+        )
+    }
+
+    let (st1, body1) = post_with_key(&db, lan_ip(40), "scope-token-1", "shared-key-1").await;
+    let (st2, body2) = post_with_key(&db, lan_ip(41), "scope-token-2", "shared-key-1").await;
+
+    // Both clear auth (the physical print to 1.2.3.4 fails on CI — that is
+    // expected); the point is that neither is folded into the other.
+    assert_ne!(st1, StatusCode::UNAUTHORIZED, "phone-1 must be accepted");
+    assert_ne!(st2, StatusCode::UNAUTHORIZED, "phone-2 must be accepted");
+    assert_ne!(
+        body1.get("status").and_then(|v| v.as_str()),
+        Some("duplicate"),
+        "first request is never a duplicate: {body1}"
+    );
+    assert_ne!(
+        body2.get("status").and_then(|v| v.as_str()),
+        Some("duplicate"),
+        "the second device's key must not resolve to the first's job: {body2}"
+    );
+
+    // One key, two callers -> two rows, each stamped with its own device.
+    let (n, d1, d2): (i64, i64, i64) = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT COUNT(*),
+                    SUM(requested_by_device_id = 'phone-1'),
+                    SUM(requested_by_device_id = 'phone-2')
+             FROM print_jobs WHERE idempotency_key = 'shared-key-1'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(n, 2, "one key, two callers -> two jobs (both printed)");
+    assert_eq!(d1, 1, "phone-1's job is recorded");
+    assert_eq!(d2, 1, "phone-2's job is recorded");
+}
+
 /// `callback_url` validation: invalid URLs are refused with 400+code before
 /// any DB work; valid https URLs are accepted (best-effort callback after
 /// terminal state, not a silent drop).
@@ -2261,6 +2363,69 @@ async fn print_margins_and_records_flow_into_the_job() {
     assert_eq!(
         settings["margins"],
         serde_json::json!({"top": 12.5, "right": null, "bottom": null, "left": null})
+    );
+}
+
+/// `settings.paper` (the paper override a paired phone sets via-PC) rides
+/// the same `PrintRequest` as the UI's paper: the resolved size — not the
+/// template's design size — is what the job row records. An absent axis
+/// keeps the template design size for that axis, per axis, like the UI.
+#[tokio::test]
+async fn print_paper_size_flows_into_the_job() {
+    let db = setup();
+    seed_printers_and_templates(&db);
+    seed_sharing(&db, "paper-token-1");
+
+    let (status, _) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(32),
+        Some("paper-token-1"),
+        serde_json::json!({
+            "template": "Receipt",
+            "printer": "Desk",
+            "data": {},
+            "settings": {"paper": {"width_mm": 58.0, "height_mm": 90.0}}
+        }),
+    )
+    .await;
+    // The physical print to the seeded IPP printer (1.2.3.4) fails in CI —
+    // nothing answers it — so, like the margins test, this owns that a
+    // valid paper override clears validation and lands in the job row as
+    // the resolved paper (58 × 90, not the 120 × 200 design size).
+    assert!(
+        !(400..500).contains(&status.as_u16()),
+        "a valid paper override passes validation, got {status}"
+    );
+    let settings = latest_settings_json(&db);
+    assert_eq!(
+        settings["page"],
+        serde_json::json!({"width_mm": 58.0, "height_mm": 90.0})
+    );
+
+    // One axis set, the other absent: the template's design size stays for
+    // the absent axis (Receipt is 120 × 200 portrait).
+    let (status, _) = lan_post(
+        router(&db),
+        "/v1/print",
+        lan_ip(32),
+        Some("paper-token-1"),
+        serde_json::json!({
+            "template": "Receipt",
+            "printer": "Desk",
+            "data": {},
+            "settings": {"paper": {"width_mm": 58.0}}
+        }),
+    )
+    .await;
+    assert!(
+        !(400..500).contains(&status.as_u16()),
+        "a one-axis paper override passes validation, got {status}"
+    );
+    let settings = latest_settings_json(&db);
+    assert_eq!(
+        settings["page"],
+        serde_json::json!({"width_mm": 58.0, "height_mm": 200.0})
     );
 }
 

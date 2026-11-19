@@ -896,6 +896,11 @@ pub async fn run_print_with(
     // ── 1. Resolve content ───────────────────────────────────────────
     let content = resolve_content(db, &req)?;
 
+    // A multi-page PDF for a command-language head prints only its first
+    // page; the probe runs before the job row exists so the warning rides
+    // the response up front. The print itself still proceeds.
+    let multipage_warning = multi_page_pdf_warning(db, &req);
+
     // P15: the row exists before anything that can take time, in `printing`
     // state with the real start time. Later stages only update it, so a
     // running job is visible in History and every failure path — fetch,
@@ -907,7 +912,7 @@ pub async fn run_print_with(
         (content.paper_w_mm, content.paper_h_mm),
     )?;
 
-    run_stages(
+    let mut resp = run_stages(
         cache_dir,
         db,
         queue,
@@ -919,7 +924,11 @@ pub async fn run_print_with(
         },
         content,
     )
-    .await
+    .await?;
+    if let Some(w) = multipage_warning {
+        resp.warnings.insert(0, w);
+    }
+    Ok(resp)
 }
 
 /// Run a row the worker already claimed (`queued` → `printing`) — the P3
@@ -1025,7 +1034,11 @@ pub async fn run_claimed_job(
         },
     };
 
-    run_stages(
+    // The retry prints the same document to the same head, so the
+    // multi-page warning rides its response too.
+    let multipage_warning = multi_page_pdf_warning(db, &req);
+
+    let mut resp = run_stages(
         cache_dir,
         db,
         queue,
@@ -1037,7 +1050,11 @@ pub async fn run_claimed_job(
         },
         content,
     )
-    .await
+    .await?;
+    if let Some(w) = multipage_warning {
+        resp.warnings.insert(0, w);
+    }
+    Ok(resp)
 }
 
 /// The document a job prints: markup, stylesheet, page size — plus which
@@ -1105,6 +1122,40 @@ fn pdf_page_size_mm(pdf: &[u8]) -> Option<(f64, f64)> {
 #[cfg(target_os = "android")]
 fn pdf_page_size_mm(_pdf: &[u8]) -> Option<(f64, f64)> {
     None
+}
+
+/// The document's total page count (see
+/// [`crate::render::pdfium::pdf_page_count`]). `None` when the count cannot
+/// be read, or on Android where the platform plugin renders PDFs and there
+/// is no bundled PDFium to ask.
+#[cfg(not(target_os = "android"))]
+fn pdf_page_count(pdf: &[u8]) -> Option<u32> {
+    crate::render::pdfium::pdf_page_count(pdf)
+}
+
+#[cfg(target_os = "android")]
+fn pdf_page_count(_pdf: &[u8]) -> Option<u32> {
+    None
+}
+
+/// Pre-flight warning (production-correctness #3): a multi-page PDF for a
+/// command-language head prints only its first page — the deliberate
+/// single-label behavior. The page count is probed before `begin_job`, so
+/// the warning rides the response up front; the print itself proceeds.
+/// Pdf-language printers take the whole document and are exempt; an
+/// unknown printer resolves to Pdf there, so it is exempt too.
+fn multi_page_pdf_warning(db: &DbState, req: &PrintRequest) -> Option<String> {
+    let pdf = req.pdf.as_deref().filter(|p| !p.is_empty())?;
+    let language = lookup_printer(db, &req.printer_name)
+        .as_ref()
+        .map_or(crate::transport::PrinterLanguage::Pdf, |p| {
+            crate::transport::parse_printer_language(&p.language)
+        });
+    if matches!(language, crate::transport::PrinterLanguage::Pdf) {
+        return None;
+    }
+    let pages = pdf_page_count(pdf)?;
+    (pages > 1).then(|| format!("The PDF has {pages} pages; only the first page will be printed."))
 }
 
 /// Step 1: the document to print — the pinned template version's HTML and
@@ -1605,7 +1656,6 @@ async fn run_stages(
                     dpi,
                     printer.as_ref().and_then(|p| p.label_gap_mm),
                     &tspl_tuning,
-                    &mut warnings,
                 )
                 .await
             }
@@ -2006,7 +2056,8 @@ async fn run_stages(
 /// `language` is the row-resolved language the caller already computed —
 /// unknown printers fall back to Pdf there, so a PDF job for them is a
 /// clean passthrough. Only the first page of a multi-page document
-/// prints; the page count comes back from the rasterizer for the warning.
+/// prints; the pre-flight (`multi_page_pdf_warning`) already told the
+/// caller before the job row existed.
 #[allow(clippy::too_many_arguments)]
 async fn render_pdf_input(
     pdf: &[u8],
@@ -2017,7 +2068,6 @@ async fn render_pdf_input(
     dpi: u32,
     label_gap_mm: Option<f64>,
     tspl: &crate::transport::label_langs::tspl::TsplTuning,
-    warnings: &mut Vec<String>,
 ) -> anyhow::Result<(Vec<u8>, String)> {
     match language {
         crate::transport::PrinterLanguage::Pdf => {
@@ -2033,12 +2083,7 @@ async fn render_pdf_input(
                 crate::render::raster::raster_width_dots(lang, paper_w_mm, dpi),
                 crate::render::raster::dots_for_mm(paper_h_mm, dpi),
             );
-            let (raster, page_count) = renderer.rasterize_pdf(pdf, w_px, h_px).await?;
-            if page_count > 1 {
-                warnings.push(format!(
-                    "The PDF has {page_count} pages; only the first page was printed."
-                ));
-            }
+            let (raster, _page_count) = renderer.rasterize_pdf(pdf, w_px, h_px).await?;
             crate::transport::encode_for_language_tuned(
                 lang,
                 &raster,
@@ -3269,5 +3314,72 @@ mod tests {
         assert!(is_sensitive_key("password"));
         assert!(!is_sensitive_key("order_id"));
         assert!(!is_sensitive_key("name"));
+    }
+
+    #[test]
+    fn multipage_pdf_warns_upfront_for_command_heads_only() {
+        use crate::db::Database;
+        use crate::render::pdfium::{minimal_pdf, two_page_pdf};
+        use std::sync::{Arc, Mutex};
+
+        // Skip when the PDFium engine cannot be loaded (same condition as the
+        // pdfium tests): with no engine the probe reads no count and no
+        // warning is possible.
+        if crate::render::pdfium::pdf_page_count(&two_page_pdf()).is_none() {
+            return;
+        }
+
+        let path =
+            std::env::temp_dir().join(format!("printninja_multipage_{}.db", uuid::Uuid::new_v4()));
+        let db = Arc::new(Mutex::new(
+            Database::open(&format!("sqlite:{}", path.display())).expect("open db"),
+        ));
+        {
+            let guard = db.lock().unwrap();
+            let conn = guard.connection();
+            conn.execute(
+                "INSERT INTO printers (name, type, address, language) \
+                 VALUES ('Label','usb','usb0','tspl')",
+                [],
+            )
+            .expect("insert tspl printer");
+            conn.execute(
+                "INSERT INTO printers (name, type, address, language) \
+                 VALUES ('Desk','ipp','1.2.3.4','pdf')",
+                [],
+            )
+            .expect("insert pdf printer");
+        }
+
+        // Two-page PDF for a command-language head → the up-front warning.
+        let mut r = req();
+        r.printer_name = "Label".into();
+        r.pdf = Some(two_page_pdf());
+        assert_eq!(
+            multi_page_pdf_warning(&db, &r),
+            Some("The PDF has 2 pages; only the first page will be printed.".into())
+        );
+
+        // A Pdf-language printer takes the whole document → no warning.
+        let mut r = req();
+        r.printer_name = "Desk".into();
+        r.pdf = Some(two_page_pdf());
+        assert_eq!(multi_page_pdf_warning(&db, &r), None);
+
+        // Single-page PDF → nothing to warn about.
+        let mut r = req();
+        r.printer_name = "Label".into();
+        r.pdf = Some(minimal_pdf());
+        assert_eq!(multi_page_pdf_warning(&db, &r), None);
+
+        // Unknown printer resolves to Pdf → exempt.
+        let mut r = req();
+        r.printer_name = "Ghost".into();
+        r.pdf = Some(two_page_pdf());
+        assert_eq!(multi_page_pdf_warning(&db, &r), None);
+
+        // No pdf in the request → no warning.
+        let r = req();
+        assert_eq!(multi_page_pdf_warning(&db, &r), None);
     }
 }

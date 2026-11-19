@@ -451,37 +451,56 @@ fn record_remote_job(
     }
     let settings = settings.to_string();
     let data_json = data.as_ref().and_then(|d| serde_json::to_string(d).ok());
-    conn.execute(
-        "INSERT INTO print_jobs
-           (template_id, printer_id, source, status, error, copies, settings_json,
-            rendered_html, data_json, idempotency_key, is_test,
-            created_at, started_at, finished_at, duration_ms,
-            printed_by, template_revision)
-         VALUES (?1, NULL, 'ui', ?2, ?3, ?4, ?5,
-                 '', ?6, ?7, ?8,
-                 datetime('now'), datetime('now'), datetime('now'), ?9,
-                 ?10, ?11)
-         ON CONFLICT(idempotency_key) DO UPDATE SET
-           status = excluded.status,
-           error = excluded.error,
-           duration_ms = excluded.duration_ms,
-           finished_at = excluded.finished_at,
-           printed_by = excluded.printed_by,
-           template_revision = excluded.template_revision",
+    // Update-then-insert, not an upsert: the scoped idempotency index is on
+    // `COALESCE(requested_by_device_id, '')` + `idempotency_key`, an
+    // expression SQLite's `ON CONFLICT` target cannot name, so the old
+    // `ON CONFLICT(idempotency_key)` matched no index and failed every
+    // insert. Phone-side rows are local (`requested_by_device_id` NULL),
+    // which is the row the scoped index treats as one per key.
+    let updated = conn.execute(
+        "UPDATE print_jobs SET
+             status = ?1,
+             error = ?2,
+             duration_ms = ?3,
+             finished_at = datetime('now'),
+             printed_by = ?4,
+             template_revision = ?5
+         WHERE idempotency_key = ?6 AND requested_by_device_id IS NULL",
         rusqlite::params![
-            template_id,
             status,
             error,
-            copies as i64,
-            settings,
-            data_json,
-            idempotency_key,
-            i64::from(is_test),
             duration_ms,
             pc_name,
             template_revision,
+            idempotency_key,
         ],
     )?;
+    if updated == 0 {
+        conn.execute(
+            "INSERT INTO print_jobs
+               (template_id, printer_id, source, status, error, copies, settings_json,
+                rendered_html, data_json, idempotency_key, is_test,
+                created_at, started_at, finished_at, duration_ms,
+                printed_by, template_revision)
+             VALUES (?1, NULL, 'ui', ?2, ?3, ?4, ?5,
+                     '', ?6, ?7, ?8,
+                     datetime('now'), datetime('now'), datetime('now'), ?9,
+                     ?10, ?11)",
+            rusqlite::params![
+                template_id,
+                status,
+                error,
+                copies as i64,
+                settings,
+                data_json,
+                idempotency_key,
+                i64::from(is_test),
+                duration_ms,
+                pc_name,
+                template_revision,
+            ],
+        )?;
+    }
     Ok(())
 }
 
@@ -510,6 +529,7 @@ fn warnings_from_reply(reply: &serde_json::Value) -> Vec<String> {
 /// only when at least one axis is set: a phone that never touched either
 /// sends the body it always sent, and the PC (new or old) applies the
 /// template defaults.
+#[allow(clippy::too_many_arguments)]
 fn remote_settings(
     copies: u32,
     orientation: Option<&str>,

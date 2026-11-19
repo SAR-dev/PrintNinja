@@ -27,9 +27,9 @@
 //!    layout, where no bundle is built;
 //! 4. the system library (`libpdfium.so` on a Linux box that installed it).
 //!
-//! Multi-page documents print only the first page — the job carries a
-//! warning when more pages exist. This mirrors the label use case (one
-//! page, one label); whole-document rastering is a v2 concern.
+//! Multi-page documents print only the first page — the pre-flight warns
+//! before the job begins when more pages exist. This mirrors the label use
+//! case (one page, one label); whole-document rastering is a v2 concern.
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -175,7 +175,7 @@ pub fn pdf_page_size_mm(pdf: &[u8]) -> Option<(f64, f64)> {
     let engine = pdfium().ok()?;
     let doc = engine.load_pdf_from_byte_slice(pdf, None).ok()?;
     let pages = doc.pages();
-    if pages.len() == 0 {
+    if pages.is_empty() {
         return None;
     }
     let page = pages.first().ok()?;
@@ -187,42 +187,95 @@ pub fn pdf_page_size_mm(pdf: &[u8]) -> Option<(f64, f64)> {
     Some((width, height))
 }
 
+/// The document's total page count. `None` when the engine cannot be
+/// loaded or the document is unreadable (a zero-page document included).
+/// The pre-flight before `begin_job` asks it whether a multi-page PDF for
+/// a command-language head would print pages the job will never send.
+pub fn pdf_page_count(pdf: &[u8]) -> Option<u32> {
+    let engine = pdfium().ok()?;
+    let doc = engine.load_pdf_from_byte_slice(pdf, None).ok()?;
+    let pages = doc.pages();
+    if pages.is_empty() {
+        return None;
+    }
+    Some(pages.len() as u32)
+}
+
+/// A minimal single-page PDF, built with exact xref offsets: a
+/// portrait 150×200 pt page with one black filled rectangle covering
+/// its top-left quarter (PDF coordinates have their origin at
+/// bottom-left, so the *top-left* of the raster is x∈[0,75), y∈[100,200)).
+/// Shared by the raster tests here and the pre-flight tests in
+/// `commands::print`.
+#[cfg(test)]
+pub(crate) fn minimal_pdf() -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(b"%PDF-1.4\n");
+    let o1 = out.len();
+    out.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    let o2 = out.len();
+    out.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+    let o3 = out.len();
+    out.extend_from_slice(
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 150 200] /Contents 4 0 R >>\nendobj\n",
+    );
+    let stream = b"0 100 75 100 re f";
+    let o4 = out.len();
+    out.extend_from_slice(b"4 0 obj\n<< /Length ");
+    out.extend_from_slice(stream.len().to_string().as_bytes());
+    out.extend_from_slice(b" >>\nstream\n");
+    out.extend_from_slice(stream);
+    out.extend_from_slice(b"\nendstream\nendobj\n");
+    let xref_pos = out.len();
+    out.extend_from_slice(b"xref\n0 5\n0000000000 65535 f \n");
+    for o in [o1, o2, o3, o4] {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(b"trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n");
+    out.extend_from_slice(xref_pos.to_string().as_bytes());
+    out.extend_from_slice(b"\n%%EOF\n");
+    out
+}
+
+/// `minimal_pdf` plus a second, plain 100×100 pt page — the shape the
+/// pre-flight page-count probe must recognise as multi-page.
+#[cfg(test)]
+pub(crate) fn two_page_pdf() -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(b"%PDF-1.4\n");
+    let o1 = out.len();
+    out.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    let o2 = out.len();
+    out.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>\nendobj\n");
+    let o3 = out.len();
+    out.extend_from_slice(
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 150 200] /Contents 4 0 R >>\nendobj\n",
+    );
+    let stream = b"0 100 75 100 re f";
+    let o4 = out.len();
+    out.extend_from_slice(b"4 0 obj\n<< /Length ");
+    out.extend_from_slice(stream.len().to_string().as_bytes());
+    out.extend_from_slice(b" >>\nstream\n");
+    out.extend_from_slice(stream);
+    out.extend_from_slice(b"\nendstream\nendobj\n");
+    let o5 = out.len();
+    out.extend_from_slice(
+        b"5 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>\nendobj\n",
+    );
+    let xref_pos = out.len();
+    out.extend_from_slice(b"xref\n0 6\n0000000000 65535 f \n");
+    for o in [o1, o2, o3, o4, o5] {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(b"trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n");
+    out.extend_from_slice(xref_pos.to_string().as_bytes());
+    out.extend_from_slice(b"\n%%EOF\n");
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A minimal single-page PDF, built with exact xref offsets: a
-    /// portrait 150×200 pt page with one black filled rectangle covering
-    /// its top-left quarter (PDF coordinates have their origin at
-    /// bottom-left, so the *top-left* of the raster is x∈[0,75), y∈[100,200)).
-    fn minimal_pdf() -> Vec<u8> {
-        let mut out = Vec::new();
-        out.extend_from_slice(b"%PDF-1.4\n");
-        let o1 = out.len();
-        out.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
-        let o2 = out.len();
-        out.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
-        let o3 = out.len();
-        out.extend_from_slice(
-            b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 150 200] /Contents 4 0 R >>\nendobj\n",
-        );
-        let stream = b"0 100 75 100 re f";
-        let o4 = out.len();
-        out.extend_from_slice(b"4 0 obj\n<< /Length ");
-        out.extend_from_slice(stream.len().to_string().as_bytes());
-        out.extend_from_slice(b" >>\nstream\n");
-        out.extend_from_slice(stream);
-        out.extend_from_slice(b"\nendstream\nendobj\n");
-        let xref_pos = out.len();
-        out.extend_from_slice(b"xref\n0 5\n0000000000 65535 f \n");
-        for o in [o1, o2, o3, o4] {
-            out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
-        }
-        out.extend_from_slice(b"trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n");
-        out.extend_from_slice(xref_pos.to_string().as_bytes());
-        out.extend_from_slice(b"\n%%EOF\n");
-        out
-    }
 
     /// Bind the vendored library, or skip when it cannot be loaded (e.g.
     /// a non-Windows CI without libpdfium).
@@ -269,6 +322,23 @@ mod tests {
         let pdf = minimal_pdf();
         let (_, pages) = pdf_to_raster(&pdf, 100, 100).expect("valid PDF");
         assert_eq!(pages, 1);
+    }
+
+    #[test]
+    fn page_count_reads_the_whole_page_tree() {
+        if pdfium_or_skip().is_none() {
+            return;
+        }
+        assert_eq!(pdf_page_count(&minimal_pdf()), Some(1));
+        assert_eq!(pdf_page_count(&two_page_pdf()), Some(2));
+    }
+
+    #[test]
+    fn page_count_refuses_garbage_cleanly() {
+        if pdfium_or_skip().is_none() {
+            return;
+        }
+        assert_eq!(pdf_page_count(b"this is not a pdf at all"), None);
     }
 
     #[test]

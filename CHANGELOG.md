@@ -23,6 +23,11 @@ and this project adheres to [Calendar Versioning](YYYY.MMDD.patch) — see the c
 - **Windows Bluetooth (direct COM) checks the printer before sending.** A Bluetooth printer that is out of paper, jammed or offline now refuses the job with a clear message instead of silently swallowing it — matching the pre-send fault detection the raw-TCP, Linux Bluetooth and Android paths already had.
 - **IPP printers declare the correct document format.** Command-language jobs (ESC/POS, ZPL, TSPL, …) sent to an IPP endpoint are now declared `application/octet-stream` instead of being mislabeled as PDF.
 - **Android network discovery lists raw-TCP printers.** JetDirect/9100 printers found by the mDNS browse now appear in the add-printer flow instead of being silently dropped.
+- **Multi-page PDFs to label printers warn before the job starts.** A PDF sent to a command-language head (ESC/POS, TSPL, ZPL, CPCL) prints only its first page. The page count is now probed before the job is created, so "The PDF has N pages; only the first page will be printed" rides the response up front — including on retries. Pdf-language printers (IPP / system spooler) take the whole document and are unaffected.
+- **URLs fetched for printing can no longer be DNS-rebound.** A `data_url` fetch pins every hop to the address that passed validation, so a name that re-resolves before the connect cannot steer the request to a loopback, link-local or private address — the same treatment print callbacks already got.
+- **Pairing-code guessing is throttled per source address.** Ten or more failed pairing attempts from one address inside a minute get a 429. The budget is separate from a paired phone's token checks, so a code-guessing host cannot block a real device (and vice versa).
+- **The same idempotency key no longer collides across devices.** Retry keys are scoped per caller: two different phones (or a phone and the desktop UI) can each reuse the same key without one silently receiving the other's job.
+- **Phone-side print-via-PC history rows are recorded again.** The per-caller scoping above had invalidated the upsert the phone used to write its history row, so every via-PC attempt failed to land in the phone's history. The write is back (update-then-insert on the same key), so the phone's history shows the attempt, its outcome and the PC's name as before.
 
 ### Changed
 

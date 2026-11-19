@@ -351,7 +351,9 @@ pub(crate) struct FailureTracker {
 impl FailureTracker {
     pub(crate) const fn new() -> Self {
         Self {
-            map: std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new())),
+            map: std::sync::LazyLock::new(|| {
+                std::sync::Mutex::new(std::collections::HashMap::new())
+            }),
         }
     }
 

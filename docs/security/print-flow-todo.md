@@ -32,6 +32,26 @@ branch, with a short note on why and what a fix would look like.
   (`resolve_to_addrs`), so the POST (and its retries) cannot be rebound to an
   internal address. IP-literal hosts and `PRINTNINJA_CALLBACK_ALLOW_PRIVATE=1`
   are unchanged.
+- **Multi-page PDF → command-language head printed page 1 with an after-the-fact
+  warning** — the product decision was *warn before print, still print page 1*
+  (the single-label behavior is deliberate). `commands::print::multi_page_pdf_warning`
+  probes the count via the new `pdfium::pdf_page_count` before `begin_job` and
+  prepends "The PDF has N pages; only the first page will be printed." to the
+  response warnings; the retry path (`run_claimed_job`) gets the same probe.
+  Pdf-language printers — and unknown printers, which resolve to Pdf — are
+  exempt. The after-the-fact push in `render_pdf_input` is gone, so the warning
+  cannot duplicate.
+- **GDI-only Windows queue defaulted to `language = pdf`** — the queue's offered
+  datatypes are now read (`windows_spooler::offers_pdf_datatype`, cached per
+  queue); a system queue that cannot take PDF is flagged on the detected-device
+  row and in the printer form before saving (i18n in both locales), and the
+  send path keeps its `RAW` fallback for queues that offer no PDF datatype.
+- **`data_url` fetch DNS-rebinding window** — `data/fetcher.rs` validates each
+  hop and pins the vetted addresses to that hop's client (`resolve_to_addrs`),
+  so a DNS answer that changes after validation cannot steer the connect. The
+  client is built per hop because redirects are followed manually and each may
+  be a different host; fetches are low-frequency (≤ 6 hops per job), so the
+  cost is immaterial.
 
 ## Not yet fixed
 
@@ -44,24 +64,14 @@ branch, with a short note on why and what a fix would look like.
    (final sheet count) or a variable-length raster path for receipts — a larger
    change, not done here.
 
-2. **Multi-page PDF → command-language printer prints only page 1**, warned after
-   the fact. A pre-flight refusal is a behavior change (today it is a deliberate
-   warn-and-print for the single-label case, and the page count only comes back
-   from the rasterizer after the job row exists), so it needs a product decision
-   plus a cheap page-count probe before `begin_job` — not changed here.
-
-3. **Windows driver queues default to `language = PDF`** and a GDI-only driver
-   prints the PDF source as garbage (warned only after the send). Would ideally
-   surface at printer-add time from the queue's offered datatypes.
-
 ### Security
 
-4. **Printer credentials / pairing tokens stored in plaintext** (SQLite), and
+2. **Printer credentials / pairing tokens stored in plaintext** (SQLite), and
    `printers.password` is returned to the frontend by `list_printers` /
    `get_printer`. Needs a platform keychain (DPAPI / Keychain / libsecret) and
    removing the secret from the `Printer` DTO. Not done here — scope/risk.
 
-5. **`device_id` is client-chosen at pairing** (identity squatting). A device
+3. **`device_id` is client-chosen at pairing** (identity squatting). A device
    holding a valid code/invite can overwrite another device's `paired_devices`
    row by claiming with its `device_id` (`ON CONFLICT(id) DO UPDATE`), and that
    id is stamped on job history. Re-pairing the same phone legitimately reuses
@@ -71,62 +81,71 @@ branch, with a short note on why and what a fix would look like.
 
 ### Residual / acknowledged
 
-6. **`data_url` fetch has the same DNS-rebinding window.** The callback is now
-   pinned (see above), but `data/fetcher.rs` validates each redirect hop and
-   then lets reqwest re-resolve. Pinning there means building a client per hop
-   (redirects are followed manually) with `resolve_to_addrs` — doable, but it
-   touches the fetch loop that every print path shares, so it was left for a
-   change that can be run against the fetcher test suite.
-
-7. **Android PDF page size.** `pdf_page_size_mm` returns `None` on Android (no
+4. **Android PDF page size.** `pdf_page_size_mm` returns `None` on Android (no
    bundled PDFium; the platform plugin renders PDFs), so the A4 fallback remains
    there. The Android plugin would need to report the page size, or the phone
    should send explicit `page_height_mm`.
 
-## Verification needed on a full build (not run here — low-resource PC)
+## Verified on a full build (2026-11-20)
 
-These fixes were written by inspection and **not** compiled or tested. Before
-merging, run on a machine with the toolchain:
+All checks below were run on this branch and are green:
 
-- `pnpm build` (or `tsc -b`) — type-checks the TS changes: the via-PC paper-size
-  wiring (`usePrintActions`, `usePrintPaper`, `AdvancedOptions`,
-  `PhonePrintFlow`, `agent/types.ts`) and the added label-size presets + locale
-  keys.
-- `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` in
-  `src-tauri/` — checks the Rust changes.
-- `pnpm test` — especially `src/test/print.test.tsx` (paper override / preset
-  re-selection) and any via-PC test, now that the paper field is shown in
-  via-PC mode.
-- `pnpm test:rust` (Docker) — `remote_print`'s
-  `phone_and_local_settings_are_identical_for_the_same_options` now also pins the
-  new `paper` settings key.
+- `tsc -b` — clean.
+- `cargo fmt --check` — clean (one `cargo fmt` pass was needed; several branch
+  files had landed unformatted).
+- `cargo clippy --all-targets -- -D warnings` — clean.
+- `pnpm test` (vitest) — green.
+- `pnpm test:rust` (Docker) — full suite green, including the pre-existing
+  idempotency tests (`duplicate_idempotency_key_does_not_create_a_second_job`,
+  `losing_the_insert_race_reports_the_existing_job_…`) and the callback tests
+  (IP-literal targets), so the callback pinning left them unaffected.
 
-Also written by inspection in the latest pass (no Rust toolchain available):
+The verification pass itself surfaced four problems, all fixed on this
+branch:
 
-- **Idempotency migration.** `db::init` now ends with `ensure_idempotency_scope`;
-  the old global index is no longer created by `schema.sql` or the legacy table
-  rebuilds. Check on (a) a fresh DB, (b) a DB carrying the old
-  `idx_print_jobs_idempotency` (it must be dropped and the scoped index
-  created), and that `losing_the_insert_race_reports_the_existing_job_…` and
-  `duplicate_idempotency_key_does_not_create_a_second_job` still pass. Worth
-  adding a test: two different `requested_by_device_id` values with one key must
-  both print.
-- **`FailureTracker` refactor** (`render_share.rs`) — `const fn new()` over a
-  `LazyLock`; confirm it compiles as a `static`, and add a `pairing_api` test
-  that 11 wrong claims from one address return `429`.
-- **Callback pinning** — `resolve_and_pin` / `resolve_to_addrs` in
-  `callback.rs`; confirm the existing callback tests (IP-literal targets) are
-  unaffected, and that a name resolving to a private address is refused at
-  dispatch.
+- **The `record_remote_job` upsert was invalidated by the idempotency-scope
+  migration.** The phone-side history write targeted
+  `ON CONFLICT(idempotency_key)`, but the old key-only unique index is gone
+  (replaced by the scoped index on `COALESCE(requested_by_device_id, '')` +
+  `idempotency_key`), and SQLite's `ON CONFLICT` target can name columns, not
+  expressions — so *every* phone-side via-PC history insert failed with
+  "ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint".
+  Replaced with an update-then-insert scoped to
+  `requested_by_device_id IS NULL` (the phone-side rows under the new index);
+  pinned by `retry_with_the_same_key_refreshes_the_history_row`.
+- **The multi-page PDF warning test still assumed the old after-the-fact
+  path.** `language_dispatch::pdf_jobs_warn_when_only_the_first_page_prints`
+  printed a fake `%PDF-1.4` placeholder through a stub renderer that *claimed*
+  3 pages; the pre-flight probe reads the document's real page count, which the
+  placeholder has none of, so no warning fired. The multi-page case now feeds a
+  real minimal three-page PDF (`three_page_pdf` in the test) so the probe sees
+  the pages it warns about.
+- **Test helpers lagged the branch's new `RemotePrintArgs` fields**
+  (`page_width_mm` / `page_height_mm`), and a duplicated `post_claim_from`
+  helper — compile errors caught by clippy, fixed in the helpers.
+- **Unformatted branch files** — one `cargo fmt` pass.
 
-Worth a careful look:
+The open items from the inspection pass are now pinned by new tests:
 
-- **Via-PC paper round-trip.** Confirm a phone-set paper override reaches the PC
-  and changes the output: phone `remote_print` → PC `POST /v1/print`
-  `settings.paper` → `PrintRequest.page_width_mm`/`page_height_mm`.
-- **Via-PC `records` round-trip.** Confirm a Pages > 1 job with a `data_url`
-  prints that many pages through the PC (the phone now sends `settings.records`
-  and the PC repeats the fetched object), and that inline `data` still prints the
-  right count via the retained `expand_records` fallback.
-- **`paper_via_pc` i18n key** is now unused (the "not sent via PC" note was
-  removed); safe to delete from `en.ts`/`ja.ts` if desired.
+- **Idempotency scoping** — `the_same_idempotency_key_from_two_devices_creates_two_jobs`:
+  two different `requested_by_device_id` values with one key each create and
+  run their own job. Note: the migration branch that drops a pre-existing
+  `idx_print_jobs_idempotency` is not exercised by a test (every test DB is
+  fresh, so the `DROP INDEX IF EXISTS` is a no-op there) — the statement is
+  idempotent and the scoped-index semantics are what the tests pin.
+- **Claim throttle** — `per_address_claim_budget_throttles_a_guesser`: the
+  11th failed claim from one address gets a 429 while a second address still
+  gets a 200.
+- **Via-PC paper round-trip** — `print_paper_size_flows_into_the_job`: a
+  phone-set `settings.paper` override reaches the PC and lands in the job row
+  as the resolved paper — both axes overridden, and per-axis fallback to the
+  template design size when one axis is absent. The phone-side half was
+  already pinned by `phone_and_local_settings_are_identical_for_the_same_options`.
+- **Via-PC `records` round-trip** — the phone sends `settings.records`
+  (pinned by the same settings-identity test) and the PC's path accepts it
+  (`print_margins_and_records_flow_into_the_job`); inline `data` still expands
+  client-side via `expand_records`.
+- **Multi-page PDF pre-flight** — `multipage_pdf_warns_upfront_for_command_heads_only`
+  plus the `pdfium` page-count fixtures.
+- **`paper_via_pc` i18n key** was unused (the "not sent via PC" note was
+  removed) and has been deleted from `en.ts`/`ja.ts`.
