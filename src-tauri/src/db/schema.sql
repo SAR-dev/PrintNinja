@@ -168,7 +168,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_printer ON print_jobs(printer_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_template ON print_jobs(template_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_batch ON print_jobs(batch_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_created ON print_jobs(created_at);
--- One row per idempotency key: this index is the atomic reservation that
--- makes two simultaneous POST /v1/print requests with one key print once
--- (P12). Multiple NULL keys are fine — SQLite unique indexes allow NULLs.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_print_jobs_idempotency ON print_jobs(idempotency_key);
+-- The idempotency-key reservation (P12) is a unique index on
+-- (requested_by_device_id, idempotency_key), created by
+-- `ensure_idempotency_scope` in db/mod.rs once the column is known to exist.
+

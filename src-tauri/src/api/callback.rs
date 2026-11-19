@@ -179,6 +179,47 @@ fn log_host(url: &str) -> String {
     }
 }
 
+/// Resolve the callback host once, refuse a private answer, and return the
+/// validated addresses so the connection can be pinned to them.
+///
+/// `validate_callback_url` already resolved the name, but the POST used to
+/// resolve it again at connect time, so a DNS answer that flipped to an
+/// internal address in between (DNS rebinding) reached the internal target.
+/// Pinning the addresses checked *here* to the client closes that gap for
+/// the callback. `Ok(None)` means nothing to pin: private targets were
+/// explicitly allowed, or the host is an IP literal (connected to directly
+/// and already vetted by the string check).
+async fn resolve_and_pin(
+    url: &str,
+    allow_private: bool,
+) -> Result<Option<(String, Vec<std::net::SocketAddr>)>, String> {
+    if allow_private {
+        return Ok(None);
+    }
+    let parsed = url::Url::parse(url).map_err(|e| format!("invalid callback url: {e}"))?;
+    let Some(url::Host::Domain(host)) = parsed.host() else {
+        return Ok(None);
+    };
+    let port = parsed.port_or_known_default().unwrap_or(443);
+    let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host((host, port))
+        .await
+        .map_err(|e| format!("callback host did not resolve: {e}"))?
+        .collect();
+    if addrs.is_empty() {
+        return Err("callback host did not resolve".into());
+    }
+    if let Some(bad) = addrs
+        .iter()
+        .find(|a| crate::data::fetcher::is_forbidden_addr(a.ip()))
+    {
+        return Err(format!(
+            "callback host resolves to {} (private/loopback/link-local)",
+            bad.ip()
+        ));
+    }
+    Ok(Some((host.to_string(), addrs)))
+}
+
 /// Dispatch a callback with retries. Fire-and-forget via `tokio::spawn`.
 /// `dispatch` must NOT be called for Idempotency-Key duplicates (caller
 /// guards that).
@@ -228,11 +269,25 @@ pub fn dispatch_callback(info: CallbackDispatch) {
 
         let log_h = log_host(&url_clone);
 
-        let client = match reqwest::Client::builder()
+        let allow_private = std::env::var("PRINTNINJA_CALLBACK_ALLOW_PRIVATE")
+            .map(|v| v == "1")
+            .unwrap_or(false);
+        let pinned = match resolve_and_pin(&url_clone, allow_private).await {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!(job_id=%job_id, host=%log_host(&url_clone), error=%e, "callback refused at dispatch");
+                return;
+            }
+        };
+        let mut builder = reqwest::Client::builder()
             .timeout(Duration::from_secs(CALLBACK_TIMEOUT_SECS))
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-        {
+            .redirect(reqwest::redirect::Policy::none());
+        if let Some((host, addrs)) = &pinned {
+            // Connect to exactly the addresses vetted above; the name is
+            // never re-resolved for this client (retries included).
+            builder = builder.resolve_to_addrs(host, addrs);
+        }
+        let client = match builder.build() {
             Ok(c) => c,
             Err(e) => {
                 tracing::warn!(job_id=%job_id, host=%log_h, error=%e, "callback client build failed");

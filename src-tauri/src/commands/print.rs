@@ -2271,7 +2271,7 @@ pub(crate) fn begin_job(
         ],
     ) {
         Ok(_) => Ok(conn.last_insert_rowid()),
-        // The unique index on `idempotency_key` makes this insert the atomic
+        // The unique index on `(requested_by_device_id, idempotency_key)` makes this insert the atomic
         // reservation of the key (P12): two simultaneous requests with one
         // key insert once, so they print once — and both record the key
         // before any send. Only the key can collide (the id is
@@ -2283,8 +2283,10 @@ pub(crate) fn begin_job(
         {
             let existing: Option<i64> = req.idempotency_key.as_ref().and_then(|key| {
                 conn.query_row(
-                    "SELECT id FROM print_jobs WHERE idempotency_key = ?1",
-                    [key],
+                    "SELECT id FROM print_jobs
+                     WHERE idempotency_key = ?1
+                       AND COALESCE(requested_by_device_id, '') = COALESCE(?2, '')",
+                    rusqlite::params![key, req.requested_by_device_id],
                     |r| r.get(0),
                 )
                 .ok()

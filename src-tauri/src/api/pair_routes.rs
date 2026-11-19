@@ -49,6 +49,20 @@ fn pairing_unavailable() -> Response {
         .into_response()
 }
 
+/// Failed claims per source address. Separate from the token gates' budget
+/// (`render_share::AUTH_FAILURES`): guessing pairing codes must not block a
+/// paired phone's own requests, nor the reverse.
+static CLAIM_FAILURES: super::render_share::FailureTracker =
+    super::render_share::FailureTracker::new();
+
+fn claim_throttled_response() -> Response {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(serde_json::json!({ "error": "too many failed pairing attempts; wait a minute and try again" })),
+    )
+        .into_response()
+}
+
 /// The caller's IP must be private or loopback. The server runs with
 /// `into_make_service_with_connect_info` (see `launch_server`), so this
 /// is always present in production; tests insert a loopback address.
@@ -347,6 +361,10 @@ pub async fn claim(
         )
             .into_response();
     }
+    let caller_ip = addr.0.ip();
+    if CLAIM_FAILURES.throttled(&caller_ip) {
+        return claim_throttled_response();
+    }
     if req.protocol != Some(PROTOCOL_VERSION) {
         return (
             StatusCode::BAD_REQUEST,
@@ -363,6 +381,7 @@ pub async fn claim(
         if !has_window {
             return pairing_unavailable();
         }
+        CLAIM_FAILURES.note(&caller_ip);
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({ "error": "pairing code must be 8 characters" })),
@@ -410,6 +429,8 @@ pub async fn claim(
         .trim_end_matches('/')
         .to_string();
     if phone_account.is_empty() {
+        // A miss on every invite is a failed guess at a code.
+        CLAIM_FAILURES.note(&caller_ip);
         // No account, no invite match: the code is mistyped, revoked, or
         // the owner's 90-second code, which guests can never use. Say so
         // instead of sending a guest to sign in — that fixes nothing.
@@ -475,6 +496,7 @@ pub async fn claim(
                 .into_response();
         }
         Err(ClaimError::Wrong { left }) => {
+            CLAIM_FAILURES.note(&caller_ip);
             return (
                 StatusCode::UNAUTHORIZED,
                 Json(serde_json::json!({ "error": "wrong pairing code", "attempts_left": left })),
@@ -482,6 +504,7 @@ pub async fn claim(
                 .into_response();
         }
         Err(ClaimError::Locked) => {
+            CLAIM_FAILURES.note(&caller_ip);
             // Close a locked window: only the PC's user can open a new one.
             if let Ok(mut guard) = state.window.lock() {
                 *guard = None;
@@ -493,6 +516,7 @@ pub async fn claim(
                 .into_response();
         }
         Err(ClaimError::BadFormat) => {
+            CLAIM_FAILURES.note(&caller_ip);
             return (
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({ "error": "pairing code must be 8 characters from ABCDEFGHJKLMNPQRSTUVWXYZ23456789" })),

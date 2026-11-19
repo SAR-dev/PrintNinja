@@ -96,7 +96,31 @@ pub fn init(conn: &Connection) -> rusqlite::Result<()> {
     ensure_library_schema(conn)?;
     ensure_p2_checks(conn)?;
     ensure_template_content_schema(conn)?;
-    ensure_pairing_schema(conn)
+    ensure_pairing_schema(conn)?;
+    ensure_idempotency_scope(conn)
+}
+
+/// Scope the idempotency-key reservation to the caller.
+///
+/// The key used to be globally unique, so one authenticated caller could
+/// suppress another's job by reusing its key, and the `duplicate` response
+/// handed back the winner's `job_id`. The unique index is now on
+/// `(requested_by_device_id, idempotency_key)` — local callers (no device)
+/// share the empty scope. The old index implies the new one (unique on the
+/// key alone means unique on any superset), so no row can violate it and no
+/// data is rewritten. Idempotent; runs last so it also drops the legacy
+/// index that old databases carry.
+pub fn ensure_idempotency_scope(conn: &Connection) -> rusqlite::Result<()> {
+    if !column_exists(conn, "print_jobs", "idempotency_key")?
+        || !column_exists(conn, "print_jobs", "requested_by_device_id")?
+    {
+        return Ok(());
+    }
+    conn.execute_batch(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_print_jobs_idempotency_scoped
+             ON print_jobs(COALESCE(requested_by_device_id, ''), idempotency_key);
+         DROP INDEX IF EXISTS idx_print_jobs_idempotency;",
+    )
 }
 
 /// Pairing-code device registry (docs/architecture/PHONE_AND_PC_SHARING.md#pairing).
@@ -270,28 +294,13 @@ pub fn ensure_v2_schema(conn: &Connection) -> rusqlite::Result<()> {
 
     // `POST /v1/print` replays are atomic only if an idempotency key names
     // one job (P12): the job-row insert records the key before the send, and
-    // this unique index is what makes two simultaneous requests with one key
-    // print once — the loser hits the constraint and gets the duplicate
-    // response instead of a second physical print. Old rows can hold
-    // duplicates, so keep the newest per key and clear the rest first, or
-    // index creation fails on an existing database.
-    if has_print_jobs > 0 {
-        if !column_exists(conn, "print_jobs", "idempotency_key")? {
-            conn.execute("ALTER TABLE print_jobs ADD COLUMN idempotency_key TEXT", [])?;
-        }
-        conn.execute(
-            "UPDATE print_jobs SET idempotency_key = NULL
-             WHERE idempotency_key IS NOT NULL
-               AND id NOT IN (SELECT MAX(id) FROM print_jobs
-                              WHERE idempotency_key IS NOT NULL
-                              GROUP BY idempotency_key)",
-            [],
-        )?;
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_print_jobs_idempotency
-             ON print_jobs(idempotency_key)",
-            [],
-        )?;
+    // a unique index makes two simultaneous requests with one key print
+    // once — the loser hits the constraint and gets the duplicate response
+    // instead of a second physical print. Here only the column is ensured;
+    // the index itself is (re)built, scoped per caller, by
+    // `ensure_idempotency_scope` at the end of `init`.
+    if has_print_jobs > 0 && !column_exists(conn, "print_jobs", "idempotency_key")? {
+        conn.execute("ALTER TABLE print_jobs ADD COLUMN idempotency_key TEXT", [])?;
     }
 
     // Per-printer settings: the TSPL media gap and the IPP sign-in plus
@@ -773,8 +782,7 @@ pub fn ensure_template_content_schema(conn: &Connection) -> rusqlite::Result<()>
                  CREATE INDEX IF NOT EXISTS idx_jobs_printer ON print_jobs(printer_id);
                  CREATE INDEX IF NOT EXISTS idx_jobs_template ON print_jobs(template_id);
                  CREATE INDEX IF NOT EXISTS idx_jobs_batch ON print_jobs(batch_id);
-                 CREATE INDEX IF NOT EXISTS idx_jobs_created ON print_jobs(created_at);
-                 CREATE UNIQUE INDEX IF NOT EXISTS idx_print_jobs_idempotency ON print_jobs(idempotency_key);",
+                 CREATE INDEX IF NOT EXISTS idx_jobs_created ON print_jobs(created_at);",
             )?;
         }
         Ok(())
@@ -978,7 +986,6 @@ fn ensure_p2_checks(conn: &Connection) -> rusqlite::Result<()> {
             "CREATE INDEX IF NOT EXISTS idx_jobs_template ON print_jobs(template_id);",
             "CREATE INDEX IF NOT EXISTS idx_jobs_batch ON print_jobs(batch_id);",
             "CREATE INDEX IF NOT EXISTS idx_jobs_created ON print_jobs(created_at);",
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_print_jobs_idempotency ON print_jobs(idempotency_key);",
         ],
     )?;
     rebuild_p2(

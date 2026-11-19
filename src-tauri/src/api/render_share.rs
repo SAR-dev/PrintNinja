@@ -330,14 +330,69 @@ pub(crate) fn touch_last_seen(state: &ApiState, presented: &str) {
     }
 }
 
-/// Failed-token attempts remembered per source address (ARCHITECTURE §9).
-/// Process-global like `status::SUPPORT`: the server is one process, and
-/// tests use distinct addresses to stay isolated from each other.
-static AUTH_FAILURES: std::sync::LazyLock<
-    std::sync::Mutex<
-        std::collections::HashMap<std::net::IpAddr, std::collections::VecDeque<std::time::Instant>>,
+/// Failed attempts remembered per source address (ARCHITECTURE §9).
+///
+/// One tracker per guarded surface: the bearer-token gates and the pairing
+/// claim route each own a static, so a LAN host guessing pairing codes does
+/// not spend (or get blocked by) the budget of a paired phone's token
+/// checks. Process-global like `status::SUPPORT`; tests use distinct
+/// addresses to stay isolated from each other.
+pub(crate) struct FailureTracker {
+    map: std::sync::LazyLock<
+        std::sync::Mutex<
+            std::collections::HashMap<
+                std::net::IpAddr,
+                std::collections::VecDeque<std::time::Instant>,
+            >,
+        >,
     >,
-> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+}
+
+impl FailureTracker {
+    pub(crate) const fn new() -> Self {
+        Self {
+            map: std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new())),
+        }
+    }
+
+    /// True when `ip` failed too often too recently: answer 429 without
+    /// touching the database.
+    pub(crate) fn throttled(&self, ip: &std::net::IpAddr) -> bool {
+        let Ok(mut guard) = self.map.lock() else {
+            return false;
+        };
+        let now = std::time::Instant::now();
+        match guard.get_mut(ip) {
+            Some(queue) => {
+                prune_failures(queue, now);
+                queue.len() >= AUTH_FAIL_MAX
+            }
+            None => false,
+        }
+    }
+
+    /// Record one failed attempt from `ip`.
+    pub(crate) fn note(&self, ip: &std::net::IpAddr) {
+        let Ok(mut guard) = self.map.lock() else {
+            return;
+        };
+        if guard.len() >= AUTH_FAIL_MAX_ADDRS {
+            let now = std::time::Instant::now();
+            guard.retain(|_, queue| {
+                prune_failures(queue, now);
+                !queue.is_empty()
+            });
+        }
+        let queue = guard.entry(*ip).or_default();
+        prune_failures(queue, std::time::Instant::now());
+        queue.push_back(std::time::Instant::now());
+        while queue.len() > AUTH_FAIL_MAX * 2 {
+            queue.pop_front();
+        }
+    }
+}
+
+static AUTH_FAILURES: FailureTracker = FailureTracker::new();
 
 /// Failures remembered per address: more than this many inside the
 /// window answers 429 until the window slides past.
@@ -359,40 +414,14 @@ fn prune_failures(
     }
 }
 
-/// True when `ip` failed too often too recently: answer 429 without
-/// touching the database.
+/// True when `ip` failed a token check too often too recently.
 pub(crate) fn auth_throttled(ip: &std::net::IpAddr) -> bool {
-    let Ok(mut guard) = AUTH_FAILURES.lock() else {
-        return false;
-    };
-    let now = std::time::Instant::now();
-    match guard.get_mut(ip) {
-        Some(queue) => {
-            prune_failures(queue, now);
-            queue.len() >= AUTH_FAIL_MAX
-        }
-        None => false,
-    }
+    AUTH_FAILURES.throttled(ip)
 }
 
-/// Record one failed attempt from `ip`.
+/// Record one failed token check from `ip`.
 pub(crate) fn note_auth_failure(ip: &std::net::IpAddr) {
-    let Ok(mut guard) = AUTH_FAILURES.lock() else {
-        return;
-    };
-    if guard.len() >= AUTH_FAIL_MAX_ADDRS {
-        let now = std::time::Instant::now();
-        guard.retain(|_, queue| {
-            prune_failures(queue, now);
-            !queue.is_empty()
-        });
-    }
-    let queue = guard.entry(*ip).or_default();
-    prune_failures(queue, std::time::Instant::now());
-    queue.push_back(std::time::Instant::now());
-    while queue.len() > AUTH_FAIL_MAX * 2 {
-        queue.pop_front();
-    }
+    AUTH_FAILURES.note(ip)
 }
 
 /// Extract a Bearer token or return an empty string when there is none.
