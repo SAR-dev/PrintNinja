@@ -11,6 +11,7 @@ import {
   supportedPrinterLanguages,
   supportedPrinterTypes,
 } from "@/lib/platform";
+import { useLocalNetworkPermission } from "@/lib/android/useLocalNetworkPermission";
 import { describeError, isAlreadyExists } from "@/lib/errors";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { agent } from "@/lib/agent/commands";
@@ -43,7 +44,12 @@ export function usePrinterForm(
   list: ReturnType<typeof usePrinters>,
 ) {
   const { t } = useTranslation();
-  const { scanBluetooth } = discovery;
+  const { scanBluetooth, setNetworkPrinters } = discovery;
+  const {
+    granted: lanGranted,
+    canAskAgain: lanCanAskAgain,
+    ask: askLan,
+  } = useLocalNetworkPermission();
   // The detected-devices block shows counts only until a section is opened
   // (state lives in the block itself, which remounts with each dialog). While
   // editing it is tucked behind a link: filling from it overwrites the row.
@@ -72,6 +78,11 @@ export function usePrinterForm(
     skip_tls_verification: false,
     via_driver: false,
   });
+  // Android: the local network permission is off while the form would
+  // reach the LAN (saving a new ipp / raw_tcp row, or running Detect on
+  // one) — the explanation dialog opens instead, and the quiet scan
+  // picks the list back up once the permission comes back.
+  const [lanPromptOpen, setLanPromptOpen] = useState(false);
   // The one failing check from the last Save, as an i18n key, shown
   // inline next to the failing field instead of a toast. Any edit to
   // any field clears it — the person is already on top of it.
@@ -108,7 +119,18 @@ export function usePrinterForm(
     setAdvancedOpen(false);
     setSignInOpen(false);
     setAddressTouched(false);
+    setLanPromptOpen(false);
     setFormErrorKey(null);
+  };
+
+  // After a successful add or save: hide the sheet and clear everything so
+  // the next open starts from a blank form. A failed save deliberately
+  // skips this — the sheet stays open with the values still in it.
+  const closeAndReset = () => {
+    setShowAdd(false);
+    setEditingId(null);
+    setForm(blankForm);
+    resetDialogUi();
   };
 
   const openAdd = () => {
@@ -142,10 +164,19 @@ export function usePrinterForm(
     setShowAdd(true);
   };
 
+  // The connection types that dial out over the local network.
+  const isLanType = (type: string) => type === "ipp" || type === "raw_tcp";
+
   /** Ask the printer what it speaks and pre-fill the language if the
    * operator has not picked one yet. Never fails the form: a probe
-   * problem shows as "unknown", the same as a silent printer. */
+   * problem shows as "unknown", the same as a silent printer. On
+   * Android the probe dials the LAN, so a denied permission opens the
+   * explanation dialog instead of the probe. */
   const runDetect = async () => {
+    if (isAndroid() && !lanGranted && isLanType(form.printer_type)) {
+      setLanPromptOpen(true);
+      return;
+    }
     setDetecting(true);
     setDetectResult(null);
     try {
@@ -193,6 +224,27 @@ export function usePrinterForm(
     }
   }, [showAdd, form.printer_type, scanBluetooth]);
 
+  // On Android the page no longer browses the LAN on mount (usePrinters):
+  // the one quiet browse rides on the sheet instead, and only when the
+  // local-network permission is already granted — a denied permission
+  // shows the explanation, not a silently empty list. Once per open,
+  // no scanning state and no toasts: it just keeps the detected rows
+  // fresh for the person who just asked to see them.
+  const quietScanDone = useRef(false);
+  useEffect(() => {
+    if (!showAdd) {
+      quietScanDone.current = false;
+      return;
+    }
+    if (!isAndroid() || !lanGranted || quietScanDone.current) return;
+    quietScanDone.current = true;
+    void agent("discover_network_printers", { timeout_secs: 8 })
+      .then((list) => {
+        if (list && list.length > 0) setNetworkPrinters(list);
+      })
+      .catch(() => {});
+  }, [showAdd, lanGranted, setNetworkPrinters]);
+
   /** Copy a detected device into the form without saving anything. */
   const fillFromDetected = (kind: DetectedKind, d: SystemPrinter) => {
     if (kind === "system") {
@@ -233,7 +285,13 @@ export function usePrinterForm(
     }
   };
 
+  // The detected-row Add is one tap; a double-tap while the first is still
+  // in flight would otherwise add the printer twice.
+  const addDiscoveredInFlight = useRef(false);
+
   const addDiscovered = async (np: SystemPrinter) => {
+    if (addDiscoveredInFlight.current) return;
+    addDiscoveredInFlight.current = true;
     const printerType = np.printer_type ?? "ipp";
     const address = np.address;
     const name = np.name;
@@ -258,9 +316,14 @@ export function usePrinterForm(
         },
       });
       notifySuccess(t("printers.toast_added", { name }));
+      // One-tap add is done: close the sheet just like Save does.
+      closeAndReset();
       await list.load();
     } catch (e) {
+      // Failure keeps the sheet open so the row is still there to retry.
       notifyError(t("printers.toast_save_failed", { error: describeError(e) }));
+    } finally {
+      addDiscoveredInFlight.current = false;
     }
   };
 
@@ -279,6 +342,17 @@ export function usePrinterForm(
       return;
     }
     const req = parsed.req;
+    // Adding by IP needs the LAN on Android; editing an existing row
+    // does not (it only rewrites the local config), so it goes through.
+    if (
+      editingId === null &&
+      isAndroid() &&
+      !lanGranted &&
+      isLanType(req.printer_type)
+    ) {
+      setLanPromptOpen(true);
+      return;
+    }
     try {
       if (editingId === null) {
         await agent("add_printer", { req });
@@ -287,10 +361,7 @@ export function usePrinterForm(
         await agent("update_printer", { id: editingId, req });
         notifySuccess(t("printers.toast_saved", { name: form.name.trim() }));
       }
-      setShowAdd(false);
-      setEditingId(null);
-      setForm(blankForm);
-      resetDialogUi();
+      closeAndReset();
       await list.load();
     } catch (e) {
       const msg = describeError(e);
@@ -471,6 +542,11 @@ export function usePrinterForm(
   return {
     showDetected,
     setShowDetected,
+    lanGranted,
+    lanCanAskAgain,
+    lanPromptOpen,
+    setLanPromptOpen,
+    askLan,
     advancedOpen,
     setAdvancedOpen,
     signInOpen,

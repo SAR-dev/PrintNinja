@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { onSessionStarted } from "@/lib/share/client";
-import { createSyncScheduler, type SyncState } from "@/lib/sync/scheduler";
+import {
+  createSyncScheduler,
+  type RefreshOutcome,
+  type SyncState,
+} from "@/lib/sync/scheduler";
 import {
   productionApi,
   productionCache,
@@ -16,16 +20,19 @@ const INITIAL: SyncState = {
 };
 
 let current: {
-  refreshNow: (opts?: { force?: boolean }) => Promise<void>;
+  refreshNow: (opts?: { force?: boolean }) => Promise<RefreshOutcome>;
 } | null = null;
 
 /**
  * Refresh the local cache from the server now. This is the only sync
  * action in the app: the server owns the data, and this pulls it down.
- * No-op before the scheduler starts.
+ * Resolves with the outcome (so a manual refresh can report it); no-op
+ * before the scheduler starts.
  */
-export function cacheNow(): Promise<void> {
-  return current?.refreshNow() ?? Promise.resolve();
+export function cacheNow(opts?: {
+  force?: boolean;
+}): Promise<RefreshOutcome> {
+  return current?.refreshNow(opts) ?? Promise.resolve({ ok: true, error: null });
 }
 
 export function useSyncStatus(deps?: {

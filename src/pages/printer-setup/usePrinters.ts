@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { describeError } from "@/lib/errors";
+import { isAndroid } from "@/lib/android/platform";
 import { notifyError, notifyInfo, notifySuccess } from "@/lib/notify";
 import { isPrintViaPc } from "@/lib/printViaPc";
 import { TimeoutError, withTimeout } from "@/lib/withTimeout";
@@ -59,6 +60,13 @@ export function usePrinters(discovery: ReturnType<typeof usePrinterDiscovery>) {
     // Background mDNS browse after mount (one-shot, not continuous) so
     // printers appear without an extra tap: an 8 s browse immediately,
     // then a single 8 s re-browse at 15 s (~30 s window total).
+    // Android never browses on mount: the browse talks to the LAN, and
+    // the local-network permission is only asked when the user does
+    // something that needs it — opening the Add sheet runs a quiet
+    // scan once the permission is granted (usePrinterForm). A
+    // mount-time browse is exactly the unexplained system prompt this
+    // removes.
+    if (isAndroid()) return;
     void agent("discover_network_printers", { timeout_secs: 8 })
       .then((list) => {
         if (list && list.length > 0) discovery.setNetworkPrinters(list);

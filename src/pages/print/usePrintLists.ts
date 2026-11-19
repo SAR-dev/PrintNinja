@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSystemPrinters } from "@/lib/hooks/useSystemPrinters";
 import { usePrintStore } from "@/lib/store/printStore";
 import {
@@ -58,19 +58,31 @@ export function usePrintLists() {
   };
 
   // Fetch printers + templates fresh every time (mount, sync pull,
-  // window focus) so a height saved in Designer is visible here.
-  useEffect(() => {
-    let cancelled = false;
-    const load = async (first: boolean) => {
+  // window focus, manual refresh) so a height saved in Designer is
+  // visible here.
+  const aliveRef = useRef(true);
+  useEffect(
+    () => () => {
+      aliveRef.current = false;
+    },
+    [],
+  );
+  // refreshSystemPrinters is a plain function, re-created each render;
+  // the ref keeps reloadLists (and its listeners) stable.
+  const refreshRef = useRef(refreshSystemPrinters);
+  refreshRef.current = refreshSystemPrinters;
+  const reloadLists = useCallback(
+    async (first: boolean) => {
+      const cancelled = () => !aliveRef.current;
       try {
         // Saved printers plus OS ones, merged by the hook; this also
         // updates the list the dropdown shows.
         const [p, tpl, prefs] = await Promise.all([
-          refreshSystemPrinters().catch(() => []),
+          refreshRef.current().catch(() => []),
           listTemplates().catch(() => []),
           loadPrintPrefs().catch((): PrintPrefsMap => ({})),
         ]);
-        if (cancelled) return;
+        if (cancelled()) return;
         setTemplates(tpl);
         setPrinterPrefs(prefs);
         const st = usePrintStore.getState();
@@ -98,24 +110,29 @@ export function usePrintLists() {
       } catch (e) {
         console.error("Failed to load printers/templates:", e);
       } finally {
-        if (first && !cancelled) setLoading(false);
+        if (first && !cancelled()) setLoading(false);
       }
-    };
-    void load(true);
-    const onPulled = () => void load(false);
-    const onFocus = () => void load(false);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    aliveRef.current = true;
+    void reloadLists(true);
+    const onPulled = () => void reloadLists(false);
+    const onFocus = () => void reloadLists(false);
     window.addEventListener("sync:pulled", onPulled);
     window.addEventListener("focus", onFocus);
     return () => {
-      cancelled = true;
       window.removeEventListener("sync:pulled", onPulled);
       window.removeEventListener("focus", onFocus);
     };
-  }, []);
+  }, [reloadLists]);
 
   return {
     printers,
     refreshSystemPrinters,
+    reloadLists,
     templates,
     loading,
     printerPrefs,

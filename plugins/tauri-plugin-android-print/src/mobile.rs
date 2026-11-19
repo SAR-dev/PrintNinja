@@ -345,4 +345,26 @@ impl<R: Runtime> AndroidPrint<R> {
             .run_mobile_plugin("requestNotificationPermission", ())
             .map_err(crate::Error::from)
     }
+
+    pub fn local_network_permission_state(
+        &self,
+    ) -> crate::Result<LocalNetworkPermissionStateResponse> {
+        self.0
+            .run_mobile_plugin("localNetworkPermissionState", ())
+            .map_err(crate::Error::from)
+    }
+
+    pub fn request_local_network_permission(
+        &self,
+    ) -> crate::Result<LocalNetworkPermissionResponse> {
+        self.0
+            .run_mobile_plugin("requestLocalNetworkPermission", ())
+            .map_err(crate::Error::from)
+    }
+
+    pub fn open_local_network_settings(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin("openLocalNetworkSettings", ())
+            .map_err(Into::into)
+    }
 }

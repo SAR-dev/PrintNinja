@@ -14,6 +14,9 @@ Default permissions for the Android print plugin
 - `allow-is-battery-exemption-granted`
 - `allow-notification-permission-state`
 - `allow-request-notification-permission`
+- `allow-local-network-permission-state`
+- `allow-request-local-network-permission`
+- `allow-open-local-network-settings`
 
 ## Permission Table
 
@@ -131,6 +134,32 @@ Denies the is_battery_exemption_granted command without any pre-configured scope
 <tr>
 <td>
 
+`android-print:allow-local-network-permission-state`
+
+</td>
+<td>
+
+Enables the local_network_permission_state command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`android-print:deny-local-network-permission-state`
+
+</td>
+<td>
+
+Denies the local_network_permission_state command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `android-print:allow-notification-permission-state`
 
 </td>
@@ -157,6 +186,32 @@ Denies the notification_permission_state command without any pre-configured scop
 <tr>
 <td>
 
+`android-print:allow-open-local-network-settings`
+
+</td>
+<td>
+
+Enables the open_local_network_settings command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`android-print:deny-open-local-network-settings`
+
+</td>
+<td>
+
+Denies the open_local_network_settings command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `android-print:allow-request-battery-exemption`
 
 </td>
@@ -176,6 +231,32 @@ Enables the request_battery_exemption command without any pre-configured scope.
 <td>
 
 Denies the request_battery_exemption command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`android-print:allow-request-local-network-permission`
+
+</td>
+<td>
+
+Enables the request_local_network_permission command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`android-print:deny-request-local-network-permission`
+
+</td>
+<td>
+
+Denies the request_local_network_permission command without any pre-configured scope.
 
 </td>
 </tr>

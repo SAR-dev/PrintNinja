@@ -441,6 +441,30 @@ pub struct NotificationPermissionResponse {
     pub opened_settings: bool,
 }
 
+/// What `localNetworkPermissionState` resolves with: whether Android
+/// allows local network access (LAN discovery, paired PCs, IP printing),
+/// and whether the system prompt may still be shown (false routes the
+/// button to the app's permission settings screen instead of asking
+/// into a silent auto-deny).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalNetworkPermissionStateResponse {
+    pub granted: bool,
+    pub can_ask_again: bool,
+}
+
+/// What `requestLocalNetworkPermission` resolves with: `granted` is the
+/// answer at the moment the dialog fired (the prompt is system UI and
+/// the real answer arrives later, read back as state), `opened_settings`
+/// is true when the system would not prompt and the app's permission
+/// settings screen was opened instead.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalNetworkPermissionResponse {
+    pub granted: bool,
+    pub opened_settings: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -656,6 +680,25 @@ mod tests {
     #[test]
     fn notification_permission_response_parses_the_object_kotlin_sends() {
         let r: NotificationPermissionResponse =
+            serde_json::from_str(r#"{"granted":false,"openedSettings":true}"#).unwrap();
+        assert!(!r.granted);
+        assert!(r.opened_settings);
+    }
+
+    #[test]
+    fn local_network_permission_state_parses_the_object_kotlin_sends() {
+        let r: LocalNetworkPermissionStateResponse =
+            serde_json::from_str(r#"{"granted":true,"canAskAgain":false}"#).unwrap();
+        assert!(r.granted);
+        assert!(!r.can_ask_again);
+        let wrong: Result<LocalNetworkPermissionStateResponse, _> =
+            serde_json::from_str(r#"{"granted":true,"can_ask_again":true}"#);
+        assert!(wrong.is_err());
+    }
+
+    #[test]
+    fn local_network_permission_response_parses_the_object_kotlin_sends() {
+        let r: LocalNetworkPermissionResponse =
             serde_json::from_str(r#"{"granted":false,"openedSettings":true}"#).unwrap();
         assert!(!r.granted);
         assert!(r.opened_settings);

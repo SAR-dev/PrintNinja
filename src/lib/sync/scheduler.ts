@@ -10,6 +10,13 @@ import {
 
 export type SyncStatusName = "synced" | "syncing" | "offline";
 
+/** The outcome of one refresh attempt, so a caller that waited for it
+ *  (a manual refresh) can say what happened. */
+export interface RefreshOutcome {
+  ok: boolean;
+  error: string | null;
+}
+
 export interface SyncState {
   state: SyncStatusName;
   /** Local rows with edits not yet saved to the server (legacy drafts). */
@@ -46,6 +53,11 @@ const MAX_BACKOFF_MS = 5 * 60_000;
  * Failures back off exponentially (5 s doubling to 5 min) and report
  * `offline`; success resets the backoff. Concurrent runs never overlap:
  * a trigger while refreshing sets a flag for one re-run afterwards.
+ *
+ * `refreshNow` resolves with the outcome of the refresh it caused:
+ * a call made while a run is in flight joins the chain and resolves
+ * when it has fully settled (including the re-run), and a call inside
+ * the backoff window resolves as skipped (no API call, no error).
  */
 export function createSyncScheduler(deps: SchedulerDeps) {
   const now = deps.now ?? (() => Date.now());
@@ -59,6 +71,14 @@ export function createSyncScheduler(deps: SchedulerDeps) {
   let periodicTimer: ReturnType<typeof setInterval> | null = null;
   let lastFocusRun = 0;
   let disposed = false;
+  /** Resolvers for refreshNow calls that joined an in-flight run. */
+  let outcomeWaiters: Array<(outcome: RefreshOutcome) => void> = [];
+
+  const drainWaiters = (outcome: RefreshOutcome) => {
+    const waiters = outcomeWaiters;
+    outcomeWaiters = [];
+    for (const resolve of waiters) resolve(outcome);
+  };
 
   const emit = async (state: SyncStatusName) => {
     if (!deps.onStatus) return;
@@ -74,7 +94,9 @@ export function createSyncScheduler(deps: SchedulerDeps) {
   const backoffMs = () =>
     Math.min(BASE_BACKOFF_MS * 2 ** failures, MAX_BACKOFF_MS);
 
-  async function refreshNow(opts?: { force?: boolean }): Promise<void> {
+  async function refreshNow(opts?: {
+    force?: boolean;
+  }): Promise<RefreshOutcome> {
     // A new sign-in is a fresh start: backoff earned while signed out
     // (401s) must not delay the new account's first pull.
     if (opts?.force) {
@@ -83,12 +105,16 @@ export function createSyncScheduler(deps: SchedulerDeps) {
     }
     if (running) {
       rerun = true;
-      return;
+      return new Promise<RefreshOutcome>((resolve) =>
+        outcomeWaiters.push(resolve),
+      );
     }
     if (now() < backoffUntil) {
-      return;
+      // Skipped, not failed: report what the last attempt left behind.
+      return { ok: lastError === null, error: lastError };
     }
     running = true;
+    let ok = false;
     await emit("syncing");
     try {
       await pull(deps.cache, deps.api, deps.library?.cache);
@@ -107,6 +133,7 @@ export function createSyncScheduler(deps: SchedulerDeps) {
         ({ downloaded: fontsDownloaded, failed: fontsFailed } =
           await downloadFontFiles(deps.library.cache));
       }
+      ok = true;
       lastPulledAt = new Date(now()).toISOString();
       lastError = null;
       failures = 0;
@@ -133,11 +160,19 @@ export function createSyncScheduler(deps: SchedulerDeps) {
       await emit("offline");
     } finally {
       running = false;
+      const outcome: RefreshOutcome = { ok, error: lastError };
       if (rerun && !disposed) {
+        // The re-run's finally drains the waiters with the chain's final
+        // outcome, so a manual refresh reports what actually happened.
         rerun = false;
         void refreshNow();
+      } else {
+        drainWaiters(outcome);
       }
     }
+    // The runner reports its own run; joiners wait for the chain's final
+    // outcome (drained in the re-run's finally above).
+    return { ok, error: lastError };
   }
 
   function onFocus(): void {

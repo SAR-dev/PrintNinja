@@ -11,4 +11,7 @@ permissions = [
   "allow-is-battery-exemption-granted",
   "allow-notification-permission-state",
   "allow-request-notification-permission",
+  "allow-local-network-permission-state",
+  "allow-request-local-network-permission",
+  "allow-open-local-network-settings",
 ]

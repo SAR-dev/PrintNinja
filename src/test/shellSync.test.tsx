@@ -22,10 +22,18 @@ const shellState = vi.hoisted(() => ({
     lastError: string | null;
   },
   cacheNow: vi.fn(async () => {}),
+  refresh: vi.fn(),
 }));
 
 vi.mock("@/lib/shell/useShareStatus", () => ({
   useShareStatus: () => shellState.share,
+}));
+
+vi.mock("@/lib/refresh/manual", () => ({
+  useManualRefresh: () => ({
+    refreshing: false,
+    run: shellState.refresh,
+  }),
 }));
 
 vi.mock("@/lib/sync/useSyncStatus", () => ({
@@ -53,6 +61,7 @@ beforeEach(() => {
     lastError: null,
   };
   shellState.cacheNow.mockClear();
+  shellState.refresh.mockClear();
 });
 
 describe("topbar share + cache", () => {
@@ -107,10 +116,10 @@ describe("topbar share + cache", () => {
     expect(screen.queryByTestId("topbar-profile")).toBeNull();
   });
 
-  it("runs a cache refresh when the cache button is clicked", async () => {
+  it("runs the manual refresh when the refresh button is clicked", async () => {
     renderShell();
     fireEvent.click(screen.getByTestId("sync-chip"));
-    expect(shellState.cacheNow).toHaveBeenCalledOnce();
+    expect(shellState.refresh).toHaveBeenCalledOnce();
   });
 
   it("surfaces the last refresh error on the cache button", () => {
@@ -132,10 +141,11 @@ describe("topbar share + cache", () => {
     );
   });
 
-  it("shows only the offline badge when the share is down", () => {
+  it("keeps the refresh button when the share is down", () => {
     shellState.share = { state: "offline" };
     renderShell();
     expect(screen.getByTitle("Share service unreachable")).toBeInTheDocument();
-    expect(screen.queryByTestId("sync-chip")).not.toBeInTheDocument();
+    // Local reloads still work with the server down, so the button stays.
+    expect(screen.getByTestId("sync-chip")).toBeInTheDocument();
   });
 });

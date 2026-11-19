@@ -18,6 +18,18 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Local network access: finding printers on the LAN, reaching a
+         paired PC, and printing to an IP address all send traffic to
+         devices on the local network. NEARBY_WIFI_DEVICES (Android 13+)
+         is the nearby-devices access for that; ACCESS_LOCAL_NETWORK
+         (Android 14+) is the same gate once the app targets Android 17.
+         Both are runtime permissions — AndroidPrintPlugin checks them
+         and asks with a short explanation before any LAN traffic, so a
+         scan never fires an unexplained system prompt. -->
+    <uses-permission
+        android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <!-- Battery-optimization exemption: opening the system screen
          (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) throws
          SecurityException without this, which the toggle used to

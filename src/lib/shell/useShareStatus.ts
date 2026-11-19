@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { SessionExpiredError } from "@/lib/api/errors";
+import { isAndroid } from "@/lib/platform";
+import { useLocalNetworkPermission } from "@/lib/android/useLocalNetworkPermission";
 import * as share from "@/lib/share/client";
+import { isLocalServiceUrl } from "@/lib/share/localUrl";
 
 export type ShareStatus =
   | { state: "unconfigured" }
@@ -18,6 +21,9 @@ const RETRY_MS = 5_000;
 /** Connection to the share service, for the top bar. Never throws. */
 export function useShareStatus(): ShareStatus {
   const [status, setStatus] = useState<ShareStatus>({ state: "unconfigured" });
+  // Reaching a share service on the LAN is local-network traffic on
+  // Android: the badge must not fire the permission prompt on a poll.
+  const { granted: lanGranted } = useLocalNetworkPermission();
 
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +36,12 @@ export function useShareStatus(): ShareStatus {
           const token = await share.getSessionToken();
           if (!token) {
             next = { state: "signed_out" };
+          } else if (isAndroid() && !lanGranted && isLocalServiceUrl(url)) {
+            // A valid session against a service the app is not allowed
+            // to reach yet: unreachable, not signed out. The badge
+            // flips on its own when the permission is granted (the
+            // effect below re-runs the check).
+            next = { state: "offline" };
           } else {
             next = (await checkOnline()) ?? next;
           }
@@ -80,7 +92,9 @@ export function useShareStatus(): ShareStatus {
       offStarted();
       offEnded();
     };
-  }, []);
+    // When the local network permission is granted (or revoked) the
+    // check re-runs immediately so the badge reflects the new answer.
+  }, [lanGranted]);
 
   return status;
 }

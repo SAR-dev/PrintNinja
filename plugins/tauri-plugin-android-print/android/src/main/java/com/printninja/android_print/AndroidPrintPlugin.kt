@@ -2037,6 +2037,141 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
         invoke.resolve(JSObject().put("granted", false).put("openedSettings", false))
     }
 
+    /**
+     * Local network access — LAN printer discovery, reaching a paired
+     * PC, printing by IP address — is gated on two runtime
+     * permissions, each checked only where the OS knows it:
+     * NEARBY_WIFI_DEVICES (Android 13+) is the nearby-devices access
+     * for talking to devices on the local network, and
+     * ACCESS_LOCAL_NETWORK (Android 14+) applies once the app targets
+     * Android 17. An install on an older system needs neither and
+     * passes through.
+     */
+    private fun grantedLocalNetwork(): Boolean {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(
+                activity,
+                Manifest.permission.NEARBY_WIFI_DEVICES,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        if (Build.VERSION.SDK_INT >= 34 &&
+            ContextCompat.checkSelfPermission(
+                activity,
+                Manifest.permission.ACCESS_LOCAL_NETWORK,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Whether the system prompt has ever been shown for this install —
+     * the same memory the notification prompt keeps: a declined prompt
+     * must not re-fire on every ask (silently auto-denying), and the
+     * "Try again" button needs the answer to know when the settings
+     * screen is the only route left.
+     */
+    private fun localNetworkAsked(): Boolean =
+        activity.getSharedPreferences("printninja_permissions", Context.MODE_PRIVATE)
+            .getBoolean("local_network_permission_asked", false)
+
+    private fun markLocalNetworkAsked() {
+        activity.getSharedPreferences("printninja_permissions", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("local_network_permission_asked", true)
+            .apply()
+    }
+
+    /** True while the system may still show the permission dialog. */
+    private fun canPromptLocalNetwork(): Boolean =
+        PrintNinjaService.canPromptNotification(
+            localNetworkAsked(),
+            activity.shouldShowRequestPermissionRationale(Manifest.permission.NEARBY_WIFI_DEVICES),
+        )
+
+    /** Fires the one-time system prompt; the answer is read back as state. */
+    private fun askLocalNetworkPermission() {
+        markLocalNetworkAsked()
+        val perms =
+            if (Build.VERSION.SDK_INT >= 34) {
+                arrayOf(
+                    Manifest.permission.NEARBY_WIFI_DEVICES,
+                    Manifest.permission.ACCESS_LOCAL_NETWORK,
+                )
+            } else {
+                arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES)
+            }
+        activity.runOnUiThread { ActivityCompat.requestPermissions(activity, perms, 9753) }
+    }
+
+    /**
+     * The permission state the UI shows: whether Android has allowed
+     * local network access, and whether the system prompt may still be
+     * shown (otherwise the caller's button opens the settings screen
+     * instead of asking into a silent auto-deny).
+     */
+    @Command
+    fun localNetworkPermissionState(invoke: Invoke) {
+        invoke.resolve(
+            JSObject()
+                .put("granted", grantedLocalNetwork())
+                .put("canAskAgain", canPromptLocalNetwork()),
+        )
+    }
+
+    /**
+     * Asks for the local network permission, or opens the app's
+     * permission settings when the system will not prompt again.
+     * Settles at once: the prompt is system UI, the plugin never
+     * receives the grant callback, and a JS-side state read on
+     * visibilitychange picks up the real answer when the dialog is
+     * dismissed.
+     */
+    @Command
+    fun requestLocalNetworkPermission(invoke: Invoke) {
+        if (grantedLocalNetwork()) {
+            invoke.resolve(JSObject().put("granted", true).put("openedSettings", false))
+            return
+        }
+        if (!canPromptLocalNetwork()) {
+            // The prompt is gone (asked, declined, "don't ask again"):
+            // the app's own permission screen is the only route left.
+            val intent =
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:${activity.packageName}"),
+                )
+                    .putExtra("pid", PackageManager.PERMISSION_GRANTED)
+            activity.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            invoke.resolve(JSObject().put("granted", false).put("openedSettings", true))
+            return
+        }
+        askLocalNetworkPermission()
+        invoke.resolve(JSObject().put("granted", false).put("openedSettings", false))
+    }
+
+    /**
+     * Opens the app's own permission settings screen — the "Open
+     * settings" button on the local network denial notice. Deliberately
+     * distinct from the request command: it never fires the system
+     * prompt, even when one is still available, because the person
+     * chose the settings screen over the dialog.
+     */
+    @Command
+    fun openLocalNetworkSettings(invoke: Invoke) {
+        val intent =
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:${activity.packageName}"),
+            )
+                .putExtra("pid", PackageManager.PERMISSION_GRANTED)
+        activity.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        invoke.resolve()
+    }
+
     @Command
     fun requestBatteryExemption(invoke: Invoke) {
         val granted = BatteryExemption.request(activity)

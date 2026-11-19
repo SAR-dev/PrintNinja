@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { LocalNetworkNotice } from "@/components/LocalNetworkAccess";
 
 /** One thing the app found: an OS print queue, an mDNS hit or a paired device. */
 export interface DetectedDevice {
@@ -40,6 +41,11 @@ interface Props {
   onAdd?: (kind: DetectedKind, device: DetectedDevice) => void;
   /** Android only: opens the OS Bluetooth screen where pairing happens. */
   onOpenBluetoothSettings?: () => void;
+  /** Android only: the local network permission is off — the network
+   * section is replaced by the explanation notice. */
+  networkBlocked?: boolean;
+  onNetworkAllow?: () => void;
+  onNetworkSettings?: () => void;
 }
 
 const TEST_IDS: Record<DetectedKind, (id: string) => string> = {
@@ -64,6 +70,9 @@ export function DetectedDevices({
   onFill,
   onAdd,
   onOpenBluetoothSettings,
+  networkBlocked = false,
+  onNetworkAllow,
+  onNetworkSettings,
 }: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState<Record<DetectedKind, boolean>>({
@@ -112,18 +121,25 @@ export function DetectedDevices({
             onFill={onFill}
           />
         )}
-        <Section
-          kind="network"
-          icon={Wifi}
-          label={t("printers.found_network")}
-          devices={network}
-          expanded={open.network}
-          onToggle={() => toggle("network")}
-          emptyHint={!scanning ? t("printers.no_network_printers") : null}
-          data-testid="printers-toggle-network"
-          onFill={onFill}
-          onAdd={onAdd}
-        />
+        {networkBlocked ? (
+          <LocalNetworkNotice
+            onAllow={onNetworkAllow ?? (() => {})}
+            onOpenSettings={onNetworkSettings ?? (() => {})}
+          />
+        ) : (
+          <Section
+            kind="network"
+            icon={Wifi}
+            label={t("printers.found_network")}
+            devices={network}
+            expanded={open.network}
+            onToggle={() => toggle("network")}
+            emptyHint={!scanning ? t("printers.no_network_printers") : null}
+            data-testid="printers-toggle-network"
+            onFill={onFill}
+            onAdd={onAdd}
+          />
+        )}
         {bluetooth && (
           <Section
             kind="bluetooth"
