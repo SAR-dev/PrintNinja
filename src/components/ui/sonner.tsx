@@ -5,7 +5,7 @@ type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 /**
  * App toaster: status-token colors per type (UI_GUIDE.md, not sonner's
- * own palette), two visible at most, and a close button everywhere.
+ * own palette), two visible at most, and a close button on phones.
  * Phones sit bottom-center above the bottom nav (plus the sticky Print
  * bar on /print) via `--toast-offset-bottom`, which Layout keeps true
  * to the real chrome heights; desktop stays bottom-right.
@@ -17,6 +17,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
       position={isAndroid() ? "bottom-center" : "bottom-right"}
       mobileOffset={{ bottom: "var(--toast-offset-bottom, 24px)" }}
       visibleToasts={2}
+      // Phones: every toast gets a visible ✕. Sonner's swipe-to-dismiss
+      // only allows the position-derived direction (down, for
+      // bottom-center), which is cramped at the bottom edge — a tap target
+      // is the reliable way to clear a toast with a thumb.
+      closeButton={isAndroid()}
       className="toaster group"
       toastOptions={{
         classNames: {

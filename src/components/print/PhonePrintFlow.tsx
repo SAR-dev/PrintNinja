@@ -14,6 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
+import { FirstPrintMoment } from "@/components/FirstPrintMoment";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -274,6 +275,7 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
             <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />
             {t("print.sent")}
           </p>
+          <FirstPrintMoment />
           {store.renderedBy && (
             <p className="text-xs">
               {t("print.rendered_on", { peer: store.renderedBy })}
