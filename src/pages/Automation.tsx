@@ -70,8 +70,9 @@ export function AutomationPage() {
       >
         {/* data-variant="segmented": on a phone the strip stays one
             horizontal segmented control (the labels fit, so it never
-            pans sideways) instead of the stacked full-width rows mobile.css
-            gives other pages' tab strips (DESIGN IMPROVEMENTS 4.9). */}
+            pans sideways) instead of the stacked full-width rows TabsList
+            gives other pages' tab strips via its max-md: classes
+            (DESIGN IMPROVEMENTS 4.9). */}
         <TabsList
           aria-label={t("automation.tabs_aria")}
           data-variant="segmented"

@@ -474,7 +474,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Top bar: same on every screen size */}
       <header
         data-slot="app-header"
-        className="flex h-12 shrink-0 items-center gap-3 border-b bg-card px-3 pt-[env(safe-area-inset-top)] md:px-4"
+        className="flex h-12 shrink-0 items-center gap-3 border-b bg-card px-3 pt-[env(safe-area-inset-top)] md:px-4 max-md:h-[calc(3.5rem_+_env(safe-area-inset-top,0px))] max-md:px-[max(1rem,env(safe-area-inset-left,0px))] max-md:pl-[max(1rem,env(safe-area-inset-left,0px))] max-md:pr-[max(1rem,env(safe-area-inset-right,0px))] max-md:border-b-0 max-md:bg-background max-md:relative max-md:z-20"
       >
         {/* min-w-0 down the brand chain lets the app name truncate on a phone
             instead of pushing the right-hand badges (update, sync, help) past
@@ -486,7 +486,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             aria-label={appName}
           >
             <AppLogo src={logo} />
-            <span className="truncate text-base font-semibold tracking-tight">
+            <span className="truncate text-base font-semibold tracking-tight max-md:text-[1.0625rem] max-md:font-bold max-md:tracking-[-0.02em]">
               {appName}
             </span>
           </Link>
@@ -526,7 +526,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Button
             variant="ghost"
             size="icon"
-            className={shortLandscape ? undefined : "md:hidden"}
+            className={cn(
+              shortLandscape ? undefined : "md:hidden",
+              "max-md:rounded-full",
+            )}
             onClick={openPalette}
             aria-label={t("shell.search")}
           >
@@ -536,6 +539,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             variant="ghost"
             size="icon"
             data-slot="header-help"
+            className="max-md:rounded-full max-md:hidden"
             onClick={openHelp}
             aria-label={t("shell.help")}
             title={t("shell.help")}
@@ -635,14 +639,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
           data-slot="app-main"
           tabIndex={-1}
           className={cn(
-            "min-w-0 flex-1 overflow-y-auto focus:outline-none",
+            "min-w-0 flex-1 overflow-y-auto focus:outline-none max-md:overscroll-y-contain max-md:[-webkit-overflow-scrolling:touch]",
             fillsViewport && "lg:overflow-hidden",
           )}
         >
           <div
             data-slot="app-content"
             className={cn(
-              "mx-auto w-full max-w-[1600px] space-y-4 px-4 py-4 md:px-6 md:py-5",
+              "mx-auto w-full max-w-[1600px] space-y-4 px-4 py-4 md:px-6 md:py-5 max-md:pt-6 max-md:pb-10 max-md:pl-[max(1rem,env(safe-area-inset-left,0px))] max-md:pr-[max(1rem,env(safe-area-inset-right,0px))]",
               fillsViewport && "lg:flex lg:h-full lg:flex-col",
             )}
           >
@@ -657,9 +661,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <nav
         aria-label={t("shell.mobile_nav")}
         data-slot="mobile-nav"
-        className="shrink-0 border-t bg-card pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="shrink-0 border-t bg-card pb-[env(safe-area-inset-bottom)] md:hidden max-md:border-0 max-md:rounded-[2rem] max-md:m-[0.25rem_max(0.75rem,env(safe-area-inset-left,0px))_calc(0.625rem_+_env(safe-area-inset-bottom,0px))_max(0.75rem,env(safe-area-inset-right,0px))] max-md:pb-0 max-md:shadow-[0_1px_2px_hsl(var(--foreground)/0.06),0_10px_32px_-8px_hsl(var(--foreground)/0.28)] max-md:relative max-md:z-20"
       >
-        <ul className="flex items-stretch">
+        <ul className="flex items-stretch max-md:px-1.5 max-md:py-1">
           {MOBILE_PRIMARY_ITEMS.filter(
             (item) => !viaPc || item.path !== "/printers",
           ).map((item) => {
@@ -670,13 +674,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   to={item.path}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 text-xs transition-colors",
+                    "flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 text-xs transition-colors max-md:min-h-[3.75rem] max-md:gap-[0.3125rem] max-md:tracking-[0.01em] max-md:justify-start max-md:pt-1 max-md:transition-[color_150ms]",
                     active
-                      ? "font-semibold text-primary"
-                      : "text-muted-foreground hover:text-foreground",
+                      ? "font-semibold text-primary max-md:font-bold max-md:[&_svg]:bg-accent"
+                      : "text-muted-foreground hover:text-foreground max-md:font-medium",
+                    "max-md:active:[&_svg]:scale-[0.88]",
                   )}
                 >
-                  <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                  <item.icon
+                    className="h-5 w-5 shrink-0 max-md:box-content max-md:h-[1.5rem] max-md:w-[1.5rem] max-md:p-[0.25rem_1.25rem] max-md:rounded-full max-md:bg-transparent max-md:transition-[background-color_var(--dur-base)_var(--ease-out),transform_150ms_var(--ease-out)]"
+                    aria-hidden="true"
+                  />
                   <span className="max-w-full truncate leading-none">
                     {t(item.labelKey)}
                   </span>
@@ -690,15 +698,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
               onClick={() => setMoreOpen(true)}
               aria-expanded={moreOpen}
               className={cn(
-                "flex min-h-14 w-full flex-col items-center justify-center gap-1 px-0.5 text-xs transition-colors",
+                "flex min-h-14 w-full flex-col items-center justify-center gap-1 px-0.5 text-xs transition-colors max-md:min-h-[3.75rem] max-md:gap-[0.3125rem] max-md:tracking-[0.01em] max-md:justify-start max-md:pt-1 max-md:transition-[color_150ms]",
                 MOBILE_MORE_ITEMS.some((item) =>
                   isActivePath(location.pathname, item.path),
                 )
-                  ? "font-semibold text-primary"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "font-semibold text-primary max-md:font-medium"
+                  : "text-muted-foreground hover:text-foreground max-md:font-medium",
+                moreOpen && "max-md:[&_svg]:bg-accent",
+                "max-md:active:[&_svg]:scale-[0.88]",
               )}
             >
-              <MoreHorizontal className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <MoreHorizontal
+                className="h-5 w-5 shrink-0 max-md:box-content max-md:h-[1.5rem] max-md:w-[1.5rem] max-md:p-[0.25rem_1.25rem] max-md:rounded-full max-md:bg-transparent max-md:transition-[background-color_var(--dur-base)_var(--ease-out),transform_150ms_var(--ease-out)]"
+                aria-hidden="true"
+              />
               <span className="max-w-full truncate leading-none">
                 {t("nav.more")}
               </span>

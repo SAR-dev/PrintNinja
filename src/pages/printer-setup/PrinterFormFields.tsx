@@ -406,7 +406,7 @@ export function PrinterFormFields({
                 {t("printers.ipp_password_hint")}
               </p>
             </div>
-            <label className="flex items-start gap-2 text-sm">
+            <label className="flex items-start gap-2 text-sm max-md:font-semibold">
               <input
                 type="checkbox"
                 className="mt-0.5 h-4 w-4"
@@ -437,7 +437,7 @@ export function PrinterFormFields({
           app never switches between them on its own. */}
       {form.printer_type === "bluetooth" && !isAndroid() && (
         <div className="rounded-md border p-3">
-          <label className="flex items-start gap-2 text-sm">
+          <label className="flex items-start gap-2 text-sm max-md:font-semibold">
             <input
               type="checkbox"
               className="mt-0.5 h-4 w-4"

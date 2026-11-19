@@ -394,7 +394,7 @@ Route loading is a bare spinner (`PageLoading`), and one nested Suspense uses `f
 
 **Phase 3: structural (ongoing, one page per pull request)**
 1. ✅ Split large pages and group state: Settings, Print, Designer, PrinterSetup (5.2). All four are now thin shells (108–287 lines) composing section components and small state hooks in `src/pages/{settings,print,designer,printer-setup}/`; state grouped into per-feature hooks. Rendered markup, testids and behavior unchanged (verified by testid/`id`/`aria-*` multiset audit against the pre-split pages).
-2. Fold phone styling into component variants (5.6).
+2. ✅ Fold phone styling into component variants (5.6). Per-component phone rules now live on the components as `max-md:` Tailwind variants (ui/ buttons, card, fields, switch, tabs, sheet, dialog, Layout, PageHeader, DataTable, History, PhonePrintFlow, PrinterFormFields); `src/mobile.css` keeps only shared tokens, cross-cutting touch/focus rules and outer-container descendant rules. Rendered output unchanged.
 3. Optional brand moments and design-system documentation (7.6).
 4. Japanese typography and screenshot runs once Phase 2 is stable.
 

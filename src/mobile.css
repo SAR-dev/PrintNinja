@@ -6,6 +6,17 @@
  * large page title, pill action chips, a tonal bottom tab bar, sheets that
  * rise from the bottom edge, and press feedback on everything tappable.
  *
+ * Per-component phone styling (button weights and press states, card
+ * radii, field sizes, the page header, the bottom tab bar, sheet and
+ * dialog geometry) lives in the components themselves as `max-md:`
+ * Tailwind variants — see src/components/ui/ and Layout.tsx. This file
+ * keeps only what is genuinely shared:
+ *  - the phone token values (radius, control heights, shadows, easing),
+ *  - cross-cutting touch and focus rules that span several components,
+ *  - a few descendant rules that only an outer container can express
+ *    (ad-hoc cards inside app-main, tab triggers, page-action buttons,
+ *     dialog buttons, the designer's sample panel).
+ *
  * Rules:
  *  - Desktop is untouched: every rule is inside the phone media query.
  *  - Colour comes from the existing semantic tokens only (no new palette),
@@ -13,11 +24,13 @@
  *  - Form controls keep their visible 1px `--input` border. It is the 3:1
  *    boundary WCAG 1.4.11 asks for, so controls get bigger and rounder,
  *    not borderless.
- *  - Hooks are `data-slot` attributes on the shared primitives and layout,
- *    so these rules do not depend on Tailwind class chains.
  *
- * This file loads after index.css, so equal-specificity rules here win over
- * Tailwind utilities.
+ * This file loads after index.css, so equal-specificity rules here win
+ * over Tailwind utilities. The components' `max-md:` classes do not need
+ * `!important` against base utilities (media-variant utilities are
+ * emitted after base ones); the only `!` marks remain where two
+ * media-wrapped utilities collide (coarse-pointer min-heights) or where
+ * an important animation must beat the base `animate-in`.
  */
 
 @media (max-width: 767px) {
@@ -58,60 +71,22 @@
     touch-action: manipulation;
   }
 
-  /* ---------- App bar ---------- */
-  [data-slot="app-header"] {
-    height: calc(3.5rem + env(safe-area-inset-top, 0px));
-    padding-inline: max(1rem, env(safe-area-inset-left, 0px))
-      max(1rem, env(safe-area-inset-right, 0px));
-    border-bottom: 0;
-    background-color: hsl(var(--background));
-    position: relative;
-    z-index: 20;
-  }
-  [data-slot="app-header"] a > span.truncate {
-    font-size: 1.0625rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
-  /* The shortcuts sheet lists keyboard keys; a phone has none. */
-  [data-slot="header-help"] {
-    display: none;
-  }
-  [data-slot="app-header"] [data-slot="button"] {
-    border-radius: 9999px;
+  /* ---------- Fields: shared focus ring ----------
+     The soft 3px ring (no offset) replaces the desktop ring on phones.
+     It spans Input, Textarea and SelectTrigger, so it stays here instead
+     of being tripled in the components. */
+  [data-slot="input"]:focus-visible,
+  [data-slot="textarea"]:focus-visible,
+  [data-slot="select-trigger"]:focus {
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.2);
+    --tw-ring-offset-width: 0px;
   }
 
-  /* ---------- Content area ---------- */
-  [data-slot="app-main"] {
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-  [data-slot="app-content"] {
-    padding: 1.5rem max(1rem, env(safe-area-inset-left, 0px)) 2.5rem
-      max(1rem, env(safe-area-inset-right, 0px));
-  }
-
-  /* ---------- Large page title + chip actions ---------- */
-  [data-slot="page-header"] {
-    gap: 0.875rem;
-    border-bottom: 0;
-    padding-bottom: 0;
-  }
-  [data-slot="page-header"] h1 {
-    font-size: 1.75rem;
-    line-height: 1.1;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-  }
-  [data-slot="page-header"] p {
-    font-size: 0.875rem;
-    line-height: 1.4;
-  }
-  /* Actions become pills. They wrap rather than scroll: a sideways row
-     would hide the primary action (the last one) off the screen edge. */
-  [data-slot="page-actions"] {
-    gap: 0.5rem;
-  }
+  /* ---------- Page actions: pills ----------
+     The actions become pills. They wrap rather than scroll: a sideways
+     row would hide the primary action (the last one) off the screen edge.
+     The container's gap already matches the base `gap-2`, and the buttons
+     are page-owned children PageHeader cannot reach. */
   [data-slot="page-actions"] [data-slot="button"] {
     height: 2.75rem;
     min-height: 2.75rem;
@@ -120,8 +95,10 @@
     font-size: 0.875rem;
   }
 
-  /* ---------- Cards: borderless, lifted by shadow ---------- */
-  [data-slot="card"],
+  /* ---------- Cards: borderless, lifted by shadow ----------
+     Ad-hoc cards — pages that hand-style `rounded-lg border bg-card`
+     divs (DataTable rows, History, Settings, ...) — share one rule here;
+     the Card component carries its own `max-md:` classes. */
   [data-slot="app-main"] .rounded-lg.border.bg-card {
     border-color: transparent;
     border-radius: 1.25rem;
@@ -140,69 +117,10 @@
     box-shadow: none;
   }
 
-  /* ---------- Buttons ---------- */
-  [data-slot="button"] {
-    font-weight: 600;
-    transition:
-      transform var(--dur-fast) var(--ease-out),
-      background-color 150ms,
-      opacity 150ms;
-  }
-  [data-slot="button"]:active:not(:disabled) {
-    transform: scale(0.97);
-  }
-  [data-slot="button"].h-8 {
-    /* size="sm": still a 44px target on phones (the e2e phone spec
-       asserts every visible button is at least 44x44). */
-    height: 2.75rem;
-    min-height: 2.75rem;
-  }
-
-  /* ---------- Fields ---------- */
-  /* Horizontal padding is left to the utilities: inputs with a leading icon
-     (search) rely on their own pl-* to clear it. */
-  [data-slot="input"],
-  [data-slot="select-trigger"] {
-    height: 3rem;
-    min-height: 3rem;
-    border-radius: 0.875rem;
-  }
-  [data-slot="select-trigger"] {
-    padding-inline: 1rem;
-  }
-  [data-slot="textarea"] {
-    border-radius: 0.875rem;
-  }
-  [data-slot="input"]:focus-visible,
-  [data-slot="textarea"]:focus-visible,
-  [data-slot="select-trigger"]:focus {
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.2);
-    --tw-ring-offset-width: 0px;
-  }
-  label {
-    font-weight: 600;
-  }
-  [data-slot="switch"] {
-    /* Native switches are about 51x31; scale from the trailing edge so the
-       row layout does not shift. */
-    transform: scale(1.2);
-    transform-origin: right center;
-  }
-
-  /* ---------- Stacked tabs ----------
-     On phones a tab strip becomes a vertical list of full-width rows —
-     the vertical-only rule in the mobile e2e spec. Strips that opt into
-     data-variant="segmented" (Automation's three short tabs) stay one
-     horizontal segmented control instead: stacking took a large part of
-     the first screen for no space saving (DESIGN IMPROVEMENTS 4.9). */
-  [data-slot="tabs-list"]:not([data-variant="segmented"]) {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    gap: 0.25rem;
-    padding: 0.25rem;
-    border-radius: 1rem;
-  }
+  /* ---------- Stacked tabs: trigger rules ----------
+     The list stacking itself is a `max-md:` class on TabsList; these
+     descendant rules target the triggers, which cannot know their
+     list's variant. */
   [data-slot="tabs-list"]:not([data-variant="segmented"])
     [data-slot="tabs-trigger"] {
     width: 100%;
@@ -222,61 +140,6 @@
       0 2px 8px -2px hsl(var(--foreground) / 0.12);
   }
 
-  /* ---------- Bottom tab bar ---------- */
-  /* A detached, rounded island that floats above the page surface rather
-     than a bar bolted to the screen edge. The page background shows around
-     it, so content never slides underneath. */
-  [data-slot="mobile-nav"] {
-    border: 0;
-    border-radius: 2rem;
-    margin: 0.25rem max(0.75rem, env(safe-area-inset-left, 0px))
-      calc(0.625rem + env(safe-area-inset-bottom, 0px))
-      max(0.75rem, env(safe-area-inset-right, 0px));
-    padding-bottom: 0;
-    box-shadow:
-      0 1px 2px hsl(var(--foreground) / 0.06),
-      0 10px 32px -8px hsl(var(--foreground) / 0.28);
-    position: relative;
-    z-index: 20;
-  }
-  [data-slot="mobile-nav"] ul {
-    padding: 0.25rem 0.375rem;
-  }
-  [data-slot="mobile-nav"] a,
-  [data-slot="mobile-nav"] button {
-    min-height: 3.75rem;
-    gap: 0.3125rem;
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-    justify-content: flex-start;
-    padding-top: 0.25rem;
-    transition: color 150ms;
-  }
-  /* The icon sits on a pill; the active tab's pill is filled. */
-  [data-slot="mobile-nav"] svg {
-    box-sizing: content-box;
-    width: 1.5rem;
-    height: 1.5rem;
-    padding: 0.25rem 1.25rem;
-    border-radius: 9999px;
-    background-color: transparent;
-    transition:
-      background-color var(--dur-base) var(--ease-out),
-      transform 150ms var(--ease-out);
-  }
-  [data-slot="mobile-nav"] a[aria-current="page"] svg,
-  [data-slot="mobile-nav"] button[aria-expanded="true"] svg {
-    background-color: hsl(var(--accent));
-  }
-  [data-slot="mobile-nav"] a:active svg,
-  [data-slot="mobile-nav"] button:active svg {
-    transform: scale(0.88);
-  }
-  [data-slot="mobile-nav"] a[aria-current="page"] {
-    font-weight: 700;
-  }
-
   /* ---------- Status banners (Print result, offline, errors) ---------- */
   [data-slot="app-main"] [role="status"][class*="-soft"] {
     border-color: transparent;
@@ -284,139 +147,11 @@
     padding: 0.875rem 1rem;
   }
 
-  /* ---------- List cards ---------- */
-  [data-card] {
-    padding: 1rem;
-    gap: 0.75rem;
-    transition:
-      transform var(--dur-fast) var(--ease-out),
-      box-shadow var(--dur-fast) var(--ease-out);
-  }
-  [data-card]:active {
-    transform: scale(0.985);
-    box-shadow: none;
-  }
-  /* The row's selection checkbox: a bigger, rounder target. */
-  [data-card] input[type="checkbox"] {
-    width: 1.375rem;
-    height: 1.375rem;
-    border-radius: 0.5rem;
-  }
-  [data-card] [data-slot="button"][class*="w-control"],
-  [data-card] button[aria-label^="Actions for"] {
-    border-radius: 9999px;
-  }
-
-  /* ---------- Search field: a pill on the page surface, not a boxed form ---------- */
-  [data-slot="app-main"] [role="search"] {
-    margin-inline: 0;
-    padding: 0;
-    border-color: transparent;
-    background-color: transparent;
-    box-shadow: none;
-  }
-  [role="search"] [data-slot="input"] {
-    border-radius: 9999px;
-  }
-  [role="search"] [data-slot="button"] {
-    border-radius: 9999px;
-    height: 3rem;
-  }
-
-  /* ---------- Sticky action bar (Print) ---------- */
-  [data-slot="action-bar"] {
-    border-top: 0;
-    padding-top: 0.75rem;
-    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-    background-color: hsl(var(--card) / 0.92);
-    box-shadow: var(--shadow-bar);
-    -webkit-backdrop-filter: blur(14px) saturate(1.4);
-    backdrop-filter: blur(14px) saturate(1.4);
-  }
-  [data-slot="action-bar"] [data-slot="button"] {
-    height: 3.25rem;
-    border-radius: 9999px;
-    font-size: 0.9375rem;
-    box-shadow: 0 6px 16px -6px hsl(var(--primary) / 0.55);
-  }
-  [data-slot="action-bar"] [data-slot="button"]:disabled {
-    box-shadow: none;
-  }
-
-  /* ---------- Sheets and dialogs rise from the bottom ---------- */
-  [data-slot="overlay"] {
-    background-color: hsl(var(--foreground) / 0.45);
-  }
-  [data-slot="sheet-content"][data-side="bottom"] {
-    border-top: 0;
-    border-radius: 1.75rem 1.75rem 0 0;
-    box-shadow: 0 -12px 40px -12px hsl(var(--foreground) / 0.3);
-  }
-  /* Grab handle. */
-  [data-slot="sheet-content"][data-side="bottom"]::before,
-  [data-slot="dialog-content"]::before {
-    content: "";
-    position: absolute;
-    top: 0.5rem;
-    left: 50%;
-    width: 2.5rem;
-    height: 0.3125rem;
-    transform: translateX(-50%);
-    border-radius: 9999px;
-    background-color: hsl(var(--foreground) / 0.18);
-  }
-  [data-slot="sheet-content"][data-side="bottom"] > header,
-  [data-slot="sheet-content"][data-side="bottom"] > div:first-child {
-    padding-top: 1.75rem;
-  }
-  [data-slot="dialog-content"] {
-    left: 0;
-    right: 0;
-    top: auto;
-    bottom: 0;
-    width: 100%;
-    max-width: none;
-    max-height: 92dvh;
-    overflow-y: auto;
-    transform: none;
-    border: 0;
-    border-radius: 1.75rem 1.75rem 0 0;
-    padding: 2rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
-    box-shadow: 0 -12px 40px -12px hsl(var(--foreground) / 0.3);
-  }
-  [data-slot="dialog-content"][data-state="open"] {
-    animation: phone-sheet-up var(--dur-slow) var(--ease-out);
-  }
-  [data-slot="dialog-content"][data-state="closed"] {
-    animation: phone-sheet-down var(--dur-base) var(--ease-in) forwards;
-  }
-  /* Bottom-sheet link lists (the "More" sheet): roomy rows, icons on tonal
-     tiles. */
-  [data-slot="sheet-content"][data-side="bottom"] li > a {
-    min-height: 3.5rem;
-    gap: 0.875rem;
-    padding-inline: 0.75rem;
-    border-radius: 1rem;
-    font-size: 0.9375rem;
-    transition: background-color var(--dur-fast);
-  }
-  [data-slot="sheet-content"][data-side="bottom"] li > a:active {
-    background-color: hsl(var(--muted));
-  }
-  [data-slot="sheet-content"][data-side="bottom"] li > a svg {
-    box-sizing: content-box;
-    width: 1.25rem;
-    height: 1.25rem;
-    padding: 0.5rem;
-    border-radius: 0.75rem;
-    background-color: hsl(var(--secondary));
-  }
-  [data-slot="sheet-content"][data-side="bottom"] li > a[aria-current="page"] svg {
-    background-color: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
-  }
-
-  /* Primary action first and full width, like a native action sheet. */
+  /* ---------- Sheets and dialogs ----------
+     The phone geometry of bottom sheets and dialogs (and the grab
+     handle) lives on the Sheet/Dialog component classes; this descendant
+     rule spans both components, so the dialog's primary action stays
+     full width. */
   [data-slot="dialog-content"] [data-slot="button"] {
     width: 100%;
   }
@@ -424,13 +159,16 @@
   /* ---------- Phone designer viewer ----------
      The viewer's sample-data section reuses the desktop panel, whose
      per-row Edit/Delete icon buttons are 24px. Every control on a phone
-     gets the 44px floor (the e2e phone spec asserts it). */
+     gets the 44px floor (the e2e phone spec asserts it). The sample panel
+     is an opaque prop, so its buttons are styled from here. */
   .viewer-sample [data-slot="button"] {
     min-height: 2.75rem;
     min-width: 2.75rem;
   }
 }
 
+/* Named slide used by DialogContent's phone `max-md:` animation classes;
+   the reduced-motion override for it is at the bottom of this file. */
 @keyframes phone-sheet-up {
   from {
     transform: translateY(100%);
@@ -448,10 +186,13 @@
   }
 }
 
-/* Motion off means no slide either (index.css already zeroes durations for
-   most things; these keyframes are named animations, so cover them too). */
+/* Motion off means no slide either (index.css already zeroes durations
+   for most things; these keyframes are named animations, so cover them
+   too). The attribute selector outranks the component's important
+   `max-md:…!animate-…` classes, and `!important` is needed because
+   those classes are important themselves. */
 @media (max-width: 767px) and (prefers-reduced-motion: reduce) {
   [data-slot="dialog-content"][data-state] {
-    animation: none;
+    animation: none !important;
   }
 }

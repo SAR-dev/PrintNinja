@@ -262,7 +262,7 @@ export function PrinterTable({
 
   return (
     <Tabs value={tab} onValueChange={setTab} className="w-full">
-      {/* Stacked full-width filter rows on phones (mobile.css). */}
+      {/* Stacked full-width filter rows on phones (TabsList max-md: classes). */}
       <TabsList>
         {visibleGroups.map((g) => (
           <TabsTrigger key={g.key} value={g.key}>
