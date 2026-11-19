@@ -22,6 +22,11 @@ The printer is being sent a normal document, but it only understands its own com
 **🔵 How do I add a Bluetooth printer?**
 Pair it in your device's Bluetooth settings, then add it in PrintNinja as **Bluetooth** with the printer's address (its MAC address). On Android, paired printers are listed for you. No driver is needed. On Windows you can also use the COM port Windows gives the printer.
 
+**📵 My Bluetooth printer says "sent" but nothing comes out — or only a couple of characters.**
+- **Nothing at all:** the bytes are arriving in a language the printer does not understand. Check **two** settings: the printer's *own* language mode in its menu (most thermal printers ship in a mode other than **ESC/POS**) and the **Language** in PrintNinja — the two must match. For a 58 mm receipt printer the mode is almost always **ESC/POS**.
+- **A few characters, then nothing:** the printer's head is slower than the Bluetooth pipe and is dropping the overflow. PrintNinja already spaces the write out in small chunks with a short pause between them; if your model still drops bytes, open the printer, go to **Advanced**, and make it slower still — a smaller **chunk size** and/or a longer **write pause** (leaving a field blank returns it to the built-in default).
+- **Everything is there but cut off / squeezed:** the **paper width** in PrintNinja does not match the paper in the printer — set it to the width you loaded (54 mm for a 2-inch roll, 80 mm for a 3-inch roll) and re-test.
+
 **🧩 I want to use my printer's own driver instead.**
 In **Printers**, edit the printer and turn on **Print through the OS driver**. The printer must already be installed on your computer under the same name. PrintNinja then does exactly that and never switches between methods on its own.
 

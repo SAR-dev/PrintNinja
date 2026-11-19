@@ -118,6 +118,74 @@ pub struct TransportSettings {
     pub skip_tls_verification: bool,
     /** Print through the OS driver queue instead of the driverless wire (Bluetooth). */
     pub via_driver: bool,
+    /** Driverless Bluetooth pacing (Android); the default is the built-in. */
+    pub bluetooth: BluetoothDelivery,
+}
+
+/// Pacing for a driverless Bluetooth job on Android: the RFCOMM socket
+/// is written in `chunk_bytes` slices with a `chunk_pause_ms` pause
+/// between them, so a slow thermal printer's buffer has a chance to drain
+/// and the job does not arrive as one flood it drops. The defaults
+/// (512 bytes / 50 ms) are safe for 2-inch receipt printers; a stored
+/// value narrows or widens the pace per printer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct BluetoothDelivery {
+    /** Bytes per RFCOMM write. */
+    pub chunk_bytes: u32,
+    /** Pause between writes, in milliseconds. */
+    pub chunk_pause_ms: u32,
+}
+
+impl Default for BluetoothDelivery {
+    fn default() -> Self {
+        Self {
+            chunk_bytes: 512,
+            chunk_pause_ms: 50,
+        }
+    }
+}
+
+impl BluetoothDelivery {
+    pub const MIN_CHUNK_BYTES: u32 = 32;
+    pub const MAX_CHUNK_BYTES: u32 = 8192;
+    pub const MAX_PAUSE_MS: u32 = 2000;
+
+    /// Strict check for values a person is saving.
+    pub fn validate(&self) -> Result<(), String> {
+        if !(Self::MIN_CHUNK_BYTES..=Self::MAX_CHUNK_BYTES).contains(&self.chunk_bytes) {
+            return Err(format!(
+                "chunk size must be between {} and {} bytes",
+                Self::MIN_CHUNK_BYTES,
+                Self::MAX_CHUNK_BYTES
+            ));
+        }
+        if self.chunk_pause_ms > Self::MAX_PAUSE_MS {
+            return Err(format!(
+                "chunk pause must be between 0 and {} ms",
+                Self::MAX_PAUSE_MS
+            ));
+        }
+        Ok(())
+    }
+
+    /// Lenient read for printing: the `bluetooth` object inside a
+    /// printer's `default_settings_json`. Anything missing, malformed or
+    /// out of range falls back to the built-in pace — a bad stored value
+    /// must never break a print.
+    pub fn from_settings_json(json: Option<&str>) -> Self {
+        let Some(root) = json.and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+        else {
+            return Self::default();
+        };
+        let Some(node) = root.get("bluetooth") else {
+            return Self::default();
+        };
+        match serde_json::from_value::<Self>(node.clone()) {
+            Ok(d) if d.validate().is_ok() => d,
+            _ => Self::default(),
+        }
+    }
 }
 
 /// Payloads larger than this cross the Rust→Kotlin bridge by file
@@ -285,6 +353,47 @@ pub fn encode_for_language_tuned(
     }
 }
 
+/// A plain-text test job for the languages that can print text natively:
+/// the smallest job that proves the language mode is right — one line of
+/// text, nothing to rasterize, no image buffer for a small Bluetooth head
+/// to drop. `None` for languages that only accept bitmaps (pdf, raster):
+/// the image test page is the only check they have.
+pub fn text_test_bytes(language: &PrinterLanguage, name: &str, label_w_mm: f64) -> Option<Vec<u8>> {
+    let line = format!("PrintNinja test: {name}");
+    Some(match language {
+        PrinterLanguage::Escpos => {
+            let mut b = escpos::EscPosEncoder::init();
+            b.extend(escpos::EscPosEncoder::text(&line));
+            b.extend(escpos::EscPosEncoder::feed(3));
+            b
+        }
+        PrinterLanguage::Tspl => {
+            // A 30 mm-tall label, at least as wide as the printer's own.
+            let mut s = format!("SIZE {} mm,30 mm\r\n", label_w_mm.max(30.0));
+            s.push_str("GAP 2 mm,0 mm\r\n");
+            s.push_str("DIRECTION 1\r\n");
+            s.push_str("REFERENCE 0,0\r\n");
+            s.push_str("CLS\r\n");
+            s.push_str("TEXT 0,0,\"2\",0,1,1,\"PrintNinja test\"\r\n");
+            s.push_str("PRINT 1\r\n");
+            s.into_bytes()
+        }
+        PrinterLanguage::Zpl => {
+            let mut s = String::from("^XA\n^FO50,50^A0N,40,40\n");
+            s.push_str(&format!("^FD{line}^FS\n"));
+            s.push_str("^XZ\n");
+            s.into_bytes()
+        }
+        PrinterLanguage::Cpcl => {
+            let mut s = String::from("! 0 200 200 210 1\r\n");
+            s.push_str("TEXT 0 20 4 0 0 PrintNinja test\r\n");
+            s.push_str("PRINT\r\n");
+            s.into_bytes()
+        }
+        PrinterLanguage::Pdf | PrinterLanguage::Raster => return None,
+    })
+}
+
 #[derive(Debug, Clone)]
 pub struct RenderedJob {
     pub job_id: String,
@@ -416,6 +525,7 @@ pub fn create_transport(
             name.to_string(),
             address.to_string(),
             settings.via_driver,
+            settings.bluetooth,
         ))),
         // Linux dials the paired device's RFCOMM socket directly — no
         // driver, no CUPS queue — unless the row is set to print through
@@ -603,6 +713,7 @@ impl TransportRegistry {
                     name.to_string(),
                     address.to_string(),
                     settings.via_driver,
+                    settings.bluetooth,
                 )
                 .reach()
                 .await;
@@ -667,6 +778,52 @@ mod tests {
             parse_printer_type("telepathy"),
             PrinterType::System
         ));
+    }
+
+    #[test]
+    fn text_test_escpos_is_init_one_line_and_a_feed() {
+        let bytes = text_test_bytes(&PrinterLanguage::Escpos, "B-FP2D", 54.0).unwrap();
+        // ESC @, then the line with its newline, then GS d 3 to feed out
+        // the last row (receipt printers hold a few lines in the platen).
+        assert_eq!(&bytes[..2], &[0x1B, 0x40]);
+        let line = b"PrintNinja test: B-FP2D\n";
+        assert!(bytes.windows(line.len()).any(|w| w == line));
+        assert_eq!(&bytes[bytes.len() - 3..], &[0x1B, 0x64, 0x03]);
+    }
+
+    #[test]
+    fn text_test_label_languages_keep_their_frame_and_text() {
+        let tspl =
+            String::from_utf8(text_test_bytes(&PrinterLanguage::Tspl, "X", 40.0).unwrap()).unwrap();
+        assert!(tspl.starts_with("SIZE 40 mm,30 mm\r\n"), "{tspl}");
+        assert!(tspl.contains("TEXT 0,0,\"2\",0,1,1,\"PrintNinja test\"\r\n"));
+        assert!(tspl.trim_end().ends_with("PRINT 1"));
+
+        let zpl =
+            String::from_utf8(text_test_bytes(&PrinterLanguage::Zpl, "ZT", 40.0).unwrap()).unwrap();
+        assert!(zpl.starts_with("^XA\n"), "{zpl}");
+        assert!(zpl.contains("^FDPrintNinja test: ZT^FS\n"));
+        assert!(zpl.trim_end().ends_with("^XZ"));
+
+        let cpcl =
+            String::from_utf8(text_test_bytes(&PrinterLanguage::Cpcl, "C", 40.0).unwrap()).unwrap();
+        assert!(cpcl.starts_with("! 0 200 200 210 1\r\n"), "{cpcl}");
+        assert!(cpcl.contains("TEXT 0 20 4 0 0 PrintNinja test\r\n"));
+        assert!(cpcl.trim_end().ends_with("PRINT"));
+    }
+
+    #[test]
+    fn text_test_width_never_drops_below_a_real_label() {
+        // A stored 24 mm roll must not produce a 24 mm TSPL label.
+        let tspl =
+            String::from_utf8(text_test_bytes(&PrinterLanguage::Tspl, "X", 24.0).unwrap()).unwrap();
+        assert!(tspl.starts_with("SIZE 30 mm,30 mm\r\n"), "{tspl}");
+    }
+
+    #[test]
+    fn text_test_has_no_form_for_bitmap_only_languages() {
+        assert!(text_test_bytes(&PrinterLanguage::Pdf, "X", 80.0).is_none());
+        assert!(text_test_bytes(&PrinterLanguage::Raster, "X", 80.0).is_none());
     }
 
     #[test]
@@ -1124,5 +1281,77 @@ mod tests {
     #[test]
     fn driver_mode_defaults_to_the_driverless_wire() {
         assert!(!TransportSettings::default().via_driver);
+    }
+
+    /// A stored pacing round-trips: the `bluetooth` key inside
+    /// `default_settings_json` is read back byte-for-byte, and anything
+    /// missing or out of range falls back to the built-in pace rather
+    /// than refusing the print.
+    #[test]
+    fn bluetooth_delivery_reads_the_stored_key_leniently() {
+        let d = BluetoothDelivery {
+            chunk_bytes: 256,
+            chunk_pause_ms: 100,
+        };
+        assert_eq!(
+            d,
+            BluetoothDelivery::from_settings_json(Some(
+                r#"{"bluetooth":{"chunkBytes":256,"chunkPauseMs":100}}"#
+            ))
+        );
+
+        // No key, no row, malformed JSON, wrong shape: all the default.
+        let default = BluetoothDelivery::default();
+        assert_eq!(
+            default,
+            BluetoothDelivery::from_settings_json(Some(r#"{"tspl":{}}"#))
+        );
+        assert_eq!(default, BluetoothDelivery::from_settings_json(None));
+        assert_eq!(
+            default,
+            BluetoothDelivery::from_settings_json(Some("not json"))
+        );
+        assert_eq!(
+            default,
+            BluetoothDelivery::from_settings_json(Some(r#"{"bluetooth":"fast"}"#))
+        );
+    }
+
+    /// A bad stored value can never break a print: out-of-range numbers
+    /// validate to the default pace on the read path, but the strict
+    /// check refuses them when a person saves them.
+    #[test]
+    fn bluetooth_delivery_refuses_out_of_range_pace() {
+        let bad = BluetoothDelivery {
+            chunk_bytes: 1,
+            chunk_pause_ms: 50,
+        };
+        assert!(bad.validate().is_err());
+        assert_eq!(
+            BluetoothDelivery::default(),
+            BluetoothDelivery::from_settings_json(Some(r#"{"bluetooth":{"chunkBytes":1}}"#))
+        );
+        let big = BluetoothDelivery {
+            chunk_bytes: 9000,
+            chunk_pause_ms: 50,
+        };
+        assert!(big.validate().is_err());
+        let slow = BluetoothDelivery {
+            chunk_bytes: 512,
+            chunk_pause_ms: 2001,
+        };
+        assert!(slow.validate().is_err());
+        assert!(BluetoothDelivery {
+            chunk_bytes: 32,
+            chunk_pause_ms: 0,
+        }
+        .validate()
+        .is_ok());
+        assert!(BluetoothDelivery {
+            chunk_bytes: 8192,
+            chunk_pause_ms: 2000,
+        }
+        .validate()
+        .is_ok());
     }
 }

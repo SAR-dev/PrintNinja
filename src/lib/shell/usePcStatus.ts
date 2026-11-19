@@ -4,6 +4,7 @@ import { describeError, PEER_REMOVED_RE, rawErrorMessage } from "@/lib/errors";
 import { RENDER_PAIRS_KEY, parsePairs } from "@/lib/pairing";
 import { isAndroid } from "@/lib/platform";
 import { readSetting } from "@/lib/settings";
+import { useLocalNetworkPermission } from "@/lib/android/useLocalNetworkPermission";
 
 /**
  * Whether the paired PC can be reached right now, for the phone's banner.
@@ -138,6 +139,18 @@ export function usePcStatus(): {
   const lastRun = useRef(0);
   const inFlight = useRef(false);
   const mounted = useRef(true);
+  // Probing a PC is LAN traffic. Android denies it without the local
+  // network permission, and a failed probe would read as "your PC is
+  // down" when the real story is "the app may not talk to the LAN" —
+  // so no probes until the permission is granted. The ref keeps the
+  // stable run/refresh/recheck callbacks (reused by the banner button
+  // and route changes) reading the current answer, not a mount-time
+  // closure.
+  const { granted: lanGranted } = useLocalNetworkPermission();
+  const grantedRef = useRef(lanGranted);
+  useEffect(() => {
+    grantedRef.current = lanGranted;
+  }, [lanGranted]);
   // Skip-the-quiet-poll bookkeeping: while every PC is unpaired, the
   // 30 s tick only re-reads the (cheap, local) pairs list, and probes
   // the network only when it changed. A removal cannot heal by waiting.
@@ -145,7 +158,7 @@ export function usePcStatus(): {
   const pairsJsonRef = useRef<string | null>(null);
 
   const run = useCallback(async (force: boolean) => {
-    if (!isAndroid() || inFlight.current) return;
+    if (!isAndroid() || !grantedRef.current || inFlight.current) return;
     if (!force && Date.now() - lastRun.current < PC_MIN_GAP_MS) return;
     inFlight.current = true;
     lastRun.current = Date.now();
@@ -171,7 +184,11 @@ export function usePcStatus(): {
   const refresh = useCallback(() => void run(false), [run]);
 
   useEffect(() => {
-    if (!isAndroid()) return;
+    // Polling starts only once Android has granted the local network
+    // permission; when the user grants it later (explanation screen,
+    // or the settings screen), the effect re-runs and the immediate
+    // check below reports the first real status.
+    if (!isAndroid() || !lanGranted) return;
     mounted.current = true;
     void run(true);
     const timer = setInterval(() => {
@@ -200,7 +217,7 @@ export function usePcStatus(): {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };
-  }, [run]);
+  }, [run, lanGranted]);
 
   return { status, episodeKey, recheck, refresh };
 }

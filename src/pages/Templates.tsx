@@ -17,6 +17,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { InfoNotice } from "@/components/InfoNotice";
 import { PageHeader } from "@/components/PageHeader";
+import { RefreshButton } from "@/components/RefreshButton";
 import { PaperThumb } from "@/components/PaperThumb";
 import type { TemplateRow } from "@/lib/agent/types";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -58,6 +59,7 @@ import {
 } from "@/components/ui/select";
 import { notifySuccess, notifyError } from "@/lib/notify";
 import * as share from "@/lib/share/client";
+import { useRefreshable } from "@/lib/refresh/useRefreshable";
 import { renderTemplateRust } from "@/lib/render/rustPreview";
 import { compileTemplateCss } from "@/lib/templates/compileTemplateCss";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
@@ -257,6 +259,19 @@ export function TemplatesPage() {
   useEffect(() => {
     if (activeTab === "community") loadCommunity();
   }, [activeTab, loadCommunity]);
+
+  // The shared manual refresh re-reads the lists on screen: the local
+  // tabs always, the community list while that tab is up (it is the one
+  // that dials the server).
+  useRefreshable("templates", {
+    label: () => t("nav.templates"),
+    run: () => loadMine(),
+  });
+  useRefreshable("templates-community", {
+    label: () => t("templates.tab_community"),
+    run: () => loadCommunity(),
+    active: () => activeTab === "community",
+  });
 
   // A saved copy whose template is no longer on the server is withdrawn by its
   // author. Nothing is written locally: the copy stays, and still prints.
@@ -874,10 +889,9 @@ export function TemplatesPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title={t("nav.templates")}
-        description={t("pages.templates")}
-      />
+      <PageHeader title={t("nav.templates")} description={t("pages.templates")}>
+        <RefreshButton />
+      </PageHeader>
 
       {/* Phones view and print templates; the PC edits them (PLAN §6, D4). */}
       {isPhone && (

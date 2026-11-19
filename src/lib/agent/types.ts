@@ -113,6 +113,10 @@ export interface HistoryJob {
   template_revision: number | null;
   /** Paired PC that printed this job; null when printed locally. */
   printed_by: string | null;
+  /** The job's printer type; null when the printer was deleted. */
+  printer_type: string | null;
+  /** The job's printer's `via_driver` flag; null when the printer is gone. */
+  via_driver: boolean | null;
 }
 
 export interface BatchSummary {
@@ -154,6 +158,11 @@ export interface PrinterRow {
    * spooler / CUPS) instead of the driverless raw wire. Absent = false.
    */
   via_driver?: boolean;
+  /**
+   * Per-printer tuning JSON (TSPL gap, Bluetooth pacing) as stored on the
+   * row; null when nothing was tuned. Read, never written, by the form.
+   */
+  default_settings_json?: string | null;
   /** UI-only: last test-print outcome, not stored server-side. */
   status?: string;
 }

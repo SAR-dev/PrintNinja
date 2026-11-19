@@ -15,6 +15,8 @@ import type {
 } from "@/lib/agent/types";
 import { describeError } from "@/lib/errors";
 import { isAndroid } from "@/lib/android/platform";
+import { useLocalNetworkPermission } from "@/lib/android/useLocalNetworkPermission";
+import { useRefreshable } from "@/lib/refresh/useRefreshable";
 import {
   notifyApiStatusChanged,
   startApiServer,
@@ -51,6 +53,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { LocalNetworkPrompt } from "@/components/LocalNetworkAccess";
 
 const PAIRS_KEY = "render_pairs";
 
@@ -241,6 +244,15 @@ function PcSection() {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [load, loadDevices]);
+
+  // The shared manual refresh re-reads the share status and the paired
+  // lists (local reads — no network involved).
+  useRefreshable("devices", {
+    label: () => t("nav.devices"),
+    run: async () => {
+      await Promise.all([load(), loadDevices()]);
+    },
+  });
   // A phone pairs from its own screen: without a poll the new row sits
   // invisible until focus/mount. Cheap local read, skipped while hidden.
   useEffect(() => {
@@ -1097,6 +1109,16 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
     import("@/lib/agent/types").DiscoveredPeer[]
   >([]);
   const [scanningPeers, setScanningPeers] = useState(false);
+  // Every action in this section dials the local network (the nearby
+  // scan, pairing, the pair test), so with Android's permission denied
+  // they open the explanation dialog instead, and the auto-scan below
+  // waits for the permission to be on.
+  const {
+    granted: lanGranted,
+    canAskAgain: lanCanAskAgain,
+    ask: askLan,
+  } = useLocalNetworkPermission();
+  const [lanPromptOpen, setLanPromptOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -1136,8 +1158,23 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
   }, []);
 
   useEffect(() => {
+    if (!lanGranted) return;
     void scanPeers();
-  }, [scanPeers]);
+  }, [scanPeers, lanGranted]);
+
+  useRefreshable("devices", {
+    label: () => t("nav.devices"),
+    run: () => load(),
+  });
+  // The nearby-PC scan dials the local network, so it declines with a
+  // message while the permission is off — the same rule as the manual
+  // scan on this screen.
+  useRefreshable("devices-peers", {
+    label: () => t("nav.devices"),
+    run: () => scanPeers(),
+    skipReason: () =>
+      isAndroid() && !lanGranted ? t("printers.lan_denied") : null,
+  });
 
   const savePairs = async (next: RenderPair[]) => {
     setPairs(next);
@@ -1145,6 +1182,10 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
   };
 
   const testPair = async (pair: RenderPair, notify = false) => {
+    if (!lanGranted) {
+      setLanPromptOpen(true);
+      return;
+    }
     setTests((prev) => ({ ...prev, [pair.id]: { state: "busy" } }));
     try {
       const caps = await agent("peer_capabilities", {
@@ -1203,6 +1244,10 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
     const normalized = normalizePairingCode(input);
     if (!isCompletePairingCode(input)) {
       setFormError(t("settings_page.devices_code_invalid"));
+      return;
+    }
+    if (!lanGranted) {
+      setLanPromptOpen(true);
       return;
     }
     setBusy(true);
@@ -1451,7 +1496,11 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => void scanPeers()}
+              onClick={
+                lanGranted
+                  ? () => void scanPeers()
+                  : () => setLanPromptOpen(true)
+              }
               disabled={scanningPeers}
               data-testid="devices-nearby-rescan"
             >
@@ -1616,6 +1665,16 @@ function PhoneSection({ onPaired }: { onPaired?: () => void }) {
           {formError}
         </p>
       )}
+
+      <LocalNetworkPrompt
+        open={lanPromptOpen}
+        onOpenChange={setLanPromptOpen}
+        canAskAgain={lanCanAskAgain}
+        onAllow={() => {
+          setLanPromptOpen(false);
+          void askLan();
+        }}
+      />
     </div>
   );
 }

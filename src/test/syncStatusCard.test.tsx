@@ -20,7 +20,7 @@ const shellState = vi.hoisted(() => ({
     lastPulledAt: string | null;
     lastError: string | null;
   },
-  cacheNow: vi.fn(async () => {}),
+  refresh: vi.fn(),
 }));
 
 vi.mock("@/lib/shell/useShareStatus", () => ({
@@ -29,8 +29,13 @@ vi.mock("@/lib/shell/useShareStatus", () => ({
 
 vi.mock("@/lib/sync/useSyncStatus", () => ({
   useSyncStatus: () => shellState.sync,
-  cacheNow: (...args: unknown[]) =>
-    (shellState.cacheNow as (...a: unknown[]) => Promise<void>)(...args),
+}));
+
+vi.mock("@/lib/refresh/manual", () => ({
+  useManualRefresh: () => ({
+    refreshing: false,
+    run: shellState.refresh,
+  }),
 }));
 
 beforeEach(() => {
@@ -41,7 +46,7 @@ beforeEach(() => {
     lastPulledAt: null,
     lastError: null,
   };
-  shellState.cacheNow.mockClear();
+  shellState.refresh.mockClear();
 });
 
 describe("SyncStatusCard", () => {
@@ -64,7 +69,7 @@ describe("SyncStatusCard", () => {
     expect(screen.getByText(/Last refreshed 2026/)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Refresh cache/ }));
-    expect(shellState.cacheNow).toHaveBeenCalledOnce();
+    expect(shellState.refresh).toHaveBeenCalledOnce();
   });
 
   it("renders the last error as plain text, no hover needed", () => {
@@ -80,12 +85,12 @@ describe("SyncStatusCard", () => {
     expect(screen.getByText("Never")).toBeInTheDocument();
   });
 
-  it("disables Refresh cache when signed out", () => {
+  it("keeps Refresh available when signed out and explains why sync skips the server", () => {
     shellState.share = { state: "signed_out" };
     render(<SyncStatusCard />);
-    expect(
-      screen.getByRole("button", { name: /Refresh cache/ }),
-    ).toBeDisabled();
+    // The shared refresh still reloads the local lists when signed out;
+    // only the server pull is skipped.
+    expect(screen.getByRole("button", { name: /Refresh cache/ })).toBeEnabled();
     expect(
       screen.getByText("Sign in to the share service to refresh the cache."),
     ).toBeInTheDocument();

@@ -112,6 +112,6 @@ describe("useSyncStatus", () => {
   });
 
   it("cacheNow without a mounted scheduler is a safe no-op", async () => {
-    await expect(cacheNow()).resolves.toBeUndefined();
+    await expect(cacheNow()).resolves.toEqual({ ok: true, error: null });
   });
 });

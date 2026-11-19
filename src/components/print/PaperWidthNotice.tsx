@@ -50,7 +50,7 @@ export function PaperWidthNotice({
         {message}
       </p>
       {onApply && (
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
           <Button
             variant="outline"
             size="sm"

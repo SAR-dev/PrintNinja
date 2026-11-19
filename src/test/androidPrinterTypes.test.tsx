@@ -12,7 +12,20 @@ import { isAndroid } from "@/lib/platform";
 
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (...a: unknown[]) => invoke(...a),
+  invoke: (cmd: string, args?: unknown) => {
+    // Android-simulated tests run with the local network permission
+    // granted: they exercise the granted flows, not the prompt.
+    if (cmd === "plugin:android-print|local_network_permission_state") {
+      return Promise.resolve({ granted: true, canAskAgain: false });
+    }
+    if (cmd === "plugin:android-print|request_local_network_permission") {
+      return Promise.resolve({ granted: true, openedSettings: false });
+    }
+    if (cmd === "plugin:android-print|open_local_network_settings") {
+      return Promise.resolve(null);
+    }
+    return invoke(cmd, args);
+  },
 }));
 
 import { PrinterSetupPage } from "@/pages/PrinterSetup";

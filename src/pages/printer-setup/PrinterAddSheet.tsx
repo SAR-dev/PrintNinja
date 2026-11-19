@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { isAndroid } from "@/lib/platform";
+import { openLocalNetworkSettings } from "@/lib/android/localNetwork";
 import { Scan } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { DetectedDevices } from "@/components/printers/DetectedDevices";
+import { LocalNetworkPrompt } from "@/components/LocalNetworkAccess";
 import { PrinterFormFields } from "./PrinterFormFields";
 import type { usePrinterDiscovery } from "./usePrinterDiscovery";
 import type { usePrinterForm } from "./usePrinterForm";
@@ -31,6 +33,11 @@ export function PrinterAddSheet({
   const {
     showAdd,
     setShowAdd,
+    lanGranted,
+    lanCanAskAgain,
+    lanPromptOpen,
+    setLanPromptOpen,
+    askLan,
     editingId,
     setEditingId,
     setForm,
@@ -63,6 +70,8 @@ export function PrinterAddSheet({
     formErrorIsPaper,
     formErrorIsDpi,
     formErrorIsGap,
+    formErrorIsChunk,
+    formErrorIsPause,
     formErrorIsName,
     gdiWarning,
     ippNonPdfWarning,
@@ -81,6 +90,10 @@ export function PrinterAddSheet({
     scanningAny,
     openBluetoothSettings,
   } = discovery;
+  // Android without the local network permission: the network section is
+  // replaced by the explanation notice, and Rescan quietly skips the mDNS
+  // part (the scanNetwork guard) while Bluetooth still works.
+  const networkBlocked = isAndroid() && !lanGranted;
 
   return (
     <Sheet
@@ -140,6 +153,9 @@ export function PrinterAddSheet({
               onOpenBluetoothSettings={
                 isAndroid() ? () => void openBluetoothSettings() : undefined
               }
+              networkBlocked={networkBlocked}
+              onNetworkAllow={() => void askLan()}
+              onNetworkSettings={() => void openLocalNetworkSettings()}
             />
           )}
 
@@ -174,6 +190,8 @@ export function PrinterAddSheet({
             formErrorIsPaper={formErrorIsPaper}
             formErrorIsDpi={formErrorIsDpi}
             formErrorIsGap={formErrorIsGap}
+            formErrorIsChunk={formErrorIsChunk}
+            formErrorIsPause={formErrorIsPause}
             formErrorIsName={formErrorIsName}
             gdiWarning={gdiWarning}
             ippNonPdfWarning={ippNonPdfWarning}
@@ -197,6 +215,20 @@ export function PrinterAddSheet({
           <Button onClick={addPrinter}>{t("printers.save_action")}</Button>
         </DialogFooter>
       </SheetContent>
+
+      {/* The explanation screen before the system prompt: opened by
+          Save (add by IP) and Detect while the permission is off.
+          Allow closes it — the granted state then re-triggers the
+          quiet scan, or the notice below stays as the retry route. */}
+      <LocalNetworkPrompt
+        open={lanPromptOpen}
+        onOpenChange={setLanPromptOpen}
+        canAskAgain={lanCanAskAgain}
+        onAllow={() => {
+          setLanPromptOpen(false);
+          void askLan();
+        }}
+      />
     </Sheet>
   );
 }

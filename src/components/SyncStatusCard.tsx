@@ -1,11 +1,12 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
 import { RefreshCw } from "lucide-react";
 import { useShareStatus } from "@/lib/shell/useShareStatus";
-import { cacheNow, useSyncStatus } from "@/lib/sync/useSyncStatus";
+import { useManualRefresh } from "@/lib/refresh/manual";
+import { useSyncStatus } from "@/lib/sync/useSyncStatus";
+import { cn } from "@/lib/utils";
 
 /**
  * Visible cache state for the Settings → Share tab. The topbar only
@@ -13,16 +14,17 @@ import { cacheNow, useSyncStatus } from "@/lib/sync/useSyncStatus";
  * refresh's reason had nowhere to be read. This card shows the
  * connection, the local drafts (edits not yet saved to the server), the
  * last refresh time and — when set — the last error as plain text, plus
- * a manual Refresh cache (the phones' only way to pull now).
+ * the shared manual refresh (the same one the topbar and page headers
+ * run, so it works even while the server is unreachable).
  */
 export function SyncStatusCard() {
   const { t } = useTranslation();
   const share = useShareStatus();
   const sync = useSyncStatus();
-  const [busy, setBusy] = useState(false);
+  const { refreshing, run } = useManualRefresh();
 
   const online = share.state === "online";
-  const syncing = busy || sync.state === "syncing";
+  const syncing = refreshing || sync.state === "syncing";
 
   const connection =
     share.state === "online"
@@ -32,16 +34,6 @@ export function SyncStatusCard() {
         : share.state === "signed_out"
           ? t("shell.share_signed_out")
           : t("settings_page.sync_unconfigured");
-
-  const onCacheNow = async () => {
-    if (busy || !online) return;
-    setBusy(true);
-    try {
-      await cacheNow();
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <Card>
@@ -102,13 +94,14 @@ export function SyncStatusCard() {
 
         <Button
           variant="outline"
-          onClick={() => void onCacheNow()}
-          disabled={!online || syncing}
-          title={
-            online ? t("shell.sync_now") : t("settings_page.sync_sign_in_first")
-          }
+          onClick={run}
+          disabled={refreshing}
+          title={t("shell.refresh")}
         >
-          <RefreshCw className="h-4 w-4 mr-2" aria-hidden="true" />
+          <RefreshCw
+            className={cn("h-4 w-4 mr-2", refreshing && "animate-spin")}
+            aria-hidden="true"
+          />
           {syncing ? t("shell.sync_syncing") : t("shell.sync_now")}
         </Button>
         {!online && (

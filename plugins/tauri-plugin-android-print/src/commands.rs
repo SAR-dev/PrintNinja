@@ -83,3 +83,28 @@ pub(crate) async fn request_notification_permission<R: Runtime>(
 ) -> Result<NotificationPermissionResponse> {
     app.android_print().request_notification_permission()
 }
+
+// Same as the notification pair: both settle immediately on the Kotlin
+// side, so neither needs `spawn_blocking`.
+#[command]
+pub(crate) async fn local_network_permission_state<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<LocalNetworkPermissionStateResponse> {
+    app.android_print().local_network_permission_state()
+}
+
+#[command]
+pub(crate) async fn request_local_network_permission<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<LocalNetworkPermissionResponse> {
+    app.android_print().request_local_network_permission()
+}
+
+// Like the pair above, this settles immediately on the Kotlin side
+// (it just fires an intent), so it needs no `spawn_blocking`.
+#[command]
+pub(crate) async fn open_local_network_settings<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<()> {
+    app.android_print().open_local_network_settings()
+}

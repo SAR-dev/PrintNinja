@@ -343,6 +343,18 @@
           "markdownDescription": "Denies the is_battery_exemption_granted command without any pre-configured scope."
         },
         {
+          "description": "Enables the local_network_permission_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-local-network-permission-state",
+          "markdownDescription": "Enables the local_network_permission_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the local_network_permission_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-local-network-permission-state",
+          "markdownDescription": "Denies the local_network_permission_state command without any pre-configured scope."
+        },
+        {
           "description": "Enables the notification_permission_state command without any pre-configured scope.",
           "type": "string",
           "const": "allow-notification-permission-state",
@@ -355,6 +367,18 @@
           "markdownDescription": "Denies the notification_permission_state command without any pre-configured scope."
         },
         {
+          "description": "Enables the open_local_network_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-local-network-settings",
+          "markdownDescription": "Enables the open_local_network_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_local_network_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-local-network-settings",
+          "markdownDescription": "Denies the open_local_network_settings command without any pre-configured scope."
+        },
+        {
           "description": "Enables the request_battery_exemption command without any pre-configured scope.",
           "type": "string",
           "const": "allow-request-battery-exemption",
@@ -365,6 +389,18 @@
           "type": "string",
           "const": "deny-request-battery-exemption",
           "markdownDescription": "Denies the request_battery_exemption command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the request_local_network_permission command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-request-local-network-permission",
+          "markdownDescription": "Enables the request_local_network_permission command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the request_local_network_permission command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-request-local-network-permission",
+          "markdownDescription": "Denies the request_local_network_permission command without any pre-configured scope."
         },
         {
           "description": "Enables the request_notification_permission command without any pre-configured scope.",
@@ -415,10 +451,10 @@
           "markdownDescription": "Denies the test_printer command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the Android print plugin\n#### This default permission set includes:\n\n- `allow-html-to-pdf`\n- `allow-enumerate-usb-printers`\n- `allow-test-printer`\n- `allow-start-background-service`\n- `allow-stop-background-service`\n- `allow-is-background-service-running`\n- `allow-request-battery-exemption`\n- `allow-is-battery-exemption-granted`\n- `allow-notification-permission-state`\n- `allow-request-notification-permission`",
+          "description": "Default permissions for the Android print plugin\n#### This default permission set includes:\n\n- `allow-html-to-pdf`\n- `allow-enumerate-usb-printers`\n- `allow-test-printer`\n- `allow-start-background-service`\n- `allow-stop-background-service`\n- `allow-is-background-service-running`\n- `allow-request-battery-exemption`\n- `allow-is-battery-exemption-granted`\n- `allow-notification-permission-state`\n- `allow-request-notification-permission`\n- `allow-local-network-permission-state`\n- `allow-request-local-network-permission`\n- `allow-open-local-network-settings`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the Android print plugin\n#### This default permission set includes:\n\n- `allow-html-to-pdf`\n- `allow-enumerate-usb-printers`\n- `allow-test-printer`\n- `allow-start-background-service`\n- `allow-stop-background-service`\n- `allow-is-background-service-running`\n- `allow-request-battery-exemption`\n- `allow-is-battery-exemption-granted`\n- `allow-notification-permission-state`\n- `allow-request-notification-permission`"
+          "markdownDescription": "Default permissions for the Android print plugin\n#### This default permission set includes:\n\n- `allow-html-to-pdf`\n- `allow-enumerate-usb-printers`\n- `allow-test-printer`\n- `allow-start-background-service`\n- `allow-stop-background-service`\n- `allow-is-background-service-running`\n- `allow-request-battery-exemption`\n- `allow-is-battery-exemption-granted`\n- `allow-notification-permission-state`\n- `allow-request-notification-permission`\n- `allow-local-network-permission-state`\n- `allow-request-local-network-permission`\n- `allow-open-local-network-settings`"
         }
       ]
     }

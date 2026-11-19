@@ -39,6 +39,8 @@ const job = (over: Partial<HistoryJob>): HistoryJob => ({
   requested_by_device_id: null,
   template_revision: null,
   printed_by: null,
+  printer_type: null,
+  via_driver: null,
   ...over,
 });
 

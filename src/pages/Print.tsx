@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { isAndroid } from "@/lib/platform";
+import { useLocalNetworkPermission } from "@/lib/android/useLocalNetworkPermission";
+import { useRefreshable } from "@/lib/refresh/useRefreshable";
 import { usePrintStore } from "@/lib/store/printStore";
 import { usePrintLists } from "./print/usePrintLists";
 import { useViaPc } from "./print/useViaPc";
@@ -147,6 +149,7 @@ function PrintForm() {
     effPaperW: paper.effPaperW,
     effPaperH: paper.effPaperH,
     templateChosen,
+    selectedPrinter,
     refreshSystemPrinters,
     refreshPcPrinters,
     refreshPcTemplates,
@@ -160,6 +163,25 @@ function PrintForm() {
     handleSyncTemplates,
     handleSpikeTest,
   } = actions;
+
+  // The shared manual refresh re-reads the local printer/template lists,
+  // and with Print via PC on, the PC's lists — the part that dials the
+  // LAN, so on Android it declines with a message while the permission
+  // is off.
+  const { granted: lanGranted } = useLocalNetworkPermission();
+  useRefreshable("print", {
+    label: () => t("nav.print"),
+    run: () => lists.reloadLists(false),
+  });
+  useRefreshable("print-pc", {
+    label: () => t("nav.print"),
+    run: async () => {
+      await Promise.all([refreshPcPrinters(), refreshPcTemplates()]);
+    },
+    active: () => viaPc,
+    skipReason: () =>
+      isAndroid() && !lanGranted ? t("print.lan_denied") : null,
+  });
 
   // PDF is the one language the phone cannot render itself: with no
   // pair, a PDF printer is blocked here while thermal printers go

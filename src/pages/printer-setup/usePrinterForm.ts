@@ -11,6 +11,7 @@ import {
   supportedPrinterLanguages,
   supportedPrinterTypes,
 } from "@/lib/platform";
+import { useLocalNetworkPermission } from "@/lib/android/useLocalNetworkPermission";
 import { describeError, isAlreadyExists } from "@/lib/errors";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { agent } from "@/lib/agent/commands";
@@ -33,6 +34,38 @@ import type { usePrinterDiscovery } from "./usePrinterDiscovery";
 import type { usePrinters } from "./usePrinters";
 
 /**
+ * The Bluetooth pacing a row already has, as form strings: the `bluetooth`
+ * key of the row's settings JSON (B4). A missing, half-empty or malformed
+ * value reads as blank — the built-in defaults — the same leniency the
+ * Rust side applies when it prints.
+ */
+function bluetoothPaceFromRow(json: string | null | undefined): {
+  chunkBytes: string;
+  pauseMs: string;
+} {
+  const blank = { chunkBytes: "", pauseMs: "" };
+  if (!json) return blank;
+  try {
+    const root = JSON.parse(json) as {
+      bluetooth?: { chunkBytes?: number; chunkPauseMs?: number };
+    };
+    const bt = root.bluetooth;
+    return {
+      chunkBytes:
+        bt?.chunkBytes != null && Number.isFinite(bt.chunkBytes)
+          ? String(bt.chunkBytes)
+          : "",
+      pauseMs:
+        bt?.chunkPauseMs != null && Number.isFinite(bt.chunkPauseMs)
+          ? String(bt.chunkPauseMs)
+          : "",
+    };
+  } catch {
+    return blank;
+  }
+}
+
+/**
  * The Add/Edit sheet: the form itself, its per-field error placement,
  * the capability probe and the save/remove of a single printer row.
  * Discovery lists come from `usePrinterDiscovery`; `load` (from
@@ -43,7 +76,12 @@ export function usePrinterForm(
   list: ReturnType<typeof usePrinters>,
 ) {
   const { t } = useTranslation();
-  const { scanBluetooth } = discovery;
+  const { scanBluetooth, setNetworkPrinters } = discovery;
+  const {
+    granted: lanGranted,
+    canAskAgain: lanCanAskAgain,
+    ask: askLan,
+  } = useLocalNetworkPermission();
   // The detected-devices block shows counts only until a section is opened
   // (state lives in the block itself, which remounts with each dialog). While
   // editing it is tucked behind a link: filling from it overwrites the row.
@@ -67,11 +105,18 @@ export function usePrinterForm(
     paper_width_mm: "72",
     dpi: "203",
     label_gap_mm: "",
+    bt_chunk_bytes: "",
+    bt_chunk_pause_ms: "",
     username: "",
     password: "",
     skip_tls_verification: false,
     via_driver: false,
   });
+  // Android: the local network permission is off while the form would
+  // reach the LAN (saving a new ipp / raw_tcp row, or running Detect on
+  // one) — the explanation dialog opens instead, and the quiet scan
+  // picks the list back up once the permission comes back.
+  const [lanPromptOpen, setLanPromptOpen] = useState(false);
   // The one failing check from the last Save, as an i18n key, shown
   // inline next to the failing field instead of a toast. Any edit to
   // any field clears it — the person is already on top of it.
@@ -89,6 +134,8 @@ export function usePrinterForm(
     paper_width_mm: "72",
     dpi: "203",
     label_gap_mm: "",
+    bt_chunk_bytes: "",
+    bt_chunk_pause_ms: "",
     username: "",
     password: "",
     skip_tls_verification: false,
@@ -108,7 +155,18 @@ export function usePrinterForm(
     setAdvancedOpen(false);
     setSignInOpen(false);
     setAddressTouched(false);
+    setLanPromptOpen(false);
     setFormErrorKey(null);
+  };
+
+  // After a successful add or save: hide the sheet and clear everything so
+  // the next open starts from a blank form. A failed save deliberately
+  // skips this — the sheet stays open with the values still in it.
+  const closeAndReset = () => {
+    setShowAdd(false);
+    setEditingId(null);
+    setForm(blankForm);
+    resetDialogUi();
   };
 
   const openAdd = () => {
@@ -122,6 +180,7 @@ export function usePrinterForm(
 
   const openEdit = (p: PrinterRow) => {
     setEditingId(p.id);
+    const pace = bluetoothPaceFromRow(p.default_settings_json);
     setForm({
       name: p.name,
       printer_type: p.printer_type,
@@ -130,6 +189,8 @@ export function usePrinterForm(
       paper_width_mm: String(p.paper_width_mm ?? "72"),
       dpi: String(p.dpi ?? "203"),
       label_gap_mm: p.label_gap_mm != null ? String(p.label_gap_mm) : "",
+      bt_chunk_bytes: pace.chunkBytes,
+      bt_chunk_pause_ms: pace.pauseMs,
       username: p.username ?? "",
       password: p.password ?? "",
       skip_tls_verification: p.skip_tls_verification ?? false,
@@ -142,10 +203,19 @@ export function usePrinterForm(
     setShowAdd(true);
   };
 
+  // The connection types that dial out over the local network.
+  const isLanType = (type: string) => type === "ipp" || type === "raw_tcp";
+
   /** Ask the printer what it speaks and pre-fill the language if the
    * operator has not picked one yet. Never fails the form: a probe
-   * problem shows as "unknown", the same as a silent printer. */
+   * problem shows as "unknown", the same as a silent printer. On
+   * Android the probe dials the LAN, so a denied permission opens the
+   * explanation dialog instead of the probe. */
   const runDetect = async () => {
+    if (isAndroid() && !lanGranted && isLanType(form.printer_type)) {
+      setLanPromptOpen(true);
+      return;
+    }
     setDetecting(true);
     setDetectResult(null);
     try {
@@ -193,6 +263,27 @@ export function usePrinterForm(
     }
   }, [showAdd, form.printer_type, scanBluetooth]);
 
+  // On Android the page no longer browses the LAN on mount (usePrinters):
+  // the one quiet browse rides on the sheet instead, and only when the
+  // local-network permission is already granted — a denied permission
+  // shows the explanation, not a silently empty list. Once per open,
+  // no scanning state and no toasts: it just keeps the detected rows
+  // fresh for the person who just asked to see them.
+  const quietScanDone = useRef(false);
+  useEffect(() => {
+    if (!showAdd) {
+      quietScanDone.current = false;
+      return;
+    }
+    if (!isAndroid() || !lanGranted || quietScanDone.current) return;
+    quietScanDone.current = true;
+    void agent("discover_network_printers", { timeout_secs: 8 })
+      .then((list) => {
+        if (list && list.length > 0) setNetworkPrinters(list);
+      })
+      .catch(() => {});
+  }, [showAdd, lanGranted, setNetworkPrinters]);
+
   /** Copy a detected device into the form without saving anything. */
   const fillFromDetected = (kind: DetectedKind, d: SystemPrinter) => {
     if (kind === "system") {
@@ -233,7 +324,30 @@ export function usePrinterForm(
     }
   };
 
-  const addDiscovered = async (np: SystemPrinter) => {
+  // The detected-row Add is one tap; a double-tap while the first is still
+  // in flight would otherwise add the printer twice.
+  const addDiscoveredInFlight = useRef(false);
+
+  const addDiscovered = (np: SystemPrinter) => {
+    const printerType = np.printer_type ?? "ipp";
+    // Bluetooth rows are confirmed before saving (B1): the paper width
+    // decides whether the page fits, and a blind 80 mm default is the
+    // classic 2-inch-thermal failure. One tap fills the form with a
+    // safe 2-inch width and leaves the sheet open; Save commits.
+    if (printerType === "bluetooth") {
+      fillFromDetected("bluetooth", np);
+      setForm((f) => ({ ...f, paper_width_mm: "54" }));
+      // The width is folded away under Advanced — open it so the
+      // confirmation is something the user can actually see.
+      setAdvancedOpen(true);
+      return;
+    }
+    void addDetectedNow(np);
+  };
+
+  const addDetectedNow = async (np: SystemPrinter) => {
+    if (addDiscoveredInFlight.current) return;
+    addDiscoveredInFlight.current = true;
     const printerType = np.printer_type ?? "ipp";
     const address = np.address;
     const name = np.name;
@@ -258,18 +372,27 @@ export function usePrinterForm(
         },
       });
       notifySuccess(t("printers.toast_added", { name }));
+      // One-tap add is done: close the sheet just like Save does.
+      closeAndReset();
       await list.load();
     } catch (e) {
+      // Failure keeps the sheet open so the row is still there to retry.
       notifyError(t("printers.toast_save_failed", { error: describeError(e) }));
+    } finally {
+      addDiscoveredInFlight.current = false;
     }
   };
 
   const addPrinter = async () => {
     const parsed = validatePrinterForm(form);
     if (!parsed.ok) {
-      // The paper / DPI / gap fields are folded away: open them so the
-      // error points at something visible.
-      if (/^printers\.err_(paper|dpi|gap)/.test(parsed.messageKey)) {
+      // The paper / DPI / gap / Bluetooth-pace fields are folded away:
+      // open them so the error points at something visible.
+      if (
+        /^printers\.err_(paper|dpi|gap|bt_chunk|bt_pause)/.test(
+          parsed.messageKey,
+        )
+      ) {
         setAdvancedOpen(true);
       }
       setAddressTouched(true);
@@ -279,18 +402,56 @@ export function usePrinterForm(
       return;
     }
     const req = parsed.req;
+    // Adding by IP needs the LAN on Android; editing an existing row
+    // does not (it only rewrites the local config), so it goes through.
+    if (
+      editingId === null &&
+      isAndroid() &&
+      !lanGranted &&
+      isLanType(req.printer_type)
+    ) {
+      setLanPromptOpen(true);
+      return;
+    }
     try {
-      if (editingId === null) {
-        await agent("add_printer", { req });
-        notifySuccess(t("printers.toast_added", { name: form.name.trim() }));
-      } else {
-        await agent("update_printer", { id: editingId, req });
-        notifySuccess(t("printers.toast_saved", { name: form.name.trim() }));
+      const saved =
+        editingId === null
+          ? await agent("add_printer", { req })
+          : await agent("update_printer", { id: editingId, req });
+      if (req.printer_type === "bluetooth" && !req.via_driver) {
+        // Pacing (B4) is a per-row setting stored outside the core row,
+        // so it rides a second call after the row exists. A cleared field
+        // is omitted, not sent as null: the backend fills a missing half
+        // with its default, and a null half would be a type error. A
+        // failure here loses only the custom pace, not the row — the
+        // row is already saved and printable at the defaults.
+        try {
+          await agent("set_printer_bluetooth_delivery", {
+            id: saved.id,
+            delivery:
+              req.bt_chunk_bytes == null && req.bt_chunk_pause_ms == null
+                ? null
+                : {
+                    ...(req.bt_chunk_bytes != null
+                      ? { chunkBytes: req.bt_chunk_bytes }
+                      : {}),
+                    ...(req.bt_chunk_pause_ms != null
+                      ? { chunkPauseMs: req.bt_chunk_pause_ms }
+                      : {}),
+                  },
+          });
+        } catch (e) {
+          notifyError(
+            t("printers.toast_save_failed", { error: describeError(e) }),
+          );
+        }
       }
-      setShowAdd(false);
-      setEditingId(null);
-      setForm(blankForm);
-      resetDialogUi();
+      notifySuccess(
+        editingId === null
+          ? t("printers.toast_added", { name: form.name.trim() })
+          : t("printers.toast_saved", { name: form.name.trim() }),
+      );
+      closeAndReset();
       await list.load();
     } catch (e) {
       const msg = describeError(e);
@@ -449,6 +610,13 @@ export function usePrinterForm(
   const formErrorIsGap =
     formErrorKey?.startsWith("printers.err_gap") === true &&
     form.language === "tspl";
+  // The pace fields only exist for a driverless Bluetooth row; a stored
+  // pace failing on any other row has no slot, so it falls to the banner.
+  const paceVisible = form.printer_type === "bluetooth" && !form.via_driver;
+  const formErrorIsChunk =
+    paceVisible && formErrorKey?.startsWith("printers.err_bt_chunk") === true;
+  const formErrorIsPause =
+    paceVisible && formErrorKey?.startsWith("printers.err_bt_pause") === true;
   const formErrorIsName = formErrorKey === "printers.err_name_required";
   // What no single field owns (unknown type / language, unparsable):
   // one banner at the top of the form.
@@ -458,6 +626,8 @@ export function usePrinterForm(
     !formErrorIsPaper &&
     !formErrorIsDpi &&
     !formErrorIsGap &&
+    !formErrorIsChunk &&
+    !formErrorIsPause &&
     !formErrorIsName;
   const addressDescribedBy =
     [
@@ -471,6 +641,11 @@ export function usePrinterForm(
   return {
     showDetected,
     setShowDetected,
+    lanGranted,
+    lanCanAskAgain,
+    lanPromptOpen,
+    setLanPromptOpen,
+    askLan,
     advancedOpen,
     setAdvancedOpen,
     signInOpen,
@@ -517,6 +692,8 @@ export function usePrinterForm(
     formErrorIsPaper,
     formErrorIsDpi,
     formErrorIsGap,
+    formErrorIsChunk,
+    formErrorIsPause,
     formErrorIsName,
     formErrorBanner,
     addressDescribedBy,

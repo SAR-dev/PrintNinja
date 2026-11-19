@@ -353,6 +353,12 @@ pub struct BluetoothWriteOnRequest {
     pub handle: String,
     pub data_base64: Option<String>,
     pub data_path: Option<String>,
+    /// Bytes per RFCOMM write on the Kotlin side; `None` keeps the
+    /// plugin's default (512).
+    pub chunk_bytes: Option<u64>,
+    /// Pause between RFCOMM writes in milliseconds; `None` keeps the
+    /// plugin's default (50).
+    pub chunk_pause_ms: Option<u64>,
 }
 
 /// Release a held RFCOMM socket. Idempotent: unknown handles resolve
@@ -383,13 +389,16 @@ pub struct ApiServerState {
 /// The outcome of one finished background print job, posted to the
 /// notification shade by `postJobNotification` (item 41). `kind` is
 /// "success" or "failure"; `subject` is the job's name (its template)
-/// and `detail` the failure's reason.
+/// and `detail` the failure's reason. `sent_only` marks a success on a
+/// raw-wire printer (USB, driverless Bluetooth), whose notification says
+/// "sent to the printer" instead of "printed".
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobNotificationRequest {
     pub kind: String,
     pub subject: Option<String>,
     pub detail: Option<String>,
+    pub sent_only: Option<bool>,
 }
 
 /// What `startBackgroundService` / `isBackgroundServiceRunning` resolve
@@ -437,6 +446,30 @@ pub struct NotificationPermissionStateResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NotificationPermissionResponse {
+    pub granted: bool,
+    pub opened_settings: bool,
+}
+
+/// What `localNetworkPermissionState` resolves with: whether Android
+/// allows local network access (LAN discovery, paired PCs, IP printing),
+/// and whether the system prompt may still be shown (false routes the
+/// button to the app's permission settings screen instead of asking
+/// into a silent auto-deny).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalNetworkPermissionStateResponse {
+    pub granted: bool,
+    pub can_ask_again: bool,
+}
+
+/// What `requestLocalNetworkPermission` resolves with: `granted` is the
+/// answer at the moment the dialog fired (the prompt is system UI and
+/// the real answer arrives later, read back as state), `opened_settings`
+/// is true when the system would not prompt and the app's permission
+/// settings screen was opened instead.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalNetworkPermissionResponse {
     pub granted: bool,
     pub opened_settings: bool,
 }
@@ -534,19 +567,29 @@ mod tests {
             handle: "h".into(),
             data_base64: Some("AA==".into()),
             data_path: None,
+            chunk_bytes: Some(256),
+            chunk_pause_ms: Some(100),
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"dataBase64\""), "{json}");
+        assert!(json.contains("\"chunkBytes\":256"), "{json}");
+        assert!(json.contains("\"chunkPauseMs\":100"), "{json}");
         let req = BluetoothWriteOnRequest {
             handle: "h".into(),
             data_base64: None,
             data_path: Some("/cache/payload.bin".into()),
+            // Unset pacing: the Kotlin side falls back to its defaults,
+            // like the other Option fields it already defaults.
+            chunk_bytes: None,
+            chunk_pause_ms: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"dataPath\""), "{json}");
         // Absent side serializes as null, like the existing Option fields
         // (reply_timeout_ms) the Kotlin side already defaults.
         assert!(json.contains("\"dataBase64\":null"), "{json}");
+        assert!(json.contains("\"chunkBytes\":null"), "{json}");
+        assert!(json.contains("\"chunkPauseMs\":null"), "{json}");
     }
 
     fn printer(kind: &str, host: &str, rp: Option<&str>) -> DiscoveredPrinter {
@@ -662,6 +705,25 @@ mod tests {
     }
 
     #[test]
+    fn local_network_permission_state_parses_the_object_kotlin_sends() {
+        let r: LocalNetworkPermissionStateResponse =
+            serde_json::from_str(r#"{"granted":true,"canAskAgain":false}"#).unwrap();
+        assert!(r.granted);
+        assert!(!r.can_ask_again);
+        let wrong: Result<LocalNetworkPermissionStateResponse, _> =
+            serde_json::from_str(r#"{"granted":true,"can_ask_again":true}"#);
+        assert!(wrong.is_err());
+    }
+
+    #[test]
+    fn local_network_permission_response_parses_the_object_kotlin_sends() {
+        let r: LocalNetworkPermissionResponse =
+            serde_json::from_str(r#"{"granted":false,"openedSettings":true}"#).unwrap();
+        assert!(!r.granted);
+        assert!(r.opened_settings);
+    }
+
+    #[test]
     fn job_notification_request_sends_the_keys_kotlin_expects() {
         // JobNotificationArgs parses exactly these names by reflection,
         // so the wire keys are the contract; the absent side serializes
@@ -670,21 +732,24 @@ mod tests {
             kind: "failure".into(),
             subject: Some("Order #12".into()),
             detail: None,
+            sent_only: None,
         })
         .unwrap();
         assert_eq!(
             json,
-            serde_json::json!({"kind": "failure", "subject": "Order #12", "detail": null})
+            serde_json::json!({"kind": "failure", "subject": "Order #12", "detail": null, "sentOnly": null})
         );
+        // A raw-wire success says "sent", never "printed" (B3).
         let json = serde_json::to_value(JobNotificationRequest {
             kind: "success".into(),
             subject: None,
             detail: None,
+            sent_only: Some(true),
         })
         .unwrap();
         assert_eq!(
             json,
-            serde_json::json!({"kind": "success", "subject": null, "detail": null})
+            serde_json::json!({"kind": "success", "subject": null, "detail": null, "sentOnly": true})
         );
     }
 

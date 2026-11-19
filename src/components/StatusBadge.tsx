@@ -136,8 +136,15 @@ export function StatusBadge({
 }
 
 /** For values that come from data (job.status). Unknown values render neutral. */
-export function JobStatusBadge({ status }: { status: string }) {
-  if (isStatusKey(status)) return <StatusBadge status={status} />;
+export function JobStatusBadge({
+  status,
+  label,
+}: {
+  status: string;
+  /** Overrides the translated label, e.g. "Sent" for a raw-wire success. */
+  label?: string;
+}) {
+  if (isStatusKey(status)) return <StatusBadge status={status} label={label} />;
   return (
     <span className="inline-flex items-center whitespace-nowrap rounded-sm bg-neutral-soft px-2 py-0.5 text-xs font-medium text-neutral">
       {status}

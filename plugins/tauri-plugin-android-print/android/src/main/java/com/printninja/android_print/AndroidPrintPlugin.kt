@@ -99,6 +99,14 @@ fun dotsFromArgb(pixels: IntArray, widthPx: Int, heightPx: Int): ByteArray {
 private const val TAG = "AndroidPrintPlugin"
 
 /**
+ * The Android 17 local network permission, by name. The plugin compiles
+ * against API 36, where `Manifest.permission.ACCESS_LOCAL_NETWORK` does not
+ * exist yet (referencing it fails the build with "Unresolved reference"),
+ * and the permission check and request APIs take the plain string anyway.
+ */
+private const val ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
+
+/**
  * One render's deadline, in ms: a page that never finishes still gets an
  * answer. Shared by the class's PDF watchdog (`renderTimeoutMs`) and
  * [renderDots].
@@ -442,6 +450,10 @@ class BluetoothWriteOnArgs {
     var handle: String? = null
     var dataBase64: String? = null
     var dataPath: String? = null
+    /** Bytes per RFCOMM write; `null` keeps the plugin default (512). */
+    var chunkBytes: Long? = null
+    /** Pause between RFCOMM writes, in ms; `null` keeps 50. */
+    var chunkPauseMs: Long? = null
 }
 
 @InvokeArg
@@ -458,12 +470,15 @@ class ApiServerStateArgs {
 }
 
 /** One finished background print job, for the one-shot result
- *  notification (item 41; see PrintNinjaService). */
+ *  notification (item 41; see PrintNinjaService). `sentOnly` marks a
+ *  success on a raw-wire printer: the text says "sent", never
+ *  "printed". */
 @InvokeArg
 class JobNotificationArgs {
     var kind: String? = null
     var subject: String? = null
     var detail: String? = null
+    var sentOnly: Boolean? = null
 }
 
 @TauriPlugin
@@ -1804,10 +1819,29 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 }
                 return@execute
             }
+            // Paced write (B4): one flood is exactly what a slow 2-inch
+            // thermal head drops, so the bytes go out in small slices
+            // with a short drain pause between them. The whole send —
+            // pauses included — stays far under the Rust side's 30 s
+            // Bluetooth deadline (see BluetoothPacing).
+            val chunkBytes = clampChunkBytes(args.chunkBytes ?: BT_CHUNK_BYTES_DEFAULT)
+            val pauseMs =
+                pacedChunkPauseMs(data.size, chunkBytes,
+                    clampChunkPauseMs(args.chunkPauseMs ?: BT_CHUNK_PAUSE_MS_DEFAULT))
+            val ranges = chunkRanges(data.size, chunkBytes)
+            var written = 0
             try {
                 val out = socket.outputStream
-                out.write(data)
+                ranges.forEachIndexed { index, range ->
+                    out.write(data, range.first, range.last - range.first + 1)
+                    written = range.last + 1
+                    if (index < ranges.lastIndex && pauseMs > 0L) Thread.sleep(pauseMs)
+                }
                 out.flush()
+                // Settle before answering: Rust closes the socket as
+                // soon as this resolves, and a platen mid-stroke at
+                // close time prints only the first letters of the job.
+                if (data.isNotEmpty()) Thread.sleep(settleDelayMs(data.size))
                 answer(invoke) {
                     invoke.resolve(JSObject().put("bytesWritten", data.size))
                 }
@@ -1815,7 +1849,9 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 answer(invoke) { invoke.reject(bluetoothDenied()) }
             } catch (e: Exception) {
                 answer(invoke) {
-                    invoke.reject("Bluetooth write failed: ${e.message}")
+                    invoke.reject(
+                        "Bluetooth write failed after $written of ${data.size} bytes: ${e.message}"
+                    )
                 }
             }
         }
@@ -1891,6 +1927,7 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 kind,
                 args.subject,
                 args.detail,
+                args.sentOnly ?: false,
             )
         }
         invoke.resolve()
@@ -2035,6 +2072,141 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
         askNotificationPermission()
         ioPool.execute { awaitNotificationAnswer() }
         invoke.resolve(JSObject().put("granted", false).put("openedSettings", false))
+    }
+
+    /**
+     * Local network access — LAN printer discovery, reaching a paired
+     * PC, printing by IP address — is gated on two runtime
+     * permissions, each checked only where the OS knows it:
+     * NEARBY_WIFI_DEVICES (Android 13+) is the nearby-devices access
+     * for talking to devices on the local network, and
+     * ACCESS_LOCAL_NETWORK (Android 14+) applies once the app targets
+     * Android 17. An install on an older system needs neither and
+     * passes through.
+     */
+    private fun grantedLocalNetwork(): Boolean {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(
+                activity,
+                Manifest.permission.NEARBY_WIFI_DEVICES,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        if (Build.VERSION.SDK_INT >= 34 &&
+            ContextCompat.checkSelfPermission(
+                activity,
+                ACCESS_LOCAL_NETWORK,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Whether the system prompt has ever been shown for this install —
+     * the same memory the notification prompt keeps: a declined prompt
+     * must not re-fire on every ask (silently auto-denying), and the
+     * "Try again" button needs the answer to know when the settings
+     * screen is the only route left.
+     */
+    private fun localNetworkAsked(): Boolean =
+        activity.getSharedPreferences("printninja_permissions", Context.MODE_PRIVATE)
+            .getBoolean("local_network_permission_asked", false)
+
+    private fun markLocalNetworkAsked() {
+        activity.getSharedPreferences("printninja_permissions", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("local_network_permission_asked", true)
+            .apply()
+    }
+
+    /** True while the system may still show the permission dialog. */
+    private fun canPromptLocalNetwork(): Boolean =
+        PrintNinjaService.canPromptNotification(
+            localNetworkAsked(),
+            activity.shouldShowRequestPermissionRationale(Manifest.permission.NEARBY_WIFI_DEVICES),
+        )
+
+    /** Fires the one-time system prompt; the answer is read back as state. */
+    private fun askLocalNetworkPermission() {
+        markLocalNetworkAsked()
+        val perms =
+            if (Build.VERSION.SDK_INT >= 34) {
+                arrayOf(
+                    Manifest.permission.NEARBY_WIFI_DEVICES,
+                    ACCESS_LOCAL_NETWORK,
+                )
+            } else {
+                arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES)
+            }
+        activity.runOnUiThread { ActivityCompat.requestPermissions(activity, perms, 9753) }
+    }
+
+    /**
+     * The permission state the UI shows: whether Android has allowed
+     * local network access, and whether the system prompt may still be
+     * shown (otherwise the caller's button opens the settings screen
+     * instead of asking into a silent auto-deny).
+     */
+    @Command
+    fun localNetworkPermissionState(invoke: Invoke) {
+        invoke.resolve(
+            JSObject()
+                .put("granted", grantedLocalNetwork())
+                .put("canAskAgain", canPromptLocalNetwork()),
+        )
+    }
+
+    /**
+     * Asks for the local network permission, or opens the app's
+     * permission settings when the system will not prompt again.
+     * Settles at once: the prompt is system UI, the plugin never
+     * receives the grant callback, and a JS-side state read on
+     * visibilitychange picks up the real answer when the dialog is
+     * dismissed.
+     */
+    @Command
+    fun requestLocalNetworkPermission(invoke: Invoke) {
+        if (grantedLocalNetwork()) {
+            invoke.resolve(JSObject().put("granted", true).put("openedSettings", false))
+            return
+        }
+        if (!canPromptLocalNetwork()) {
+            // The prompt is gone (asked, declined, "don't ask again"):
+            // the app's own permission screen is the only route left.
+            val intent =
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:${activity.packageName}"),
+                )
+                    .putExtra("pid", PackageManager.PERMISSION_GRANTED)
+            activity.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            invoke.resolve(JSObject().put("granted", false).put("openedSettings", true))
+            return
+        }
+        askLocalNetworkPermission()
+        invoke.resolve(JSObject().put("granted", false).put("openedSettings", false))
+    }
+
+    /**
+     * Opens the app's own permission settings screen — the "Open
+     * settings" button on the local network denial notice. Deliberately
+     * distinct from the request command: it never fires the system
+     * prompt, even when one is still available, because the person
+     * chose the settings screen over the dialog.
+     */
+    @Command
+    fun openLocalNetworkSettings(invoke: Invoke) {
+        val intent =
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:${activity.packageName}"),
+            )
+                .putExtra("pid", PackageManager.PERMISSION_GRANTED)
+        activity.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        invoke.resolve()
     }
 
     @Command

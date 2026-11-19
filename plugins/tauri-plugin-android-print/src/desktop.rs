@@ -84,4 +84,20 @@ impl<R: Runtime> AndroidPrint<R> {
     pub fn request_notification_permission(&self) -> crate::Result<NotificationPermissionResponse> {
         self.unavailable("requestNotificationPermission")
     }
+
+    pub fn local_network_permission_state(
+        &self,
+    ) -> crate::Result<LocalNetworkPermissionStateResponse> {
+        self.unavailable("localNetworkPermissionState")
+    }
+
+    pub fn request_local_network_permission(
+        &self,
+    ) -> crate::Result<LocalNetworkPermissionResponse> {
+        self.unavailable("requestLocalNetworkPermission")
+    }
+
+    pub fn open_local_network_settings(&self) -> crate::Result<()> {
+        self.unavailable("openLocalNetworkSettings")
+    }
 }

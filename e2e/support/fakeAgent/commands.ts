@@ -317,6 +317,22 @@ const implemented: Record<string, Handler> = {
   open_bluetooth_settings: () => {
     throw new Error("Bluetooth settings only exist on Android");
   },
+  // Android local network permission (plugin:android-print). Specs that fake
+  // an Android user agent run against a loopback service, which the app
+  // treats as local-network traffic. An unhandled command answers null and
+  // the app reads that as "not granted", which turns the share badge
+  // offline and makes pairing open the permission dialog instead of
+  // pairing. The e2e browser has no system prompt, so the honest answer is
+  // "already granted".
+  "plugin:android-print|local_network_permission_state": () => ({
+    granted: true,
+    canAskAgain: false,
+  }),
+  "plugin:android-print|request_local_network_permission": () => ({
+    granted: true,
+    openedSettings: false,
+  }),
+  "plugin:android-print|open_local_network_settings": () => null,
   cache_apply_changes: (args) =>
     cache.applyChanges(
       (args["changes"] as SyncChangeIn[] | undefined) ?? [],
@@ -728,6 +744,10 @@ const acknowledgedStubs: string[] = [
   // row by Rust and read back by the print pipeline; no browser code calls
   // it yet, so the fake agent only acknowledges it for the contract test.
   "set_printer_tspl_tuning",
+  // Driverless Bluetooth pacing (B4) is stored on the printer row by Rust
+  // and read back by the Android print path; the e2e browser never sends a
+  // Bluetooth job, so the fake agent only acknowledges it.
+  "set_printer_bluetooth_delivery",
   // mDNS discovery is implemented above
 ];
 
