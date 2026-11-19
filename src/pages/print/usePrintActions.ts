@@ -218,9 +218,9 @@ export function usePrintActions({
 
   // One print through the paired PC. A fresh attempt mints the
   // idempotency key; a retry reuses it, so a timeout never prints twice.
-  // Paper size stays home (the API has no field for it), but the four
-  // margins ride along — the same values the local path sends — so a
-  // phone job lays out the page the same way a local one would.
+  // Paper size and the four margins ride along — the same values the local
+  // path sends — so a phone job lays out the page the same way a local
+  // one would.
   const handleRemotePrint = async (retry: boolean) => {
     const pair = resolvePhonePair(pairs, viaPcDevice);
     if (!pair) {
@@ -268,6 +268,8 @@ export function usePrintActions({
           margin_right: store.marginRight,
           margin_bottom: store.marginBottom,
           margin_left: store.marginLeft,
+          page_width_mm: effPaperW,
+          page_height_mm: effPaperH,
           orientation: store.orientation,
           fit_mode: store.fitMode,
           page_range: store.pageRange.trim() || undefined,

@@ -94,35 +94,27 @@ export function AdvancedOptions({
           </Select>
         </div>
       </div>
-      {viaPc ? (
-        <p className="text-xs text-muted-foreground">
-          {t("print.paper_via_pc")}
-        </p>
-      ) : (
-        <>
-          <PaperSizeFields
-            ids={{
-              select: "print-paper",
-              width: "paper-w",
-              height: "paper-h",
-            }}
-            layout="grid"
-            paperPreset={paperPreset}
-            seedW={effPaperW}
-            seedH={effPaperH}
-            designW={designW}
-            designH={designH}
-          />
-          <p className="-mt-2 text-xs text-muted-foreground">
-            {t("print.paper_note", {
-              dw: designW,
-              dh: designH,
-              pw: previewPaperW,
-              ph: previewPaperH,
-            })}
-          </p>
-        </>
-      )}
+      <PaperSizeFields
+        ids={{
+          select: "print-paper",
+          width: "paper-w",
+          height: "paper-h",
+        }}
+        layout="grid"
+        paperPreset={paperPreset}
+        seedW={effPaperW}
+        seedH={effPaperH}
+        designW={designW}
+        designH={designH}
+      />
+      <p className="-mt-2 text-xs text-muted-foreground">
+        {t("print.paper_note", {
+          dw: designW,
+          dh: designH,
+          pw: previewPaperW,
+          ph: previewPaperH,
+        })}
+      </p>
       <fieldset className="space-y-1.5">
         <legend className="text-sm font-medium leading-none">
           {t("print.margins")} (mm)

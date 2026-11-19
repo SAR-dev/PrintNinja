@@ -72,6 +72,11 @@ pub struct RemotePrintArgs {
     pub margin_right: Option<f64>,
     pub margin_bottom: Option<f64>,
     pub margin_left: Option<f64>,
+    /// Page size in millimetres (MISSING_FEATURES #25), one field per axis
+    /// like the local `PrintRequest`. Absent stays absent — the PC keeps the
+    /// template design size for that axis.
+    pub page_width_mm: Option<f64>,
+    pub page_height_mm: Option<f64>,
     pub test: Option<bool>,
     /// Caller-generated de-duplication key. Retries of one attempt reuse
     /// it, so a timeout never prints twice; absent, one is minted.
@@ -501,9 +506,10 @@ fn warnings_from_reply(reply: &serde_json::Value) -> Vec<String> {
 /// (MISSING_FEATURES #25: a phone job and a local job with the same
 /// options must give the same page). Absent options stay absent, exactly
 /// like the local path — the PC then keeps its own defaults for them.
-/// `margins` is included only when at least one side is set: a phone that
-/// never touched the margins sends the body it always sent, and the PC
-/// (new or old) applies the template defaults.
+/// `margins` is included only when at least one side is set, and `paper`
+/// only when at least one axis is set: a phone that never touched either
+/// sends the body it always sent, and the PC (new or old) applies the
+/// template defaults.
 fn remote_settings(
     copies: u32,
     orientation: Option<&str>,
@@ -512,6 +518,7 @@ fn remote_settings(
     grayscale: Option<bool>,
     http_method: Option<&str>,
     margins: (Option<f64>, Option<f64>, Option<f64>, Option<f64>),
+    page: (Option<f64>, Option<f64>),
 ) -> serde_json::Value {
     let mut settings = serde_json::json!({ "copies": copies });
     for (k, v) in [
@@ -531,6 +538,12 @@ fn remote_settings(
             "right": margins.1,
             "bottom": margins.2,
             "left": margins.3,
+        });
+    }
+    if page.0.is_some() || page.1.is_some() {
+        settings["paper"] = serde_json::json!({
+            "width_mm": page.0,
+            "height_mm": page.1,
         });
     }
     settings
@@ -658,6 +671,7 @@ pub async fn remote_print_inner(
         args.grayscale,
         args.http_method.as_deref(),
         margins,
+        (args.page_width_mm, args.page_height_mm),
     );
     let mut body = serde_json::json!({
         "template": template_name,
@@ -1195,6 +1209,7 @@ mod tests {
             Some(true),
             Some("POST"),
             (Some(5.0), Some(6.0), Some(7.0), Some(8.0)),
+            (None, None),
         );
         let local = serde_json::json!({
             "copies": 2,
@@ -1218,16 +1233,43 @@ mod tests {
             None,
             None,
             (Some(12.5), None, None, None),
+            (None, None),
         );
         assert_eq!(
             phone["margins"],
             serde_json::json!({"top": 12.5, "right": null, "bottom": null, "left": null})
         );
 
-        // No margin touched at all: no `margins` key — the PC keeps the
-        // template defaults exactly as a local job with all-`null`
-        // margins does.
-        let phone = remote_settings(1, None, None, None, None, None, (None, None, None, None));
+        // One paper axis set, the other absent: `paper` appears with the
+        // absent axis `null`, so the PC keeps the template default there.
+        let phone = remote_settings(
+            1,
+            None,
+            None,
+            None,
+            None,
+            None,
+            (None, None, None, None),
+            (Some(58.0), None),
+        );
+        assert_eq!(
+            phone["paper"],
+            serde_json::json!({"width_mm": 58.0, "height_mm": null})
+        );
+
+        // No margin or paper touched at all: no `margins`/`paper` key —
+        // the PC keeps the template defaults exactly as a local job with
+        // all-`null` margins does.
+        let phone = remote_settings(
+            1,
+            None,
+            None,
+            None,
+            None,
+            None,
+            (None, None, None, None),
+            (None, None),
+        );
         assert_eq!(phone, serde_json::json!({ "copies": 1 }));
     }
 }

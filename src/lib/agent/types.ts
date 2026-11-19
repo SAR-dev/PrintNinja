@@ -323,6 +323,9 @@ export interface RemotePrintArgs {
   margin_right?: number;
   margin_bottom?: number;
   margin_left?: number;
+  /** Page size in millimetres, one field per axis like the local request. */
+  page_width_mm?: number | null;
+  page_height_mm?: number | null;
   test?: boolean;
   /** Caller-generated key; retries of one attempt reuse it. */
   idempotency_key?: string;

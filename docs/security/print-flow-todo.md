@@ -63,3 +63,29 @@ branch, with a short note on why and what a fix would look like.
    bundled PDFium; the platform plugin renders PDFs), so the A4 fallback remains
    there. The Android plugin would need to report the page size, or the phone
    should send explicit `page_height_mm`.
+
+## Verification needed on a full build (not run here — low-resource PC)
+
+These fixes were written by inspection and **not** compiled or tested. Before
+merging, run on a machine with the toolchain:
+
+- `pnpm build` (or `tsc -b`) — type-checks the TS changes: the via-PC paper-size
+  wiring (`usePrintActions`, `usePrintPaper`, `AdvancedOptions`,
+  `PhonePrintFlow`, `agent/types.ts`) and the added label-size presets + locale
+  keys.
+- `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` in
+  `src-tauri/` — checks the Rust changes.
+- `pnpm test` — especially `src/test/print.test.tsx` (paper override / preset
+  re-selection) and any via-PC test, now that the paper field is shown in
+  via-PC mode.
+- `pnpm test:rust` (Docker) — `remote_print`'s
+  `phone_and_local_settings_are_identical_for_the_same_options` now also pins the
+  new `paper` settings key.
+
+Worth a careful look:
+
+- **Via-PC paper round-trip.** Confirm a phone-set paper override reaches the PC
+  and changes the output: phone `remote_print` → PC `POST /v1/print`
+  `settings.paper` → `PrintRequest.page_width_mm`/`page_height_mm`.
+- **`paper_via_pc` i18n key** is now unused (the "not sent via PC" note was
+  removed); safe to delete from `en.ts`/`ja.ts` if desired.
