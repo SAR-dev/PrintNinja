@@ -664,6 +664,8 @@ const en = {
       "IPP sign-in user. Blank uses the built-in PrintNinja identity.",
     ipp_password_hint:
       "Sent as HTTP Basic authentication on every request. Blank sends no authentication.",
+    ipp_password_hint_keep:
+      "A password is saved on this printer. Leave blank to keep it, or enter a new one to replace it.",
     ipp_skip_cert: "Skip certificate verification",
     ipp_skip_cert_hint:
       "https:// endpoints only. Lets a self-signed or otherwise unverifiable certificate through.",

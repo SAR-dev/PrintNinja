@@ -298,7 +298,10 @@ export const printerFormSchema = z
       2000,
     ),
     // IPP sign-in: blank user means the built-in `PrintNinja` identity,
-    // blank password means no HTTP authentication at all.
+    // blank password means no HTTP authentication at all. On an edit the
+    // field starts blank and is never prefilled, so the hook omits
+    // `password` (undefined) when it was left untouched — the backend
+    // keeps the stored password; a touched blank clears it.
     username: z.string().trim().max(200).optional(),
     password: z.string().max(200).optional(),
     skip_tls_verification: z.boolean().optional(),

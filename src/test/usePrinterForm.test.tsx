@@ -317,3 +317,72 @@ describe("usePrinterForm sheet lifecycle", () => {
     expect(list.load).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("password semantics on edit (blank means keep)", () => {
+  const secureRow: PrinterRow = {
+    ...savedRow,
+    username: "admin",
+    has_password: true,
+  };
+
+  const setup = () => {
+    const discovery = makeDiscovery();
+    const list = makeList();
+    const { result } = renderHook(() => usePrinterForm(discovery, list));
+    act(() => result.current.openEdit(secureRow));
+    return { result };
+  };
+
+  const updateReq = () => {
+    const call = invoke.mock.calls.find((c) => c[0] === "update_printer");
+    return (call as [string, { id: number; req: Record<string, unknown> }])[1]
+      .req as Record<string, unknown>;
+  };
+
+  it("never prefills the stored password and shows the keep hint", () => {
+    const { result } = setup();
+    expect(result.current.form.password).toBe("");
+    expect(result.current.signInOpen).toBe(true);
+    expect(result.current.passwordKeepHint).toBe(true);
+  });
+
+  it("sends no password when the untouched field is left blank", async () => {
+    const { result } = setup();
+    await act(async () => {
+      await result.current.addPrinter();
+    });
+    // Undefined omits the key from the JSON — the backend keeps the
+    // stored password.
+    expect(updateReq().password).toBeUndefined();
+    expect(result.current.passwordKeepHint).toBe(false);
+  });
+
+  it("sends the typed password when the field is changed", async () => {
+    const { result } = setup();
+    act(() => {
+      result.current.setPasswordTouched(true);
+      result.current.setForm((f) => ({ ...f, password: "new-secret" }));
+    });
+    expect(result.current.passwordKeepHint).toBe(false);
+
+    await act(async () => {
+      await result.current.addPrinter();
+    });
+    expect(updateReq().password).toBe("new-secret");
+  });
+
+  it("sends a blank string when the field was touched and cleared", async () => {
+    const { result } = setup();
+    act(() => {
+      result.current.setPasswordTouched(true);
+      result.current.setForm((f) => ({ ...f, password: "new-secret" }));
+      result.current.setForm((f) => ({ ...f, password: "" }));
+    });
+
+    await act(async () => {
+      await result.current.addPrinter();
+    });
+    // Touched blank is explicit: it clears the stored password.
+    expect(updateReq().password).toBe("");
+  });
+});

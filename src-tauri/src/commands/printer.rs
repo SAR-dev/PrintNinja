@@ -16,8 +16,11 @@ pub struct Printer {
     pub label_gap_mm: Option<f64>,
     /** IPP sign-in user; null means the built-in `PrintNinja`. */
     pub username: Option<String>,
-    /** IPP password; null means no HTTP authentication is sent. */
-    pub password: Option<String>,
+    /**
+     * A stored IPP password exists. The value itself is never sent to
+     * the frontend — add/update receive it transiently in the request.
+     */
+    pub has_password: bool,
     /** Accept self-signed certificates on this printer's TLS endpoint. */
     pub skip_tls_verification: bool,
     /**
@@ -82,7 +85,7 @@ pub fn list_printers(db: State<DbState>) -> AppResult<Vec<Printer>> {
                 dpi: row.get(6)?,
                 label_gap_mm: row.get(7)?,
                 username: row.get(8)?,
-                password: row.get(9)?,
+                has_password: row.get::<_, Option<String>>(9)?.is_some(),
                 skip_tls_verification: row.get(10)?,
                 via_driver: row.get(11)?,
                 default_settings_json: row.get(12)?,
@@ -107,6 +110,9 @@ pub struct AddPrinterRequest {
     pub label_gap_mm: Option<f64>,
     #[serde(default)]
     pub username: Option<String>,
+    /// Transient credential: the value is sent to the backend, never back.
+    /// On add, blank stores no password. On update, absent keeps the
+    /// stored password and an explicit blank clears it.
     #[serde(default)]
     pub password: Option<String>,
     #[serde(default)]
@@ -182,7 +188,7 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
                 dpi: row.get(6)?,
                 label_gap_mm: row.get(7)?,
                 username: row.get(8)?,
-                password: row.get(9)?,
+                has_password: row.get::<_, Option<String>>(9)?.is_some(),
                 skip_tls_verification: row.get(10)?,
                 via_driver: row.get(11)?,
                 default_settings_json: row.get(12)?,
@@ -360,6 +366,19 @@ pub fn update_printer_conn(
         )));
     }
 
+    // The form never prefills the stored password, so an update that
+    // omits it means "keep what is stored": only an explicit value
+    // rewrites the column, and an explicit blank clears it.
+    let existing_password: Option<String> = conn
+        .query_row("SELECT password FROM printers WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .map_err(|_| AppError::NotFound(format!("Printer {} not found", id)))?;
+    let new_password = match &req.password {
+        None => existing_password,
+        Some(p) => (!p.is_empty()).then(|| p.clone()),
+    };
+
     let affected = conn.execute(
         "UPDATE printers SET name = ?1, type = ?2, address = ?3, language = ?4,
                 paper_width_mm = ?5, dpi = ?6, label_gap_mm = ?7, username = ?8,
@@ -377,7 +396,7 @@ pub fn update_printer_conn(
             req.dpi,
             req.label_gap_mm,
             req.username.as_ref().filter(|s| !s.is_empty()),
-            req.password.as_ref().filter(|s| !s.is_empty()),
+            &new_password,
             req.skip_tls_verification.unwrap_or(false) as i64,
             req.via_driver.unwrap_or(false) as i64,
             id,
@@ -403,7 +422,7 @@ pub fn update_printer_conn(
                 dpi: row.get(6)?,
                 label_gap_mm: row.get(7)?,
                 username: row.get(8)?,
-                password: row.get(9)?,
+                has_password: row.get::<_, Option<String>>(9)?.is_some(),
                 skip_tls_verification: row.get(10)?,
                 via_driver: row.get(11)?,
                 default_settings_json: row.get(12)?,
@@ -438,7 +457,7 @@ fn get_printer_inner(db: &DbState, id: i64) -> AppResult<Printer> {
                     dpi: row.get(6)?,
                     label_gap_mm: row.get(7)?,
                     username: row.get(8)?,
-                    password: row.get(9)?,
+                    has_password: row.get::<_, Option<String>>(9)?.is_some(),
                     skip_tls_verification: row.get(10)?,
                     via_driver: row.get(11)?,
                     default_settings_json: row.get(12)?,
@@ -480,8 +499,10 @@ pub async fn test_printer(
     id: i64,
     kind: Option<String>,
 ) -> AppResult<()> {
-    // Load the printer so we know where to send and which language to speak.
-    let printer = {
+    // Load the printer so we know where to send and which language to
+    // speak. The password rides along for the transport only — the row
+    // the frontend sees reports `has_password`, never the value.
+    let (printer, password) = {
         let guard = db
             .lock()
             .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
@@ -493,23 +514,27 @@ pub async fn test_printer(
              FROM printers WHERE id = ?1",
             [id],
             |row| {
-                Ok(Printer {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    printer_type: row.get(2)?,
-                    address: row.get(3)?,
-                    language: row.get(4)?,
-                    paper_width_mm: row.get(5)?,
-                    dpi: row.get(6)?,
-                    label_gap_mm: row.get(7)?,
-                    username: row.get(8)?,
-                    password: row.get(9)?,
-                    skip_tls_verification: row.get(10)?,
-                    via_driver: row.get(11)?,
-                    default_settings_json: row.get(12)?,
-                    created_at: row.get(13)?,
-                    updated_at: row.get(14)?,
-                })
+                let password = row.get::<_, Option<String>>(9)?;
+                Ok((
+                    Printer {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        printer_type: row.get(2)?,
+                        address: row.get(3)?,
+                        language: row.get(4)?,
+                        paper_width_mm: row.get(5)?,
+                        dpi: row.get(6)?,
+                        label_gap_mm: row.get(7)?,
+                        username: row.get(8)?,
+                        has_password: password.as_ref().is_some(),
+                        skip_tls_verification: row.get(10)?,
+                        via_driver: row.get(11)?,
+                        default_settings_json: row.get(12)?,
+                        created_at: row.get(13)?,
+                        updated_at: row.get(14)?,
+                    },
+                    password,
+                ))
             },
         )
         .map_err(|_| AppError::NotFound(format!("Printer {} not found", id)))?
@@ -518,7 +543,7 @@ pub async fn test_printer(
     let printer_type = crate::transport::parse_printer_type(&printer.printer_type);
     let settings = crate::transport::TransportSettings {
         username: printer.username.clone(),
-        password: printer.password.clone(),
+        password,
         skip_tls_verification: printer.skip_tls_verification,
         via_driver: printer.via_driver,
         bluetooth: crate::transport::BluetoothDelivery::from_settings_json(

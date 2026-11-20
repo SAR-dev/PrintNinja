@@ -167,6 +167,72 @@ fn via_driver_stores_and_updates_explicitly() {
     assert_eq!(kept_on.dpi, Some(300));
 }
 
+/// The password never travels to the caller: the row reports
+/// `has_password` instead. An update that omits it keeps the stored
+/// value, an explicit value replaces it, and an explicit blank clears
+/// it — the form's blank-means-keep contract, pinned at the seam.
+#[test]
+fn update_password_semantics_keep_clear_set() {
+    let db = test_db();
+    let id = add(&db, "Dock Zebra");
+
+    // Seed a stored password the way a saved row would carry one.
+    with_conn(&db, |conn| {
+        conn.execute(
+            "UPDATE printers SET password = ?1 WHERE id = ?2",
+            rusqlite::params!["secret-1", id],
+        )
+        .unwrap();
+    });
+
+    // An edit that does not send a password keeps the stored one.
+    let kept = with_conn(&db, |conn| {
+        update_printer_conn(conn, id, &req("Dock Zebra"))
+    })
+    .expect("update works");
+    assert!(kept.has_password);
+    assert_eq!(stored_password(&db, id).as_deref(), Some("secret-1"));
+
+    // An explicit value replaces it.
+    let set = with_conn(&db, |conn| {
+        update_printer_conn(
+            conn,
+            id,
+            &AddPrinterRequest {
+                password: Some("secret-2".to_string()),
+                ..req("Dock Zebra")
+            },
+        )
+    })
+    .expect("update works");
+    assert!(set.has_password);
+    assert_eq!(stored_password(&db, id).as_deref(), Some("secret-2"));
+
+    // An explicit blank clears it.
+    let cleared = with_conn(&db, |conn| {
+        update_printer_conn(
+            conn,
+            id,
+            &AddPrinterRequest {
+                password: Some(String::new()),
+                ..req("Dock Zebra")
+            },
+        )
+    })
+    .expect("update works");
+    assert!(!cleared.has_password);
+    assert_eq!(stored_password(&db, id), None);
+}
+
+fn stored_password(db: &Db, id: i64) -> Option<String> {
+    with_conn(db, |conn| {
+        conn.query_row("SELECT password FROM printers WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .unwrap()
+    })
+}
+
 #[test]
 fn tspl_tuning_round_trips_validates_and_clears() {
     let db = test_db();

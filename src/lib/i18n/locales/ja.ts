@@ -677,6 +677,8 @@ const ja: Translation = {
       "IPPサインインのユーザー名。空欄なら組み込みの PrintNinja アイデンティティを使います。",
     ipp_password_hint:
       "すべてのリクエストに HTTP Basic 認証として送られます。空欄なら認証は送られません。",
+    ipp_password_hint_keep:
+      "このプリンターにはパスワードが保存されています。空欄のままにするとそのまま使われ、入力すると置き換えられます。",
     ipp_skip_cert: "証明書検証をスキップ",
     ipp_skip_cert_hint:
       "https:// のエンドポイント専用。自己署名など検証できない証明書を通します。",

@@ -149,8 +149,11 @@ export interface PrinterRow {
   label_gap_mm?: number | null;
   /** IPP sign-in user; null means the built-in `PrintNinja`. */
   username?: string | null;
-  /** IPP password; null means no HTTP authentication is sent. */
-  password?: string | null;
+  /**
+   * A stored IPP password exists. The value itself is never sent to the
+   * UI — add/update receive it transiently in the request instead.
+   */
+  has_password?: boolean;
   /** Accept self-signed certificates on this printer's TLS endpoint. */
   skip_tls_verification?: boolean;
   /**
@@ -197,7 +200,11 @@ export interface AddPrinterReq {
   label_gap_mm?: number;
   /** IPP sign-in user; undefined leaves the built-in `PrintNinja`. */
   username?: string;
-  /** IPP password; undefined sends no HTTP authentication. */
+  /**
+   * Transient credential, sent to the backend and never back. Add:
+   * undefined/blank stores no password. Edit: undefined keeps the stored
+   * password, a blank string clears it.
+   */
   password?: string;
   /** Accept self-signed certificates on this printer's TLS endpoint. */
   skip_tls_verification?: boolean;

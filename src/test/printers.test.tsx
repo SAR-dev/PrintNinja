@@ -933,7 +933,7 @@ describe("Add / edit dialog layout", () => {
             printer_type: "ipp",
             address: "https://10.0.0.8",
             username: "admin",
-            password: "secret",
+            has_password: true,
           }),
         ];
       if (cmd === "enumerate_system_printers") return SYSTEM;
@@ -947,6 +947,8 @@ describe("Add / edit dialog layout", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(toggle).toHaveTextContent("Configured");
     expect(within(panel).getByLabelText("Username")).toHaveValue("admin");
+    // The stored password is never sent to the UI, so the field stays blank.
+    expect(within(panel).getByLabelText("Password")).toHaveValue("");
     // A printer without credentials still opens folded.
     fireEvent.keyDown(panel, { key: "Escape" });
   });

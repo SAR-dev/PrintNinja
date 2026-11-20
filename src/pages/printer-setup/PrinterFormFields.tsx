@@ -57,6 +57,8 @@ export function PrinterFormFields({
   systemAndroidWarning,
   signInOpen,
   setSignInOpen,
+  passwordKeepHint,
+  setPasswordTouched,
   advancedOpen,
   setAdvancedOpen,
 }: {
@@ -90,6 +92,8 @@ export function PrinterFormFields({
   systemAndroidWarning: boolean;
   signInOpen: boolean;
   setSignInOpen: Dispatch<SetStateAction<boolean>>;
+  passwordKeepHint: boolean;
+  setPasswordTouched: (v: boolean) => void;
   advancedOpen: boolean;
   setAdvancedOpen: Dispatch<SetStateAction<boolean>>;
 }) {
@@ -372,7 +376,10 @@ export function PrinterFormFields({
           data-testid="printer-signin-toggle"
           title={t("printers.ipp_signin")}
           summary={
-            form.username || form.password || form.skip_tls_verification
+            form.username ||
+            form.password ||
+            passwordKeepHint ||
+            form.skip_tls_verification
               ? t("printers.signin_set")
               : t("printers.signin_unset")
           }
@@ -410,15 +417,20 @@ export function PrinterFormFields({
                 autoComplete="new-password"
                 value={form.password}
                 aria-describedby="printer-password-hint"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, password: e.target.value }))
-                }
+                onChange={(e) => {
+                  setPasswordTouched(true);
+                  setForm((f) => ({ ...f, password: e.target.value }));
+                }}
               />
               <p
                 id="printer-password-hint"
                 className="text-xs text-muted-foreground"
               >
-                {t("printers.ipp_password_hint")}
+                {t(
+                  passwordKeepHint
+                    ? "printers.ipp_password_hint_keep"
+                    : "printers.ipp_password_hint",
+                )}
               </p>
             </div>
             <label className="flex items-start gap-2 text-sm max-md:font-semibold">

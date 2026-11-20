@@ -92,6 +92,12 @@ export function usePrinterForm(
   // IPP sign-in (user, password, certificate check) is rarely needed, so it
   // starts folded; a row that already has any of it opens it when edited.
   const [signInOpen, setSignInOpen] = useState(false);
+  // The password field is never prefilled, so "touched" is what separates
+  // "keep what is stored" from "the person actually changed it".
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  // Whether the row being edited carries a stored password — the hint
+  // under the (always blank) field depends on it.
+  const [editHasPassword, setEditHasPassword] = useState(false);
   // The generic address-format error waits for the first blur; a clear
   // connection mix-up (USB port in a Bluetooth row) shows at once.
   const [addressTouched, setAddressTouched] = useState(false);
@@ -155,6 +161,8 @@ export function usePrinterForm(
     setAdvancedOpen(false);
     setSignInOpen(false);
     setAddressTouched(false);
+    setPasswordTouched(false);
+    setEditHasPassword(false);
     setLanPromptOpen(false);
     setFormErrorKey(null);
   };
@@ -192,14 +200,19 @@ export function usePrinterForm(
       bt_chunk_bytes: pace.chunkBytes,
       bt_chunk_pause_ms: pace.pauseMs,
       username: p.username ?? "",
-      password: p.password ?? "",
+      // Never prefill: the row no longer carries the value, and blank
+      // means "keep what is stored".
+      password: "",
       skip_tls_verification: p.skip_tls_verification ?? false,
       via_driver: p.via_driver ?? false,
     });
     setDetectResult(null);
     languageTouched.current = false;
     resetDialogUi();
-    setSignInOpen(Boolean(p.username || p.password || p.skip_tls_verification));
+    setEditHasPassword(Boolean(p.has_password));
+    setSignInOpen(
+      Boolean(p.username || p.has_password || p.skip_tls_verification),
+    );
     setShowAdd(true);
   };
 
@@ -402,6 +415,13 @@ export function usePrinterForm(
       return;
     }
     const req = parsed.req;
+    // The password field is never prefilled, so on an edit a blank,
+    // untouched field means "keep the stored password": omit it from the
+    // request. Only a value the person typed (or a deliberately cleared
+    // field) is sent — a blank string there clears the stored password.
+    if (editingId !== null && !passwordTouched) {
+      req.password = undefined;
+    }
     // Adding by IP needs the LAN on Android; editing an existing row
     // does not (it only rewrites the local config), so it goes through.
     if (
@@ -638,6 +658,10 @@ export function usePrinterForm(
       .filter(Boolean)
       .join(" ") || undefined;
 
+  // The saved-password hint under the (always blank) field: only while
+  // editing a row that has one, and until the person touches the field.
+  const passwordKeepHint = editHasPassword && !passwordTouched;
+
   return {
     showDetected,
     setShowDetected,
@@ -650,6 +674,9 @@ export function usePrinterForm(
     setAdvancedOpen,
     signInOpen,
     setSignInOpen,
+    passwordTouched,
+    setPasswordTouched,
+    passwordKeepHint,
     addressTouched,
     setAddressTouched,
     showAdd,

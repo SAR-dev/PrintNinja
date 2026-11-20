@@ -79,6 +79,8 @@ export function PrinterAddSheet({
     systemAndroidWarning,
     signInOpen,
     setSignInOpen,
+    passwordKeepHint,
+    setPasswordTouched,
     advancedOpen,
     setAdvancedOpen,
   } = form;
@@ -199,6 +201,8 @@ export function PrinterAddSheet({
             systemAndroidWarning={systemAndroidWarning}
             signInOpen={signInOpen}
             setSignInOpen={setSignInOpen}
+            passwordKeepHint={passwordKeepHint}
+            setPasswordTouched={setPasswordTouched}
             advancedOpen={advancedOpen}
             setAdvancedOpen={setAdvancedOpen}
           />
