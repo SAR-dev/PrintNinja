@@ -657,6 +657,9 @@ const en = {
     bt_chunk_pause_ms: "Bluetooth write pause (ms)",
     bt_chunk_pause_hint:
       "Driverless Bluetooth only: the pause between writes, giving a slow printer time to keep up. Blank keeps the built-in default (50).",
+    escpos_band_rows: "ESC/POS image band height (rows)",
+    escpos_band_rows_hint:
+      "ESC/POS only: how many image rows go in each raster command. Blank keeps the built-in default (256). If a test page prints a couple of stray characters instead of the image, try 64 or 24.",
     ipp_signin: "Sign-in (optional)",
     ipp_username: "Username",
     ipp_password: "Password",
@@ -819,6 +822,10 @@ const en = {
     err_bt_pause_int: "Bluetooth write pause must be a whole number",
     err_bt_pause_min: "Bluetooth write pause must be at least 0",
     err_bt_pause_max: "Bluetooth write pause must be at most 2000",
+    err_escpos_band_number: "Image band height must be a number",
+    err_escpos_band_int: "Image band height must be a whole number",
+    err_escpos_band_min: "Image band height must be at least 8",
+    err_escpos_band_max: "Image band height must be at most 2303",
     err_invalid: "Invalid printer",
     lang_pdf: "PDF",
     lang_escpos: "ESC/POS (receipt)",

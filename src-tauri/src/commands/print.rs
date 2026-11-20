@@ -253,6 +253,7 @@ pub trait JobRenderer: Send + Sync {
         dpi: u32,
         label_gap_mm: Option<f64>,
         tspl: &crate::transport::label_langs::tspl::TsplTuning,
+        escpos: &crate::transport::escpos::EscPosTuning,
     ) -> anyhow::Result<(Vec<u8>, &'static str)> {
         match language {
             crate::transport::PrinterLanguage::Pdf => self
@@ -286,6 +287,7 @@ pub trait JobRenderer: Send + Sync {
                     dpi,
                     label_gap_mm,
                     tspl,
+                    escpos,
                 )
                 .map_err(|e| anyhow::anyhow!(e))
             }
@@ -1734,6 +1736,7 @@ async fn run_stages(
     // printer gets its first page rasterised at its dot dimensions, then
     // the identical encoder the HTML path uses.
     let tspl_tuning = printer.as_ref().map(|p| p.tspl).unwrap_or_default();
+    let escpos_tuning = printer.as_ref().map(|p| p.escpos).unwrap_or_default();
     let sheet_refusal = if req.pdf.as_ref().is_some_and(|p| !p.is_empty()) {
         None
     } else {
@@ -1757,6 +1760,7 @@ async fn run_stages(
                     dpi,
                     printer.as_ref().and_then(|p| p.label_gap_mm),
                     &tspl_tuning,
+                    &escpos_tuning,
                 )
                 .await
             }
@@ -1871,6 +1875,7 @@ async fn run_stages(
                                 dpi,
                                 printer.as_ref().and_then(|p| p.label_gap_mm),
                                 &tspl_tuning,
+                                &escpos_tuning,
                             )
                             .await
                             .map(|(b, m)| (b, m.to_string()))
@@ -2169,6 +2174,7 @@ async fn render_pdf_input(
     dpi: u32,
     label_gap_mm: Option<f64>,
     tspl: &crate::transport::label_langs::tspl::TsplTuning,
+    escpos: &crate::transport::escpos::EscPosTuning,
 ) -> anyhow::Result<(Vec<u8>, String)> {
     match language {
         crate::transport::PrinterLanguage::Pdf => {
@@ -2193,6 +2199,7 @@ async fn render_pdf_input(
                 dpi,
                 label_gap_mm,
                 tspl,
+                escpos,
             )
             .map(|(b, m)| (b, m.to_string()))
             .map_err(anyhow::Error::msg)
@@ -2217,6 +2224,9 @@ pub struct StoredPrinter {
     /// TSPL darkness, speed and media type from the row's
     /// `default_settings_json`; defaults send nothing extra.
     pub tspl: crate::transport::label_langs::tspl::TsplTuning,
+    /// ESC/POS raster band height from the row's `default_settings_json`;
+    /// the default is the built-in 256 rows.
+    pub escpos: crate::transport::escpos::EscPosTuning,
     /// Driverless Bluetooth pacing from the row's
     /// `default_settings_json`; defaults are the built-in pace.
     pub bluetooth: crate::transport::BluetoothDelivery,
@@ -2258,6 +2268,9 @@ pub fn lookup_printer(db: &DbState, name: &str) -> Option<StoredPrinter> {
                 skip_tls_verification: r.get(8)?,
                 via_driver: r.get(9)?,
                 tspl: crate::transport::label_langs::tspl::TsplTuning::from_settings_json(
+                    r.get::<_, Option<String>>(10)?.as_deref(),
+                ),
+                escpos: crate::transport::escpos::EscPosTuning::from_settings_json(
                     r.get::<_, Option<String>>(10)?.as_deref(),
                 ),
                 bluetooth: crate::transport::BluetoothDelivery::from_settings_json(

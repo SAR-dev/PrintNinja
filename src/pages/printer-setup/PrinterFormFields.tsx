@@ -50,6 +50,7 @@ export function PrinterFormFields({
   formErrorIsGap,
   formErrorIsChunk,
   formErrorIsPause,
+  formErrorIsBand,
   formErrorIsName,
   gdiWarning,
   ippNonPdfWarning,
@@ -85,6 +86,7 @@ export function PrinterFormFields({
   formErrorIsGap: boolean;
   formErrorIsChunk: boolean;
   formErrorIsPause: boolean;
+  formErrorIsBand: boolean;
   formErrorIsName: boolean;
   gdiWarning: boolean;
   ippNonPdfWarning: boolean;
@@ -626,6 +628,52 @@ export function PrinterFormFields({
                   id="printer-label-gap-error"
                   role="alert"
                   data-testid="printer-label-gap-error"
+                  className="text-xs text-destructive"
+                >
+                  {t(formErrorKey)}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ESC/POS raster band height: some compact printers print stray
+              characters instead of the image when one raster command is
+              too tall, so a shorter band is the first thing to try. */}
+          {form.language === "escpos" && (
+            <div className={field}>
+              <Label htmlFor="printer-escpos-band">
+                {t("printers.escpos_band_rows")}
+              </Label>
+              <Input
+                id="printer-escpos-band"
+                type="number"
+                min="8"
+                max="2303"
+                value={form.escpos_band_rows}
+                aria-invalid={formErrorIsBand || undefined}
+                aria-describedby={
+                  formErrorIsBand
+                    ? "printer-escpos-band-hint printer-escpos-band-error"
+                    : "printer-escpos-band-hint"
+                }
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    escpos_band_rows: e.target.value,
+                  }))
+                }
+              />
+              <p
+                id="printer-escpos-band-hint"
+                className="text-xs text-muted-foreground"
+              >
+                {t("printers.escpos_band_rows_hint")}
+              </p>
+              {formErrorIsBand && formErrorKey && (
+                <p
+                  id="printer-escpos-band-error"
+                  role="alert"
+                  data-testid="printer-escpos-band-error"
                   className="text-xs text-destructive"
                 >
                   {t(formErrorKey)}

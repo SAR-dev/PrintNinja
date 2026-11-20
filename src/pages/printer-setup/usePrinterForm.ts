@@ -34,6 +34,22 @@ import type { usePrinterDiscovery } from "./usePrinterDiscovery";
 import type { usePrinters } from "./usePrinters";
 
 /**
+ * The ESC/POS raster band height a row already has, as a form string: the
+ * `escpos.bandRows` key of the row's settings JSON. Missing or malformed
+ * reads as blank — the built-in 256 rows.
+ */
+function escposBandRowsFromRow(json: string | null | undefined): string {
+  if (!json) return "";
+  try {
+    const root = JSON.parse(json) as { escpos?: { bandRows?: number } };
+    const rows = root.escpos?.bandRows;
+    return rows != null && Number.isFinite(rows) ? String(rows) : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
  * The Bluetooth pacing a row already has, as form strings: the `bluetooth`
  * key of the row's settings JSON (B4). A missing, half-empty or malformed
  * value reads as blank — the built-in defaults — the same leniency the
@@ -113,6 +129,7 @@ export function usePrinterForm(
     label_gap_mm: "",
     bt_chunk_bytes: "",
     bt_chunk_pause_ms: "",
+    escpos_band_rows: "",
     username: "",
     password: "",
     skip_tls_verification: false,
@@ -142,6 +159,7 @@ export function usePrinterForm(
     label_gap_mm: "",
     bt_chunk_bytes: "",
     bt_chunk_pause_ms: "",
+    escpos_band_rows: "",
     username: "",
     password: "",
     skip_tls_verification: false,
@@ -199,6 +217,7 @@ export function usePrinterForm(
       label_gap_mm: p.label_gap_mm != null ? String(p.label_gap_mm) : "",
       bt_chunk_bytes: pace.chunkBytes,
       bt_chunk_pause_ms: pace.pauseMs,
+      escpos_band_rows: escposBandRowsFromRow(p.default_settings_json),
       username: p.username ?? "",
       // Never prefill: the row no longer carries the value, and blank
       // means "keep what is stored".
@@ -402,7 +421,7 @@ export function usePrinterForm(
       // The paper / DPI / gap / Bluetooth-pace fields are folded away:
       // open them so the error points at something visible.
       if (
-        /^printers\.err_(paper|dpi|gap|bt_chunk|bt_pause)/.test(
+        /^printers\.err_(paper|dpi|gap|bt_chunk|bt_pause|escpos_band)/.test(
           parsed.messageKey,
         )
       ) {
@@ -459,6 +478,25 @@ export function usePrinterForm(
                       ? { chunkPauseMs: req.bt_chunk_pause_ms }
                       : {}),
                   },
+          });
+        } catch (e) {
+          notifyError(
+            t("printers.toast_save_failed", { error: describeError(e) }),
+          );
+        }
+      }
+      if (req.language === "escpos") {
+        // The ESC/POS band height is a per-row setting stored outside the
+        // core row, so it rides a second call after the row exists. A
+        // cleared field sends null (the built-in 256 rows). A failure here
+        // loses only the custom band height, not the row.
+        try {
+          await agent("set_printer_escpos_tuning", {
+            id: saved.id,
+            tuning:
+              req.escpos_band_rows == null
+                ? null
+                : { bandRows: req.escpos_band_rows },
           });
         } catch (e) {
           notifyError(
@@ -637,6 +675,11 @@ export function usePrinterForm(
     paceVisible && formErrorKey?.startsWith("printers.err_bt_chunk") === true;
   const formErrorIsPause =
     paceVisible && formErrorKey?.startsWith("printers.err_bt_pause") === true;
+  // The band-height field only exists for ESC/POS; a stored value failing
+  // on another language has no slot, so it falls to the banner below.
+  const formErrorIsBand =
+    formErrorKey?.startsWith("printers.err_escpos_band") === true &&
+    form.language === "escpos";
   const formErrorIsName = formErrorKey === "printers.err_name_required";
   // What no single field owns (unknown type / language, unparsable):
   // one banner at the top of the form.
@@ -648,6 +691,7 @@ export function usePrinterForm(
     !formErrorIsGap &&
     !formErrorIsChunk &&
     !formErrorIsPause &&
+    !formErrorIsBand &&
     !formErrorIsName;
   const addressDescribedBy =
     [
@@ -721,6 +765,7 @@ export function usePrinterForm(
     formErrorIsGap,
     formErrorIsChunk,
     formErrorIsPause,
+    formErrorIsBand,
     formErrorIsName,
     formErrorBanner,
     addressDescribedBy,

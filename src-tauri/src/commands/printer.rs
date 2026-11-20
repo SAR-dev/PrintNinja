@@ -278,6 +278,73 @@ pub fn set_printer_tspl_tuning_conn(
     Ok(())
 }
 
+/// Save a printer's ESC/POS tuning (raster band height). `None` clears it,
+/// so the built-in 256-row bands apply again. Stored under the `escpos` key
+/// of the row's `default_settings_json`; other keys there are kept.
+#[tauri::command]
+pub fn set_printer_escpos_tuning(
+    db: State<DbState>,
+    id: i64,
+    tuning: Option<crate::transport::escpos::EscPosTuning>,
+) -> AppResult<()> {
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    set_printer_escpos_tuning_conn(guard.connection(), id, tuning.as_ref())
+}
+
+/// Test seam for [`set_printer_escpos_tuning`].
+pub fn set_printer_escpos_tuning_conn(
+    conn: &rusqlite::Connection,
+    id: i64,
+    tuning: Option<&crate::transport::escpos::EscPosTuning>,
+) -> AppResult<()> {
+    if let Some(t) = tuning {
+        t.validate().map_err(AppError::Validation)?;
+    }
+    let current: Option<String> = conn
+        .query_row(
+            "SELECT default_settings_json FROM printers WHERE id = ?1",
+            [id],
+            |r| r.get(0),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => {
+                AppError::NotFound(format!("Printer {} not found", id))
+            }
+            other => other.into(),
+        })?;
+    let mut root = current
+        .as_deref()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+        .filter(|v| v.is_object())
+        .unwrap_or_else(|| serde_json::json!({}));
+    let obj = root.as_object_mut().expect("object");
+    // An all-default tuning (no band height) is the same as none: keep the
+    // stored JSON free of an empty `escpos` object.
+    match tuning.filter(|t| t.band_rows.is_some()) {
+        Some(t) => {
+            obj.insert(
+                "escpos".to_string(),
+                serde_json::to_value(t).map_err(|e| AppError::Internal(e.to_string()))?,
+            );
+        }
+        None => {
+            obj.remove("escpos");
+        }
+    }
+    let stored = if obj.is_empty() {
+        None
+    } else {
+        Some(root.to_string())
+    };
+    conn.execute(
+        "UPDATE printers SET default_settings_json = ?1, updated_at = datetime('now') WHERE id = ?2",
+        rusqlite::params![stored, id],
+    )?;
+    Ok(())
+}
+
 /// Save a printer's driverless Bluetooth delivery pacing (chunk size and
 /// pause). `None` clears it, so the built-in pace applies again. Stored
 /// under the `bluetooth` key of the row's `default_settings_json`; other

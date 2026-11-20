@@ -670,6 +670,9 @@ const ja: Translation = {
     bt_chunk_pause_ms: "Bluetooth書き込みの間隔 (ms)",
     bt_chunk_pause_hint:
       "ドライバーなしBluetooth専用: 書き込みと書き込みの間隔。遅いプリンターが追いつける時間をつくる。空欄なら組み込み既定値 (50) が使われます。",
+    escpos_band_rows: "ESC/POS画像バンドの高さ (行)",
+    escpos_band_rows_hint:
+      "ESC/POS専用: 1回のラスターコマンドで送る画像の行数。空欄なら組み込み既定値 (256) が使われます。テストページが画像ではなく数文字しか印刷されない場合は、64 または 24 をお試しください。",
     ipp_signin: "サインイン（任意）",
     ipp_username: "ユーザー名",
     ipp_password: "パスワード",
@@ -836,6 +839,10 @@ const ja: Translation = {
     err_bt_pause_int: "Bluetooth書き込みの間隔は整数で入力してください",
     err_bt_pause_min: "Bluetooth書き込みの間隔は0以上にしてください",
     err_bt_pause_max: "Bluetooth書き込みの間隔は2000以下にしてください",
+    err_escpos_band_number: "画像バンドの高さは数値で入力してください",
+    err_escpos_band_int: "画像バンドの高さは整数で入力してください",
+    err_escpos_band_min: "画像バンドの高さは8以上にしてください",
+    err_escpos_band_max: "画像バンドの高さは2303以下にしてください",
     err_invalid: "プリンターの設定が正しくありません",
     lang_pdf: "PDF",
     lang_escpos: "ESC/POS（レシート）",

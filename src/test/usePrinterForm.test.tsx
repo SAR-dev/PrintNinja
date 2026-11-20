@@ -74,6 +74,7 @@ const btForm = (over: Partial<LoosePrinterForm> = {}): LoosePrinterForm => ({
   label_gap_mm: "",
   bt_chunk_bytes: "",
   bt_chunk_pause_ms: "",
+  escpos_band_rows: "",
   username: "",
   password: "",
   skip_tls_verification: false,
@@ -291,6 +292,90 @@ describe("usePrinterForm sheet lifecycle", () => {
       expect.anything(),
     );
     expect(result.current.showAdd).toBe(false);
+  });
+
+  it("prefills the ESC/POS band height from the row's settings when editing", () => {
+    const discovery = makeDiscovery();
+    const list = makeList();
+    const { result } = renderHook(() => usePrinterForm(discovery, list));
+    act(() =>
+      result.current.openEdit({
+        ...btRowSaved,
+        default_settings_json: '{"escpos":{"bandRows":64}}',
+      }),
+    );
+    expect(result.current.form.escpos_band_rows).toBe("64");
+    // A row without the key reads blank (the built-in 256 rows).
+    act(() => result.current.openEdit(btRowSaved));
+    expect(result.current.form.escpos_band_rows).toBe("");
+  });
+
+  it("saves the ESC/POS band height after the row", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "add_printer") return { ...btRowSaved };
+      return null;
+    });
+    const discovery = makeDiscovery();
+    const list = makeList();
+    const { result } = renderHook(() => usePrinterForm(discovery, list));
+    act(() => result.current.openAdd());
+    act(() => result.current.setForm(btForm({ escpos_band_rows: "64" })));
+
+    await act(async () => {
+      await result.current.addPrinter();
+    });
+
+    expect(invoke).toHaveBeenCalledWith("set_printer_escpos_tuning", {
+      id: 9,
+      tuning: { bandRows: 64 },
+    });
+    expect(result.current.showAdd).toBe(false);
+  });
+
+  it("clears the ESC/POS band height when the field is saved blank", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "add_printer") return { ...btRowSaved };
+      return null;
+    });
+    const discovery = makeDiscovery();
+    const list = makeList();
+    const { result } = renderHook(() => usePrinterForm(discovery, list));
+    act(() => result.current.openAdd());
+    act(() => result.current.setForm(btForm()));
+
+    await act(async () => {
+      await result.current.addPrinter();
+    });
+
+    expect(invoke).toHaveBeenCalledWith("set_printer_escpos_tuning", {
+      id: 9,
+      tuning: null,
+    });
+  });
+
+  it("does not touch the band height for a non-ESC/POS row", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "add_printer") return { ...btRowSaved };
+      return null;
+    });
+    const discovery = makeDiscovery();
+    const list = makeList();
+    const { result } = renderHook(() => usePrinterForm(discovery, list));
+    act(() => result.current.openAdd());
+    act(() =>
+      result.current.setForm(
+        btForm({ language: "zpl", escpos_band_rows: "64" }),
+      ),
+    );
+
+    await act(async () => {
+      await result.current.addPrinter();
+    });
+
+    expect(invoke).not.toHaveBeenCalledWith(
+      "set_printer_escpos_tuning",
+      expect.anything(),
+    );
   });
 
   it("keeps the saved row when only the pace call fails", async () => {

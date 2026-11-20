@@ -72,6 +72,7 @@ export function PrinterAddSheet({
     formErrorIsGap,
     formErrorIsChunk,
     formErrorIsPause,
+    formErrorIsBand,
     formErrorIsName,
     gdiWarning,
     ippNonPdfWarning,
@@ -194,6 +195,7 @@ export function PrinterAddSheet({
             formErrorIsGap={formErrorIsGap}
             formErrorIsChunk={formErrorIsChunk}
             formErrorIsPause={formErrorIsPause}
+            formErrorIsBand={formErrorIsBand}
             formErrorIsName={formErrorIsName}
             gdiWarning={gdiWarning}
             ippNonPdfWarning={ippNonPdfWarning}
