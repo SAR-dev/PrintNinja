@@ -58,7 +58,8 @@ use printninja_lib::queue::PrintQueue;
 use printninja_lib::transport::ipp::IppPrinter;
 use printninja_lib::transport::raw_tcp::RawTcpPrinter;
 use printninja_lib::transport::{
-    PrinterLanguage, PrinterTransport, PrinterType, RenderedJob, TransportRegistry,
+    BluetoothDelivery, PrinterLanguage, PrinterTransport, PrinterType, RawDelivery, RawRecorder,
+    RawSend, RawSendOptions, RenderedJob, TransportRegistry,
 };
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -875,6 +876,32 @@ async fn send_raw_job(
         mime_type: "application/octet-stream".into(),
         copies: 1,
         language,
+        raw: None,
+    })
+    .await
+}
+
+/// Send one job the way the raw console does: a plain data payload plus
+/// the resolved delivery + recorder, so the test can read back the
+/// timings and the effective options the transport actually applied.
+async fn send_raw_console_job(
+    printer: &VirtualPrinter,
+    language: PrinterLanguage,
+    data: &[u8],
+    raw: printninja_lib::transport::RawSend,
+) -> Result<(), String> {
+    RawTcpPrinter::new(
+        "Virtual".into(),
+        format!("127.0.0.1:{}", printer.raw_port()),
+    )
+    .send(RenderedJob {
+        job_id: "raw-console".into(),
+        printer_id: "p1".into(),
+        data: data.to_vec(),
+        mime_type: "application/octet-stream".into(),
+        copies: 1,
+        language,
+        raw: Some(raw),
     })
     .await
 }
@@ -887,6 +914,26 @@ fn stored_jobs(printer: &VirtualPrinter) -> usize {
     std::fs::read_dir(&printer.jobs)
         .map(|dir| dir.flatten().count())
         .unwrap_or(0)
+}
+
+/// The fixture's handler thread stores the job after the connection ends,
+/// which can lag the send's return — poll for `n` stored jobs instead of
+/// racing the file write (the same wait `received_containing` performs).
+fn wait_stored_jobs(printer: &VirtualPrinter, n: usize) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if stored_jobs(printer) >= n {
+            return;
+        }
+        if Instant::now() >= deadline {
+            panic!(
+                "only {} jobs stored after 10 s, waiting for {}",
+                stored_jobs(printer),
+                n
+            );
+        }
+        std::thread::sleep(Duration::from_millis(150));
+    }
 }
 
 #[tokio::test]
@@ -1062,6 +1109,129 @@ async fn once_a_printer_has_answered_its_silence_fails_the_job() {
         "took {elapsed:?}: that is the send deadline, not the status one"
     );
     assert_eq!(stored_jobs(&printer), 1, "only the healthy print went out");
+}
+
+/// The regression guard: with every raw console option unset, the paced
+/// path must put exactly the same bytes on the wire as the ordinary one —
+/// the tool adds measurement, never a different job. The recorder must
+/// still report the built-in pace it applied.
+#[tokio::test]
+async fn unset_options_change_nothing_on_the_wire() {
+    let Some(printer) = VirtualPrinter::start("ok") else {
+        return;
+    };
+
+    // 768 bytes: several chunks at the built-in 512-byte pace, so the two
+    // paths each take more than one write.
+    let payload = b"PNJ-REGRESSION-GUARD-0123456789".repeat(16);
+    send_raw_job(&printer, PrinterLanguage::Escpos, &payload)
+        .await
+        .expect("the ordinary path must keep working");
+    let recorder = RawRecorder::default();
+    let delivery = RawDelivery::resolve(&RawSendOptions::default(), BluetoothDelivery::default());
+    send_raw_console_job(
+        &printer,
+        PrinterLanguage::Escpos,
+        &payload,
+        RawSend {
+            delivery,
+            recorder: recorder.clone(),
+        },
+    )
+    .await
+    .expect("the raw console path must work");
+
+    wait_stored_jobs(&printer, 2);
+    // Both payloads are identical, so the concatenation is unambiguous
+    // whichever order the jobs dir lists them in.
+    let mut expected = payload.to_vec();
+    expected.extend_from_slice(&payload);
+    assert_eq!(
+        printer.received(),
+        expected,
+        "the wire must see identical bytes"
+    );
+    assert_eq!(stored_jobs(&printer), 2, "both sends must have stored");
+
+    // No settle was asked for, so the built-in desktop behavior — close
+    // immediately — is what the report states, and no settle stage ran.
+    let effective = recorder
+        .effective()
+        .expect("the transport must record the pace it applied");
+    assert_eq!(effective.chunk_bytes, Some(delivery.chunk_bytes));
+    assert_eq!(effective.chunk_pause_ms, Some(delivery.chunk_pause_ms));
+    assert_eq!(effective.settle_ms, Some(delivery.desktop_settle_ms()));
+    let timings = recorder.timings();
+    assert!(timings.open.is_some(), "the connect must be timed");
+    assert!(timings.write.is_some(), "the write must be timed");
+    assert!(timings.close.is_some(), "the close must be timed");
+    assert!(
+        timings.settle.is_none(),
+        "no settle was asked, so none may be reported"
+    );
+}
+
+/// The experiment this tool exists for: small chunks, a real pause, a real
+/// settle. The bytes must still arrive whole and in order — pacing is
+/// timing, not content — and the report must show the requested pace
+/// applied, with the pauses and the settle visible in the wall times.
+#[tokio::test]
+async fn a_paced_send_arrives_whole_and_reports_what_it_applied() {
+    let Some(printer) = VirtualPrinter::start("ok") else {
+        return;
+    };
+
+    // 2048 bytes at the minimum chunk: 64 writes, 63 pauses of 25 ms
+    // (≈ 1.6 s of pacing) plus a 200 ms settle.
+    let payload: Vec<u8> = (0..=255u8).cycle().take(2048).collect();
+    let options = RawSendOptions {
+        chunk_bytes: Some(32),
+        chunk_pause_ms: Some(25),
+        settle_ms: Some(200),
+    };
+    let delivery = RawDelivery::resolve(&options, BluetoothDelivery::default());
+    let recorder = RawRecorder::default();
+
+    send_raw_console_job(
+        &printer,
+        PrinterLanguage::Escpos,
+        &payload,
+        RawSend {
+            delivery,
+            recorder: recorder.clone(),
+        },
+    )
+    .await
+    .expect("the paced send must succeed");
+    wait_stored_jobs(&printer, 1);
+    assert_eq!(
+        printer.received(),
+        payload,
+        "pacing must not change the bytes"
+    );
+    assert_eq!(stored_jobs(&printer), 1);
+
+    // The request was inside every bound, so it must be applied as asked.
+    assert_eq!(
+        recorder
+            .effective()
+            .expect("the applied pace must be reported"),
+        options
+    );
+    let timings = recorder.timings();
+    assert!(
+        timings.write.expect("the write must be timed") >= 1400,
+        "the 63 pauses of 25 ms must be inside the write stage: write was {} ms",
+        timings.write.unwrap_or(0)
+    );
+    assert!(
+        timings
+            .settle
+            .expect("a settle was asked, so it must be reported")
+            >= 180,
+        "the 200 ms settle must be honored: settle was {} ms",
+        timings.settle.unwrap_or(0)
+    );
 }
 
 /// The whole path, and the promise the UI makes: no paper, and the row the

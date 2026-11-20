@@ -696,6 +696,30 @@ const implemented: Record<string, Handler> = {
       created_at: new Date().toISOString(),
     };
   },
+  // Raw console (developer tools): the e2e browser has no printer, so the
+  // fake reports the payload's size as sent and echoes the requested
+  // options back as applied — the page's result line renders, which is
+  // all e2e needs of this command.
+  send_raw_bytes: (args) => {
+    const bin =
+      typeof args["data_base64"] === "string" ? atob(args["data_base64"]) : "";
+    const options =
+      typeof args["options"] === "object" && args["options"] !== null
+        ? (args["options"] as Record<string, unknown>)
+        : {};
+    const pick = (key: string) =>
+      typeof options[key] === "number" ? (options[key] as number) : undefined;
+    return {
+      ok: true,
+      bytesSent: bin.length,
+      timingsMs: { open: 1, write: 1, close: 0 },
+      effectiveOptions: {
+        chunkBytes: pick("chunkBytes"),
+        chunkPauseMs: pick("chunkPauseMs"),
+        settleMs: pick("settleMs"),
+      },
+    };
+  },
 };
 
 /** Every Rust command without real behavior yet (src-tauri/src/lib.rs).

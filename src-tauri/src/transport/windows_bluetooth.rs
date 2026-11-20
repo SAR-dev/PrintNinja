@@ -176,7 +176,21 @@ impl WindowsBluetoothPrinter {
         // The stored address is the row's identity: the key for the shared
         // status bookkeeping and the name the precheck's messages carry.
         let address = self.address.trim().to_string();
-        direct::send(&port, &address, job, send_timeout(DIRECT_SEND_TIMEOUT)).await
+        let base = send_timeout(DIRECT_SEND_TIMEOUT);
+        // A paced raw console send pays for the pauses it asked for; the
+        // deadline gets room for them instead of mistaking patience for a
+        // stall. Ordinary jobs take the base budget, as before.
+        let budget = match &job.raw {
+            Some(raw) => {
+                let writes =
+                    (job.data.len() as u64).div_ceil(raw.delivery.chunk_bytes.max(1) as u64);
+                base + Duration::from_millis(
+                    writes.saturating_sub(1) * raw.delivery.chunk_pause_ms as u64,
+                )
+            }
+            None => base,
+        };
+        direct::send(&port, &address, job, budget).await
     }
 
     #[cfg(not(windows))]
@@ -317,7 +331,7 @@ fn wide(s: &str) -> Vec<u16> {
 mod direct {
     use super::winapi::*;
     use super::{wide, RenderedJob, DIRECT_SEND_TIMEOUT};
-    use crate::transport::{status, PrinterLanguage};
+    use crate::transport::{status, PrinterLanguage, RawSend};
     use std::ffi::c_void;
     use std::ptr::null_mut;
     use std::time::{Duration, Instant};
@@ -352,13 +366,48 @@ mod direct {
         let reported_port = port.to_string();
         let port = port.to_string();
         let address = address.to_string();
+        let raw = job.raw;
+        let data = job.data;
+        let language = job.language;
         let task = tokio::task::spawn_blocking(move || {
+            let open_start = Instant::now();
             let handle = open_port(&port, budget)?;
+            // What the operator is about to get, even if the write then
+            // fails: the report stays useful on the sends it exists to debug.
+            if let Some(raw) = &raw {
+                raw.recorder
+                    .record_open(open_start.elapsed().as_millis() as u64);
+                let settle = raw.delivery.desktop_settle_ms();
+                raw.recorder.record_effective(
+                    raw.delivery.chunk_bytes,
+                    raw.delivery.chunk_pause_ms,
+                    settle,
+                );
+            }
             let outcome = (|| {
-                precheck(handle, &port, &address, &job.language)?;
-                write_job(handle, &port, &job.data, budget)
+                precheck(handle, &port, &address, &language)?;
+                match &raw {
+                    Some(raw) => write_job_paced(handle, &port, &data, raw, budget),
+                    None => write_job(handle, &port, &data, budget),
+                }?;
+                // The experiment the raw console exists for: does the head
+                // finish the label if the port lingers after the last byte?
+                if let Some(raw) = &raw {
+                    let settle = raw.delivery.desktop_settle_ms();
+                    if settle > 0 {
+                        let t = Instant::now();
+                        std::thread::sleep(Duration::from_millis(settle as u64));
+                        raw.recorder.record_settle(t.elapsed().as_millis() as u64);
+                    }
+                }
+                Ok(())
             })();
+            let close_start = Instant::now();
             unsafe { CloseHandle(handle) };
+            if let Some(raw) = &raw {
+                raw.recorder
+                    .record_close(close_start.elapsed().as_millis() as u64);
+            }
             outcome
         });
         match tokio::time::timeout(budget + Duration::from_secs(5), task).await {
@@ -638,6 +687,67 @@ mod direct {
                 ));
             }
         }
+        Ok(())
+    }
+
+    /// The raw console's write: the same per-chunk `WriteFile` loop, but the
+    /// operator chooses the chunk size and the pause between writes, and
+    /// the wall time of the phase is recorded through the job's
+    /// [`RawSend`]. An ordinary job never reaches this function.
+    fn write_job_paced(
+        handle: HANDLE,
+        port: &str,
+        data: &[u8],
+        raw: &RawSend,
+        budget: Duration,
+    ) -> Result<(), String> {
+        let delivery = raw.delivery;
+        let recorder = &raw.recorder;
+        let deadline = Instant::now() + budget;
+        let write_start = Instant::now();
+        let chunk = delivery.chunk_bytes.max(1) as usize;
+        let pause = Duration::from_millis(delivery.chunk_pause_ms as u64);
+        let mut pieces = data.chunks(chunk).peekable();
+        while let Some(piece) = pieces.next() {
+            let last = pieces.peek().is_none();
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(format!(
+                    "the printer on {port} stopped responding after {}s while \
+                     sending — check for a paper jam or out-of-paper, or that it is \
+                     still connected",
+                    budget.as_secs()
+                ));
+            }
+            apply_timeouts(handle, port, Duration::ZERO, remaining)?;
+            let mut written: DWORD = 0;
+            let ok = unsafe {
+                WriteFile(
+                    handle,
+                    piece.as_ptr() as *const c_void,
+                    piece.len() as DWORD,
+                    &mut written,
+                    null_mut(),
+                )
+            };
+            if ok == 0 {
+                let code = unsafe { GetLastError() };
+                return Err(format!(
+                    "COM port {port} stopped accepting the job (Windows error {code})"
+                ));
+            }
+            if written as usize != piece.len() {
+                return Err(format!(
+                    "COM port {port} accepted {written} of {} bytes — the job is \
+                     incomplete",
+                    piece.len()
+                ));
+            }
+            if !last && !pause.is_zero() {
+                std::thread::sleep(pause);
+            }
+        }
+        recorder.record_write(write_start.elapsed().as_millis() as u64);
         Ok(())
     }
 }

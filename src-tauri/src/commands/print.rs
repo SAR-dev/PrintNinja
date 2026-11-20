@@ -2026,6 +2026,7 @@ async fn run_stages(
                             mime_type: mime_type.to_string(),
                             copies: 1,
                             language: language.clone(),
+                            raw: None,
                         },
                         &transport_settings,
                     )
@@ -2056,6 +2057,7 @@ async fn run_stages(
                         mime_type: mime_type.to_string(),
                         copies: send_copies,
                         language: language.clone(),
+                        raw: None,
                     },
                     &transport_settings,
                 )

@@ -189,6 +189,30 @@ export interface ProbeCapabilitiesResult {
   document_formats: string[];
 }
 
+/**
+ * The raw console's send report (developer tools). `ok: false` means the
+ * send failed — `error` names why, `bytesSent` is what got out before it
+ * stopped. Timings and effective options are `null`/absent for stages that
+ * never ran; `effectiveOptions` is what the backend actually applied after
+ * clamping.
+ */
+export interface RawSendReport {
+  ok: boolean;
+  error?: string;
+  bytesSent: number;
+  timingsMs: {
+    open?: number | null;
+    write?: number | null;
+    settle?: number | null;
+    close?: number | null;
+  };
+  effectiveOptions: {
+    chunkBytes?: number | null;
+    chunkPauseMs?: number | null;
+    settleMs?: number | null;
+  };
+}
+
 export interface AddPrinterReq {
   name: string;
   printer_type: string;

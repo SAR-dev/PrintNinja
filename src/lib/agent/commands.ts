@@ -22,6 +22,7 @@ import type {
   PrintResponse,
   ProfileRow,
   ProbeCapabilitiesResult,
+  RawSendReport,
   PairedDevice,
   PairingInvite,
   NewPairingInvite,
@@ -174,6 +175,25 @@ export interface AgentCommands {
     null,
   ];
   test_printer: [{ id: number; kind?: "page" | "text" }, null];
+  /**
+   * Raw console (developer tools): send the given bytes to the printer on
+   * its real send path. `data_base64` is the decoded payload; each option
+   * left out (or the whole object `null`) falls back to the stored
+   * per-printer value, then the built-in default — the report's
+   * `effectiveOptions` says what actually ran.
+   */
+  send_raw_bytes: [
+    {
+      printer_id: number;
+      data_base64: string;
+      options?: {
+        chunkBytes?: number;
+        chunkPauseMs?: number;
+        settleMs?: number;
+      } | null;
+    },
+    RawSendReport,
+  ];
   /**
    * What the printer speaks, asked before its row is saved (never an
    * error: a silent or refusing query comes back `detected: false`).
