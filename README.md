@@ -8,7 +8,7 @@
 
 Works on Windows 🪟, Android 🤖 and Linux 🐧. Pair a Bluetooth printer and go, or use any printer you already have.
 
-[![Version](https://img.shields.io/badge/version-2026.1119.2-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
+[![Version](https://img.shields.io/badge/version-2026.1120.0-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
 ![Platforms](https://img.shields.io/badge/Windows%20%C2%B7%20Linux%20%C2%B7%20Android-supported-2ea44f)
 
 [📦 Install](#install) ·
