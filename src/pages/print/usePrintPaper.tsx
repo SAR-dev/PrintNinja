@@ -87,14 +87,15 @@ export function usePrintPaper({
 
   // The fold's header line: the current values, so folding hides the
   // controls but not what is set.
-  const paperSummary = paperPreset === "auto"
-    ? t("print.paper_auto")
-    : paperPreset === "custom"
-      ? `${store.paperW ?? "—"}×${store.paperH ?? "—"}`
-      : t(
-          PAPER_PRESETS.find((x) => x.key === paperPreset)?.labelKey ??
-            "print.paper_auto",
-        );
+  const paperSummary =
+    paperPreset === "auto"
+      ? t("print.paper_auto")
+      : paperPreset === "custom"
+        ? `${store.paperW ?? "—"}×${store.paperH ?? "—"}`
+        : t(
+            PAPER_PRESETS.find((x) => x.key === paperPreset)?.labelKey ??
+              "print.paper_auto",
+          );
   const advancedSummary = [
     t(
       store.orientation === "portrait"
