@@ -121,7 +121,15 @@ impl AndroidBluetoothPrinter {
     /// Runs on the send's held socket (`handle`): the query and the write
     /// below share one RFCOMM connect instead of two (A2/A3).
     async fn send_on(&self, handle: &str, job: &RenderedJob) -> Result<(), String> {
-        if let Some(dialect) = status::dialect_for(&job.language) {
+        // ZPL gets no `~HS` pre-check over Bluetooth. Zebra's three-line
+        // reply is not something every ZPL-emulating head gives, and a
+        // probe right before the write can make a stateful RFCOMM head
+        // drop the job. Suspected cause of a Toshiba B-FP2D that showed
+        // "received data" and printed nothing while another app's plain
+        // ZPL printed; not yet confirmed on hardware. ESC/POS and TSPL
+        // keep their checks.
+        let dialect = status::dialect_for(&job.language).filter(|d| *d != status::Dialect::Zpl);
+        if let Some(dialect) = dialect {
             let addr = self.address.clone();
             if status::should_probe(&addr, Instant::now()) {
                 let reply = self.query_remote(handle, &dialect.query()).await?;

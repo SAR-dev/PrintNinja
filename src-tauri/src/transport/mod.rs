@@ -383,9 +383,12 @@ pub fn text_test_bytes(language: &PrinterLanguage, name: &str, label_w_mm: f64) 
             s.into_bytes()
         }
         PrinterLanguage::Zpl => {
-            let mut s = String::from("^XA\n^FO50,50^A0N,40,40\n");
-            s.push_str(&format!("^FD{line}^FS\n"));
-            s.push_str("^XZ\n");
+            // Back to back, with the built-in bitmap font D: every ZPL
+            // emulation has it, where the scalable font 0 (^A0) and line
+            // feeds between commands are not guaranteed (Toshiba B-FP2D).
+            let mut s = String::from("^XA^FO50,50^ADN,36,20");
+            s.push_str(&format!("^FD{line}^FS"));
+            s.push_str("^XZ");
             s.into_bytes()
         }
         PrinterLanguage::Cpcl => {
@@ -805,8 +808,8 @@ mod tests {
 
         let zpl =
             String::from_utf8(text_test_bytes(&PrinterLanguage::Zpl, "ZT", 40.0).unwrap()).unwrap();
-        assert!(zpl.starts_with("^XA\n"), "{zpl}");
-        assert!(zpl.contains("^FDPrintNinja test: ZT^FS\n"));
+        assert!(zpl.starts_with("^XA"), "{zpl}");
+        assert!(zpl.contains("^FDPrintNinja test: ZT^FS"));
         assert!(zpl.trim_end().ends_with("^XZ"));
 
         let cpcl =
