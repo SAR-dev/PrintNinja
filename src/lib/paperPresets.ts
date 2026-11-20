@@ -3,6 +3,10 @@ export const PAPER_PRESETS = [
   { key: "a4", w: 210, h: 297, labelKey: "print.paper_a4" },
   { key: "letter", w: 216, h: 279, labelKey: "print.paper_letter" },
   { key: "photo", w: 100, h: 150, labelKey: "print.paper_photo" },
+  // Common thermal label / receipt widths, alongside the office sizes.
+  { key: "label40", w: 40, h: 30, labelKey: "print.paper_label40" },
+  { key: "label58", w: 58, h: 40, labelKey: "print.paper_label58" },
+  { key: "label80", w: 80, h: 60, labelKey: "print.paper_label80" },
 ] as const;
 
 /** Largest paper edge the custom inputs accept (mm). */

@@ -48,6 +48,9 @@ fn test_raster() -> RasterImage {
 struct StubRenderer {
     raster: RasterImage,
     seen: Arc<Mutex<Option<(usize, usize)>>>,
+    /// The final in-page `.pn-sheet` count the renderer reports: 1, like
+    /// a browser that did not paginate, in the existing tests.
+    sheets: u32,
 }
 
 #[async_trait::async_trait]
@@ -61,9 +64,9 @@ impl JobRenderer for StubRenderer {
         _html: &str,
         w_px: usize,
         h_px: usize,
-    ) -> anyhow::Result<RasterImage> {
+    ) -> anyhow::Result<(RasterImage, u32)> {
         *self.seen.lock().unwrap() = Some((w_px, h_px));
-        Ok(self.raster.clone())
+        Ok((self.raster.clone(), self.sheets))
     }
 }
 
@@ -188,6 +191,7 @@ async fn capture(language: &str) -> (Vec<u8>, Option<(usize, usize)>) {
     let renderer = StubRenderer {
         raster: test_raster(),
         seen: seen.clone(),
+        sheets: 1,
     };
     let res = run_print_with(&cache, &db, &queue, print_request("Thermal"), &renderer)
         .await
@@ -348,6 +352,55 @@ async fn the_raster_is_sized_in_the_printers_own_dots() {
     assert_eq!(seen, Some((320, 240)));
 }
 
+// ── Overflow guard (TODO item 1) ────────────────────────────────────────────
+//
+// The static pre-flight count only sees the sheets the layout wrote; the
+// browser's pagination clones more when a design overflows its page. The
+// renderer now reports the final count, and a command-language job that
+// paginated past one sheet is refused instead of truncated.
+
+#[tokio::test]
+async fn command_jobs_are_refused_when_the_browser_paginates() {
+    let db = test_db();
+    let (port, capture) = loopback("zpl").await;
+    seed_printer(&db, "Thermal", "zpl", port);
+    let queue = PrintQueue::new();
+    let cache = cache_dir();
+    // The layout wrote one sheet (zero margins), but the browser paginated
+    // the overflow into a second: only that post-render count can fire the
+    // refusal here.
+    let seen = Arc::new(Mutex::new(None));
+    let renderer = StubRenderer {
+        raster: test_raster(),
+        seen: seen.clone(),
+        sheets: 2,
+    };
+    let res = run_print_with(&cache, &db, &queue, print_request("Thermal"), &renderer)
+        .await
+        .expect("pipeline");
+    assert!(!res.success, "the overflow must be refused, not truncated");
+    assert!(
+        res.error.as_deref().unwrap_or("").contains("2 sheets"),
+        "the refusal must name the browser's sheet count: {:?}",
+        res.error
+    );
+    assert!(seen.lock().unwrap().is_some(), "the render must have run");
+    let bytes = capture.await.expect("capture task");
+    assert!(
+        bytes.is_empty(),
+        "no print bytes may reach the head: {bytes:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_single_sheet_rendered_job_still_prints() {
+    // Pins the guard as a no-op in the common case: a browser that did not
+    // paginate reports 1 and the job goes out.
+    let (bytes, seen) = capture("zpl").await;
+    assert!(bytes.starts_with(b"^XA"), "the job must print: {bytes:?}");
+    assert_eq!(seen, Some((320, 240)));
+}
+
 // ── PDF input (TODO item 3) ─────────────────────────────────────────────────
 //
 // A job can carry an existing PDF instead of HTML: pdf-language printers
@@ -356,6 +409,50 @@ async fn the_raster_is_sized_in_the_printers_own_dots() {
 
 /// The document a PDF-input job prints in these tests.
 const SAMPLE_PDF: &[u8] = b"%PDF-1.4 fake document";
+
+/// A real, minimal three-page PDF the bundled PDFium can parse. The
+/// pre-flight warning probes the document's own page count from its bytes,
+/// so a multi-page job in these tests needs a document that actually has
+/// that many pages (the stub rasterizer's `pages` field is no longer the
+/// warning's signal).
+fn three_page_pdf() -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(b"%PDF-1.4\n");
+    let o1 = out.len();
+    out.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    let o2 = out.len();
+    out.extend_from_slice(
+        b"2 0 obj\n<< /Type /Pages /Kids [3 0 R 5 0 R 6 0 R] /Count 3 >>\nendobj\n",
+    );
+    let o3 = out.len();
+    out.extend_from_slice(
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 150 200] /Contents 4 0 R >>\nendobj\n",
+    );
+    let stream = b"0 100 75 100 re f";
+    let o4 = out.len();
+    out.extend_from_slice(b"4 0 obj\n<< /Length ");
+    out.extend_from_slice(stream.len().to_string().as_bytes());
+    out.extend_from_slice(b" >>\nstream\n");
+    out.extend_from_slice(stream);
+    out.extend_from_slice(b"\nendstream\nendobj\n");
+    let o5 = out.len();
+    out.extend_from_slice(
+        b"5 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>\nendobj\n",
+    );
+    let o6 = out.len();
+    out.extend_from_slice(
+        b"6 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>\nendobj\n",
+    );
+    let xref_pos = out.len();
+    out.extend_from_slice(b"xref\n0 7\n0000000000 65535 f \n");
+    for o in [o1, o2, o3, o4, o5, o6] {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(b"trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n");
+    out.extend_from_slice(xref_pos.to_string().as_bytes());
+    out.extend_from_slice(b"\n%%EOF\n");
+    out
+}
 
 /// Serves the PDF-input path with a fixed raster: the pipeline still runs
 /// the layout, the queue permit, the real encoders and the real TCP
@@ -406,15 +503,17 @@ async fn capture_pdf(language: &str, pages: u32) -> (Vec<u8>, Option<Vec<u8>>, V
         pages,
         pdf_seen: pdf_seen.clone(),
     };
-    let res = run_print_with(
-        &cache,
-        &db,
-        &queue,
-        pdf_request("Thermal", SAMPLE_PDF.to_vec()),
-        &renderer,
-    )
-    .await
-    .expect("pipeline");
+    // The pre-flight page-count probe reads the document's bytes, so a
+    // multi-page job gets a document with that many real pages; the
+    // single-page jobs keep the placeholder.
+    let pdf = if pages > 1 {
+        three_page_pdf()
+    } else {
+        SAMPLE_PDF.to_vec()
+    };
+    let res = run_print_with(&cache, &db, &queue, pdf_request("Thermal", pdf), &renderer)
+        .await
+        .expect("pipeline");
     assert!(res.success, "job must succeed: {:?}", res.error);
     let bytes = capture.await.expect("capture");
     let pdf_seen = pdf_seen.lock().unwrap().take();
@@ -463,6 +562,58 @@ async fn pdf_jobs_warn_when_only_the_first_page_prints() {
     assert!(
         warnings.iter().any(|w| w.contains("3 pages")),
         "a multi-page pdf must warn that only page 1 printed: {warnings:?}"
+    );
+}
+
+/// A PDF-input renderer that records the dot dimensions the pipeline
+/// asked for: the paper geometry the pre-flight probe resolved to, made
+/// visible to the test.
+struct PdfSizeStub {
+    seen: Arc<Mutex<Option<(usize, usize)>>>,
+}
+
+#[async_trait::async_trait]
+impl JobRenderer for PdfSizeStub {
+    async fn render(&self, _: &str, _: f64, _: f64, _: &str) -> anyhow::Result<Vec<u8>> {
+        panic!("a pdf job must never run the HTML renderer");
+    }
+
+    async fn rasterize_pdf(
+        &self,
+        _: &[u8],
+        w_px: usize,
+        h_px: usize,
+    ) -> anyhow::Result<(RasterImage, u32)> {
+        *self.seen.lock().unwrap() = Some((w_px, h_px));
+        Ok((test_raster(), 3))
+    }
+}
+
+#[tokio::test]
+async fn pdf_jobs_rasterize_at_the_probed_page_size_not_a4() {
+    // The fixture's first page is 150 × 200 pt = 52.92 × 70.56 mm. With no
+    // explicit page size in the request, the pre-flight probe — not the A4
+    // fallback, not the 40 mm media width seeded on the row — must set the
+    // paper: at the seeded 203 dpi that is 423 × 564 dots, where the A4
+    // default would ask for 1672 × 2379.
+    let db = test_db();
+    let (port, _capture) = loopback("zpl").await;
+    seed_printer(&db, "Thermal", "zpl", port);
+    let queue = PrintQueue::new();
+    let cache = cache_dir();
+    let seen = Arc::new(Mutex::new(None));
+    let renderer = PdfSizeStub { seen: seen.clone() };
+    let mut req = pdf_request("Thermal", three_page_pdf());
+    req.page_width_mm = None;
+    req.page_height_mm = None;
+    let res = run_print_with(&cache, &db, &queue, req, &renderer)
+        .await
+        .expect("pipeline");
+    assert!(res.success, "job must succeed: {:?}", res.error);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        Some((423, 564)),
+        "a pdf job must rasterize at the document's own page size, not A4"
     );
 }
 

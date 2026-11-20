@@ -72,6 +72,7 @@ export function PrinterAddSheet({
     formErrorIsGap,
     formErrorIsChunk,
     formErrorIsPause,
+    formErrorIsBand,
     formErrorIsName,
     gdiWarning,
     ippNonPdfWarning,
@@ -79,6 +80,8 @@ export function PrinterAddSheet({
     systemAndroidWarning,
     signInOpen,
     setSignInOpen,
+    passwordKeepHint,
+    setPasswordTouched,
     advancedOpen,
     setAdvancedOpen,
   } = form;
@@ -192,6 +195,7 @@ export function PrinterAddSheet({
             formErrorIsGap={formErrorIsGap}
             formErrorIsChunk={formErrorIsChunk}
             formErrorIsPause={formErrorIsPause}
+            formErrorIsBand={formErrorIsBand}
             formErrorIsName={formErrorIsName}
             gdiWarning={gdiWarning}
             ippNonPdfWarning={ippNonPdfWarning}
@@ -199,6 +203,8 @@ export function PrinterAddSheet({
             systemAndroidWarning={systemAndroidWarning}
             signInOpen={signInOpen}
             setSignInOpen={setSignInOpen}
+            passwordKeepHint={passwordKeepHint}
+            setPasswordTouched={setPasswordTouched}
             advancedOpen={advancedOpen}
             setAdvancedOpen={setAdvancedOpen}
           />

@@ -309,25 +309,31 @@ impl PdfRenderer {
     /// dot) and the PNG is thresholded to dots; on Android the system
     /// WebView does the same render on the device (PLAN §4). Same rule on
     /// every platform: failure is an error, never a placeholder.
+    ///
+    /// The second element is the number of `.pn-sheet`s on the rendered
+    /// page — the browser's own count where it has one (persistent CDP
+    /// render), the static count the layout wrote otherwise. The pipeline
+    /// refuses a command-language job when it is over 1.
     pub async fn html_to_raster(
         &self,
         html: &str,
         w_px: usize,
         h_px: usize,
-    ) -> Result<crate::render::raster::RasterImage> {
+    ) -> Result<(crate::render::raster::RasterImage, u32)> {
         tracing::debug!(w_px, h_px, "rasterizing for a command-language printer");
         let html_path = self.write_job_html(html).await?;
 
         #[cfg(windows)]
-        let result = self.webview2_screenshot(&html_path, w_px, h_px).await;
+        let result = self.webview2_screenshot(&html_path, html, w_px, h_px).await;
 
         // Same Chromium as the PDF path: --screenshot at the exact label
         // size, then the shared PNG thresholding below.
         #[cfg(target_os = "linux")]
-        let result = self.chromium_screenshot(&html_path, w_px, h_px).await;
+        let result = self.chromium_screenshot(&html_path, html, w_px, h_px).await;
 
         // The system WebView measures the page at the head's own
-        // resolution and thresholds on the device (PLAN §4).
+        // resolution and thresholds on the device (PLAN §4). It runs no
+        // evaluate, so the sheet count is the static one.
         #[cfg(target_os = "android")]
         let result = Self::android_webview_raster(html, w_px, h_px).await;
 
@@ -461,7 +467,7 @@ impl PdfRenderer {
         html: &str,
         w_px: usize,
         h_px: usize,
-    ) -> Result<crate::render::raster::RasterImage> {
+    ) -> Result<(crate::render::raster::RasterImage, u32)> {
         use tauri_plugin_android_print::AndroidPrintExt;
 
         const ANDROID_RENDER_DEADLINE: std::time::Duration = std::time::Duration::from_secs(75);
@@ -493,7 +499,7 @@ impl PdfRenderer {
         // Length for the error message, taken before `bytes` moves into
         // `from_packed` (the closure may not borrow it afterwards).
         let dot_bytes = bytes.len();
-        crate::render::raster::RasterImage::from_packed(
+        let raster = crate::render::raster::RasterImage::from_packed(
             res.width as usize,
             res.height as usize,
             bytes,
@@ -504,7 +510,10 @@ impl PdfRenderer {
                 res.width,
                 res.height
             )
-        })
+        })?;
+        // No evaluate channel on this path: the static count is all the
+        // pipeline can know (same as one-shot screenshots below).
+        Ok((raster, crate::render::layout::count_static_sheets(html)))
     }
 
     /// Headless Edge `--screenshot` at `w_px`×`h_px`, thresholded to dots.
@@ -512,9 +521,14 @@ impl PdfRenderer {
     async fn webview2_screenshot(
         &self,
         html_path: &std::path::Path,
+        html: &str,
         w_px: usize,
         h_px: usize,
-    ) -> Result<crate::render::raster::RasterImage> {
+    ) -> Result<(crate::render::raster::RasterImage, u32)> {
+        // The static sheet count, for the paths that have no evaluate
+        // channel (one-shot Edge below); the persistent CDP branch
+        // reports the browser's own count instead.
+        let fallback_sheets = crate::render::layout::count_static_sheets(html);
         // Unique per job, like the PDF path: no shared screenshot target,
         // no stale hand-offs between concurrent jobs.
         let job = uuid::Uuid::new_v4();
@@ -528,17 +542,19 @@ impl PdfRenderer {
             let started = std::time::Instant::now();
             let cfg = cdp::Config::new(std::path::Path::new(&edge_path), &self.cache_dir);
             match cdp::shared()
-                .screenshot(&cfg, &html_url, w_px as u32, h_px as u32)
+                .screenshot(&cfg, &html_url, w_px as u32, h_px as u32, fallback_sheets)
                 .await
             {
-                Ok(bytes) => {
+                Ok((bytes, sheets)) => {
                     let edge_ms = started.elapsed().as_millis() as u64;
                     tokio::fs::write(&png_path, &bytes).await?;
                     crate::metrics::count_browser_render(true);
                     tracing::info!(edge_ms, persistent = true, "rendered screenshot with Edge");
                     let decoded = png_to_raster(&png_path);
                     debug_copy(png_path, self.cache_dir.join("last-render.png"), true);
-                    return decoded.map_err(|e| anyhow!("screenshot decode: {e}"));
+                    return decoded
+                        .map(|raster| (raster, sheets))
+                        .map_err(|e| anyhow!("screenshot decode: {e}"));
                 }
                 Err(e) => {
                     crate::metrics::count_browser_render(false);
@@ -635,7 +651,9 @@ impl PdfRenderer {
         // Keep the newest screenshot next to last-render.pdf for debugging;
         // the per-job file is removed either way.
         debug_copy(png_path, self.cache_dir.join("last-render.png"), true);
-        Ok(raster)
+        // No evaluate channel on this path: the static count is all the
+        // pipeline can know.
+        Ok((raster, fallback_sheets))
     }
 }
 
@@ -827,9 +845,13 @@ impl PdfRenderer {
     async fn chromium_screenshot(
         &self,
         html_path: &std::path::Path,
+        html: &str,
         w_px: usize,
         h_px: usize,
-    ) -> Result<crate::render::raster::RasterImage> {
+    ) -> Result<(crate::render::raster::RasterImage, u32)> {
+        // The static sheet count, for the one-shot Chromium path below;
+        // the persistent CDP branch reports the browser's own count.
+        let fallback_sheets = crate::render::layout::count_static_sheets(html);
         let chromium = find_chromium()?;
         let html_url = format!("file://{}", html_path.display());
 
@@ -838,10 +860,10 @@ impl PdfRenderer {
             let started = std::time::Instant::now();
             let cfg = persistent_chromium_config(&chromium, &self.cache_dir);
             match cdp::shared()
-                .screenshot(&cfg, &html_url, w_px as u32, h_px as u32)
+                .screenshot(&cfg, &html_url, w_px as u32, h_px as u32, fallback_sheets)
                 .await
             {
-                Ok(bytes) => {
+                Ok((bytes, sheets)) => {
                     let chromium_ms = started.elapsed().as_millis() as u64;
                     let job = uuid::Uuid::new_v4();
                     let png_path = self.cache_dir.join(format!("shot-{job}.png"));
@@ -854,7 +876,9 @@ impl PdfRenderer {
                     );
                     let decoded = png_to_raster(&png_path);
                     debug_copy(png_path, self.cache_dir.join("last-render.png"), true);
-                    return decoded.map_err(|e| anyhow!("screenshot decode: {e}"));
+                    return decoded
+                        .map(|raster| (raster, sheets))
+                        .map_err(|e| anyhow!("screenshot decode: {e}"));
                 }
                 Err(e) => {
                     crate::metrics::count_browser_render(false);
@@ -897,7 +921,9 @@ impl PdfRenderer {
         tracing::info!("rendered screenshot with Chromium");
         let raster = png_to_raster(&png_path).map_err(|e| anyhow!("screenshot decode: {e}"))?;
         debug_copy(png_path, self.cache_dir.join("last-render.png"), true);
-        Ok(raster)
+        // No evaluate channel on this path: the static count is all the
+        // pipeline can know.
+        Ok((raster, fallback_sheets))
     }
 }
 

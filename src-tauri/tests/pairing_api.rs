@@ -98,15 +98,41 @@ fn claim_body(code: &str, device_id: &str) -> serde_json::Value {
     })
 }
 
+/// `claim_body` plus the re-pair proof: the token the claimant already
+/// holds for `device_id` (anti-squatting gate).
+fn claim_body_with_token(
+    code: &str,
+    device_id: &str,
+    previous_token: Option<&str>,
+) -> serde_json::Value {
+    let mut body = claim_body(code, device_id);
+    if let Some(t) = previous_token {
+        body["previous_token"] = serde_json::json!(t);
+    }
+    body
+}
+
 async fn post_claim(app: axum::Router, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+    // The whole file shares the loopback address's failure budget; the
+    // per-address budget test uses `post_claim_from` with its own address.
+    post_claim_from(&app, Ipv4Addr::LOCALHOST, body).await
+}
+
+async fn post_claim_from(
+    app: &axum::Router,
+    ip: Ipv4Addr,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
     let res = app
-        .oneshot(with_loopback(
+        .clone()
+        .oneshot(with_remote(
             Request::builder()
                 .method("POST")
                 .uri("/v1/pair/claim")
                 .header("content-type", "application/json")
                 .body(axum::body::Body::from(body.to_string()))
                 .unwrap(),
+            ip,
         ))
         .await
         .unwrap();
@@ -294,6 +320,50 @@ async fn no_window_expired_wrong_locked_and_disabled() {
 }
 
 #[tokio::test]
+async fn per_address_claim_budget_throttles_a_guesser() {
+    // The per-source-address tracker (`CLAIM_FAILURES`), separate from the
+    // window's own 5-wrong-code lock: 10 failures inside a minute, then
+    // 429. Malformed codes note a failure without consuming a window
+    // attempt, so the window lock cannot mask the address budget. A
+    // non-loopback private address keeps this test off the budget that
+    // the rest of the file shares.
+    let (db, window) = setup();
+    open_window(&window, "K7QM4XPD", Instant::now());
+    let app = router(&db, &window);
+    let guesser = Ipv4Addr::new(192, 168, 1, 50);
+    for _ in 0..10 {
+        let (status, _) =
+            post_claim_from(&app, guesser, claim_body("short", "phone-guesser")).await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "malformed, noted, window untouched"
+        );
+    }
+    // The 11th attempt is throttled before any code is checked — the
+    // right code would fail too.
+    let (status, body) =
+        post_claim_from(&app, guesser, claim_body("K7QM4XPD", "phone-guesser")).await;
+    assert_eq!(
+        status,
+        StatusCode::TOO_MANY_REQUESTS,
+        "the 11th failure from one address is throttled: {body}"
+    );
+    // A different address keeps its own budget.
+    let (status, body) = post_claim_from(
+        &app,
+        Ipv4Addr::new(192, 168, 1, 51),
+        claim_body("K7QM4XPD", "phone-1"),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a fresh address can still claim: {body}"
+    );
+}
+
+#[tokio::test]
 async fn guest_miss_names_the_invite_instead_of_sign_in() {
     // No account and no matching invite: mistyped, revoked, or the
     // owner's window code, which guests can never use. The answer names
@@ -352,13 +422,18 @@ async fn reclaiming_same_device_replaces_row_invalidates_old_token_keeps_rename(
         )
         .unwrap();
 
-    // Re-pair with a new code: same device_id replaces the row.
+    // Re-pair with a new code: same device_id plus proof of the row's
+    // current token replaces the row.
     open_window(&window, "BBBBBBBB", Instant::now());
-    let (status, second) =
-        post_claim(router(&db, &window), claim_body("BBBBBBBB", "phone-1")).await;
+    let (status, second) = post_claim(
+        router(&db, &window),
+        claim_body_with_token("BBBBBBBB", "phone-1", Some(&first_token)),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{second}");
     let second_token = second["token"].as_str().unwrap().to_string();
     assert_ne!(first_token, second_token);
+    assert_eq!(second["device_id"], "phone-1");
 
     assert_eq!(paired_count(&db), 1, "re-pair replaces, not duplicates");
     assert_eq!(
@@ -381,6 +456,152 @@ async fn reclaiming_same_device_replaces_row_invalidates_old_token_keeps_rename(
         )
         .unwrap();
     assert_eq!(display.as_deref(), Some("Shop Phone"));
+}
+
+/// A holder of a valid code cannot take over another device's id
+/// without that row's token: the squat is refused with 409, the victim
+/// row is untouched, and the code is not burned.
+#[tokio::test]
+async fn claiming_another_devices_id_without_its_token_is_refused() {
+    let (db, window) = setup();
+    open_window(&window, "K7QM4XPD", Instant::now());
+    let (status, first) =
+        post_claim(router(&db, &window), claim_body("K7QM4XPD", "victim-1")).await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    let victim_token = first["token"].as_str().unwrap().to_string();
+
+    // A different address claims the open code while presenting the
+    // victim's id without its token. (The 409 below notes a failure on
+    // the process-global `CLAIM_FAILURES`, so this address stays clear
+    // of the 192.168.1.50 budget the throttle test consumes.)
+    open_window(&window, "BBBBBBBB", Instant::now());
+    let (status, body) = post_claim_from(
+        &router(&db, &window),
+        Ipv4Addr::new(192, 168, 1, 60),
+        claim_body("BBBBBBBB", "victim-1"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], "device_id_conflict");
+
+    // The victim row is untouched and still authenticates…
+    assert_eq!(paired_count(&db), 1, "the squat created no row");
+    assert_eq!(
+        get_caps(router(&db, &window), Some(&victim_token)).await,
+        StatusCode::OK,
+        "the victim's token still works"
+    );
+    // …and the code was not burned: a clean device can claim it.
+    let (status, body) = post_claim(router(&db, &window), claim_body("BBBBBBBB", "phone-2")).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "the code survived the squat: {body}"
+    );
+}
+
+/// The same squat through a guest invite is refused just as early:
+/// the gate runs before the invite is spent.
+#[tokio::test]
+async fn a_squat_with_a_guest_invite_burns_neither_the_row_nor_the_invite() {
+    let (db, window) = setup();
+    seed_invite(&db, "VV1CT1ME", "2030-01-01T00:00:00Z", Some(1), true);
+    seed_invite(&db, "VV1CT1M2", "2030-01-01T00:00:00Z", Some(1), true);
+
+    // The squat 409s below note a failure on `CLAIM_FAILURES`, which is
+    // process-global: these addresses must stay clear of the 192.168.1.50
+    // budget that `per_address_claim_budget_throttles_a_guesser` consumes.
+    //
+    // First holder of an invite claiming "victim-1" for the first time
+    // is legitimate — no row exists yet, so no proof is needed.
+    let (status, body) = post_claim_from(
+        &router(&db, &window),
+        Ipv4Addr::new(192, 168, 1, 60),
+        claim_body("VV1CT1ME", "victim-1"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let row_token = body["token"].as_str().unwrap().to_string();
+
+    // A second claimant presenting the id without the row's token is
+    // refused before the invite is spent.
+    let (status, body) = post_claim_from(
+        &router(&db, &window),
+        Ipv4Addr::new(192, 168, 1, 61),
+        claim_body("VV1CT1M2", "victim-1"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], "device_id_conflict");
+
+    // The row is still the first claimant's…
+    assert_eq!(
+        get_caps(router(&db, &window), Some(&row_token)).await,
+        StatusCode::OK
+    );
+    assert_eq!(paired_count(&db), 1);
+    // …and the second invite kept its use: a clean id redeems it.
+    let (status, body) =
+        post_claim(router(&db, &window), claim_body("VV1CT1M2", "phone-clean")).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "the invite survived the squat: {body}"
+    );
+}
+
+/// A fresh claim that sends no device id gets a PC-minted one: the
+/// response echoes it, the row is written under it, and re-pairing with
+/// it plus its token succeeds.
+#[tokio::test]
+async fn a_fresh_claim_without_a_device_id_gets_a_minted_one() {
+    let (db, window) = setup();
+    open_window(&window, "K7QM4XPD", Instant::now());
+    let mut body = claim_body("K7QM4XPD", "");
+    body.as_object_mut().unwrap().remove("device_id");
+    let (status, reply) = post_claim(router(&db, &window), body).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    let minted = reply["device_id"].as_str().unwrap().to_string();
+    assert!(!minted.is_empty());
+    assert_ne!(minted.len(), 8, "not a pairing code");
+    let token = reply["token"].as_str().unwrap().to_string();
+    assert_eq!(paired_count(&db), 1);
+    let row_id: String = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row("SELECT id FROM paired_devices", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(row_id, minted, "the row is written under the minted id");
+
+    // Re-pairing with the minted id + its token works and replaces.
+    open_window(&window, "BBBBBBBB", Instant::now());
+    let (status, second) = post_claim(
+        router(&db, &window),
+        claim_body_with_token("BBBBBBBB", &minted, Some(&token)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{second}");
+    assert_eq!(second["device_id"], minted);
+    assert_eq!(paired_count(&db), 1);
+}
+
+/// An over-long device id is refused before anything is spent.
+#[tokio::test]
+async fn an_overlong_device_id_is_refused_without_spending_the_code() {
+    let (db, window) = setup();
+    open_window(&window, "K7QM4XPD", Instant::now());
+    let (status, body) = post_claim(
+        router(&db, &window),
+        claim_body("K7QM4XPD", &"x".repeat(129)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(body["error"].as_str().unwrap().contains("128"));
+    assert_eq!(paired_count(&db), 0);
+    // The code is still claimable.
+    let (status, _) = post_claim(router(&db, &window), claim_body("K7QM4XPD", "phone-1")).await;
+    assert_eq!(status, StatusCode::OK);
 }
 
 #[tokio::test]
@@ -623,8 +844,14 @@ fn seed_invite(db: &Db, code: &str, expires_at: &str, uses_left: Option<i64>, ca
         .execute(
             "INSERT INTO pairing_invites
                  (id, code_hash, created_at, expires_at, uses_left, can_print, created_by)
-             VALUES ('inv-1', ?1, datetime('now'), ?2, ?3, ?4, 'user-1')",
-            rusqlite::params![hash, expires_at, uses_left, i64::from(can_print)],
+             VALUES (?1, ?2, datetime('now'), ?3, ?4, ?5, 'user-1')",
+            rusqlite::params![
+                format!("inv-{code}"),
+                hash,
+                expires_at,
+                uses_left,
+                i64::from(can_print)
+            ],
         )
         .unwrap();
 }

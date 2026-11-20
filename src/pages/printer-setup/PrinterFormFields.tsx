@@ -50,6 +50,7 @@ export function PrinterFormFields({
   formErrorIsGap,
   formErrorIsChunk,
   formErrorIsPause,
+  formErrorIsBand,
   formErrorIsName,
   gdiWarning,
   ippNonPdfWarning,
@@ -57,6 +58,8 @@ export function PrinterFormFields({
   systemAndroidWarning,
   signInOpen,
   setSignInOpen,
+  passwordKeepHint,
+  setPasswordTouched,
   advancedOpen,
   setAdvancedOpen,
 }: {
@@ -83,6 +86,7 @@ export function PrinterFormFields({
   formErrorIsGap: boolean;
   formErrorIsChunk: boolean;
   formErrorIsPause: boolean;
+  formErrorIsBand: boolean;
   formErrorIsName: boolean;
   gdiWarning: boolean;
   ippNonPdfWarning: boolean;
@@ -90,6 +94,8 @@ export function PrinterFormFields({
   systemAndroidWarning: boolean;
   signInOpen: boolean;
   setSignInOpen: Dispatch<SetStateAction<boolean>>;
+  passwordKeepHint: boolean;
+  setPasswordTouched: (v: boolean) => void;
   advancedOpen: boolean;
   setAdvancedOpen: Dispatch<SetStateAction<boolean>>;
 }) {
@@ -372,7 +378,10 @@ export function PrinterFormFields({
           data-testid="printer-signin-toggle"
           title={t("printers.ipp_signin")}
           summary={
-            form.username || form.password || form.skip_tls_verification
+            form.username ||
+            form.password ||
+            passwordKeepHint ||
+            form.skip_tls_verification
               ? t("printers.signin_set")
               : t("printers.signin_unset")
           }
@@ -410,15 +419,20 @@ export function PrinterFormFields({
                 autoComplete="new-password"
                 value={form.password}
                 aria-describedby="printer-password-hint"
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, password: e.target.value }))
-                }
+                onChange={(e) => {
+                  setPasswordTouched(true);
+                  setForm((f) => ({ ...f, password: e.target.value }));
+                }}
               />
               <p
                 id="printer-password-hint"
                 className="text-xs text-muted-foreground"
               >
-                {t("printers.ipp_password_hint")}
+                {t(
+                  passwordKeepHint
+                    ? "printers.ipp_password_hint_keep"
+                    : "printers.ipp_password_hint",
+                )}
               </p>
             </div>
             <label className="flex items-start gap-2 text-sm max-md:font-semibold">
@@ -614,6 +628,52 @@ export function PrinterFormFields({
                   id="printer-label-gap-error"
                   role="alert"
                   data-testid="printer-label-gap-error"
+                  className="text-xs text-destructive"
+                >
+                  {t(formErrorKey)}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ESC/POS raster band height: some compact printers print stray
+              characters instead of the image when one raster command is
+              too tall, so a shorter band is the first thing to try. */}
+          {form.language === "escpos" && (
+            <div className={field}>
+              <Label htmlFor="printer-escpos-band">
+                {t("printers.escpos_band_rows")}
+              </Label>
+              <Input
+                id="printer-escpos-band"
+                type="number"
+                min="8"
+                max="2303"
+                value={form.escpos_band_rows}
+                aria-invalid={formErrorIsBand || undefined}
+                aria-describedby={
+                  formErrorIsBand
+                    ? "printer-escpos-band-hint printer-escpos-band-error"
+                    : "printer-escpos-band-hint"
+                }
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    escpos_band_rows: e.target.value,
+                  }))
+                }
+              />
+              <p
+                id="printer-escpos-band-hint"
+                className="text-xs text-muted-foreground"
+              >
+                {t("printers.escpos_band_rows_hint")}
+              </p>
+              {formErrorIsBand && formErrorKey && (
+                <p
+                  id="printer-escpos-band-error"
+                  role="alert"
+                  data-testid="printer-escpos-band-error"
                   className="text-xs text-destructive"
                 >
                   {t(formErrorKey)}

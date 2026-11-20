@@ -215,6 +215,16 @@ window.__pnLoaded=function(f){
 window.__pnPaginate=function(){return Promise.all(designs().map(paginate)).then(function(){return true})};
 })();"#;
 
+/// Count the `.pn-sheet` divs the layout produced before the browser ran.
+///
+/// This is the *static* count: [`PAGINATE_SCRIPT`] still clones a sheet for
+/// content taller than the design page, so the rendered count can be larger.
+/// Renderers with a live page (the persistent CDP browser) report the real
+/// count; one-shot screenshots and the Android WebView fall back to this one.
+pub(crate) fn count_static_sheets(html: &str) -> u32 {
+    html.matches("class=\"pn-sheet\"").count() as u32
+}
+
 /// Build the printable document: one `.pn-sheet` per sheet, each exactly the
 /// paper size, holding the design pages as scaled `<iframe>`s.
 ///

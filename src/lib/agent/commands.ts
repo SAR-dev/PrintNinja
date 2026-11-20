@@ -163,6 +163,16 @@ export interface AgentCommands {
     },
     null,
   ];
+  /**
+   * ESC/POS raster band height (rows per `GS v 0` command), stored on the
+   * row's settings JSON. `null` (or `tuning: {}`) resets to the built-in
+   * 256 rows. Some compact printers print stray characters instead of the
+   * image when a band is too tall.
+   */
+  set_printer_escpos_tuning: [
+    { id: number; tuning?: { bandRows?: number } | null },
+    null,
+  ];
   test_printer: [{ id: number; kind?: "page" | "text" }, null];
   /**
    * What the printer speaks, asked before its row is saved (never an

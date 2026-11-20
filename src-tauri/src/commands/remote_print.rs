@@ -72,6 +72,11 @@ pub struct RemotePrintArgs {
     pub margin_right: Option<f64>,
     pub margin_bottom: Option<f64>,
     pub margin_left: Option<f64>,
+    /// Page size in millimetres (MISSING_FEATURES #25), one field per axis
+    /// like the local `PrintRequest`. Absent stays absent — the PC keeps the
+    /// template design size for that axis.
+    pub page_width_mm: Option<f64>,
+    pub page_height_mm: Option<f64>,
     pub test: Option<bool>,
     /// Caller-generated de-duplication key. Retries of one attempt reuse
     /// it, so a timeout never prints twice; absent, one is minted.
@@ -446,37 +451,56 @@ fn record_remote_job(
     }
     let settings = settings.to_string();
     let data_json = data.as_ref().and_then(|d| serde_json::to_string(d).ok());
-    conn.execute(
-        "INSERT INTO print_jobs
-           (template_id, printer_id, source, status, error, copies, settings_json,
-            rendered_html, data_json, idempotency_key, is_test,
-            created_at, started_at, finished_at, duration_ms,
-            printed_by, template_revision)
-         VALUES (?1, NULL, 'ui', ?2, ?3, ?4, ?5,
-                 '', ?6, ?7, ?8,
-                 datetime('now'), datetime('now'), datetime('now'), ?9,
-                 ?10, ?11)
-         ON CONFLICT(idempotency_key) DO UPDATE SET
-           status = excluded.status,
-           error = excluded.error,
-           duration_ms = excluded.duration_ms,
-           finished_at = excluded.finished_at,
-           printed_by = excluded.printed_by,
-           template_revision = excluded.template_revision",
+    // Update-then-insert, not an upsert: the scoped idempotency index is on
+    // `COALESCE(requested_by_device_id, '')` + `idempotency_key`, an
+    // expression SQLite's `ON CONFLICT` target cannot name, so the old
+    // `ON CONFLICT(idempotency_key)` matched no index and failed every
+    // insert. Phone-side rows are local (`requested_by_device_id` NULL),
+    // which is the row the scoped index treats as one per key.
+    let updated = conn.execute(
+        "UPDATE print_jobs SET
+             status = ?1,
+             error = ?2,
+             duration_ms = ?3,
+             finished_at = datetime('now'),
+             printed_by = ?4,
+             template_revision = ?5
+         WHERE idempotency_key = ?6 AND requested_by_device_id IS NULL",
         rusqlite::params![
-            template_id,
             status,
             error,
-            copies as i64,
-            settings,
-            data_json,
-            idempotency_key,
-            i64::from(is_test),
             duration_ms,
             pc_name,
             template_revision,
+            idempotency_key,
         ],
     )?;
+    if updated == 0 {
+        conn.execute(
+            "INSERT INTO print_jobs
+               (template_id, printer_id, source, status, error, copies, settings_json,
+                rendered_html, data_json, idempotency_key, is_test,
+                created_at, started_at, finished_at, duration_ms,
+                printed_by, template_revision)
+             VALUES (?1, NULL, 'ui', ?2, ?3, ?4, ?5,
+                     '', ?6, ?7, ?8,
+                     datetime('now'), datetime('now'), datetime('now'), ?9,
+                     ?10, ?11)",
+            rusqlite::params![
+                template_id,
+                status,
+                error,
+                copies as i64,
+                settings,
+                data_json,
+                idempotency_key,
+                i64::from(is_test),
+                duration_ms,
+                pc_name,
+                template_revision,
+            ],
+        )?;
+    }
     Ok(())
 }
 
@@ -501,9 +525,11 @@ fn warnings_from_reply(reply: &serde_json::Value) -> Vec<String> {
 /// (MISSING_FEATURES #25: a phone job and a local job with the same
 /// options must give the same page). Absent options stay absent, exactly
 /// like the local path — the PC then keeps its own defaults for them.
-/// `margins` is included only when at least one side is set: a phone that
-/// never touched the margins sends the body it always sent, and the PC
-/// (new or old) applies the template defaults.
+/// `margins` is included only when at least one side is set, and `paper`
+/// only when at least one axis is set: a phone that never touched either
+/// sends the body it always sent, and the PC (new or old) applies the
+/// template defaults.
+#[allow(clippy::too_many_arguments)]
 fn remote_settings(
     copies: u32,
     orientation: Option<&str>,
@@ -512,6 +538,8 @@ fn remote_settings(
     grayscale: Option<bool>,
     http_method: Option<&str>,
     margins: (Option<f64>, Option<f64>, Option<f64>, Option<f64>),
+    page: (Option<f64>, Option<f64>),
+    records: Option<u32>,
 ) -> serde_json::Value {
     let mut settings = serde_json::json!({ "copies": copies });
     for (k, v) in [
@@ -532,6 +560,20 @@ fn remote_settings(
             "bottom": margins.2,
             "left": margins.3,
         });
+    }
+    if page.0.is_some() || page.1.is_some() {
+        settings["paper"] = serde_json::json!({
+            "width_mm": page.0,
+            "height_mm": page.1,
+        });
+    }
+    // Records rides in settings so the PC repeats a fetched `data_url`
+    // object `records` times (the client-side expansion is a legacy fallback
+    // for older PCs and only covers inline `data`). Omitted when 1.
+    if let Some(r) = records {
+        if r > 1 {
+            settings["records"] = serde_json::Value::from(r);
+        }
     }
     settings
 }
@@ -658,6 +700,8 @@ pub async fn remote_print_inner(
         args.grayscale,
         args.http_method.as_deref(),
         margins,
+        (args.page_width_mm, args.page_height_mm),
+        args.records,
     );
     let mut body = serde_json::json!({
         "template": template_name,
@@ -1195,6 +1239,8 @@ mod tests {
             Some(true),
             Some("POST"),
             (Some(5.0), Some(6.0), Some(7.0), Some(8.0)),
+            (None, None),
+            None,
         );
         let local = serde_json::json!({
             "copies": 2,
@@ -1218,16 +1264,73 @@ mod tests {
             None,
             None,
             (Some(12.5), None, None, None),
+            (None, None),
+            None,
         );
         assert_eq!(
             phone["margins"],
             serde_json::json!({"top": 12.5, "right": null, "bottom": null, "left": null})
         );
 
-        // No margin touched at all: no `margins` key — the PC keeps the
-        // template defaults exactly as a local job with all-`null`
-        // margins does.
-        let phone = remote_settings(1, None, None, None, None, None, (None, None, None, None));
+        // One paper axis set, the other absent: `paper` appears with the
+        // absent axis `null`, so the PC keeps the template default there.
+        let phone = remote_settings(
+            1,
+            None,
+            None,
+            None,
+            None,
+            None,
+            (None, None, None, None),
+            (Some(58.0), None),
+            None,
+        );
+        assert_eq!(
+            phone["paper"],
+            serde_json::json!({"width_mm": 58.0, "height_mm": null})
+        );
+
+        // Records > 1 rides in `settings` so the PC repeats a fetched
+        // `data_url` object; records = 1 is omitted (the default).
+        let phone = remote_settings(
+            1,
+            None,
+            None,
+            None,
+            None,
+            None,
+            (None, None, None, None),
+            (None, None),
+            Some(5),
+        );
+        assert_eq!(phone["records"], serde_json::json!(5));
+        let phone = remote_settings(
+            1,
+            None,
+            None,
+            None,
+            None,
+            None,
+            (None, None, None, None),
+            (None, None),
+            Some(1),
+        );
+        assert!(phone.get("records").is_none());
+
+        // No margin, paper or records touched at all: no `margins`/`paper`/
+        // `records` key — the PC keeps the template defaults exactly as a
+        // local job with all-`null` margins does.
+        let phone = remote_settings(
+            1,
+            None,
+            None,
+            None,
+            None,
+            None,
+            (None, None, None, None),
+            (None, None),
+            None,
+        );
         assert_eq!(phone, serde_json::json!({ "copies": 1 }));
     }
 }

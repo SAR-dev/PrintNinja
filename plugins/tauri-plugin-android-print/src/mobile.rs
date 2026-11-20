@@ -15,10 +15,8 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
     api: PluginApi<R, C>,
 ) -> crate::Result<AndroidPrint<R>> {
     #[cfg(target_os = "android")]
-    let handle = api.register_android_plugin(
-        "com.printninja.android_print",
-        "AndroidPrintPlugin",
-    )?;
+    let handle =
+        api.register_android_plugin("com.printninja.android_print", "AndroidPrintPlugin")?;
     #[cfg(target_os = "ios")]
     let handle = api.register_ios_plugin(init_plugin_android_print)?;
     Ok(AndroidPrint(handle))
@@ -29,7 +27,9 @@ pub struct AndroidPrint<R: Runtime>(PluginHandle<R>);
 
 impl<R: Runtime> AndroidPrint<R> {
     pub fn html_to_pdf(&self, payload: HtmlToPdfRequest) -> crate::Result<HtmlToPdfResponse> {
-        self.0.run_mobile_plugin("htmlToPdf", payload).map_err(Into::into)
+        self.0
+            .run_mobile_plugin("htmlToPdf", payload)
+            .map_err(Into::into)
     }
 
     /// Render HTML to a 1-bit raster on the device (thermal printing,
@@ -51,12 +51,19 @@ impl<R: Runtime> AndroidPrint<R> {
     /// (`PdfRenderer`), thresholds to dots and writes them to a
     /// cache-dir file; the response carries its path, the dimensions and
     /// the page count. The caller reads and deletes the file.
-    pub fn pdf_to_raster(
-        &self,
-        payload: PdfToRasterRequest,
-    ) -> crate::Result<PdfToRasterResponse> {
+    pub fn pdf_to_raster(&self, payload: PdfToRasterRequest) -> crate::Result<PdfToRasterResponse> {
         self.0
             .run_mobile_plugin("pdfToRaster", payload)
+            .map_err(Into::into)
+    }
+
+    /// Probe a PDF's page geometry on the device: Kotlin opens the document
+    /// with the platform's `PdfRenderer` (no bitmap render) and reports the
+    /// first page's size in millimetres plus the total page count — the
+    /// phone-side twin of the desktop's `pdfium` metadata reads.
+    pub fn probe_pdf(&self, payload: PdfProbeRequest) -> crate::Result<PdfProbeResponse> {
+        self.0
+            .run_mobile_plugin("probePdf", payload)
             .map_err(Into::into)
     }
 
@@ -114,20 +121,14 @@ impl<R: Runtime> AndroidPrint<R> {
     }
 
     /// Status query on a held USB connection. The connection stays open.
-    pub fn query_usb_on(
-        &self,
-        payload: UsbQueryOnRequest,
-    ) -> crate::Result<UsbQueryResponse> {
+    pub fn query_usb_on(&self, payload: UsbQueryOnRequest) -> crate::Result<UsbQueryResponse> {
         self.0
             .run_mobile_plugin("queryUsbOn", payload)
             .map_err(Into::into)
     }
 
     /// Write on a held USB connection. The connection stays open.
-    pub fn write_usb_on(
-        &self,
-        payload: UsbWriteOnRequest,
-    ) -> crate::Result<UsbWriteResponse> {
+    pub fn write_usb_on(&self, payload: UsbWriteOnRequest) -> crate::Result<UsbWriteResponse> {
         self.0
             .run_mobile_plugin("writeUsbOn", payload)
             .map_err(Into::into)
@@ -203,10 +204,7 @@ impl<R: Runtime> AndroidPrint<R> {
     /// Open an RFCOMM socket and hold it under a minted handle, so one
     /// print's query and write share a single connect. The caller must
     /// close the handle on every path (`close_bluetooth_connection`).
-    pub fn open_bluetooth_connection(
-        &self,
-        address: &str,
-    ) -> crate::Result<BluetoothOpenResponse> {
+    pub fn open_bluetooth_connection(&self, address: &str) -> crate::Result<BluetoothOpenResponse> {
         let payload = BluetoothOpenRequest {
             address: address.to_string(),
         };
@@ -307,10 +305,7 @@ impl<R: Runtime> AndroidPrint<R> {
     /// background print job (item 41). The Kotlin side is best-effort —
     /// a denied notification permission resolves empty — so this only
     /// errors when the plugin round trip itself fails.
-    pub fn post_job_notification(
-        &self,
-        request: JobNotificationRequest,
-    ) -> crate::Result<()> {
+    pub fn post_job_notification(&self, request: JobNotificationRequest) -> crate::Result<()> {
         self.0
             .run_mobile_plugin("postJobNotification", request)
             .map_err(Into::into)

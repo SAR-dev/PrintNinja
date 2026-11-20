@@ -48,6 +48,19 @@ pub fn sanitize_html(input: &str) -> String {
     strip_remote_fetches(&do_strip_scripts_and_handlers(input))
 }
 
+/// Sanitize a stylesheet the same way [`sanitize_html`] scrubs inline
+/// styles: remote `@import` rules are dropped and remote `url()` targets
+/// are blanked (`data:` and relative URLs stay). A lone `javascript:`
+/// payload is dropped entirely.
+///
+/// The print pipeline injects the template's stored `css` column verbatim
+/// into the rendered document, and [`sanitize_html`] only sees the HTML —
+/// not this CSS — so the CSS is scrubbed here as the second half of the
+/// print-time guarantee (see `commands::print::build_template_css`).
+pub fn sanitize_css(css: &str) -> String {
+    scrub_css_urls(css).unwrap_or_default()
+}
+
 /// Script/handler/javascript: stripping (no remote-URL handling here —
 /// that is [`strip_remote_fetches`], kept separate so each pass stays
 /// reviewable).

@@ -1,3 +1,66 @@
+/// Per-printer ESC/POS tuning. Every field defaults to "behave as before",
+/// so a printer without settings gets exactly the bytes it always got.
+///
+/// Stored under the `escpos` key of the row's `default_settings_json`,
+/// e.g. `{"escpos":{"bandRows":64}}`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct EscPosTuning {
+    /// Rows per `GS v 0` raster band. `None` keeps
+    /// [`EscPosEncoder::RASTER_BAND_ROWS`]. Some compact printers accept
+    /// the command but not tall bands (small receive buffer, firmware
+    /// height cap) and print a couple of stray characters instead of the
+    /// image; shorter bands print the same image as a run of short
+    /// commands.
+    pub band_rows: Option<u32>,
+}
+
+impl EscPosTuning {
+    pub const MIN_BAND_ROWS: u32 = 8;
+    /// Epson documents 2303 as the most rows one `GS v 0` carries.
+    pub const MAX_BAND_ROWS: u32 = 2303;
+
+    /// Strict check for values a person is saving.
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(rows) = self.band_rows {
+            if !(Self::MIN_BAND_ROWS..=Self::MAX_BAND_ROWS).contains(&rows) {
+                return Err(format!(
+                    "ESC/POS band height must be between {} and {} rows",
+                    Self::MIN_BAND_ROWS,
+                    Self::MAX_BAND_ROWS
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Lenient read for printing: the `escpos` object inside a printer's
+    /// `default_settings_json`. Anything missing, malformed or out of
+    /// range falls back to the default — a bad stored value must never
+    /// break a print.
+    pub fn from_settings_json(raw: Option<&str>) -> Self {
+        let Some(raw) = raw else {
+            return Self::default();
+        };
+        let Ok(root) = serde_json::from_str::<serde_json::Value>(raw) else {
+            return Self::default();
+        };
+        let Some(node) = root.get("escpos") else {
+            return Self::default();
+        };
+        match serde_json::from_value::<Self>(node.clone()) {
+            Ok(t) if t.validate().is_ok() => t,
+            _ => Self::default(),
+        }
+    }
+
+    /// The band height to encode with.
+    pub fn band_rows(&self) -> usize {
+        self.band_rows
+            .map_or(EscPosEncoder::RASTER_BAND_ROWS, |r| r as usize)
+    }
+}
+
 /// ESC/POS command encoder for thermal receipt printers
 pub struct EscPosEncoder;
 
@@ -42,12 +105,23 @@ impl EscPosEncoder {
     /// Print raster bitmap (GS v 0), as a run of bands of at most
     /// [`Self::RASTER_BAND_ROWS`] rows each.
     pub fn print_raster(image: &crate::render::raster::RasterImage) -> Vec<u8> {
+        Self::print_raster_banded(image, Self::RASTER_BAND_ROWS)
+    }
+
+    /// [`Self::print_raster`] with an explicit band height (clamped to at
+    /// least one row). With [`Self::RASTER_BAND_ROWS`] the output is
+    /// byte-for-byte the same.
+    pub fn print_raster_banded(
+        image: &crate::render::raster::RasterImage,
+        band_rows: usize,
+    ) -> Vec<u8> {
         let width_bytes = image.width.div_ceil(8);
         if width_bytes == 0 || image.height == 0 {
             return Vec::new();
         }
-        let mut cmd = Vec::with_capacity(image.dots.len() + 8 * (image.height / 256 + 1));
-        for band in image.dots.chunks(width_bytes * Self::RASTER_BAND_ROWS) {
+        let band_rows = band_rows.max(1);
+        let mut cmd = Vec::with_capacity(image.dots.len() + 8 * (image.height / band_rows + 1));
+        for band in image.dots.chunks(width_bytes * band_rows) {
             let rows = band.len() / width_bytes;
             cmd.extend_from_slice(&[
                 0x1D,
@@ -122,9 +196,23 @@ impl EscPosEncoder {
         cut_after: bool,
         open_drawer: bool,
     ) -> Vec<u8> {
+        Self::build_receipt_tuned(image, cut_after, open_drawer, &EscPosTuning::default())
+    }
+
+    /// [`Self::build_receipt`] with the printer's ESC/POS tuning applied.
+    /// With `EscPosTuning::default()` the output is byte-for-byte the same.
+    pub fn build_receipt_tuned(
+        image: &crate::render::raster::RasterImage,
+        cut_after: bool,
+        open_drawer: bool,
+        tuning: &EscPosTuning,
+    ) -> Vec<u8> {
         let mut receipt = Vec::new();
         receipt.extend_from_slice(&Self::init());
-        receipt.extend_from_slice(&Self::print_raster(&Self::trim_trailing_blank_rows(image)));
+        receipt.extend_from_slice(&Self::print_raster_banded(
+            &Self::trim_trailing_blank_rows(image),
+            tuning.band_rows(),
+        ));
         receipt.extend_from_slice(&Self::feed(3));
         if cut_after {
             receipt.extend_from_slice(&Self::cut(false));
@@ -191,6 +279,97 @@ mod tests {
         assert!(out.ends_with(&[0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00]));
         let body = &out[2..out.len() - 6];
         assert_eq!(bands(body, 48), vec![10]);
+    }
+
+    #[test]
+    fn custom_band_height_splits_the_same_rows_into_shorter_commands() {
+        let img = image(432, 200, &[0, 199]);
+        let out = EscPosEncoder::print_raster_banded(&img, 64);
+        let rows = bands(&out, 54);
+        assert_eq!(rows, vec![64, 64, 64, 8]);
+        assert_eq!(rows.iter().sum::<usize>(), 200);
+    }
+
+    #[test]
+    fn explicit_default_band_height_is_byte_identical() {
+        let img = image(384, 600, &[0, 300, 599]);
+        assert_eq!(
+            EscPosEncoder::print_raster_banded(&img, EscPosEncoder::RASTER_BAND_ROWS),
+            EscPosEncoder::print_raster(&img)
+        );
+        assert_eq!(
+            EscPosEncoder::build_receipt_tuned(&img, true, false, &EscPosTuning::default()),
+            EscPosEncoder::build_receipt(&img, true, false)
+        );
+    }
+
+    #[test]
+    fn tuned_receipt_uses_the_band_height_and_keeps_the_frame() {
+        let img = image(384, 100, &[0, 99]);
+        let tuning = EscPosTuning {
+            band_rows: Some(32),
+        };
+        let out = EscPosEncoder::build_receipt_tuned(&img, true, false, &tuning);
+        assert!(out.starts_with(&[0x1B, 0x40]));
+        assert!(out.ends_with(&[0x1B, 0x64, 0x03, 0x1D, 0x56, 0x00]));
+        let body = &out[2..out.len() - 6];
+        assert_eq!(bands(body, 48), vec![32, 32, 32, 4]);
+    }
+
+    #[test]
+    fn tuning_reads_leniently_and_validates_strictly() {
+        assert_eq!(
+            EscPosTuning::from_settings_json(None),
+            EscPosTuning::default()
+        );
+        assert_eq!(
+            EscPosTuning::from_settings_json(Some("not json")),
+            EscPosTuning::default()
+        );
+        assert_eq!(
+            EscPosTuning::from_settings_json(Some(r#"{"tspl":{}}"#)),
+            EscPosTuning::default()
+        );
+        assert_eq!(
+            EscPosTuning::from_settings_json(Some(r#"{"escpos":{"bandRows":64}}"#)),
+            EscPosTuning {
+                band_rows: Some(64)
+            }
+        );
+        // Out of range, wrong type or negative reads as the default.
+        for bad in [
+            r#"{"escpos":{"bandRows":0}}"#,
+            r#"{"escpos":{"bandRows":7}}"#,
+            r#"{"escpos":{"bandRows":99999}}"#,
+            r#"{"escpos":{"bandRows":"wide"}}"#,
+            r#"{"escpos":{"bandRows":-5}}"#,
+            r#"{"escpos":"fast"}"#,
+        ] {
+            assert_eq!(
+                EscPosTuning::from_settings_json(Some(bad)),
+                EscPosTuning::default(),
+                "{bad}"
+            );
+        }
+        assert!(EscPosTuning { band_rows: None }.validate().is_ok());
+        for rows in [8, 64, 256, 2303] {
+            assert!(EscPosTuning {
+                band_rows: Some(rows)
+            }
+            .validate()
+            .is_ok());
+        }
+        for rows in [0, 7, 2304] {
+            assert!(EscPosTuning {
+                band_rows: Some(rows)
+            }
+            .validate()
+            .is_err());
+        }
+        assert_eq!(
+            EscPosTuning::default().band_rows(),
+            EscPosEncoder::RASTER_BAND_ROWS
+        );
     }
 
     #[test]

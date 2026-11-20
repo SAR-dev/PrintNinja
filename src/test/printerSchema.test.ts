@@ -19,6 +19,7 @@ const base = {
   label_gap_mm: "",
   bt_chunk_bytes: "",
   bt_chunk_pause_ms: "",
+  escpos_band_rows: "",
   username: "",
   password: "",
   skip_tls_verification: false,
@@ -148,6 +149,36 @@ describe("validatePrinterForm", () => {
         bt_chunk_pause_ms: "0",
       }).ok,
     ).toBe(true);
+  });
+
+  it("keeps the ESC/POS band height blank or an integer in range", () => {
+    // Blank is the built-in default (256 rows).
+    const blank = validatePrinterForm({ ...base, language: "escpos" });
+    expect(blank.ok).toBe(true);
+    if (blank.ok) expect(blank.req.escpos_band_rows).toBeUndefined();
+
+    const r = validatePrinterForm({
+      ...base,
+      language: "escpos",
+      escpos_band_rows: "64",
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.req.escpos_band_rows).toBe(64);
+
+    for (const rows of ["7", "2304", "24.5", "abc", "-8"]) {
+      const bad = validatePrinterForm({ ...base, escpos_band_rows: rows });
+      expect(bad.ok, rows).toBe(false);
+      if (!bad.ok) {
+        expect(bad.messageKey, rows).toMatch(/^printers\.err_escpos_band/);
+      }
+    }
+    // The bounds themselves are valid.
+    for (const rows of ["8", "2303"]) {
+      expect(
+        validatePrinterForm({ ...base, escpos_band_rows: rows }).ok,
+        rows,
+      ).toBe(true);
+    }
   });
 
   it("passes the IPP sign-in fields through untouched", () => {

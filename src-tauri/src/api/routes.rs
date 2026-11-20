@@ -701,8 +701,16 @@ async fn print_job(
         html: String::new(),
         // Decoded (and either/or-checked) above; None for template jobs.
         pdf: pdf_bytes,
-        page_width_mm: None,
-        page_height_mm: None,
+        // Explicit paper from a paired phone's `settings.paper` (absent
+        // otherwise: the PC resolves the template design size).
+        page_width_mm: settings
+            .get("paper")
+            .and_then(|p| p.get("width_mm"))
+            .and_then(|v| v.as_f64()),
+        page_height_mm: settings
+            .get("paper")
+            .and_then(|p| p.get("height_mm"))
+            .and_then(|v| v.as_f64()),
         orientation: settings
             .get("orientation")
             .and_then(|o| o.as_str())

@@ -62,12 +62,11 @@ export function usePrintPaper({
   const designW = previewTemplate?.page_w_mm ?? 80;
   const designH = previewTemplate?.page_h_mm ?? 200;
   // Explicit paper size wins per axis; null falls back to the design size.
-  // The paper is per-print only — never written back to the template.
-  // Print via PC sends no paper size (the PC prints at the template's
-  // design size), so the explicit choice is ignored there and the preview
-  // shows what will really print.
-  const reqPaperW = viaPc ? null : store.paperW;
-  const reqPaperH = viaPc ? null : store.paperH;
+  // The paper is per-print only — never written back to the template. It
+  // rides along on the via-PC path too (`remote_print` carries it), so the
+  // same override applies whichever device prints.
+  const reqPaperW = store.paperW;
+  const reqPaperH = store.paperH;
   const effPaperW = reqPaperW ?? designW;
   const effPaperH = reqPaperH ?? designH;
   // The physical sheet the preview draws (and the PDF prints on): the same
@@ -82,18 +81,14 @@ export function usePrintPaper({
   );
   // "Custom…" is a deliberate choice kept in the store; every other value
   // is derived from the size so presets still show when restored.
-  const paperPreset = viaPc
-    ? "auto"
-    : store.paperCustom
-      ? "custom"
-      : derivePaperKey(store.paperW, store.paperH);
+  const paperPreset = store.paperCustom
+    ? "custom"
+    : derivePaperKey(store.paperW, store.paperH);
 
   // The fold's header line: the current values, so folding hides the
-  // controls but not what is set. Via PC sends no paper, so the summary
-  // stays at orientation and fit.
-  const paperSummary = viaPc
-    ? null
-    : paperPreset === "auto"
+  // controls but not what is set.
+  const paperSummary =
+    paperPreset === "auto"
       ? t("print.paper_auto")
       : paperPreset === "custom"
         ? `${store.paperW ?? "—"}×${store.paperH ?? "—"}`

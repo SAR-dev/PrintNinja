@@ -334,6 +334,48 @@ fun renderPdfDots(
     }
 }
 
+/**
+ * Probes a PDF's page geometry with the platform's own PDFium port
+ * (`PdfRenderer`, API 21+): the first page's size in millimetres and
+ * the document's page count. No bitmap render — it only opens the
+ * document — so it is a fraction of [renderPdfDots]' cost. The
+ * device-side twin of the desktop's vendored PDFium metadata reads,
+ * behind the phone's PDF raster sizing and multi-page warning.
+ *
+ * Top-level like [renderPdfDots]: it needs only a [Context], so the
+ * instrumented test can call it without constructing the plugin.
+ *
+ * @return (page width in mm, page height in mm, page count).
+ * @throws IllegalArgumentException when [pdf] is not a parseable PDF.
+ */
+fun probePdfPage(
+    context: Context,
+    pdf: ByteArray,
+): Triple<Float, Float, Int> {
+    val pdfFile = File.createTempFile("pn_pdf_", ".pdf", context.cacheDir)
+    try {
+        FileOutputStream(pdfFile).use { it.write(pdf) }
+        val renderer = PdfRenderer(
+            ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+        )
+        try {
+            val page = renderer.openPage(0)
+            try {
+                // PDF points to millimetres: 1 pt = 1/72 in = 25.4/72 mm.
+                val widthMm = page.width / 72f * 25.4f
+                val heightMm = page.height / 72f * 25.4f
+                return Triple(widthMm, heightMm, renderer.pageCount)
+            } finally {
+                page.close()
+            }
+        } finally {
+            renderer.close()
+        }
+    } finally {
+        pdfFile.delete()
+    }
+}
+
 @InvokeArg
 class HtmlToPdfArgs {
     var html: String? = null
@@ -355,6 +397,11 @@ class PdfToRasterArgs {
     var pdfBase64: String? = null
     var widthPx: Int? = null
     var heightPx: Int? = null
+}
+
+@InvokeArg
+class ProbePdfArgs {
+    var pdfBase64: String? = null
 }
 
 @InvokeArg
@@ -740,6 +787,51 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                     onFailure = { e ->
                         Log.e(TAG, "PDF raster failed", e)
                         invoke.reject("PDF raster failed: ${e.message}")
+                    },
+                )
+            }
+        }
+    }
+
+    /**
+     * Reports a submitted PDF's first-page size in millimetres and its
+     * page count — the metadata probe behind the phone's PDF raster
+     * sizing and multi-page warning (PLAN §2). No bitmap render: it
+     * only opens the document, so it is a fraction of [pdfToRaster]'s
+     * cost.
+     *
+     * Same main-thread contract as [pdfToRaster]: Tauri invokes this on
+     * the main thread, so it returns at once; the probe runs on [ioPool]
+     * and the answer settles back on the main thread.
+     */
+    @Command
+    fun probePdf(invoke: Invoke) {
+        val args = invoke.parseArgs(ProbePdfArgs::class.java)
+        val pdfBase64 = args.pdfBase64 ?: return invoke.reject("pdfBase64 is required")
+        val pdf = try {
+            Base64.decode(pdfBase64, Base64.NO_WRAP)
+        } catch (e: IllegalArgumentException) {
+            return invoke.reject("pdfBase64 is not valid base64")
+        }
+        if (pdf.isEmpty()) {
+            return invoke.reject("pdfBase64 decodes to an empty document")
+        }
+
+        ioPool.execute {
+            val result = runCatching { probePdfPage(activity, pdf) }
+            answer(invoke) {
+                result.fold(
+                    onSuccess = { (widthMm, heightMm, pageCount) ->
+                        invoke.resolve(
+                            JSObject()
+                                .put("pageWidthMm", widthMm)
+                                .put("pageHeightMm", heightMm)
+                                .put("pageCount", pageCount),
+                        )
+                    },
+                    onFailure = { e ->
+                        Log.e(TAG, "PDF probe failed", e)
+                        invoke.reject("PDF probe failed: ${e.message}")
                     },
                 )
             }

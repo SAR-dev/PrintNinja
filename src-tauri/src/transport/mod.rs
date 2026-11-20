@@ -293,11 +293,14 @@ pub fn encode_for_language(
         dpi,
         label_gap_mm,
         &label_langs::tspl::TsplTuning::default(),
+        &escpos::EscPosTuning::default(),
     )
 }
 
 /// [`encode_for_language`] plus the printer's TSPL tuning (darkness,
-/// speed, media type). Only the TSPL arm reads `tspl`.
+/// speed, media type) and ESC/POS tuning (raster band height). Only the
+/// TSPL arm reads `tspl`, and only the ESC/POS arm reads `escpos_tuning`.
+#[allow(clippy::too_many_arguments)]
 pub fn encode_for_language_tuned(
     language: &PrinterLanguage,
     image: &crate::render::raster::RasterImage,
@@ -306,6 +309,7 @@ pub fn encode_for_language_tuned(
     dpi: u32,
     label_gap_mm: Option<f64>,
     tspl: &label_langs::tspl::TsplTuning,
+    escpos_tuning: &escpos::EscPosTuning,
 ) -> Result<(Vec<u8>, &'static str), String> {
     const DEFAULT_GAP_MM: f64 = 2.0;
 
@@ -324,7 +328,7 @@ pub fn encode_for_language_tuned(
             // ignore the cut command, so the frame is safe to send
             // unconditionally.
             Ok((
-                escpos::EscPosEncoder::build_receipt(image, true, false),
+                escpos::EscPosEncoder::build_receipt_tuned(image, true, false, escpos_tuning),
                 "application/octet-stream",
             ))
         }

@@ -483,14 +483,18 @@ impl JobRenderer for FakeRenderer {
 
     /// Stand in for the browser's screenshot path, so a printer that speaks a
     /// command language (`escpos`, `zpl`, `tspl`) reaches the real encoder —
-    /// and with it the status query that picks the right dialect.
+    /// and with it the status query that picks the right dialect. The page
+    /// holds one sheet, like a browser that did not paginate.
     async fn rasterize(
         &self,
         _final_html: &str,
         w_px: usize,
         h_px: usize,
-    ) -> anyhow::Result<printninja_lib::render::raster::RasterImage> {
-        Ok(printninja_lib::render::raster::RasterImage::new(w_px, h_px))
+    ) -> anyhow::Result<(printninja_lib::render::raster::RasterImage, u32)> {
+        Ok((
+            printninja_lib::render::raster::RasterImage::new(w_px, h_px),
+            1,
+        ))
     }
 }
 

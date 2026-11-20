@@ -194,6 +194,8 @@ fn args(template_id: i64) -> RemotePrintArgs {
         margin_right: None,
         margin_bottom: None,
         margin_left: None,
+        page_width_mm: None,
+        page_height_mm: None,
         test: None,
         idempotency_key: Some("remote-1".into()),
         pair_id: None,

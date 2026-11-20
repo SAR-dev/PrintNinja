@@ -582,11 +582,13 @@ const ja: Translation = {
     paper_a4: "A4（210 × 297 mm）",
     paper_letter: "USレター（216 × 279 mm）",
     paper_photo: "4×6インチ（100 × 150 mm）",
+    paper_label40: "40 mmラベル（40 × 30 mm）",
+    paper_label58: "58 mmレシート（58 × 40 mm）",
+    paper_label80: "80 mmレシート（80 × 60 mm）",
     paper_custom: "カスタム…",
     paper_width: "幅 (mm)",
     paper_height: "高さ (mm)",
     paper_note: "デザイン {{dw}}×{{dh}} mm → 用紙 {{pw}}×{{ph}} mm",
-    paper_via_pc: "PC経由の印刷では、テンプレートの用紙サイズが使われます。",
     paper_mismatch_template:
       "テンプレートは {{tw}}×{{th}} mm です。このプリンターは {{pw}} mm の用紙です。",
     paper_mismatch_paper:
@@ -668,6 +670,9 @@ const ja: Translation = {
     bt_chunk_pause_ms: "Bluetooth書き込みの間隔 (ms)",
     bt_chunk_pause_hint:
       "ドライバーなしBluetooth専用: 書き込みと書き込みの間隔。遅いプリンターが追いつける時間をつくる。空欄なら組み込み既定値 (50) が使われます。",
+    escpos_band_rows: "ESC/POS画像バンドの高さ (行)",
+    escpos_band_rows_hint:
+      "ESC/POS専用: 1回のラスターコマンドで送る画像の行数。空欄なら組み込み既定値 (256) が使われます。テストページが画像ではなく数文字しか印刷されない場合は、64 または 24 をお試しください。",
     ipp_signin: "サインイン（任意）",
     ipp_username: "ユーザー名",
     ipp_password: "パスワード",
@@ -675,6 +680,8 @@ const ja: Translation = {
       "IPPサインインのユーザー名。空欄なら組み込みの PrintNinja アイデンティティを使います。",
     ipp_password_hint:
       "すべてのリクエストに HTTP Basic 認証として送られます。空欄なら認証は送られません。",
+    ipp_password_hint_keep:
+      "このプリンターにはパスワードが保存されています。空欄のままにするとそのまま使われ、入力すると置き換えられます。",
     ipp_skip_cert: "証明書検証をスキップ",
     ipp_skip_cert_hint:
       "https:// のエンドポイント専用。自己署名など検証できない証明書を通します。",
@@ -832,6 +839,10 @@ const ja: Translation = {
     err_bt_pause_int: "Bluetooth書き込みの間隔は整数で入力してください",
     err_bt_pause_min: "Bluetooth書き込みの間隔は0以上にしてください",
     err_bt_pause_max: "Bluetooth書き込みの間隔は2000以下にしてください",
+    err_escpos_band_number: "画像バンドの高さは数値で入力してください",
+    err_escpos_band_int: "画像バンドの高さは整数で入力してください",
+    err_escpos_band_min: "画像バンドの高さは8以上にしてください",
+    err_escpos_band_max: "画像バンドの高さは2303以下にしてください",
     err_invalid: "プリンターの設定が正しくありません",
     lang_pdf: "PDF",
     lang_escpos: "ESC/POS（レシート）",

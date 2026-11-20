@@ -188,6 +188,12 @@ pub trait JobRenderer: Send + Sync {
     /// Rasterize `final_html` at exactly `w_px` × `h_px` dots (P4), for
     /// printers that speak a command language instead of taking a PDF.
     ///
+    /// Returns the raster and the number of `.pn-sheet`s on the rendered
+    /// page: 1 for renderers without in-page pagination, more when the
+    /// browser's `PAGINATE_SCRIPT` cloned sheets for overflowing content.
+    /// The pipeline refuses a command-language job when that count is over
+    /// 1 — a single-bitmap head cannot print them all.
+    ///
     /// The default refuses: a renderer that cannot rasterize must fail the
     /// job loudly, never fall back to PDF bytes on a printer that would drop
     /// them. [`PdfRenderer`] overrides this with the browser-backed
@@ -197,7 +203,7 @@ pub trait JobRenderer: Send + Sync {
         final_html: &str,
         w_px: usize,
         h_px: usize,
-    ) -> anyhow::Result<crate::render::raster::RasterImage> {
+    ) -> anyhow::Result<(crate::render::raster::RasterImage, u32)> {
         let _ = (final_html, w_px, h_px);
         Err(anyhow::anyhow!(
             "this renderer cannot rasterize HTML to dots; command-language printers \
@@ -247,6 +253,7 @@ pub trait JobRenderer: Send + Sync {
         dpi: u32,
         label_gap_mm: Option<f64>,
         tspl: &crate::transport::label_langs::tspl::TsplTuning,
+        escpos: &crate::transport::escpos::EscPosTuning,
     ) -> anyhow::Result<(Vec<u8>, &'static str)> {
         match language {
             crate::transport::PrinterLanguage::Pdf => self
@@ -263,20 +270,26 @@ pub trait JobRenderer: Send + Sync {
                 // The sheet is laid out in mm; map it onto the dot viewport
                 // so one mm of design is one mm of label at this dpi.
                 let raster_html = crate::render::layout::fit_to_dots(final_html, w_px, paper_w_mm);
-                self.rasterize(&raster_html, w_px, h_px)
-                    .await
-                    .and_then(|raster| {
-                        crate::transport::encode_for_language_tuned(
-                            lang,
-                            &raster,
-                            paper_w_mm,
-                            paper_h_mm,
-                            dpi,
-                            label_gap_mm,
-                            tspl,
-                        )
-                        .map_err(|e| anyhow::anyhow!(e))
-                    })
+                let (raster, sheets) = self.rasterize(&raster_html, w_px, h_px).await?;
+                // The browser may have paginated the overflow into extra
+                // sheets after the static pre-flight count (which only sees
+                // the divs the layout wrote). The head can only print the
+                // one sheet this bitmap holds, so refuse rather than
+                // silently drop the rest.
+                if let Some(msg) = multi_sheet_message(lang, sheets) {
+                    return Err(anyhow::anyhow!("{msg}"));
+                }
+                crate::transport::encode_for_language_tuned(
+                    lang,
+                    &raster,
+                    paper_w_mm,
+                    paper_h_mm,
+                    dpi,
+                    label_gap_mm,
+                    tspl,
+                    escpos,
+                )
+                .map_err(|e| anyhow::anyhow!(e))
             }
         }
     }
@@ -299,7 +312,7 @@ impl JobRenderer for PdfRenderer {
         final_html: &str,
         w_px: usize,
         h_px: usize,
-    ) -> anyhow::Result<crate::render::raster::RasterImage> {
+    ) -> anyhow::Result<(crate::render::raster::RasterImage, u32)> {
         self.html_to_raster(final_html, w_px, h_px).await
     }
 
@@ -366,7 +379,10 @@ fn build_template_css(user_css: &str, compiled_css: &str) -> String {
     if !user_css.trim().is_empty() {
         parts.push(user_css);
     }
-    parts.join("\n")
+    // Scrub remote `@import` / `url()` from the assembled stylesheet: this
+    // CSS is injected verbatim into the rendered document and is not
+    // covered by the HTML sanitizer (`sanitize_html` sees only the markup).
+    crate::render::handlebars::sanitize_css(&parts.join("\n"))
 }
 
 /// Wrap one record's rendered HTML in the template's stylesheet, as a
@@ -641,23 +657,17 @@ pub fn validate_page_range(raw: Option<&str>) -> AppResult<()> {
     Ok(())
 }
 
-/// Command-language printers (ESC/POS, ZPL, TSPL, CPCL, raster) print one
-/// bitmap per job, so only the first sheet would reach the head
-/// (MISSING_FEATURES item 49). Refuse a job that lays out more than one
-/// sheet instead of silently printing a truncated receipt. PDF printers
-/// are unaffected: each sheet is its own PDF page.
-///
-/// This counts the sheets the layout wrote (one per record). A single
-/// design that the browser later paginates onto extra sheets is not
-/// visible here.
-pub fn multi_sheet_refusal(
+/// The refusal message for a command-language job whose rendered page holds
+/// `sheets` sheets: the head prints one bitmap per job, so any sheet past
+/// the first would be dropped (MISSING_FEATURES item 49). PDF printers are
+/// unaffected: each sheet is its own PDF page.
+pub fn multi_sheet_message(
     language: &crate::transport::PrinterLanguage,
-    final_html: &str,
+    sheets: u32,
 ) -> Option<String> {
     if matches!(language, crate::transport::PrinterLanguage::Pdf) {
         return None;
     }
-    let sheets = final_html.matches("class=\"pn-sheet\"").count();
     (sheets > 1).then(|| {
         format!(
             "This job has {sheets} sheets, but this printer's command language \
@@ -665,6 +675,25 @@ pub fn multi_sheet_refusal(
              Print one record at a time, or use a printer set to PDF."
         )
     })
+}
+
+/// Command-language printers print one bitmap per job, so refuse a job that
+/// lays out more than one sheet instead of silently printing a truncated
+/// receipt.
+///
+/// This is the pre-flight half of the guard: it counts the sheets the
+/// layout wrote (one per record). A single design that the browser later
+/// paginates onto extra sheets is caught by the post-render check in
+/// [`render_for_language`](JobRenderer::render_for_language), which gets
+/// the browser's final sheet count from the renderer.
+pub fn multi_sheet_refusal(
+    language: &crate::transport::PrinterLanguage,
+    final_html: &str,
+) -> Option<String> {
+    multi_sheet_message(
+        language,
+        crate::render::layout::count_static_sheets(final_html),
+    )
 }
 
 /// HTTP method for fetching `data_url`: GET (default) or POST.
@@ -890,8 +919,23 @@ pub async fn run_print_with(
     req.orientation = orientation;
     req.fit_mode = fit_mode;
 
+    // The job's PDF, probed before the job row exists: the paper the
+    // render stage uses and the multi-page warning both read the answer,
+    // so the row records the probed paper. A failed probe is `none()` and
+    // the fallbacks apply as before.
+    let pdf_probe = if let Some(p) = req.pdf.as_deref().filter(|p| !p.is_empty()) {
+        Some(probe_pdf_bytes(p).await)
+    } else {
+        None
+    };
+
     // ── 1. Resolve content ───────────────────────────────────────────
-    let content = resolve_content(db, &req)?;
+    let content = resolve_content(db, &req, pdf_probe.as_ref())?;
+
+    // A multi-page PDF for a command-language head prints only its first
+    // page; the probe ran before the job row exists so the warning rides
+    // the response up front. The print itself still proceeds.
+    let multipage_warning = multi_page_pdf_warning(db, &req, pdf_probe.as_ref());
 
     // P15: the row exists before anything that can take time, in `printing`
     // state with the real start time. Later stages only update it, so a
@@ -904,7 +948,7 @@ pub async fn run_print_with(
         (content.paper_w_mm, content.paper_h_mm),
     )?;
 
-    run_stages(
+    let mut resp = run_stages(
         cache_dir,
         db,
         queue,
@@ -916,7 +960,11 @@ pub async fn run_print_with(
         },
         content,
     )
-    .await
+    .await?;
+    if let Some(w) = multipage_warning {
+        resp.warnings.insert(0, w);
+    }
+    Ok(resp)
 }
 
 /// Run a row the worker already claimed (`queued` → `printing`) — the P3
@@ -975,6 +1023,14 @@ pub async fn run_claimed_job(
         }
     }
 
+    // The retry prints the same document to the same head: probe the PDF
+    // again, so the paper and the multi-page warning match a fresh print.
+    let pdf_probe = if let Some(p) = req.pdf.as_deref().filter(|p| !p.is_empty()) {
+        Some(probe_pdf_bytes(p).await)
+    } else {
+        None
+    };
+
     let content = match replay {
         Some(rendered) => {
             // A replay prints already-laid-out HTML; design equals paper so
@@ -996,7 +1052,7 @@ pub async fn run_claimed_job(
                 render_template: false,
             }
         }
-        None => match resolve_content(db, &req) {
+        None => match resolve_content(db, &req, pdf_probe.as_ref()) {
             Ok(c) => c,
             Err(e) => {
                 let msg = e.to_string();
@@ -1022,7 +1078,11 @@ pub async fn run_claimed_job(
         },
     };
 
-    run_stages(
+    // The retry prints the same document to the same head, so the
+    // multi-page warning rides its response too.
+    let multipage_warning = multi_page_pdf_warning(db, &req, pdf_probe.as_ref());
+
+    let mut resp = run_stages(
         cache_dir,
         db,
         queue,
@@ -1034,7 +1094,11 @@ pub async fn run_claimed_job(
         },
         content,
     )
-    .await
+    .await?;
+    if let Some(w) = multipage_warning {
+        resp.warnings.insert(0, w);
+    }
+    Ok(resp)
 }
 
 /// The document a job prints: markup, stylesheet, page size — plus which
@@ -1090,9 +1154,119 @@ struct JobRun {
     started: Instant,
 }
 
+/// What the pipeline knows about a job's PDF before the job row exists:
+/// the first page's size in millimetres and the total page count. Each
+/// field is `None` when it could not be read — unreadable document, or the
+/// engine unavailable — and the fallbacks apply exactly as before (the
+/// printer's stored media width, then A4; no multi-page warning).
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct PdfProbe {
+    pub(crate) size_mm: Option<(f64, f64)>,
+    pub(crate) page_count: Option<u32>,
+}
+
+impl PdfProbe {
+    fn none() -> Self {
+        Self::default()
+    }
+}
+
+/// The document's first-page size and page count from the bundled PDFium
+/// (see [`crate::render::pdfium::pdf_page_size_mm`] /
+/// [`crate::render::pdfium::pdf_page_count`]). Synchronous: the engine is
+/// a C library, so callers run it off the async executor.
+#[cfg(not(target_os = "android"))]
+fn pdf_probe_sync(pdf: &[u8]) -> PdfProbe {
+    PdfProbe {
+        size_mm: crate::render::pdfium::pdf_page_size_mm(pdf),
+        page_count: crate::render::pdfium::pdf_page_count(pdf),
+    }
+}
+
+/// Probe a job's PDF before `begin_job`: the paper the render stage will
+/// use and the multi-page warning both read the answer, so the job row
+/// records the probed paper. A failed probe is `none()` — the A4 /
+/// media-width fallbacks apply, exactly today's behavior for an
+/// unreadable document.
+async fn probe_pdf_bytes(pdf: &[u8]) -> PdfProbe {
+    // The bundled PDFium in a blocking task (non-Android): the engine is
+    // a C library and must not sit on the async executor.
+    #[cfg(not(target_os = "android"))]
+    let probe = {
+        let pdf = pdf.to_vec();
+        tokio::task::spawn_blocking(move || pdf_probe_sync(&pdf))
+            .await
+            .unwrap_or_else(|_| PdfProbe::none())
+    };
+
+    // Android: the platform's own PDFium port (`PdfRenderer`) answers
+    // through the plugin — no bitmap render, so a fraction of the raster
+    // cost. The `ANDROID_APP` handle is registered at app setup; before
+    // that, the probe is `none()` and the fallbacks apply.
+    #[cfg(target_os = "android")]
+    let probe = {
+        use base64::Engine as _;
+        use tauri_plugin_android_print::AndroidPrintExt;
+
+        let Some(app) = crate::render::android_app() else {
+            tracing::warn!("PDF probe skipped: the Android render bridge is not ready yet");
+            return PdfProbe::none();
+        };
+        let payload = tauri_plugin_android_print::PdfProbeRequest {
+            pdf_base64: base64::engine::general_purpose::STANDARD.encode(pdf),
+        };
+        match tokio::task::spawn_blocking(move || app.android_print().probe_pdf(payload))
+            .await
+            .ok()
+            .and_then(|r| r.ok())
+        {
+            Some(res) => PdfProbe {
+                size_mm: Some((res.page_width_mm, res.page_height_mm)),
+                page_count: Some(res.page_count),
+            },
+            None => {
+                tracing::warn!("PDF probe failed on Android; the fallback paper sizes apply");
+                PdfProbe::none()
+            }
+        }
+    };
+    probe
+}
+
+/// Pre-flight warning (production-correctness #3): a multi-page PDF for a
+/// command-language head prints only its first page — the deliberate
+/// single-label behavior. The page count is probed before `begin_job` (in
+/// [`probe_pdf_bytes`], passed in as `probe`), so the warning rides the
+/// response up front; the print itself proceeds. Pdf-language printers
+/// take the whole document and are exempt; an unknown printer resolves to
+/// Pdf there, so it is exempt too. `probe` is `None` when the request
+/// carries no (non-empty) PDF.
+fn multi_page_pdf_warning(
+    db: &DbState,
+    req: &PrintRequest,
+    probe: Option<&PdfProbe>,
+) -> Option<String> {
+    let language = lookup_printer(db, &req.printer_name)
+        .as_ref()
+        .map_or(crate::transport::PrinterLanguage::Pdf, |p| {
+            crate::transport::parse_printer_language(&p.language)
+        });
+    if matches!(language, crate::transport::PrinterLanguage::Pdf) {
+        return None;
+    }
+    let pages = probe.and_then(|p| p.page_count)?;
+    (pages > 1).then(|| format!("The PDF has {pages} pages; only the first page will be printed."))
+}
+
 /// Step 1: the document to print — the pinned template version's HTML and
 /// CSS, or the request's own HTML — plus the page size it prints at.
-fn resolve_content(db: &DbState, req: &PrintRequest) -> AppResult<ResolvedContent> {
+/// `probe` carries the PDF geometry [`probe_pdf_bytes`] read before
+/// `begin_job`; `None` when the request has no (non-empty) PDF.
+fn resolve_content(
+    db: &DbState,
+    req: &PrintRequest,
+    probe: Option<&PdfProbe>,
+) -> AppResult<ResolvedContent> {
     let (html, css, design_w, design_h, tpl_orientation) = match req.template_id {
         Some(tid) => {
             let guard = db
@@ -1104,10 +1278,12 @@ fn resolve_content(db: &DbState, req: &PrintRequest) -> AppResult<ResolvedConten
         }
         None => {
             // A PDF-input job has no design size; the best guess at its
-            // paper is the printer's stored media width (label printers
-            // record their label width there). Height has no stored
-            // column — a caller that needs a specific label height sends
-            // `page_height_mm`.
+            // paper is the PDF's own page size (probed before `begin_job`,
+            // passed in as `probe`), then the printer's stored media width
+            // (label printers record their label width there), then A4.
+            // Reading the PDF's page size keeps a label PDF from being
+            // rasterized at the A4 fallback (wrong size / clipped).
+            let pdf_size = probe.and_then(|p| p.size_mm);
             let row_w = req
                 .pdf
                 .as_ref()
@@ -1121,8 +1297,13 @@ fn resolve_content(db: &DbState, req: &PrintRequest) -> AppResult<ResolvedConten
             (
                 req.html.clone(),
                 String::new(),
-                req.page_width_mm.or(row_w).unwrap_or(DEFAULT_PAPER_W_MM),
-                req.page_height_mm.unwrap_or(DEFAULT_PAPER_H_MM),
+                req.page_width_mm
+                    .or_else(|| pdf_size.map(|(w, _)| w))
+                    .or(row_w)
+                    .unwrap_or(DEFAULT_PAPER_W_MM),
+                req.page_height_mm
+                    .or_else(|| pdf_size.map(|(_, h)| h))
+                    .unwrap_or(DEFAULT_PAPER_H_MM),
                 None,
             )
         }
@@ -1555,6 +1736,7 @@ async fn run_stages(
     // printer gets its first page rasterised at its dot dimensions, then
     // the identical encoder the HTML path uses.
     let tspl_tuning = printer.as_ref().map(|p| p.tspl).unwrap_or_default();
+    let escpos_tuning = printer.as_ref().map(|p| p.escpos).unwrap_or_default();
     let sheet_refusal = if req.pdf.as_ref().is_some_and(|p| !p.is_empty()) {
         None
     } else {
@@ -1578,7 +1760,7 @@ async fn run_stages(
                     dpi,
                     printer.as_ref().and_then(|p| p.label_gap_mm),
                     &tspl_tuning,
-                    &mut warnings,
+                    &escpos_tuning,
                 )
                 .await
             }
@@ -1693,6 +1875,7 @@ async fn run_stages(
                                 dpi,
                                 printer.as_ref().and_then(|p| p.label_gap_mm),
                                 &tspl_tuning,
+                                &escpos_tuning,
                             )
                             .await
                             .map(|(b, m)| (b, m.to_string()))
@@ -1979,7 +2162,8 @@ async fn run_stages(
 /// `language` is the row-resolved language the caller already computed —
 /// unknown printers fall back to Pdf there, so a PDF job for them is a
 /// clean passthrough. Only the first page of a multi-page document
-/// prints; the page count comes back from the rasterizer for the warning.
+/// prints; the pre-flight (`multi_page_pdf_warning`) already told the
+/// caller before the job row existed.
 #[allow(clippy::too_many_arguments)]
 async fn render_pdf_input(
     pdf: &[u8],
@@ -1990,7 +2174,7 @@ async fn render_pdf_input(
     dpi: u32,
     label_gap_mm: Option<f64>,
     tspl: &crate::transport::label_langs::tspl::TsplTuning,
-    warnings: &mut Vec<String>,
+    escpos: &crate::transport::escpos::EscPosTuning,
 ) -> anyhow::Result<(Vec<u8>, String)> {
     match language {
         crate::transport::PrinterLanguage::Pdf => {
@@ -2006,12 +2190,7 @@ async fn render_pdf_input(
                 crate::render::raster::raster_width_dots(lang, paper_w_mm, dpi),
                 crate::render::raster::dots_for_mm(paper_h_mm, dpi),
             );
-            let (raster, page_count) = renderer.rasterize_pdf(pdf, w_px, h_px).await?;
-            if page_count > 1 {
-                warnings.push(format!(
-                    "The PDF has {page_count} pages; only the first page was printed."
-                ));
-            }
+            let (raster, _page_count) = renderer.rasterize_pdf(pdf, w_px, h_px).await?;
             crate::transport::encode_for_language_tuned(
                 lang,
                 &raster,
@@ -2020,6 +2199,7 @@ async fn render_pdf_input(
                 dpi,
                 label_gap_mm,
                 tspl,
+                escpos,
             )
             .map(|(b, m)| (b, m.to_string()))
             .map_err(anyhow::Error::msg)
@@ -2044,6 +2224,9 @@ pub struct StoredPrinter {
     /// TSPL darkness, speed and media type from the row's
     /// `default_settings_json`; defaults send nothing extra.
     pub tspl: crate::transport::label_langs::tspl::TsplTuning,
+    /// ESC/POS raster band height from the row's `default_settings_json`;
+    /// the default is the built-in 256 rows.
+    pub escpos: crate::transport::escpos::EscPosTuning,
     /// Driverless Bluetooth pacing from the row's
     /// `default_settings_json`; defaults are the built-in pace.
     pub bluetooth: crate::transport::BluetoothDelivery,
@@ -2085,6 +2268,9 @@ pub fn lookup_printer(db: &DbState, name: &str) -> Option<StoredPrinter> {
                 skip_tls_verification: r.get(8)?,
                 via_driver: r.get(9)?,
                 tspl: crate::transport::label_langs::tspl::TsplTuning::from_settings_json(
+                    r.get::<_, Option<String>>(10)?.as_deref(),
+                ),
+                escpos: crate::transport::escpos::EscPosTuning::from_settings_json(
                     r.get::<_, Option<String>>(10)?.as_deref(),
                 ),
                 bluetooth: crate::transport::BluetoothDelivery::from_settings_json(
@@ -2244,7 +2430,7 @@ pub(crate) fn begin_job(
         ],
     ) {
         Ok(_) => Ok(conn.last_insert_rowid()),
-        // The unique index on `idempotency_key` makes this insert the atomic
+        // The unique index on `(requested_by_device_id, idempotency_key)` makes this insert the atomic
         // reservation of the key (P12): two simultaneous requests with one
         // key insert once, so they print once — and both record the key
         // before any send. Only the key can collide (the id is
@@ -2256,8 +2442,10 @@ pub(crate) fn begin_job(
         {
             let existing: Option<i64> = req.idempotency_key.as_ref().and_then(|key| {
                 conn.query_row(
-                    "SELECT id FROM print_jobs WHERE idempotency_key = ?1",
-                    [key],
+                    "SELECT id FROM print_jobs
+                     WHERE idempotency_key = ?1
+                       AND COALESCE(requested_by_device_id, '') = COALESCE(?2, '')",
+                    rusqlite::params![key, req.requested_by_device_id],
                     |r| r.get(0),
                 )
                 .ok()
@@ -3240,5 +3428,94 @@ mod tests {
         assert!(is_sensitive_key("password"));
         assert!(!is_sensitive_key("order_id"));
         assert!(!is_sensitive_key("name"));
+    }
+
+    #[test]
+    fn multipage_pdf_warns_upfront_for_command_heads_only() {
+        use crate::db::Database;
+        use crate::render::pdfium::{minimal_pdf, two_page_pdf};
+        use std::sync::{Arc, Mutex};
+
+        // Skip when the PDFium engine cannot be loaded (same condition as the
+        // pdfium tests): with no engine the probe reads no count and no
+        // warning is possible.
+        if crate::render::pdfium::pdf_page_count(&two_page_pdf()).is_none() {
+            return;
+        }
+
+        let path =
+            std::env::temp_dir().join(format!("printninja_multipage_{}.db", uuid::Uuid::new_v4()));
+        let db = Arc::new(Mutex::new(
+            Database::open(&format!("sqlite:{}", path.display())).expect("open db"),
+        ));
+        {
+            let guard = db.lock().unwrap();
+            let conn = guard.connection();
+            conn.execute(
+                "INSERT INTO printers (name, type, address, language) \
+                 VALUES ('Label','usb','usb0','tspl')",
+                [],
+            )
+            .expect("insert tspl printer");
+            conn.execute(
+                "INSERT INTO printers (name, type, address, language) \
+                 VALUES ('Desk','ipp','1.2.3.4','pdf')",
+                [],
+            )
+            .expect("insert pdf printer");
+        }
+
+        // The pipeline probes a non-empty PDF before `begin_job`; mirror
+        // that here with the bundled PDFium directly (this test target
+        // has it, unlike Android).
+        fn probe_for(req: &PrintRequest) -> Option<PdfProbe> {
+            req.pdf
+                .as_deref()
+                .filter(|p| !p.is_empty())
+                .map(pdf_probe_sync)
+        }
+
+        // Two-page PDF for a command-language head → the up-front warning.
+        let mut r = req();
+        r.printer_name = "Label".into();
+        r.pdf = Some(two_page_pdf());
+        assert_eq!(
+            multi_page_pdf_warning(&db, &r, probe_for(&r).as_ref()),
+            Some("The PDF has 2 pages; only the first page will be printed.".into())
+        );
+
+        // A Pdf-language printer takes the whole document → no warning.
+        let mut r = req();
+        r.printer_name = "Desk".into();
+        r.pdf = Some(two_page_pdf());
+        assert_eq!(
+            multi_page_pdf_warning(&db, &r, probe_for(&r).as_ref()),
+            None
+        );
+
+        // Single-page PDF → nothing to warn about.
+        let mut r = req();
+        r.printer_name = "Label".into();
+        r.pdf = Some(minimal_pdf());
+        assert_eq!(
+            multi_page_pdf_warning(&db, &r, probe_for(&r).as_ref()),
+            None
+        );
+
+        // Unknown printer resolves to Pdf → exempt.
+        let mut r = req();
+        r.printer_name = "Ghost".into();
+        r.pdf = Some(two_page_pdf());
+        assert_eq!(
+            multi_page_pdf_warning(&db, &r, probe_for(&r).as_ref()),
+            None
+        );
+
+        // No pdf in the request → no warning.
+        let r = req();
+        assert_eq!(
+            multi_page_pdf_warning(&db, &r, probe_for(&r).as_ref()),
+            None
+        );
     }
 }

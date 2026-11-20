@@ -567,11 +567,13 @@ const en = {
     paper_a4: "A4 (210 × 297 mm)",
     paper_letter: "US Letter (216 × 279 mm)",
     paper_photo: "4 × 6 in (100 × 150 mm)",
+    paper_label40: "40 mm label (40 × 30 mm)",
+    paper_label58: "58 mm receipt (58 × 40 mm)",
+    paper_label80: "80 mm receipt (80 × 60 mm)",
     paper_custom: "Custom…",
     paper_width: "Width (mm)",
     paper_height: "Height (mm)",
     paper_note: "Design {{dw}} × {{dh}} mm → paper {{pw}} × {{ph}} mm",
-    paper_via_pc: "Print via PC uses the template’s own paper size.",
     paper_mismatch_template:
       "Template is {{tw}} × {{th}} mm; this printer uses {{pw}} mm paper.",
     paper_mismatch_paper:
@@ -655,6 +657,9 @@ const en = {
     bt_chunk_pause_ms: "Bluetooth write pause (ms)",
     bt_chunk_pause_hint:
       "Driverless Bluetooth only: the pause between writes, giving a slow printer time to keep up. Blank keeps the built-in default (50).",
+    escpos_band_rows: "ESC/POS image band height (rows)",
+    escpos_band_rows_hint:
+      "ESC/POS only: how many image rows go in each raster command. Blank keeps the built-in default (256). If a test page prints a couple of stray characters instead of the image, try 64 or 24.",
     ipp_signin: "Sign-in (optional)",
     ipp_username: "Username",
     ipp_password: "Password",
@@ -662,6 +667,8 @@ const en = {
       "IPP sign-in user. Blank uses the built-in PrintNinja identity.",
     ipp_password_hint:
       "Sent as HTTP Basic authentication on every request. Blank sends no authentication.",
+    ipp_password_hint_keep:
+      "A password is saved on this printer. Leave blank to keep it, or enter a new one to replace it.",
     ipp_skip_cert: "Skip certificate verification",
     ipp_skip_cert_hint:
       "https:// endpoints only. Lets a self-signed or otherwise unverifiable certificate through.",
@@ -815,6 +822,10 @@ const en = {
     err_bt_pause_int: "Bluetooth write pause must be a whole number",
     err_bt_pause_min: "Bluetooth write pause must be at least 0",
     err_bt_pause_max: "Bluetooth write pause must be at most 2000",
+    err_escpos_band_number: "Image band height must be a number",
+    err_escpos_band_int: "Image band height must be a whole number",
+    err_escpos_band_min: "Image band height must be at least 8",
+    err_escpos_band_max: "Image band height must be at most 2303",
     err_invalid: "Invalid printer",
     lang_pdf: "PDF",
     lang_escpos: "ESC/POS (receipt)",

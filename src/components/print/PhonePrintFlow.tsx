@@ -1026,35 +1026,27 @@ function LayoutOptionsSheet({
         </DialogHeader>
         <div className="flex-1 overflow-y-auto p-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
           <div className="space-y-4">
-            {viaPc ? (
-              <p className="text-xs text-muted-foreground">
-                {t("print.paper_via_pc")}
-              </p>
-            ) : (
-              <>
-                <PaperSizeFields
-                  ids={{
-                    select: "phone-paper",
-                    width: "phone-paper-w",
-                    height: "phone-paper-h",
-                  }}
-                  layout="stack"
-                  paperPreset={paperPreset}
-                  seedW={effPaperW}
-                  seedH={effPaperH}
-                  designW={designW}
-                  designH={designH}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t("print.paper_note", {
-                    dw: designW,
-                    dh: designH,
-                    pw: previewPaperW,
-                    ph: previewPaperH,
-                  })}
-                </p>
-              </>
-            )}
+            <PaperSizeFields
+              ids={{
+                select: "phone-paper",
+                width: "phone-paper-w",
+                height: "phone-paper-h",
+              }}
+              layout="stack"
+              paperPreset={paperPreset}
+              seedW={effPaperW}
+              seedH={effPaperH}
+              designW={designW}
+              designH={designH}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("print.paper_note", {
+                dw: designW,
+                dh: designH,
+                pw: previewPaperW,
+                ph: previewPaperH,
+              })}
+            </p>
 
             <div className="space-y-1.5">
               <Label htmlFor="phone-orientation">

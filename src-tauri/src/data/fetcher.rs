@@ -37,20 +37,26 @@ impl DataFetcher {
 
     pub async fn fetch(&self, options: &FetchOptions) -> Result<serde_json::Value> {
         // Redirects are followed by hand so every hop goes through
-        // `validate_url`: an automatic policy would happily follow a
+        // `validate_and_pin`: an automatic policy would happily follow a
         // permitted host's redirect into the LAN (P13).
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(options.timeout_secs))
-            .redirect(reqwest::redirect::Policy::none())
-            .build()?;
-
         let mut url = reqwest::Url::parse(&options.url)?;
         let mut method = normalize_method(&options.method);
 
         // One initial request plus up to five redirects, the same limit the
         // old automatic policy had.
         for _hop in 0..=5 {
-            validate_url(&url, self.allow_private).await?;
+            // Validate first, then pin: this hop's client connects to
+            // exactly the addresses vetted above, so a DNS answer that
+            // changes before the connect (rebinding) cannot steer the
+            // request to an address the guard refused.
+            let pin = validate_and_pin(&url, self.allow_private).await?;
+            let mut builder = reqwest::Client::builder()
+                .timeout(Duration::from_secs(options.timeout_secs))
+                .redirect(reqwest::redirect::Policy::none());
+            if let Some((host, addrs)) = &pin {
+                builder = builder.resolve_to_addrs(host, addrs);
+            }
+            let client = builder.build()?;
 
             let mut request = client.request(method.clone(), url.clone());
             if let Some(headers) = &options.headers {
@@ -130,11 +136,15 @@ impl DataFetcher {
 /// `data_url` is untrusted input: a deep link (`printninja://print?url=…`)
 /// or a REST caller can set it, so without this a print probes localhost.
 ///
-/// Known limit: reqwest re-resolves the name when it connects, so a DNS
-/// answer that changes between this check and the connect (DNS rebinding)
-/// is not caught. Pinning the checked IP for the connection would close
-/// that; it is outside this plan's scope.
-async fn validate_url(url: &reqwest::Url, allow_private: bool) -> Result<()> {
+/// When the host is a domain name, the vetted addresses are returned so the
+/// caller can pin them to the client with `resolve_to_addrs`: the connect
+/// then uses exactly these addresses, so a DNS rebinding between this check
+/// and the connect cannot steer the fetch at an address we refused. IP
+/// literals (and `allow_private` callers) need no pinning.
+async fn validate_and_pin(
+    url: &reqwest::Url,
+    allow_private: bool,
+) -> Result<Option<(String, Vec<std::net::SocketAddr>)>> {
     match url.scheme() {
         "http" | "https" => {}
         other => {
@@ -144,13 +154,13 @@ async fn validate_url(url: &reqwest::Url, allow_private: bool) -> Result<()> {
         }
     }
     if allow_private {
-        return Ok(());
+        return Ok(None);
     }
 
     // `host_str()` brackets IPv6 literals ("[::1]"), which DNS cannot parse.
-    // An IP literal also needs no resolution: the address *is* the
-    // destination, so the policy check sees exactly what will be connected
-    // to. Only real domain names go through DNS.
+    // An IP literal also needs no resolution or pinning: the address *is*
+    // the destination, so the policy check sees exactly what will be
+    // connected to. Only real domain names go through DNS.
     let host = url
         .host_str()
         .ok_or_else(|| anyhow::anyhow!("Data URL has no host"))?;
@@ -165,32 +175,30 @@ async fn validate_url(url: &reqwest::Url, allow_private: bool) -> Result<()> {
                 "Refused data URL {url}: '{host}' targets {ip} (loopback, link-local or private)"
             ));
         }
-        return Ok(());
+        return Ok(None);
     }
 
     let port = url.port_or_known_default().unwrap_or(80);
-    let addrs: Vec<std::net::IpAddr> = tokio::net::lookup_host((bare, port))
-        .await?
-        .map(|a| a.ip())
-        .collect();
+    let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host((bare, port)).await?.collect();
     if addrs.is_empty() {
         return Err(anyhow::anyhow!("Data URL host '{host}' does not resolve"));
     }
-    for ip in addrs {
-        if is_forbidden_addr(ip) {
+    for addr in &addrs {
+        if is_forbidden_addr(addr.ip()) {
             return Err(anyhow::anyhow!(
-                "Refused data URL {url}: '{host}' resolves to {ip} (loopback, link-local or private)"
+                "Refused data URL {url}: '{host}' resolves to {} (loopback, link-local or private)",
+                addr.ip()
             ));
         }
     }
-    Ok(())
+    Ok(Some((host.to_string(), addrs)))
 }
 
 /// Addresses a print's data never legitimately comes from: loopback,
 /// link-local (which includes the cloud metadata endpoint 169.254.169.254),
 /// RFC1918 private, carrier-grade NAT, unique-local (fc00::/7), unspecified
 /// and multicast.
-fn is_forbidden_addr(ip: IpAddr) -> bool {
+pub(crate) fn is_forbidden_addr(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
             v4.is_loopback()
@@ -519,7 +527,7 @@ mod tests {
             "ftp://example.com/x",
             "gopher://example.com/7",
         ] {
-            let err = validate_url(&reqwest::Url::parse(url).unwrap(), false)
+            let err = validate_and_pin(&reqwest::Url::parse(url).unwrap(), false)
                 .await
                 .unwrap_err()
                 .to_string();
@@ -538,7 +546,7 @@ mod tests {
             "http://192.168.1.10/x",
             "https://[fd00::1]/x",
         ] {
-            let err = validate_url(&reqwest::Url::parse(url).unwrap(), false)
+            let err = validate_and_pin(&reqwest::Url::parse(url).unwrap(), false)
                 .await
                 .unwrap_err()
                 .to_string();
@@ -578,7 +586,7 @@ mod tests {
             .unwrap();
         assert_eq!(rel.as_str(), "http://example.com/a/next");
 
-        // Every hop — wherever it points — goes through validate_url.
+        // Every hop — wherever it points — goes through validate_and_pin.
         let cross = redirect_target(found, Some("http://other.example/z"), &base)
             .unwrap()
             .unwrap();

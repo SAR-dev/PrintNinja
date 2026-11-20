@@ -49,6 +49,20 @@ fn pairing_unavailable() -> Response {
         .into_response()
 }
 
+/// Failed claims per source address. Separate from the token gates' budget
+/// (`render_share::AUTH_FAILURES`): guessing pairing codes must not block a
+/// paired phone's own requests, nor the reverse.
+static CLAIM_FAILURES: super::render_share::FailureTracker =
+    super::render_share::FailureTracker::new();
+
+fn claim_throttled_response() -> Response {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(serde_json::json!({ "error": "too many failed pairing attempts; wait a minute and try again" })),
+    )
+        .into_response()
+}
+
 /// The caller's IP must be private or loopback. The server runs with
 /// `into_make_service_with_connect_info` (see `launch_server`), so this
 /// is always present in production; tests insert a loopback address.
@@ -150,6 +164,12 @@ pub struct ClaimRequest {
     /// identifiers, not secrets — the one-time code still does the auth.
     pub account_id: Option<String>,
     pub service_url: Option<String>,
+    /// Re-pair proof (anti-squatting): the token the claimant already
+    /// holds for `device_id`. Required when the id already has a
+    /// `paired_devices` row — compared hashed, never stored. Old phones
+    /// omit it; a fresh claim sends an empty `device_id` and no proof.
+    #[serde(default)]
+    pub previous_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -161,6 +181,10 @@ pub struct ClaimResponse {
     /// Shown once. The PC stores only its SHA-256.
     pub token: String,
     pub paired_at: String,
+    /// The id the row was written under. Fresh claims (empty
+    /// `device_id`) get a PC-minted UUID here; the phone stores it and
+    /// re-pairs with it, proving it via `previous_token`.
+    pub device_id: String,
 }
 
 /// One guest invite, as stored: the code itself never lands in the DB.
@@ -324,9 +348,45 @@ fn claim_with_invite(
             port,
             token,
             paired_at,
+            device_id: device_id.to_string(),
         }),
     )
         .into_response()
+}
+
+/// A squat attempt: the claim carries an id that already has a
+/// `paired_devices` row but no (or a wrong) proof of its current token.
+enum GateError {
+    Conflict,
+    Db(rusqlite::Error),
+}
+
+/// Re-writing an existing row requires proof of that row's current
+/// token, so a holder of a valid code or invite cannot take over another
+/// device's id (and the job history stamped with it). A fresh id, or one
+/// with no row yet, passes. `previous_token` is compared through
+/// [`super::pair_code::token_hash`] — it is never stored.
+fn device_id_gate(
+    conn: &rusqlite::Connection,
+    device_id: &str,
+    previous_token: Option<&str>,
+) -> Result<(), GateError> {
+    let stored = match conn.query_row(
+        "SELECT token_hash FROM paired_devices WHERE id = ?1",
+        [device_id],
+        |r| r.get::<_, String>(0),
+    ) {
+        Ok(hash) => Some(hash),
+        Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Err(e) => return Err(GateError::Db(e)),
+    };
+    let Some(stored) = stored else {
+        return Ok(());
+    };
+    match previous_token.filter(|t| !t.is_empty()) {
+        Some(previous) if super::pair_code::token_hash(previous) == stored => Ok(()),
+        _ => Err(GateError::Conflict),
+    }
 }
 
 /// Claim the open window with the 8-character code. Mints a per-device
@@ -347,6 +407,10 @@ pub async fn claim(
         )
             .into_response();
     }
+    let caller_ip = addr.0.ip();
+    if CLAIM_FAILURES.throttled(&caller_ip) {
+        return claim_throttled_response();
+    }
     if req.protocol != Some(PROTOCOL_VERSION) {
         return (
             StatusCode::BAD_REQUEST,
@@ -363,17 +427,18 @@ pub async fn claim(
         if !has_window {
             return pairing_unavailable();
         }
+        CLAIM_FAILURES.note(&caller_ip);
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({ "error": "pairing code must be 8 characters" })),
         )
             .into_response();
     }
-    let device_id = req.device_id.unwrap_or_default().trim().to_string();
-    if device_id.is_empty() || device_id.len() > 128 {
+    let mut device_id = req.device_id.unwrap_or_default().trim().to_string();
+    if device_id.len() > 128 {
         return (
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "error": "device_id is required" })),
+            Json(serde_json::json!({ "error": "device_id must be at most 128 characters" })),
         )
             .into_response();
     }
@@ -391,6 +456,54 @@ pub async fn claim(
     };
     let platform = req.platform.unwrap_or_default();
     let platform: String = platform.trim().chars().take(32).collect();
+
+    // Anti-squatting gate: a claim that re-writes an existing row must
+    // prove that row's current token. Runs before the invite lookup and
+    // the window claim, so a squat burns neither a one-time invite nor
+    // the one-time code. Old phones re-pairing a PC that already knows
+    // them arrive without proof and get the 409 (update the phone, or
+    // remove the paired row on the PC).
+    if !device_id.is_empty() {
+        let gate = match state.db.lock() {
+            Ok(guard) => device_id_gate(
+                guard.connection(),
+                &device_id,
+                req.previous_token.as_deref(),
+            ),
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": "database unavailable" })),
+                )
+                    .into_response();
+            }
+        };
+        if let Err(GateError::Conflict) = gate {
+            CLAIM_FAILURES.note(&caller_ip);
+            return (
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({
+                    "error": "this device id is already paired to another device; re-pair from that device, or remove it from the PC's paired devices first",
+                    "code": "device_id_conflict",
+                })),
+            )
+                .into_response();
+        }
+        if let Err(GateError::Db(e)) = gate {
+            tracing::warn!("device_id gate failed: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "database unavailable" })),
+            )
+                .into_response();
+        }
+    }
+    if device_id.is_empty() {
+        // Fresh device: the PC issues the id, so no two phones can
+        // collide on one, and the response returns it for the phone to
+        // store and re-pair with.
+        device_id = uuid::Uuid::new_v4().to_string();
+    }
 
     // Guest invites (ARCHITECTURE §9) are tried before the window:
     // they work with no window open, and a miss falls through to the
@@ -410,6 +523,8 @@ pub async fn claim(
         .trim_end_matches('/')
         .to_string();
     if phone_account.is_empty() {
+        // A miss on every invite is a failed guess at a code.
+        CLAIM_FAILURES.note(&caller_ip);
         // No account, no invite match: the code is mistyped, revoked, or
         // the owner's 90-second code, which guests can never use. Say so
         // instead of sending a guest to sign in — that fixes nothing.
@@ -475,6 +590,7 @@ pub async fn claim(
                 .into_response();
         }
         Err(ClaimError::Wrong { left }) => {
+            CLAIM_FAILURES.note(&caller_ip);
             return (
                 StatusCode::UNAUTHORIZED,
                 Json(serde_json::json!({ "error": "wrong pairing code", "attempts_left": left })),
@@ -482,6 +598,7 @@ pub async fn claim(
                 .into_response();
         }
         Err(ClaimError::Locked) => {
+            CLAIM_FAILURES.note(&caller_ip);
             // Close a locked window: only the PC's user can open a new one.
             if let Ok(mut guard) = state.window.lock() {
                 *guard = None;
@@ -493,6 +610,7 @@ pub async fn claim(
                 .into_response();
         }
         Err(ClaimError::BadFormat) => {
+            CLAIM_FAILURES.note(&caller_ip);
             return (
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({ "error": "pairing code must be 8 characters from ABCDEFGHJKLMNPQRSTUVWXYZ23456789" })),
@@ -584,6 +702,7 @@ pub async fn claim(
             port,
             token,
             paired_at,
+            device_id,
         }),
     )
         .into_response()

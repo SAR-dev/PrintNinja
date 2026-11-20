@@ -297,8 +297,25 @@ export const printerFormSchema = z
       0,
       2000,
     ),
+    // ESC/POS raster band height: rows per `GS v 0` command. Blank means
+    // the built-in 256 rows. Some compact printers print stray characters
+    // instead of the image when a band is too tall, so a shorter band is
+    // the first thing to try. Only meaningful for an ESC/POS row, but
+    // accepting it for other languages keeps one rulebook. The bounds
+    // mirror the Rust `EscPosTuning::validate()`.
+    escpos_band_rows: blankableFinitePositiveInt(
+      "printers.err_escpos_band_number",
+      "printers.err_escpos_band_int",
+      "printers.err_escpos_band_min",
+      "printers.err_escpos_band_max",
+      8,
+      2303,
+    ),
     // IPP sign-in: blank user means the built-in `PrintNinja` identity,
-    // blank password means no HTTP authentication at all.
+    // blank password means no HTTP authentication at all. On an edit the
+    // field starts blank and is never prefilled, so the hook omits
+    // `password` (undefined) when it was left untouched — the backend
+    // keeps the stored password; a touched blank clears it.
     username: z.string().trim().max(200).optional(),
     password: z.string().max(200).optional(),
     skip_tls_verification: z.boolean().optional(),
@@ -337,6 +354,7 @@ export interface LoosePrinterForm {
   label_gap_mm: string;
   bt_chunk_bytes: string;
   bt_chunk_pause_ms: string;
+  escpos_band_rows: string;
   username: string;
   password: string;
   skip_tls_verification: boolean;
