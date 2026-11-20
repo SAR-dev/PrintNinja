@@ -27,9 +27,6 @@ Pair it in your device's Bluetooth settings, then add it in PrintNinja as **Blue
 - **A few characters, then nothing:** the printer's head is slower than the Bluetooth pipe and is dropping the overflow. PrintNinja already spaces the write out in small chunks with a short pause between them; if your model still drops bytes, open the printer, go to **Advanced**, and make it slower still — a smaller **chunk size** and/or a longer **write pause** (leaving a field blank returns it to the built-in default).
 - **Everything is there but cut off / squeezed:** the **paper width** in PrintNinja does not match the paper in the printer — set it to the width you loaded (54 mm for a 2-inch roll, 80 mm for a 3-inch roll) and re-test.
 
-**🏷️ A Toshiba B-FP2D says "sent" but prints nothing with ZPL.**
-The B-FP2D's own language is **TPCL** (it ships that way); ZPL is only an *emulation* it understands when its command setting is switched to it. While the printer is in TPCL or ESC/POS mode it silently discards every ZPL byte, so PrintNinja reports success and the label stays blank. On the printer, open system mode and set **CMD SETTING** to **Z MODE** (the other choices are TPCL, TPCL1, C Mode for CPCL, ESC/POS and S Mode for SBPL), then restart it. In PrintNinja keep **Language** on **ZPL** and set the paper width to 54 mm or less, which is the widest the B-FP2D head prints. Run **Test Print** first: it sends one line of ZPL text, so if that prints, the mode is right.
-
 **🧩 I want to use my printer's own driver instead.**
 In **Printers**, edit the printer and turn on **Print through the OS driver**. The printer must already be installed on your computer under the same name. PrintNinja then does exactly that and never switches between methods on its own.
 

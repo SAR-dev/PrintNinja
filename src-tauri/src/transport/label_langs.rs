@@ -158,13 +158,9 @@ pub mod zpl {
     use crate::render::raster::RasterImage;
 
     pub fn init() -> String {
-        "^XA".to_string() // Start format
+        "^XA\n".to_string() // Start format
     }
 
-    /// Commands are sent back to back with no line feeds between them, the
-    /// form every ZPL reference shows. Zebra ignores the whitespace either
-    /// way, but Toshiba's emulation (B-FP2D Z Mode) is not guaranteed to.
-    ///
     /// `^PW` (print width) and `^LL` (label length) come from the job so a
     /// label no longer depends on the size stored in the printer; `^LH0,0`
     /// pins the label home. Darkness (`~SD`) is still left to the printer.
@@ -178,17 +174,17 @@ pub mod zpl {
         let total_bytes = bytes_per_row * image.height;
 
         let mut cmd = String::new();
-        cmd.push_str("^XA"); // Start format
-        cmd.push_str("^MMT"); // Media tracking
-        cmd.push_str(&format!("^PW{}", image.width)); // Print width, dots
+        cmd.push_str("^XA\n"); // Start format
+        cmd.push_str("^MMT\n"); // Media tracking
+        cmd.push_str(&format!("^PW{}\n", image.width)); // Print width, dots
         if label_h_mm > 0.0 {
             cmd.push_str(&format!(
-                "^LL{}",
+                "^LL{}\n",
                 crate::render::raster::dots_for_mm(label_h_mm, dpi)
             )); // Label length, dots
         }
-        cmd.push_str("^LH0,0"); // Label home
-        cmd.push_str("^PR6"); // Print rate
+        cmd.push_str("^LH0,0\n"); // Label home
+        cmd.push_str("^PR6\n"); // Print rate
                                 // Graphic field command
         cmd.push_str(&format!(
             "^FO0,0^GFA,{},{}",
@@ -201,8 +197,8 @@ pub mod zpl {
             cmd.push_str(&format!("{:02X}", byte));
         }
 
-        cmd.push_str("^FS");
-        cmd.push_str("^XZ"); // End format
+        cmd.push_str("^FS\n");
+        cmd.push_str("^XZ\n"); // End format
         cmd
     }
 }
@@ -256,10 +252,10 @@ mod tests {
     fn zpl_sets_width_length_and_home() {
         // 40 x 30 mm at 203 dpi is 320 x 240 dots.
         let zpl = zpl::print_bitmap(&image(320, 240), 40.0, 30.0, 203);
-        assert!(zpl.starts_with("^XA"), "{zpl}");
-        assert!(zpl.contains("^PW320"), "{zpl}");
-        assert!(zpl.contains("^LL240"), "{zpl}");
-        assert!(zpl.contains("^LH0,0"), "{zpl}");
+        assert!(zpl.starts_with("^XA\n"), "{zpl}");
+        assert!(zpl.contains("^PW320\n"), "{zpl}");
+        assert!(zpl.contains("^LL240\n"), "{zpl}");
+        assert!(zpl.contains("^LH0,0\n"), "{zpl}");
         assert!(zpl.contains("^GFA,9600,9600,40,"), "{zpl}");
         assert!(zpl.trim_end().ends_with("^XZ"), "{zpl}");
     }
@@ -268,7 +264,7 @@ mod tests {
     fn zpl_skips_label_length_for_a_zero_height() {
         let zpl = zpl::print_bitmap(&image(16, 2), 40.0, 0.0, 203);
         assert!(!zpl.contains("^LL"), "{zpl}");
-        assert!(zpl.contains("^PW16"), "{zpl}");
+        assert!(zpl.contains("^PW16\n"), "{zpl}");
     }
 
     /// The `EG` header must agree with the data that follows it: width in
