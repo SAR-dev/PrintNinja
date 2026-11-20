@@ -26,6 +26,10 @@ impl<R: Runtime> AndroidPrint<R> {
         self.unavailable("htmlToPdf")
     }
 
+    pub fn probe_pdf(&self, _payload: PdfProbeRequest) -> crate::Result<PdfProbeResponse> {
+        self.unavailable("probePdf")
+    }
+
     pub fn enumerate_usb_printers(&self) -> crate::Result<Vec<UsbPrinter>> {
         self.unavailable("enumerateUsbPrinters")
     }
@@ -56,10 +60,7 @@ impl<R: Runtime> AndroidPrint<R> {
     /// Desktop has no notification shade; the job's outcome is simply
     /// dropped so the caller (which is platform-agnostic) succeeds
     /// everywhere, like the API server state.
-    pub fn post_job_notification(
-        &self,
-        _request: JobNotificationRequest,
-    ) -> crate::Result<()> {
+    pub fn post_job_notification(&self, _request: JobNotificationRequest) -> crate::Result<()> {
         Ok(())
     }
 

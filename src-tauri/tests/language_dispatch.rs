@@ -48,6 +48,9 @@ fn test_raster() -> RasterImage {
 struct StubRenderer {
     raster: RasterImage,
     seen: Arc<Mutex<Option<(usize, usize)>>>,
+    /// The final in-page `.pn-sheet` count the renderer reports: 1, like
+    /// a browser that did not paginate, in the existing tests.
+    sheets: u32,
 }
 
 #[async_trait::async_trait]
@@ -61,9 +64,9 @@ impl JobRenderer for StubRenderer {
         _html: &str,
         w_px: usize,
         h_px: usize,
-    ) -> anyhow::Result<RasterImage> {
+    ) -> anyhow::Result<(RasterImage, u32)> {
         *self.seen.lock().unwrap() = Some((w_px, h_px));
-        Ok(self.raster.clone())
+        Ok((self.raster.clone(), self.sheets))
     }
 }
 
@@ -188,6 +191,7 @@ async fn capture(language: &str) -> (Vec<u8>, Option<(usize, usize)>) {
     let renderer = StubRenderer {
         raster: test_raster(),
         seen: seen.clone(),
+        sheets: 1,
     };
     let res = run_print_with(&cache, &db, &queue, print_request("Thermal"), &renderer)
         .await
@@ -345,6 +349,55 @@ async fn the_raster_is_sized_in_the_printers_own_dots() {
     // 40 mm × 30 mm at 203 dpi = 319.69 × 239.76 → 320 × 240 dots: the
     // browser must be asked for the printer's resolution, not the screen's.
     let (_, seen) = capture("zpl").await;
+    assert_eq!(seen, Some((320, 240)));
+}
+
+// ── Overflow guard (TODO item 1) ────────────────────────────────────────────
+//
+// The static pre-flight count only sees the sheets the layout wrote; the
+// browser's pagination clones more when a design overflows its page. The
+// renderer now reports the final count, and a command-language job that
+// paginated past one sheet is refused instead of truncated.
+
+#[tokio::test]
+async fn command_jobs_are_refused_when_the_browser_paginates() {
+    let db = test_db();
+    let (port, capture) = loopback("zpl").await;
+    seed_printer(&db, "Thermal", "zpl", port);
+    let queue = PrintQueue::new();
+    let cache = cache_dir();
+    // The layout wrote one sheet (zero margins), but the browser paginated
+    // the overflow into a second: only that post-render count can fire the
+    // refusal here.
+    let seen = Arc::new(Mutex::new(None));
+    let renderer = StubRenderer {
+        raster: test_raster(),
+        seen: seen.clone(),
+        sheets: 2,
+    };
+    let res = run_print_with(&cache, &db, &queue, print_request("Thermal"), &renderer)
+        .await
+        .expect("pipeline");
+    assert!(!res.success, "the overflow must be refused, not truncated");
+    assert!(
+        res.error.as_deref().unwrap_or("").contains("2 sheets"),
+        "the refusal must name the browser's sheet count: {:?}",
+        res.error
+    );
+    assert!(seen.lock().unwrap().is_some(), "the render must have run");
+    let bytes = capture.await.expect("capture task");
+    assert!(
+        bytes.is_empty(),
+        "no print bytes may reach the head: {bytes:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_single_sheet_rendered_job_still_prints() {
+    // Pins the guard as a no-op in the common case: a browser that did not
+    // paginate reports 1 and the job goes out.
+    let (bytes, seen) = capture("zpl").await;
+    assert!(bytes.starts_with(b"^XA"), "the job must print: {bytes:?}");
     assert_eq!(seen, Some((320, 240)));
 }
 
@@ -509,6 +562,58 @@ async fn pdf_jobs_warn_when_only_the_first_page_prints() {
     assert!(
         warnings.iter().any(|w| w.contains("3 pages")),
         "a multi-page pdf must warn that only page 1 printed: {warnings:?}"
+    );
+}
+
+/// A PDF-input renderer that records the dot dimensions the pipeline
+/// asked for: the paper geometry the pre-flight probe resolved to, made
+/// visible to the test.
+struct PdfSizeStub {
+    seen: Arc<Mutex<Option<(usize, usize)>>>,
+}
+
+#[async_trait::async_trait]
+impl JobRenderer for PdfSizeStub {
+    async fn render(&self, _: &str, _: f64, _: f64, _: &str) -> anyhow::Result<Vec<u8>> {
+        panic!("a pdf job must never run the HTML renderer");
+    }
+
+    async fn rasterize_pdf(
+        &self,
+        _: &[u8],
+        w_px: usize,
+        h_px: usize,
+    ) -> anyhow::Result<(RasterImage, u32)> {
+        *self.seen.lock().unwrap() = Some((w_px, h_px));
+        Ok((test_raster(), 3))
+    }
+}
+
+#[tokio::test]
+async fn pdf_jobs_rasterize_at_the_probed_page_size_not_a4() {
+    // The fixture's first page is 150 × 200 pt = 52.92 × 70.56 mm. With no
+    // explicit page size in the request, the pre-flight probe — not the A4
+    // fallback, not the 40 mm media width seeded on the row — must set the
+    // paper: at the seeded 203 dpi that is 423 × 564 dots, where the A4
+    // default would ask for 1672 × 2379.
+    let db = test_db();
+    let (port, _capture) = loopback("zpl").await;
+    seed_printer(&db, "Thermal", "zpl", port);
+    let queue = PrintQueue::new();
+    let cache = cache_dir();
+    let seen = Arc::new(Mutex::new(None));
+    let renderer = PdfSizeStub { seen: seen.clone() };
+    let mut req = pdf_request("Thermal", three_page_pdf());
+    req.page_width_mm = None;
+    req.page_height_mm = None;
+    let res = run_print_with(&cache, &db, &queue, req, &renderer)
+        .await
+        .expect("pipeline");
+    assert!(res.success, "job must succeed: {:?}", res.error);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        Some((423, 564)),
+        "a pdf job must rasterize at the document's own page size, not A4"
     );
 }
 

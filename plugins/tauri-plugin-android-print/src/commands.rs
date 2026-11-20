@@ -33,37 +33,27 @@ pub(crate) async fn test_printer<R: Runtime>(
 }
 
 #[command]
-pub(crate) async fn start_background_service<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<bool> {
+pub(crate) async fn start_background_service<R: Runtime>(app: AppHandle<R>) -> Result<bool> {
     app.android_print().start_background_service()
 }
 
 #[command]
-pub(crate) async fn stop_background_service<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<()> {
+pub(crate) async fn stop_background_service<R: Runtime>(app: AppHandle<R>) -> Result<()> {
     app.android_print().stop_background_service()
 }
 
 #[command]
-pub(crate) async fn is_background_service_running<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<bool> {
+pub(crate) async fn is_background_service_running<R: Runtime>(app: AppHandle<R>) -> Result<bool> {
     app.android_print().is_background_service_running()
 }
 
 #[command]
-pub(crate) async fn request_battery_exemption<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<bool> {
+pub(crate) async fn request_battery_exemption<R: Runtime>(app: AppHandle<R>) -> Result<bool> {
     app.android_print().request_battery_exemption()
 }
 
 #[command]
-pub(crate) async fn is_battery_exemption_granted<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<bool> {
+pub(crate) async fn is_battery_exemption_granted<R: Runtime>(app: AppHandle<R>) -> Result<bool> {
     app.android_print().is_battery_exemption_granted()
 }
 
@@ -103,8 +93,6 @@ pub(crate) async fn request_local_network_permission<R: Runtime>(
 // Like the pair above, this settles immediately on the Kotlin side
 // (it just fires an intent), so it needs no `spawn_blocking`.
 #[command]
-pub(crate) async fn open_local_network_settings<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<()> {
+pub(crate) async fn open_local_network_settings<R: Runtime>(app: AppHandle<R>) -> Result<()> {
     app.android_print().open_local_network_settings()
 }

@@ -64,6 +64,26 @@ pub struct PdfToRasterResponse {
     pub page_count: u32,
 }
 
+/// PDF metadata probe on Android: the PDF bytes, base64-encoded. Kotlin
+/// opens the document with the platform's `PdfRenderer` (no bitmap
+/// render — a fraction of `pdfToRaster`'s cost) and reports the page
+/// geometry, so the desktop's PDFium twin is not needed on the phone.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfProbeRequest {
+    pub pdf_base64: String,
+}
+
+/// The probed document's first-page size in millimetres (Kotlin converts
+/// PDF points: pt / 72 × 25.4) and its total page count.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfProbeResponse {
+    pub page_width_mm: f64,
+    pub page_height_mm: f64,
+    pub page_count: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsbPrinter {
@@ -542,8 +562,7 @@ mod tests {
 
     #[test]
     fn bluetooth_open_response_carries_the_handle() {
-        let res: BluetoothOpenResponse =
-            serde_json::from_str(r#"{"handle":"abc123"}"#).unwrap();
+        let res: BluetoothOpenResponse = serde_json::from_str(r#"{"handle":"abc123"}"#).unwrap();
         assert_eq!(res.handle, "abc123");
     }
 
@@ -647,8 +666,7 @@ mod tests {
 
     #[test]
     fn crash_reports_parse_the_object_kotlin_sends() {
-        let r: CrashReports =
-            serde_json::from_str(r#"{"reports":["a","b"]}"#).unwrap();
+        let r: CrashReports = serde_json::from_str(r#"{"reports":["a","b"]}"#).unwrap();
         assert_eq!(r.reports, vec!["a", "b"]);
         let empty: CrashReports = serde_json::from_str("{}").unwrap();
         assert!(empty.reports.is_empty());
@@ -800,6 +818,25 @@ mod tests {
         assert_eq!(r.path, "/data/user/0/com.printninja/cache/pn_raster_2.bin");
         assert_eq!(r.width, 320);
         assert_eq!(r.height, 240);
+        assert_eq!(r.page_count, 2);
+    }
+
+    #[test]
+    fn pdf_probe_request_sends_camel_case_keys() {
+        let json = serde_json::to_value(PdfProbeRequest {
+            pdf_base64: "JVBERi0xLjQ=".to_string(),
+        })
+        .unwrap();
+        assert_eq!(json, serde_json::json!({"pdfBase64": "JVBERi0xLjQ="}));
+    }
+
+    #[test]
+    fn pdf_probe_response_parses_the_object_kotlin_sends() {
+        let r: PdfProbeResponse =
+            serde_json::from_str(r#"{"pageWidthMm":58.0,"pageHeightMm":39.7,"pageCount":2}"#)
+                .unwrap();
+        assert_eq!(r.page_width_mm, 58.0);
+        assert_eq!(r.page_height_mm, 39.7);
         assert_eq!(r.page_count, 2);
     }
 }

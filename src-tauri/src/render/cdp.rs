@@ -275,16 +275,21 @@ struct Page<'a> {
     conn: &'a Connection,
     target_id: String,
     session: String,
+    /// The `.pn-sheet`s on the loaded page: the browser's own count for a
+    /// screenshot render, 0 for a print render (the PDF has its own pages).
+    sheets: u32,
 }
 
 impl<'a> Page<'a> {
     /// Open a tab on `url` and wait until it has loaded, fonts included.
     /// `viewport` is the window size in CSS px for a screenshot (1 px = 1
-    /// printer dot, no scaling).
+    /// printer dot, no scaling). `fallback_sheets` is the count the caller
+    /// knows statically — used when the in-page count cannot be read.
     async fn open(
         conn: &'a Connection,
         url: &str,
         viewport: Option<(u32, u32)>,
+        fallback_sheets: u32,
     ) -> Result<Page<'a>> {
         let created = conn
             .call(None, "Target.createTarget", json!({ "url": "about:blank" }))
@@ -293,11 +298,12 @@ impl<'a> Page<'a> {
             .as_str()
             .ok_or_else(|| anyhow!("Target.createTarget returned no targetId"))?
             .to_string();
-        match Self::attach_and_load(conn, &target_id, url, viewport).await {
-            Ok(session) => Ok(Page {
+        match Self::attach_and_load(conn, &target_id, url, viewport, fallback_sheets).await {
+            Ok((session, sheets)) => Ok(Page {
                 conn,
                 target_id,
                 session,
+                sheets,
             }),
             Err(e) => {
                 // Do not leak the tab of a job that failed to load.
@@ -309,12 +315,17 @@ impl<'a> Page<'a> {
         }
     }
 
+    /// Returns the session and the number of `.pn-sheet`s on the loaded
+    /// page. The count is read from the page itself (after pagination and
+    /// font settling), falling back to `fallback_sheets` when the value
+    /// cannot be read.
     async fn attach_and_load(
         conn: &Connection,
         target_id: &str,
         url: &str,
         viewport: Option<(u32, u32)>,
-    ) -> Result<String> {
+        fallback_sheets: u32,
+    ) -> Result<(String, u32)> {
         let attached = conn
             .call(
                 None,
@@ -395,18 +406,26 @@ impl<'a> Page<'a> {
         // web fonts load in that frame, not in this document), then measure
         // again, because a font can change the height, and wait for any pages
         // that added or dropped. A document without the script has no
-        // `__pnPaginate` and only waits for fonts, as it always did.
-        conn.call(
-            s,
-            "Runtime.evaluate",
-            json!({
-                "expression": "(async () => { const fonts = () => Promise.all([document.fonts ? document.fonts.ready : 0].concat(Array.from(document.querySelectorAll('iframe')).map(f => { try { const d = f.contentDocument; return d && d.fonts ? d.fonts.ready : 0; } catch (e) { return 0; } }))); const pn = window.__pnPaginate; if (pn) await pn(); await fonts(); if (pn) { await pn(); await fonts(); } return true; })()",
-                "awaitPromise": true,
-                "returnByValue": true
-            }),
-        )
-        .await?;
-        Ok(session)
+        // `__pnPaginate` and only waits for fonts, as it always did. The tail
+        // reports the final sheet count so the caller knows how many sheets
+        // the raster actually holds (the pipeline refuses a command-language
+        // job when it is over 1).
+        let counted = conn
+            .call(
+                s,
+                "Runtime.evaluate",
+                json!({
+                    "expression": "(async () => { const fonts = () => Promise.all([document.fonts ? document.fonts.ready : 0].concat(Array.from(document.querySelectorAll('iframe')).map(f => { try { const d = f.contentDocument; return d && d.fonts ? d.fonts.ready : 0; } catch (e) { return 0; } }))); const pn = window.__pnPaginate; if (pn) await pn(); await fonts(); if (pn) { await pn(); await fonts(); } return document.querySelectorAll('.pn-sheet').length; })()",
+                    "awaitPromise": true,
+                    "returnByValue": true
+                }),
+            )
+            .await?;
+        let sheets = counted["result"]["value"]
+            .as_u64()
+            .and_then(|n| u32::try_from(n).ok())
+            .unwrap_or(fallback_sheets);
+        Ok((session, sheets))
     }
 
     /// `Page.printToPDF` at the document's own `@page` size and margins.
@@ -426,8 +445,9 @@ impl<'a> Page<'a> {
         decode(&r, "Page.printToPDF")
     }
 
-    /// `Page.captureScreenshot` of the viewport as a PNG.
-    async fn screenshot(&self) -> Result<Vec<u8>> {
+    /// `Page.captureScreenshot` of the viewport as a PNG, with the sheet
+    /// count the loaded page reported (see [`Page::open`]).
+    async fn screenshot(&self) -> Result<(Vec<u8>, u32)> {
         let r = self
             .conn
             .call(
@@ -436,7 +456,7 @@ impl<'a> Page<'a> {
                 json!({ "format": "png", "fromSurface": true }),
             )
             .await?;
-        decode(&r, "Page.captureScreenshot")
+        Ok((decode(&r, "Page.captureScreenshot")?, self.sheets))
     }
 
     async fn close(self) {
@@ -806,7 +826,7 @@ impl PersistentBrowser {
         let browser = self.browser(cfg).await?;
         let conn = browser.conn.clone();
         let job = async {
-            let page = Page::open(&conn, url, None).await?;
+            let page = Page::open(&conn, url, None, 0).await?;
             let result = page.print_pdf().await;
             page.close().await;
             result
@@ -816,18 +836,22 @@ impl PersistentBrowser {
             .map_err(|_| anyhow!("PDF render timed out after {}s", JOB_TIMEOUT.as_secs()))?
     }
 
-    /// Screenshot the document at `url` in a `w_px`×`h_px` window, as PNG.
+    /// Screenshot the document at `url` in a `w_px`×`h_px` window, as PNG,
+    /// with the number of `.pn-sheet`s the page ended up holding.
+    /// `fallback_sheets` is the static count the caller knows; it is used
+    /// only when the in-page count cannot be read.
     pub async fn screenshot(
         &self,
         cfg: &Config,
         url: &str,
         w_px: u32,
         h_px: u32,
-    ) -> Result<Vec<u8>> {
+        fallback_sheets: u32,
+    ) -> Result<(Vec<u8>, u32)> {
         let browser = self.browser(cfg).await?;
         let conn = browser.conn.clone();
         let job = async {
-            let page = Page::open(&conn, url, Some((w_px, h_px))).await?;
+            let page = Page::open(&conn, url, Some((w_px, h_px)), fallback_sheets).await?;
             let result = page.screenshot().await;
             page.close().await;
             result
@@ -937,7 +961,9 @@ mod tests {
                                         json!({ "frameId": "F" })
                                     }
                                 }
-                                "Runtime.evaluate" => json!({ "result": { "value": true } }),
+                                // The final sheet count: 1, like a page that
+                                // did not paginate.
+                                "Runtime.evaluate" => json!({ "result": { "value": 1 } }),
                                 "Page.printToPDF" => json!({ "data": "JVBERi1mYWtl" }), // %PDF-fake
                                 "Page.captureScreenshot" => json!({ "data": "UE5HRkFLRQ==" }), // PNGFAKE
                                 _ => json!({}),
@@ -1044,12 +1070,14 @@ exec sleep 60
         let cfg = fake_edge(&rig.cache, fake.serve().await);
         let edge = PersistentBrowser::default();
 
-        let png = edge
-            .screenshot(&cfg, "file:///x.html", 812, 406)
+        let (png, sheets) = edge
+            .screenshot(&cfg, "file:///x.html", 812, 406, 3)
             .await
             .unwrap();
 
         assert_eq!(png, b"PNGFAKE");
+        // The browser's own count wins over the static fallback.
+        assert_eq!(sheets, 1);
         let m = fake.methods();
         let pos = |name: &str| m.iter().position(|x| x == name).unwrap();
         assert!(pos("Emulation.setDeviceMetricsOverride") < pos("Page.navigate"));
@@ -1238,7 +1266,9 @@ exec sleep 60
         let pdf = edge.print_pdf(&cfg, &url).await.unwrap();
         assert!(pdf.starts_with(b"%PDF"));
 
-        let png = edge.screenshot(&cfg, &url, 400, 240).await.unwrap();
+        let (png, sheets) = edge.screenshot(&cfg, &url, 400, 240, 1).await.unwrap();
+        // The fixture has no `.pn-sheet` divs: the browser says 0.
+        assert_eq!(sheets, 0);
         assert!(png.starts_with(b"\x89PNG"));
         let (w, h) = (
             u32::from_be_bytes(png[16..20].try_into().unwrap()),

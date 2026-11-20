@@ -1337,7 +1337,18 @@ struct ClaimReply {
     port: u16,
     token: String,
     paired_at: String,
+    /// The id the PC wrote the row under — minted by the PC for fresh
+    /// claims. PCs that predate server-minted ids omit it; the phone
+    /// then keeps the id it sent.
+    #[serde(default)]
+    device_id: Option<String>,
 }
+
+/// Internal sentinel from `claim_at`: the PC predates server-minted
+/// device ids and rejected the empty `device_id` a fresh claim now
+/// sends. `pair_with_code` retries once with the phone's local id (the
+/// old protocol) — only for fresh claims, never re-pairs.
+const DEVICE_ID_REQUIRED: &str = "pairing:device_id_required";
 
 /// The phone's pairing-time dial: permissive on purpose. Pairing happens
 /// before this phone trusts anything on the link — the PC's cert is
@@ -1427,10 +1438,15 @@ struct ClaimTarget<'a> {
     host: &'a str,
     port: u16,
     code: &'a str,
+    /// May be empty: a fresh claim lets the PC mint the id. Re-pairs
+    /// carry the stored id plus their token proof below.
     device_id: &'a str,
     account_id: &'a str,
     service_url: &'a str,
     device_name: &'a str,
+    /// The token this phone already holds for `device_id` — the
+    /// re-pair proof the PC's anti-squatting gate checks (hashed).
+    previous_token: Option<&'a str>,
 }
 
 async fn claim_at(
@@ -1453,6 +1469,7 @@ async fn claim_at(
             "platform": std::env::consts::OS,
             "account_id": target.account_id,
             "service_url": target.service_url,
+            "previous_token": target.previous_token,
         }))
         .send()
         .await
@@ -1503,6 +1520,15 @@ async fn claim_at(
             .unwrap_or_default();
         return Err(format!("Wrong code{left}. Check the PC and try again."));
     }
+    if status == reqwest::StatusCode::CONFLICT {
+        // The id this phone claimed is already bound to a different
+        // device on that PC, and this claim did not prove that row's
+        // token. Falling back to a fresh id here would be the identity
+        // squat the PC's gate exists to stop — surface it instead.
+        return Err(
+            "That pairing is already bound to a different device on that PC. Remove the old pairing there, or re-pair from the device that holds it.".into(),
+        );
+    }
     if !status.is_success() {
         // Guest misses carry their own code (a mistyped, revoked, or
         // owner-window code with no account behind it): surface the
@@ -1510,6 +1536,12 @@ async fn claim_at(
         // and text both consume it.
         if status == reqwest::StatusCode::BAD_REQUEST {
             let detail = res.text().await.unwrap_or_default();
+            // PCs that predate server-minted ids still require a
+            // client-chosen id: the caller retries once with the
+            // phone's local id (the old protocol).
+            if detail.contains("device_id is required") {
+                return Err(DEVICE_ID_REQUIRED.to_string());
+            }
             let is_guest_miss = serde_json::from_str::<serde_json::Value>(&detail)
                 .ok()
                 .and_then(|v| v.get("code").and_then(|c| c.as_str()).map(str::to_string))
@@ -1553,7 +1585,8 @@ pub async fn pair_with_code(
     // capped; the server truncates and defaults the rest.
     let display_name = claim_display_name(device_name);
     let client = pair_client().map_err(AppError::Internal)?;
-    // Our stable id for the PC's registry.
+    // Our stable id, kept for PCs that predate server-minted ids (the
+    // 400 fallback below) and for replies that omit the minted id.
     let device_id = {
         let guard = db
             .lock()
@@ -1624,19 +1657,74 @@ pub async fn pair_with_code(
             ));
         }
     }
+    // Stored pairs, read once: a re-pair of a PC we already know claims
+    // with that row's stored device id plus its token as proof, so the
+    // PC's anti-squatting gate lets it replace its own row. A PC we do
+    // not know claims with an empty id — the PC mints one and returns
+    // it.
+    let stored_pairs: Vec<crate::api::peer_consume::RenderPair> = {
+        let raw: Option<String> = db.lock().ok().and_then(|g| {
+            g.connection()
+                .query_row(
+                    "SELECT value FROM settings WHERE key = 'render_pairs'",
+                    [],
+                    |r| r.get(0),
+                )
+                .ok()
+        });
+        raw.as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default()
+    };
     let mut last_err = String::new();
     for (h, p) in &candidates {
+        let existing = stored_pairs
+            .iter()
+            .find(|pair| pair_addr_key(h, *p) == pair_addr_key(&pair.host, pair.port))
+            .filter(|pair| !pair.device_id.is_empty());
+        let (claim_id, proof): (&str, Option<&str>) = match existing {
+            Some(pair) => (pair.device_id.as_str(), Some(pair.secret.as_str())),
+            None => ("", None),
+        };
         let target = ClaimTarget {
             host: h,
             port: *p,
             code: &normalized,
-            device_id: &device_id,
+            device_id: claim_id,
             account_id: &account_id,
             service_url: &service_url,
             device_name: &display_name,
+            previous_token: proof,
         };
-        match claim_at(&client, &target).await {
+        let outcome = claim_at(&client, &target).await;
+        let outcome = match outcome {
+            // Old PCs reject the empty fresh-claim id: retry once with
+            // the phone's local id (the old protocol) so pairing with an
+            // un-upgraded PC still works.
+            Err(e) if e == DEVICE_ID_REQUIRED && claim_id.is_empty() => {
+                let target = ClaimTarget {
+                    host: h,
+                    port: *p,
+                    code: &normalized,
+                    device_id: &device_id,
+                    account_id: &account_id,
+                    service_url: &service_url,
+                    device_name: &display_name,
+                    previous_token: None,
+                };
+                claim_at(&client, &target).await
+            }
+            other => other,
+        };
+        match outcome {
             Ok(reply) => {
+                // The PC's minted id wins; old PCs omit it, in which
+                // case the id we sent (or the local one) stands.
+                let claimed_id = reply
+                    .device_id
+                    .clone()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| device_id.clone());
                 let pair = crate::api::peer_consume::RenderPair {
                     id: reply.provider_id.clone(),
                     name: reply.provider_name.clone(),
@@ -1647,26 +1735,13 @@ pub async fn pair_with_code(
                     provider_id: reply.provider_id.clone(),
                     platform: reply.provider_platform.clone(),
                     paired_at: reply.paired_at.clone(),
-                    device_id: device_id.clone(),
+                    device_id: claimed_id,
                     replaced_stale: false,
                 };
                 // Re-pairing the same PC replaces the old row — including
                 // a reset one under a new provider id at the same
                 // address — and the flag tells the phone to say so.
-                let raw: Option<String> = db.lock().ok().and_then(|g| {
-                    g.connection()
-                        .query_row(
-                            "SELECT value FROM settings WHERE key = 'render_pairs'",
-                            [],
-                            |r| r.get(0),
-                        )
-                        .ok()
-                });
-                let pairs: Vec<crate::api::peer_consume::RenderPair> = raw
-                    .as_deref()
-                    .and_then(|s| serde_json::from_str(s).ok())
-                    .unwrap_or_default();
-                let (pairs, pair) = merge_pair(pairs, pair);
+                let (pairs, pair) = merge_pair(stored_pairs.clone(), pair);
                 if let Ok(guard) = db.lock() {
                     let _ = crate::commands::settings::write_setting(
                         guard.connection(),
