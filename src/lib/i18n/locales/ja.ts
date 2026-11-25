@@ -1780,6 +1780,18 @@ const ja: Translation = {
       "Developer-only screens for poking at the print pipeline. The raw console can feed a printer bytes it was never meant to see.",
     settings_open: "Open raw console",
   },
+  scene: {
+    el_text: "テキスト — {{content}}",
+    el_barcode: "バーコード ({{kind}}) — {{value}}",
+    el_qr: "QR — {{value}}",
+    el_image: "画像 — {{src}}",
+    el_line: "線",
+    el_line_vertical: "線（縦）",
+    el_rect: "長方形",
+    el_rect_filled: "長方形（塗りつぶし）",
+    el_group: "グループ — {{bind}} ごとに 1 行",
+    el_frame: "フレーム",
+  },
   errors: {
     kind_database: "データベースエラー: {{detail}}",
     kind_not_found: "見つかりません: {{detail}}",

@@ -1741,6 +1741,18 @@ const en = {
       "Developer-only screens for poking at the print pipeline. The raw console can feed a printer bytes it was never meant to see.",
     settings_open: "Open raw console",
   },
+  scene: {
+    el_text: "Text — {{content}}",
+    el_barcode: "Barcode ({{kind}}) — {{value}}",
+    el_qr: "QR — {{value}}",
+    el_image: "Image — {{src}}",
+    el_line: "Line",
+    el_line_vertical: "Line (vertical)",
+    el_rect: "Rectangle",
+    el_rect_filled: "Rectangle (filled)",
+    el_group: "Group — one row per {{bind}}",
+    el_frame: "Frame",
+  },
   errors: {
     kind_database: "Database error: {{detail}}",
     kind_not_found: "Not found: {{detail}}",

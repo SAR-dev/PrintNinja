@@ -29,6 +29,12 @@ pub struct Printer {
      * Never set automatically.
      */
     pub via_driver: bool,
+    /**
+     * The label track (LABEL_PRINTING_PLAN.md, WP3): the bundled
+     * profile's id this row prints scene jobs with; null means the
+     * language-based default applies.
+     */
+    pub label_profile: Option<String>,
     pub default_settings_json: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -69,7 +75,8 @@ pub fn list_printers(db: State<DbState>) -> AppResult<Vec<Printer>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
                 label_gap_mm, username, password, skip_tls_verification,
-                via_driver, default_settings_json, created_at, updated_at
+                via_driver, label_profile, default_settings_json, created_at,
+                updated_at
          FROM printers ORDER BY name COLLATE NOCASE",
     )?;
 
@@ -88,9 +95,10 @@ pub fn list_printers(db: State<DbState>) -> AppResult<Vec<Printer>> {
                 has_password: row.get::<_, Option<String>>(9)?.is_some(),
                 skip_tls_verification: row.get(10)?,
                 via_driver: row.get(11)?,
-                default_settings_json: row.get(12)?,
-                created_at: row.get(13)?,
-                updated_at: row.get(14)?,
+                label_profile: row.get(12)?,
+                default_settings_json: row.get(13)?,
+                created_at: row.get(14)?,
+                updated_at: row.get(15)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -174,7 +182,8 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
     let printer = conn.query_row(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
                 label_gap_mm, username, password, skip_tls_verification,
-                via_driver, default_settings_json, created_at, updated_at
+                via_driver, label_profile, default_settings_json, created_at,
+                updated_at
          FROM printers WHERE id = ?1",
         [id],
         |row| {
@@ -191,9 +200,10 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
                 has_password: row.get::<_, Option<String>>(9)?.is_some(),
                 skip_tls_verification: row.get(10)?,
                 via_driver: row.get(11)?,
-                default_settings_json: row.get(12)?,
-                created_at: row.get(13)?,
-                updated_at: row.get(14)?,
+                label_profile: row.get(12)?,
+                default_settings_json: row.get(13)?,
+                created_at: row.get(14)?,
+                updated_at: row.get(15)?,
             })
         },
     )?;
@@ -475,7 +485,8 @@ pub fn update_printer_conn(
     conn.query_row(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
                 label_gap_mm, username, password, skip_tls_verification,
-                via_driver, default_settings_json, created_at, updated_at
+                via_driver, label_profile, default_settings_json, created_at,
+                updated_at
          FROM printers WHERE id = ?1",
         [id],
         |row| {
@@ -492,9 +503,10 @@ pub fn update_printer_conn(
                 has_password: row.get::<_, Option<String>>(9)?.is_some(),
                 skip_tls_verification: row.get(10)?,
                 via_driver: row.get(11)?,
-                default_settings_json: row.get(12)?,
-                created_at: row.get(13)?,
-                updated_at: row.get(14)?,
+                label_profile: row.get(12)?,
+                default_settings_json: row.get(13)?,
+                created_at: row.get(14)?,
+                updated_at: row.get(15)?,
             })
         },
     )
@@ -510,7 +522,8 @@ fn get_printer_inner(db: &DbState, id: i64) -> AppResult<Printer> {
         .query_row(
             "SELECT id, name, type, address, language, paper_width_mm, dpi,
                     label_gap_mm, username, password, skip_tls_verification,
-                via_driver, default_settings_json, created_at, updated_at
+                via_driver, label_profile, default_settings_json, created_at,
+                updated_at
              FROM printers WHERE id = ?1",
             [id],
             |row| {
@@ -527,9 +540,10 @@ fn get_printer_inner(db: &DbState, id: i64) -> AppResult<Printer> {
                     has_password: row.get::<_, Option<String>>(9)?.is_some(),
                     skip_tls_verification: row.get(10)?,
                     via_driver: row.get(11)?,
-                    default_settings_json: row.get(12)?,
-                    created_at: row.get(13)?,
-                    updated_at: row.get(14)?,
+                    label_profile: row.get(12)?,
+                    default_settings_json: row.get(13)?,
+                    created_at: row.get(14)?,
+                    updated_at: row.get(15)?,
                 })
             },
         )
@@ -568,7 +582,8 @@ fn load_printer_row(db: &DbState, id: i64) -> AppResult<(Printer, Option<String>
     conn.query_row(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
                 label_gap_mm, username, password, skip_tls_verification,
-                via_driver, default_settings_json, created_at, updated_at
+                via_driver, label_profile, default_settings_json, created_at,
+                updated_at
          FROM printers WHERE id = ?1",
         [id],
         |row| {
@@ -587,9 +602,10 @@ fn load_printer_row(db: &DbState, id: i64) -> AppResult<(Printer, Option<String>
                     has_password: password.as_ref().is_some(),
                     skip_tls_verification: row.get(10)?,
                     via_driver: row.get(11)?,
-                    default_settings_json: row.get(12)?,
-                    created_at: row.get(13)?,
-                    updated_at: row.get(14)?,
+                    label_profile: row.get(12)?,
+                    default_settings_json: row.get(13)?,
+                    created_at: row.get(14)?,
+                    updated_at: row.get(15)?,
                 },
                 password,
             ))

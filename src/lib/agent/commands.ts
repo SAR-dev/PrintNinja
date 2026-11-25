@@ -17,9 +17,15 @@ import type {
   FixReport,
   FontRow,
   HistoryJob,
+  LabelJobReq,
+  LabelPrepareResponse,
+  LabelPrintResponse,
+  LabelSaveTemplateReq,
   PrintHtmlReq,
   PrinterRow,
   PrintResponse,
+  ProfileChoice,
+  ProfileInfo,
   ProfileRow,
   ProbeCapabilitiesResult,
   RawSendReport,
@@ -359,6 +365,19 @@ export interface AgentCommands {
     PeerCapabilities,
   ];
   peer_render_request: [{ req: PeerRenderArgs }, PeerRenderResult];
+  // Label track (LABEL_PRINTING_PLAN.md): the scene (label) templates
+  // print onto the label printers; the mustache (document) track is
+  // untouched and keeps its own commands.
+  label_save_template: [{ req: LabelSaveTemplateReq }, TemplateRow];
+  label_prepare: [{ req: LabelJobReq }, LabelPrepareResponse];
+  label_print: [{ req: LabelJobReq }, LabelPrintResponse];
+  label_list_profiles: [{}, ProfileInfo[]];
+  /** Set (or clear, `profile_id: null`) the model a saved label printer
+   * prints scene jobs with; returns the effective choice. */
+  label_set_printer_profile: [
+    { printer_id: number; profile_id: string | null },
+    ProfileChoice,
+  ];
   // Misc
   ping: [{}, null];
   parse_deeplink: [{ url: string }, DeeplinkResult];

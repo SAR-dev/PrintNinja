@@ -68,6 +68,8 @@ const local = (over: Partial<TemplateRow> = {}): TemplateRow => ({
   css: ".local {}",
   compiled_css: "",
   compiled_key: "",
+  track: "html",
+  scene_json: null,
   orientation: "portrait",
   created_at: "2026-03-01T00:00:00Z",
   readme: "# Invoice",
