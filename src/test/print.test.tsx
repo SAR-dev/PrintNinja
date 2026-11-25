@@ -20,8 +20,11 @@ vi.mock("@tauri-apps/api/core", () => ({
     return invoke(cmd, args);
   },
 }));
-vi.mock("@/lib/templates/listTemplates", () => ({
-  listTemplates: async () => [
+// The page reads the template list on mount; tests that need a
+// different listing (e.g. a scene track row) swap the holder, and
+// beforeEach resets it back.
+const { mockTemplates, defaultTemplates } = vi.hoisted(() => {
+  const defaultTemplates = [
     {
       id: 7,
       name: "Shipping label",
@@ -33,7 +36,11 @@ vi.mock("@/lib/templates/listTemplates", () => ({
       compiled_css: "",
       compiled_key: "",
     },
-  ],
+  ];
+  return { mockTemplates: { current: defaultTemplates }, defaultTemplates };
+});
+vi.mock("@/lib/templates/listTemplates", () => ({
+  listTemplates: async () => mockTemplates.current,
 }));
 // The page reads `printers` on mount; tests that need a different
 // listing (e.g. a PDF printer) swap the holder, and beforeEach resets
@@ -62,6 +69,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 import { toast } from "sonner";
 import { PrintPage } from "@/pages/Print";
 import { usePrintStore } from "@/lib/store/printStore";
+import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
 
 beforeAll(() => {
   (globalThis as any).ResizeObserver = class {
@@ -77,6 +85,7 @@ beforeEach(() => {
   invoke.mockReset();
   localStorage.clear();
   mockPrinters.current = defaultPrinters;
+  mockTemplates.current = defaultTemplates;
   vi.mocked(toast.success).mockClear();
   vi.mocked(toast.error).mockClear();
   usePrintStore.setState({
@@ -903,6 +912,295 @@ describe("unpaired phone on the Print page", () => {
     } finally {
       vi.unstubAllGlobals();
       usePrintStore.setState({ dataUrl: "" });
+    }
+  });
+});
+
+describe("Label (scene) track", () => {
+  // The scene (label) template: its picker, preview and print all follow
+  // the label track, not the html one.
+  const SCENE = {
+    id: 8,
+    name: "Dock label",
+    page_w_mm: 50,
+    page_h_mm: 30,
+    orientation: "portrait",
+    html: "",
+    css: "",
+    compiled_css: "",
+    compiled_key: "",
+    track: "scene",
+    scene_json: "{}",
+  };
+  // Saved rows carry a profile the backend plans label jobs against; the
+  // OS row and the pdf head cannot run one.
+  const labelPrinter = {
+    id: "saved:1",
+    name: "Dock Zebra",
+    address: "127.0.0.1:9100",
+    printer_type: "raw_tcp",
+    language: "escpos",
+  };
+  const docPrinter = {
+    id: "saved:2",
+    name: "Doc Head",
+    address: "127.0.0.1:631",
+    printer_type: "ipp",
+    language: "pdf",
+  };
+  const osPrinter = {
+    id: "3",
+    name: "Desk Laser",
+    address: "127.0.0.1:631",
+    printer_type: "ipp",
+    language: "pdf",
+  };
+  // One 4×2 sheet, two ink dots on each row. packed is one byte per
+  // eight pixels, so a single 0b11001100 draws both rows.
+  const prepared = {
+    path: "native",
+    fallback: null,
+    records: 1,
+    pages: 1,
+    units: 8,
+    bytes: 4,
+    preview: [
+      {
+        kind: "bitmap",
+        width: 4,
+        height: 2,
+        packed: [0b11001100],
+        width_mm: 50,
+        height_mm: 30,
+      },
+    ],
+    profile: "default",
+    profile_source: "default",
+  };
+
+  // The Print page with the scene template picked and the given printer
+  // listing; the label commands answer from the fixture unless overridden.
+  const scenePage = (
+    opts: {
+      printers?: (typeof defaultPrinters)[number][];
+      printerId?: string;
+      dataUrl?: string;
+      labelPrint?: () => unknown;
+    } = {},
+  ) => {
+    const printers = opts.printers ?? [labelPrinter];
+    mockTemplates.current = [SCENE];
+    mockPrinters.current = printers;
+    usePrintStore.setState({
+      templateId: "8",
+      printerId: opts.printerId ?? "",
+      // The pages-count test earlier in the file leaves its value behind;
+      // the label repeat math must start from one sheet.
+      records: 1,
+      dataUrl: opts.dataUrl ?? "",
+    });
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers" || cmd === "enumerate_system_printers")
+        return printers;
+      if (cmd === "label_prepare") return prepared;
+      if (cmd === "label_print")
+        return (
+          opts.labelPrint?.() ?? {
+            job_id: 11,
+            report: { result: "confirmed", counts: null, reason: null },
+            duration_ms: 300,
+          }
+        );
+      return null;
+    });
+    renderPage();
+    // The subtitle only renders once the list has loaded the scene row,
+    // so this doubles as "the page knows it is on the label track".
+    return screen.findByText(/Dock label, 50 × 30 mm/);
+  };
+
+  it("offers only saved label printers for a scene template, all of them for an html one", async () => {
+    mockTemplates.current = [defaultTemplates[0], SCENE];
+    mockPrinters.current = [labelPrinter, docPrinter, osPrinter];
+    usePrintStore.setState({ templateId: "8", printerId: "Dock Zebra" });
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_printers" || cmd === "enumerate_system_printers")
+        return [labelPrinter, docPrinter, osPrinter];
+      return null;
+    });
+    renderPage();
+    const printer = await screen.findByRole("combobox", { name: "Printer" });
+    await screen.findByText(/Dock label, 50 × 30 mm/);
+    // The pdf head is a saved printer but plans no label jobs; the OS
+    // row has no profile at all — only the thermal dock is offered.
+    fireEvent.click(printer);
+    const sceneOptions = (await screen.findAllByRole("option")).map(
+      (o) => o.textContent,
+    );
+    expect(sceneOptions).toEqual(["Dock Zebra"]);
+    // The html track keeps today's rule: every printer is offered. The
+    // open list re-renders with the new picker as the template changes —
+    // in jsdom the trigger click never closes the select, and the
+    // subtitle is the sync point that the re-render has landed.
+    usePrintStore.setState({ templateId: "7" });
+    await screen.findByText(/Shipping label, 100 × 150 mm/);
+    const htmlOptions = screen.getAllByRole("option").map((o) => o.textContent);
+    expect(htmlOptions).toEqual(["Dock Zebra", "Doc Head", "Desk Laser"]);
+  });
+
+  it("moves a non-label printer selection to a saved label printer", async () => {
+    await scenePage({
+      printers: [osPrinter, labelPrinter],
+      printerId: "Desk Laser",
+    });
+    await waitFor(() =>
+      expect(usePrintStore.getState().printerId).toBe("Dock Zebra"),
+    );
+  });
+
+  it("blocks printing and names the missing label printers when none is saved", async () => {
+    await scenePage({ printers: [osPrinter], printerId: "Desk Laser" });
+    // The auto-switch left no printer: the existing blocker line says so.
+    await waitFor(() => expect(usePrintStore.getState().printerId).toBe(""));
+    expect(
+      await screen.findByText(/Choose a printer to enable printing/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Print$/ })).toBeDisabled();
+    // The picker itself explains why it is empty.
+    fireEvent.click(screen.getByRole("combobox", { name: "Printer" }));
+    expect(
+      await screen.findByText(/No saved label printers/),
+    ).toBeInTheDocument();
+  });
+
+  it("previews a scene template as 1-bit sheets from label_prepare, not the page renderer", async () => {
+    await scenePage();
+    const sheet = await screen.findByRole("img", { name: "Preview" });
+    expect(sheet).toHaveAttribute("viewBox", "0 0 4 2");
+    // Background plus one ink run per row.
+    expect(sheet.querySelectorAll("rect")).toHaveLength(3);
+    const region = screen.getByRole("region", { name: "Print preview" });
+    expect(region).toContainElement(sheet);
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "label_prepare",
+        expect.objectContaining({
+          req: expect.objectContaining({
+            template_id: 8,
+            printer: "Dock Zebra",
+            copies: 1,
+          }),
+        }),
+      ),
+    );
+    const call = invoke.mock.calls.find(([cmd]) => cmd === "label_prepare");
+    expect(
+      JSON.parse((call?.[1] as { req: { records: string } }).req.records),
+    ).toEqual([DEFAULT_MOCK_DATA]);
+    // The html track's renderer never ran for the scene template.
+    expect(invoke).not.toHaveBeenCalledWith("render_template_preview");
+  });
+
+  it("asks for a saved label printer before preparing a preview", async () => {
+    await scenePage({ printers: [osPrinter], printerId: "Desk Laser" });
+    expect(
+      await screen.findByText(/A label preview needs a saved label printer/),
+    ).toBeInTheDocument();
+    // The auto-switch left no printer behind, and the backend was never
+    // asked to plan a job it would refuse.
+    await waitFor(() => expect(usePrintStore.getState().printerId).toBe(""));
+    expect(invoke).not.toHaveBeenCalledWith("label_prepare");
+  });
+
+  it("prints a scene template as a label job, not a rendered page", async () => {
+    await scenePage();
+    const print = screen.getByRole("button", { name: /^Print$/ });
+    await waitFor(() => expect(print).toBeEnabled());
+    fireEvent.click(print);
+    expect(await screen.findByText("Print sent")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "label_print",
+        expect.objectContaining({
+          req: expect.objectContaining({
+            template_id: 8,
+            printer: "Dock Zebra",
+            copies: 1,
+          }),
+        }),
+      ),
+    );
+    const call = invoke.mock.calls.find(([cmd]) => cmd === "label_print");
+    expect(
+      JSON.parse((call?.[1] as { req: { records: string } }).req.records),
+    ).toEqual([DEFAULT_MOCK_DATA]);
+    // The sheet count follows the record: one sample object, one sheet.
+    expect(screen.getByText(/Finished in 0\.300 s/)).toBeInTheDocument();
+    expect(invoke).not.toHaveBeenCalledWith("print_html");
+  });
+
+  it("warns when the label job is only partially confirmed", async () => {
+    await scenePage({
+      labelPrint: () => ({
+        job_id: 12,
+        report: { result: "partially_printed", counts: [1, 3], reason: null },
+        duration_ms: 300,
+      }),
+    });
+    const print = screen.getByRole("button", { name: /^Print$/ });
+    await waitFor(() => expect(print).toBeEnabled());
+    fireEvent.click(print);
+    const line = await screen.findByText(/Partially printed: 1 of 3 sheets/);
+    // A success carrying a warning reports as an alert — and the line
+    // pins it: the page also has the thermal truncation warning as an
+    // alert, so the alert is read from the line itself, not by role.
+    expect(line.closest('[role="alert"]')).toHaveTextContent("Print sent");
+  });
+
+  it("warns when the label printer does not confirm the job", async () => {
+    await scenePage({
+      labelPrint: () => ({
+        job_id: 12,
+        report: { result: "sent_unconfirmed", counts: null, reason: null },
+        duration_ms: 300,
+      }),
+    });
+    const print = screen.getByRole("button", { name: /^Print$/ });
+    await waitFor(() => expect(print).toBeEnabled());
+    fireEvent.click(print);
+    const line = await screen.findByText(
+      /Sent to the printer — it did not confirm the job/,
+    );
+    expect(line.closest('[role="alert"]')).toHaveTextContent("Print sent");
+  });
+
+  it("fails the label print when its data URL cannot be loaded", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    try {
+      await scenePage({ dataUrl: "https://down.example/data" });
+      const print = screen.getByRole("button", { name: /^Print$/ });
+      await waitFor(() => expect(print).toBeEnabled());
+      fireEvent.click(print);
+      // The failed banner carries the error — the thermal truncation
+      // warning is a second role="alert" on the page, so the error text
+      // itself locates its banner.
+      const line = await screen.findByText(
+        /Could not load the data URL for the label job/,
+      );
+      expect(line.closest('[role="alert"]')).not.toBe(
+        screen.getByTestId("thermal-truncate-warning"),
+      );
+      // Unlike the html track, a broken data URL is a failed print here:
+      // the label command takes the records, so there is no server-side
+      // fetch to fall back on.
+      expect(invoke).not.toHaveBeenCalledWith("label_print");
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 });

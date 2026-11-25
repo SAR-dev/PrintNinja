@@ -619,6 +619,18 @@ const en = {
     thermal_truncate:
       "This printer prints one page at a time, so a multi-page job prints only its first page.",
     preview_unavailable: "Preview unavailable: {{error}}",
+    // The label (scene) track: the preview prepares the job against a
+    // saved label printer and draws its 1-bit sheets, the picker offers
+    // only saved label printers, and the print goes out as a label job.
+    preview_scene_saved_printer:
+      "A label preview needs a saved label printer — pick one to see the sheets.",
+    no_label_printers:
+      "No saved label printers — add one on the Printers page.",
+    scene_sent_unconfirmed: "Sent to the printer — it did not confirm the job.",
+    scene_partial: "Partially printed: {{done}} of {{total}} sheets.",
+    scene_failed: "The label job failed.",
+    scene_data_failed:
+      "Could not load the data URL for the label job ({{error}}).",
     // The phone flow (PLAN §6): plain sentences and one-field-per-row
     // labels; the desktop form keeps the keys above.
     phone: {

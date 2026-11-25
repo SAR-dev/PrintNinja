@@ -19,7 +19,12 @@ import type { PrintState } from "./types";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
 import { compileTemplateCss } from "@/lib/templates/compileTemplateCss";
 import type { TemplateListRow } from "@/lib/templates/listTemplates";
-import type { PcTemplateInfo, RenderPair } from "@/lib/agent/types";
+import type {
+  LabelPreview,
+  PcTemplateInfo,
+  RenderPair,
+} from "@/lib/agent/types";
+import type { PrintPagePrinter } from "@/lib/hooks/useSystemPrinters";
 import { usePrintStore } from "@/lib/store/printStore";
 
 /**
@@ -36,6 +41,10 @@ export function usePrintPreview(
   pcTemplate: string,
   viaPcPair: RenderPair | null,
   resetOutcome: () => void,
+  /** The local row behind `store.printerId`: a scene preview prepares
+   * against it (its saved profile), so the hook takes it as a
+   * parameter rather than looking it up. */
+  selectedPrinter: PrintPagePrinter | undefined,
 ) {
   const { t } = useTranslation();
 
@@ -45,6 +54,11 @@ export function usePrintPreview(
   const [previewPages, setPreviewPages] = useState<string[]>([]);
   const [previewError, setPreviewError] = useState<string>("");
   const [previewNotice, setPreviewNotice] = useState<string>("");
+  // The label track's prepared preview: the 1-bit sheets (or pdf pages)
+  // `label_prepare` returned for the selected scene template.
+  const [scenePreviews, setScenePreviews] = useState<LabelPreview[] | null>(
+    null,
+  );
   // Version ids already backfilled with compiled CSS this session, so the
   // preview effect does not write a "Compiled Tailwind CSS" version on
   // every render of the same template.
@@ -137,11 +151,71 @@ export function usePrintPreview(
   // template's geometry (or under its error/notice) while the new render is
   // still running — a slow data URL can take up to 10 s.
   const renderedPreviewKey = useRef<string | null>(null);
+  // The pages the preview shows, capped: one object repeats `pageCount`
+  // times, an array prints its own length — the same records a print
+  // would send. Shared by both tracks; the scene branch hands them to
+  // `label_prepare`, the html branch to the Rust renderer.
+  const loadShownData = async (): Promise<{
+    shown: unknown[];
+    notice: string;
+    empty: boolean;
+  }> => {
+    let data: unknown = DEFAULT_MOCK_DATA;
+    let notice = "";
+    if (!useTestData && debouncedDataUrl.trim()) {
+      const ctrl = new AbortController();
+      const timeout = window.setTimeout(
+        () => ctrl.abort(),
+        PREVIEW_DATA_TIMEOUT_MS,
+      );
+      try {
+        const res = await fetch(
+          debouncedDataUrl.trim(),
+          httpMethod === "POST"
+            ? {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: "{}",
+                signal: ctrl.signal,
+              }
+            : { signal: ctrl.signal },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        data = await res.json();
+      } catch (e) {
+        notice =
+          e instanceof DOMException && e.name === "AbortError"
+            ? t("print.preview_data_timeout")
+            : t("print.preview_data_failed", {
+                error: describeError(e),
+              });
+        data = DEFAULT_MOCK_DATA;
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+    if (Array.isArray(data) && data.length === 0) {
+      return { shown: [], notice, empty: true };
+    }
+    const totalPages = Array.isArray(data) ? data.length : pageCount;
+    const shown = Array.isArray(data)
+      ? data.slice(0, PREVIEW_PAGE_CAP)
+      : Array<unknown>(Math.min(pageCount, PREVIEW_PAGE_CAP)).fill(data);
+    if (totalPages > shown.length) {
+      notice += `${notice ? " " : ""}${t("print.preview_truncated", {
+        shown: shown.length,
+        total: totalPages,
+      })}`;
+    }
+    return { shown, notice, empty: false };
+  };
+
   useEffect(() => {
     const template = previewTemplate;
     if (renderedPreviewKey.current !== previewTemplateKey) {
       renderedPreviewKey.current = previewTemplateKey;
       setPreviewPages([]);
+      setScenePreviews(null);
       setPreviewError("");
       setPreviewNotice("");
     }
@@ -159,6 +233,7 @@ export function usePrintPreview(
       );
       return;
     }
+    if (template.track === "scene") return;
     let cancelled = false;
     (async () => {
       try {
@@ -192,58 +267,14 @@ export function usePrintPreview(
           }
         }
 
-        let data: unknown = DEFAULT_MOCK_DATA;
-        let notice = "";
-        if (!useTestData && debouncedDataUrl.trim()) {
-          const ctrl = new AbortController();
-          const timeout = window.setTimeout(
-            () => ctrl.abort(),
-            PREVIEW_DATA_TIMEOUT_MS,
-          );
-          try {
-            const res = await fetch(
-              debouncedDataUrl.trim(),
-              httpMethod === "POST"
-                ? {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: "{}",
-                    signal: ctrl.signal,
-                  }
-                : { signal: ctrl.signal },
-            );
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            data = await res.json();
-          } catch (e) {
-            notice =
-              e instanceof DOMException && e.name === "AbortError"
-                ? t("print.preview_data_timeout")
-                : t("print.preview_data_failed", {
-                    error: describeError(e),
-                  });
-            data = DEFAULT_MOCK_DATA;
-          } finally {
-            window.clearTimeout(timeout);
-          }
-        }
-
-        if (Array.isArray(data) && data.length === 0) {
+        const { shown: shownData, notice, empty } = await loadShownData();
+        if (empty) {
           if (!cancelled) {
             setPreviewPages([]);
             setPreviewError(t("print.preview_empty_data"));
             setPreviewNotice(notice);
           }
           return;
-        }
-        // One object repeats `records` times; an array prints its own
-        // length. The preview shows at most a few pages so a big N stays
-        // light — the print itself renders them all.
-        const totalPages = Array.isArray(data) ? data.length : pageCount;
-        const shownData = Array.isArray(data)
-          ? data.slice(0, PREVIEW_PAGE_CAP)
-          : Array<unknown>(Math.min(pageCount, PREVIEW_PAGE_CAP)).fill(data);
-        if (totalPages > shownData.length) {
-          notice += `${notice ? " " : ""}${t("print.preview_truncated", { shown: shownData.length, total: totalPages })}`;
         }
 
         // The Rust engine is the one that prints, so the preview is what
@@ -283,6 +314,70 @@ export function usePrintPreview(
     viaPcPair?.name,
   ]);
 
+  // The label track's preview: the same `label_prepare` the print
+  // runs, drawn as 1-bit sheets. The printer must be a saved row — an
+  // unsaved printer has no profile to plan against, so the backend
+  // would refuse the job anyway.
+  useEffect(() => {
+    const template = previewTemplate;
+    if (!template || template.track !== "scene" || viaPc) {
+      setScenePreviews(null);
+      return;
+    }
+    const printer = selectedPrinter;
+    if (!printer || !printer.id.startsWith("saved:")) {
+      setScenePreviews(null);
+      setPreviewError("");
+      setPreviewNotice(t("print.preview_scene_saved_printer"));
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { shown, notice, empty } = await loadShownData();
+        if (cancelled) return;
+        if (empty) {
+          setScenePreviews(null);
+          setPreviewError(t("print.preview_empty_data"));
+          setPreviewNotice(notice);
+          return;
+        }
+        const resp = await agent("label_prepare", {
+          req: {
+            template_id: template.id,
+            printer: printer.name,
+            records: JSON.stringify(shown),
+            copies: 1,
+          },
+        });
+        if (!cancelled) {
+          setScenePreviews(resp.preview);
+          setPreviewError("");
+          setPreviewNotice(notice);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setScenePreviews(null);
+          setPreviewError(
+            t("print.preview_unavailable", { error: describeError(e) }),
+          );
+          setPreviewNotice("");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    previewTemplate,
+    debouncedDataUrl,
+    useTestData,
+    httpMethod,
+    pageCount,
+    selectedPrinter,
+    viaPc,
+  ]);
+
   // A page range like "3-4" is meant for one document: a different template
   // starts from all pages again instead of printing (or failing on) pages
   // that were typed for the previous one.
@@ -299,6 +394,7 @@ export function usePrintPreview(
     previewTemplate,
     changeTemplate,
     previewPages,
+    scenePreviews,
     previewError,
     previewNotice,
   };
