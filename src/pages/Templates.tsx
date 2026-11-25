@@ -5,13 +5,17 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   Bookmark,
   BookmarkCheck,
+  ChevronDown,
   CloudUpload,
   CopyPlus,
   Eye,
+  FileText,
   MoreHorizontal,
   Pencil,
+  Plus,
   Printer,
   RefreshCw,
+  Sticker,
   Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -86,6 +90,23 @@ function matchesSearch(row: TemplateRow, raw: string): boolean {
     row.name.toLowerCase().includes(q) ||
     row.summary.toLowerCase().includes(q) ||
     (row.origin_owner ?? "").toLowerCase().includes(q)
+  );
+}
+
+/**
+ * The print track as a badge: scene rows are labels, everything else is
+ * a document (the track follows the printer class, PLAN WP4).
+ */
+function TrackBadge({ track }: { track: string }) {
+  const { t } = useTranslation();
+  return track === "scene" ? (
+    <Badge variant="default" className="shrink-0">
+      {t("templates.badge_label")}
+    </Badge>
+  ) : (
+    <Badge variant="secondary" className="shrink-0">
+      {t("templates.badge_document")}
+    </Badge>
   );
 }
 
@@ -557,7 +578,10 @@ export function TemplatesPage() {
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold">{tpl.name}</p>
+            <div className="flex items-center gap-2">
+              <p className="truncate font-semibold">{tpl.name}</p>
+              <TrackBadge track={tpl.track} />
+            </div>
             <p className="truncate text-xs text-muted-foreground">
               {tpl.summary || t("templates.no_summary")}
             </p>
@@ -693,7 +717,10 @@ export function TemplatesPage() {
               heightMm={c.row.original.page_h_mm}
             />
             <div className="min-w-0">
-              <p className="truncate font-medium">{c.row.original.name}</p>
+              <div className="flex items-center gap-2">
+                <p className="truncate font-medium">{c.row.original.name}</p>
+                <TrackBadge track={c.row.original.track} />
+              </div>
               <p className="truncate text-xs text-muted-foreground">
                 {c.row.original.summary || t("templates.no_summary")}
               </p>
@@ -890,6 +917,32 @@ export function TemplatesPage() {
   return (
     <div className="space-y-4">
       <PageHeader title={t("nav.templates")} description={t("pages.templates")}>
+        {/* New templates are created in the Designer (PLAN §6, D4); the
+            dropdown picks the track and deep-links to its create dialog. */}
+        {!isPhone && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                {t("templates.new")}
+                <ChevronDown
+                  className="h-4 w-4 opacity-50"
+                  aria-hidden="true"
+                />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => navigate("/?new=scene")}>
+                <Sticker className="h-4 w-4" aria-hidden="true" />
+                {t("templates.new_label")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => navigate("/?new=document")}>
+                <FileText className="h-4 w-4" aria-hidden="true" />
+                {t("templates.new_document")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <RefreshButton />
       </PageHeader>
 

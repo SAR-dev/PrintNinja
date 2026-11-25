@@ -273,6 +273,8 @@ const en = {
     via_pc_note:
       "Templates sync down from the server while Print via PC is on — they are not drawn here.",
     newTemplate: "New Template",
+    new_label_template: "New label template",
+    new_document_template: "New document template",
     settings: "Settings",
     settings_description:
       "Pick the template, page size, or custom input. Changes apply right away.",
@@ -1545,6 +1547,9 @@ const en = {
     empty_mine_title: "No templates yet",
     empty_mine_desc: "Create one in Designer.",
     empty_mine_action: "Open Designer",
+    new: "New",
+    new_label: "New label template",
+    new_document: "New document template",
     empty_saved_title: "No saved templates",
     empty_saved_desc:
       "Save a community template to keep a copy that works offline.",
@@ -1566,6 +1571,8 @@ const en = {
     saved_from_header: "Saved from",
     badge_community: "Community",
     badge_new: "New",
+    badge_label: "Label",
+    badge_document: "Document",
     meta_line: "{{owner}} · {{uses}} prints · {{w}}×{{h}} mm",
     save_action: "Save",
     saving: "Saving…",

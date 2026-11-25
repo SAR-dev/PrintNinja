@@ -278,6 +278,8 @@ const ja: Translation = {
     via_pc_note:
       "PC経由印刷がオンの間、テンプレートはサーバーから同期されます — ここでは編集しません。",
     newTemplate: "新規テンプレート",
+    new_label_template: "ラベルテンプレートを新規作成",
+    new_document_template: "ドキュメントテンプレートを新規作成",
     settings: "設定",
     settings_description:
       "テンプレート、ページサイズ、カスタム入力を選択します。変更はすぐに反映されます。",
@@ -1580,6 +1582,9 @@ const ja: Translation = {
     empty_mine_title: "テンプレートはまだありません",
     empty_mine_desc: "デザイナーで作成してください。",
     empty_mine_action: "デザイナーを開く",
+    new: "新規",
+    new_label: "ラベルテンプレートを新規作成",
+    new_document: "ドキュメントテンプレートを新規作成",
     empty_saved_title: "保存済みのテンプレートはありません",
     empty_saved_desc:
       "コミュニティのテンプレートを保存すると、オフラインでも使えるコピーが手元に残ります。",
@@ -1601,6 +1606,8 @@ const ja: Translation = {
     saved_from_header: "保存元",
     badge_community: "コミュニティ",
     badge_new: "新着",
+    badge_label: "ラベル",
+    badge_document: "ドキュメント",
     meta_line: "{{owner}} · 印刷{{uses}}回 · {{w}}×{{h}} mm",
     save_action: "保存",
     saving: "保存しています…",

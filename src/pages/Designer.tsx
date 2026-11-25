@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { isPrintViaPc } from "@/lib/printViaPc";
@@ -103,6 +104,19 @@ export function DesignerPage() {
     scene,
   });
   const isScene = scene.template != null;
+  // Deep link from the Templates page: ?new=scene opens the new-label
+  // dialog, ?new=document the new-document dialog. The param is cleared
+  // once handled, so the effect no-ops on later renders.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const which = searchParams.get("new");
+    if (which !== "scene" && which !== "document") return;
+    if (which === "scene") newScene.openDialog();
+    else newTemplate.openNewTemplateDialog();
+    const next = new URLSearchParams(searchParams);
+    next.delete("new");
+    setSearchParams(next, { replace: true });
+  });
   /** Run an action, asking first when either track has unsaved edits. */
   const guard = (action: () => void) => {
     const dirty =
@@ -249,6 +263,7 @@ export function DesignerPage() {
         doc={doc}
         sync={sync}
         newTemplate={newTemplate}
+        newScene={newScene}
         isScene={isScene}
         scene={scene}
         sampleJson={dataset.workingDatasetJson}

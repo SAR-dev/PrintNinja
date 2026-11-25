@@ -4,12 +4,20 @@ import { type LucideIcon } from "lucide-react";
 import { AppLogo } from "@/components/AppLogo";
 import { usePrefs } from "@/lib/prefs/PrefsProvider";
 
+interface EmptyAction {
+  label: string;
+  onClick: () => void;
+  variant?: "default" | "outline";
+}
+
 interface EmptyStateProps {
   /** Lucide glyph; omitted shows the app mark (branding-aware). */
   icon?: LucideIcon;
   title: string;
   description?: string;
   action?: { label: string; onClick: () => void };
+  /** Several choices where none is "the" action (e.g. pick a track). */
+  actions?: EmptyAction[];
   className?: string;
 }
 
@@ -18,6 +26,7 @@ export function EmptyState({
   title,
   description,
   action,
+  actions,
   className,
 }: EmptyStateProps) {
   const { logo } = usePrefs();
@@ -46,6 +55,19 @@ export function EmptyState({
         <Button className="mt-4" onClick={action.onClick}>
           {action.label}
         </Button>
+      )}
+      {actions && actions.length > 0 && (
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          {actions.map((a) => (
+            <Button
+              key={a.label}
+              variant={a.variant ?? "default"}
+              onClick={a.onClick}
+            >
+              {a.label}
+            </Button>
+          ))}
+        </div>
       )}
     </div>
   );

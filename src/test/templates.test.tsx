@@ -77,6 +77,7 @@ const base = {
   updated_at: "2026-02-01T00:00:00Z",
   page_w_mm: 100,
   page_h_mm: 150,
+  track: "html",
 };
 const LIST = [
   { ...base, id: 1, name: "Shipping label" },
@@ -119,10 +120,26 @@ const LIST = [
     remote_id: "x2",
     withdrawn: true,
   },
+  // The label track: a scene row, local-only like every scene row.
+  {
+    ...base,
+    id: 6,
+    name: "Box label",
+    track: "scene",
+    scene_json: null,
+    page_w_mm: 62,
+    page_h_mm: 29,
+  },
 ];
 
 function Where() {
-  return <p data-testid="where">{useLocation().pathname}</p>;
+  const loc = useLocation();
+  return (
+    <p data-testid="where">
+      {loc.pathname}
+      {loc.search}
+    </p>
+  );
 }
 const renderPage = () =>
   render(
@@ -202,14 +219,46 @@ describe("Templates page", () => {
   it("opens on Mine with counts and one status per template", async () => {
     renderPage();
     expect(await screen.findByText("Shipping label")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Mine (3)" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Mine (4)" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
     expect(screen.getByRole("tab", { name: "Saved (2)" })).toBeInTheDocument();
-    expect(screen.getByText("Not on the server")).toBeInTheDocument();
+    // Two rows have no server copy: the plain local row and the scene row.
+    expect(screen.getAllByText("Not on the server")).toHaveLength(2);
     expect(screen.getByText("Published")).toBeInTheDocument();
     expect(screen.getByText("Changes not saved")).toBeInTheDocument();
+  });
+
+  it("badges each Mine row by its print track", async () => {
+    renderPage();
+    await screen.findByText("Box label");
+    expect(screen.getByText("Label")).toBeInTheDocument();
+    expect(screen.getAllByText("Document")).toHaveLength(3);
+  });
+
+  it("deep-links each create flow from the New menu", async () => {
+    renderPage();
+    await screen.findByText("Shipping label");
+    const openMenu = () =>
+      fireEvent.pointerDown(screen.getByRole("button", { name: "New" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+    openMenu();
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "New label template" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("where")).toHaveTextContent("/?new=scene"),
+    );
+    openMenu();
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "New document template" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("where")).toHaveTextContent("/?new=document"),
+    );
   });
 
   it("filters Mine in the browser and says so when nothing matches", async () => {
@@ -221,7 +270,7 @@ describe("Templates page", () => {
     });
     expect(await screen.findByText("Pallet tag")).toBeInTheDocument();
     expect(screen.queryByText("Shipping label")).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Mine (3)" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Mine (4)" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search templates"), {
       target: { value: "zzz-no-such-template" },
