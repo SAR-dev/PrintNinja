@@ -343,6 +343,71 @@ pub fn get_template(db: State<DbState>, id: i64) -> AppResult<Template> {
     })
 }
 
+/// Re-save an existing scene template in place (the designer's local
+/// save, WP4). The server is html-only, so a scene row's local copy is
+/// the whole truth: the row keeps its sync bookkeeping untouched — a
+/// `dirty` scene row is invisible to the sync pull, which neither
+/// pushes it nor forgets it (forgetting only reaches `synced` rows).
+/// The scene is validated again before the row changes, the name clash
+/// check runs as in create but excluding the row itself, and the page
+/// columns re-derive from the scene's media.
+pub fn update_scene_template(
+    conn: &Connection,
+    id: i64,
+    name: &str,
+    scene_json: &str,
+) -> AppResult<Template> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(AppError::Validation("Template name required".into()));
+    }
+    let template = pn_scene::Template::from_json(scene_json)
+        .map_err(|e| AppError::Validation(format!("Invalid scene template: {e}")))?;
+    template
+        .validate()
+        .map_err(|e| AppError::Validation(format!("Invalid scene template: {e}")))?;
+
+    let clash: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM templates WHERE name = ?1 COLLATE NOCASE AND id <> ?2 AND sync_state <> 'deleted_pending'",
+        rusqlite::params![name, id],
+        |r| r.get(0),
+    )?;
+    if clash > 0 {
+        return Err(AppError::Validation(format!(
+            "A template named '{}' already exists",
+            name
+        )));
+    }
+    let (w_mm, h_mm) = crate::label_pipeline::page_mm(&template);
+    let page_w_mm = w_mm.round() as i64;
+    let page_h_mm = h_mm.round() as i64;
+    if page_w_mm <= 0 || page_h_mm <= 0 {
+        return Err(AppError::Validation(
+            "Page dimensions must be positive".into(),
+        ));
+    }
+    let orientation = if page_w_mm > page_h_mm {
+        "landscape"
+    } else {
+        "portrait"
+    };
+
+    // `track = 'scene'` keeps this path from ever overwriting an html
+    // row, even with a bogus id from a stale client.
+    let affected = conn.execute(
+        "UPDATE templates SET name = ?1, page_w_mm = ?2, page_h_mm = ?3, orientation = ?4,
+             scene_json = ?5, updated_at = datetime('now')
+         WHERE id = ?6 AND track = 'scene'",
+        rusqlite::params![name, page_w_mm, page_h_mm, orientation, scene_json, id],
+    )?;
+    if affected == 0 {
+        return Err(AppError::NotFound(format!(
+            "Scene template {id} not found"
+        )));
+    }
+    tx_guard_to_template(conn, id).map_err(Into::into)
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UpdateTemplateMetaRequest {
     pub id: i64,

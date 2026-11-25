@@ -36,9 +36,12 @@ describe("listTemplates", () => {
     const { listTemplates } = await import("@/lib/templates/listTemplates");
     const out = await listTemplates();
 
-    // Origin rides along (null for rows that predate it); nothing is
-    // created on the side — an empty account is genuinely empty.
-    expect(out).toEqual([{ ...rows[0], origin: null }]);
+    // Origin rides along (null for rows that predate it); legacy rows
+    // read as the html track with no scene; nothing is created on the
+    // side — an empty account is genuinely empty.
+    expect(out).toEqual([
+      { ...rows[0], track: "html", scene_json: null, origin: null },
+    ]);
     expect(
       invoke.mock.calls.filter((c) => c[0] === "create_template"),
     ).toHaveLength(0);

@@ -244,8 +244,10 @@ pub fn load_profiles(dir: &Path) -> Result<ProfileSet, String> {
 }
 
 /// The template's page size in millimetres — one page's worth, the
-/// same for every page of a label, roll or page template.
-fn page_mm(template: &Template) -> (f32, f32) {
+/// same for every page of a label, roll or page template. Public so
+/// the scene save path can re-derive the row's page columns from the
+/// media.
+pub fn page_mm(template: &Template) -> (f32, f32) {
     match template.media {
         pn_scene::Media::Label {
             width_mm,

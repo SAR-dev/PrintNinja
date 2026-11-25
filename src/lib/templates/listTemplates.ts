@@ -11,6 +11,10 @@ export interface TemplateListRow {
   css: string;
   compiled_css: string;
   compiled_key: string;
+  /** The print track: `html` (document) or `scene` (label). */
+  track: string;
+  /** The scene template's JSON; null for `html` rows. */
+  scene_json: string | null;
   /** Local origin when the row came from the DB (`own` / `saved`). */
   origin?: string | null;
 }
@@ -25,6 +29,8 @@ const toRow = (row: {
   css?: string;
   compiled_css?: string;
   compiled_key?: string;
+  track?: string | null;
+  scene_json?: string | null;
   origin?: string | null;
 }): TemplateListRow => ({
   id: row.id,
@@ -36,6 +42,8 @@ const toRow = (row: {
   css: row.css ?? "",
   compiled_css: row.compiled_css ?? "",
   compiled_key: row.compiled_key ?? "",
+  track: row.track ?? "html",
+  scene_json: row.scene_json ?? null,
   origin: row.origin ?? null,
 });
 

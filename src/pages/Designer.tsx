@@ -23,6 +23,8 @@ import {
 } from "./designer/useDesignerDocument";
 import { useTemplateSync } from "./designer/useTemplateSync";
 import { useNewTemplate } from "./designer/useNewTemplate";
+import { useSceneTemplate } from "./designer/scene/useSceneTemplate";
+import { useNewSceneTemplate } from "./designer/scene/NewSceneDialog";
 import { useDesignerWorkspace } from "./designer/useDesignerWorkspace";
 import { useDebouncedTemplate } from "./designer/useDebouncedTemplate";
 import { DesignerTopBar } from "./designer/DesignerTopBar";
@@ -79,6 +81,42 @@ export function DesignerPage() {
       doc.setCurrentTemplateDbId(tpl.id);
     },
   });
+  // The scene track: the same open template, but when the row is a
+  // scene the body is the label designer instead of the document
+  // workspace (the track follows the printer class, PLAN WP4).
+  const scene = useSceneTemplate({
+    templates: doc.templates,
+    setTemplates: doc.setTemplates,
+    currentTemplateId: doc.currentTemplateId,
+    setCurrentTemplateId: doc.setCurrentTemplateId,
+    currentTemplateDbId: doc.currentTemplateDbId,
+    setCurrentTemplateDbId: doc.setCurrentTemplateDbId,
+    sampleJson: dataset.workingDatasetJson,
+  });
+  const newScene = useNewSceneTemplate({
+    templates: doc.templates,
+    setTemplates: doc.setTemplates,
+    setCurrentTemplateId: doc.setCurrentTemplateId,
+    setCurrentTemplateDbId: doc.setCurrentTemplateDbId,
+    currentTemplateId: doc.currentTemplateId,
+    currentTemplateDbId: doc.currentTemplateDbId,
+    scene,
+  });
+  const isScene = scene.template != null;
+  /** Run an action, asking first when either track has unsaved edits. */
+  const guard = (action: () => void) => {
+    const dirty =
+      doc.dirty || (isScene && (scene.dirty || dataset.datasetsDirty));
+    if (dirty) doc.setDiscardAction(() => action);
+    else action();
+  };
+  // doc.switchTemplate only guards the html-side dirty; a scene edit has
+  // its own mark, so the scene switch goes through the guard.
+  const handleSwitchTemplate = (id: number) => {
+    const tpl = doc.templates.find((r) => r.id === id);
+    if (!tpl || id === doc.currentTemplateId) return;
+    guard(() => doc.loadTemplate(tpl));
+  };
   const workspace = useDesignerWorkspace(isWide);
   const debounced = useDebouncedTemplate(doc.htmlCode, doc.cssCode);
   const readOnly = isReadOnly({ origin: doc.origin });
@@ -156,22 +194,38 @@ export function DesignerPage() {
         noTemplate={
           doc.templates.length === 0 || doc.currentTemplateDbId == null
         }
-        onSwitchTemplate={doc.switchTemplate}
+        isScene={isScene}
+        onSwitchTemplate={isScene ? handleSwitchTemplate : doc.switchTemplate}
         nameError={doc.nameError}
-        dirty={doc.dirty}
-        layout={workspace.layout}
-        onLayoutChange={workspace.setLayout}
+        dirty={isScene ? scene.dirty || dataset.datasetsDirty : doc.dirty}
+        layout={isScene ? undefined : workspace.layout}
+        onLayoutChange={isScene ? undefined : workspace.setLayout}
         onNewDesktop={() =>
-          doc.unlessDiscarding(() => newTemplate.openNewTemplateDialog())
+          guard(
+            isScene
+              ? () => newScene.openDialog()
+              : () => newTemplate.openNewTemplateDialog(),
+          )
         }
-        onNewTablet={() => newTemplate.openNewTemplateDialog()}
-        onSave={() => void sync.handleSave()}
-        offline={offline}
+        onNewTablet={() =>
+          isScene ? newScene.openDialog() : newTemplate.openNewTemplateDialog()
+        }
+        onSave={
+          isScene
+            ? () => void scene.save(doc.templateName)
+            : () => void sync.handleSave()
+        }
+        saveDisabled={
+          isScene ? !!doc.nameError : offline || readOnly || !!doc.nameError
+        }
+        saveTitle={
+          !isScene && offline ? t("designer.save_offline_title") : undefined
+        }
         readOnly={readOnly}
         templateName={doc.templateName}
         onTemplateNameChange={doc.setTemplateName}
-        remoteId={doc.remoteId}
-        publishedAt={doc.publishedAt}
+        remoteId={isScene ? null : doc.remoteId}
+        publishedAt={isScene ? null : doc.publishedAt}
         pending={sync.pending}
         onVisibilityChange={sync.handleVisibilityChange}
         onHistory={() => sync.setHistoryOpen(true)}
@@ -195,6 +249,10 @@ export function DesignerPage() {
         doc={doc}
         sync={sync}
         newTemplate={newTemplate}
+        isScene={isScene}
+        scene={scene}
+        sampleJson={dataset.workingDatasetJson}
+        onSampleJsonChange={dataset.setDraftDatasetJson}
         workspace={workspace}
         debounced={debounced}
         controls={controls}
@@ -216,6 +274,7 @@ export function DesignerPage() {
         sync={sync}
         dataset={dataset}
         newTemplate={newTemplate}
+        newScene={newScene}
         insertHelper={workspace.insertHelper}
         offline={offline}
         readOnly={readOnly}

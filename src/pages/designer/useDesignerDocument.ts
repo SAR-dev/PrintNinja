@@ -29,6 +29,10 @@ export type TemplateRow = {
   server_id?: string | null;
   published_at?: string | null;
   origin?: string | null;
+  /** The print track: `html` (document) or `scene` (label). */
+  track?: string;
+  /** The scene template's JSON; null for `html` rows. */
+  scene_json?: string | null;
 };
 
 /**
@@ -108,6 +112,8 @@ export function useDesignerDocument(datasetsDirty: boolean) {
     published_at?: string | null;
     origin?: string | null;
     updated_at?: string;
+    track?: string;
+    scene_json?: string | null;
   }) => {
     const html = formatHtml(tpl.html);
     const css = formatCss(tpl.css);
@@ -221,6 +227,8 @@ export function useDesignerDocument(datasetsDirty: boolean) {
           page_h_mm: r.page_h_mm,
           orientation: r.orientation,
           origin: r.origin ?? null,
+          track: r.track ?? "html",
+          scene_json: r.scene_json ?? null,
         }));
         setTemplates(hydrated);
         const first = hydrated[0];
@@ -284,6 +292,8 @@ export function useDesignerDocument(datasetsDirty: boolean) {
                 page_w_mm: r.page_w_mm,
                 page_h_mm: r.page_h_mm,
                 orientation: r.orientation,
+                track: r.track ?? t.track ?? "html",
+                scene_json: r.scene_json ?? t.scene_json ?? null,
               };
             }
             return {
@@ -295,6 +305,8 @@ export function useDesignerDocument(datasetsDirty: boolean) {
               page_h_mm: r.page_h_mm,
               orientation: r.orientation,
               origin: r.origin ?? t.origin ?? null,
+              track: r.track ?? t.track ?? "html",
+              scene_json: r.scene_json ?? t.scene_json ?? null,
             };
           });
           for (const r of rows) {
@@ -308,6 +320,8 @@ export function useDesignerDocument(datasetsDirty: boolean) {
                 page_h_mm: r.page_h_mm,
                 orientation: r.orientation,
                 origin: r.origin ?? null,
+                track: r.track ?? "html",
+                scene_json: r.scene_json ?? null,
               });
             }
           }

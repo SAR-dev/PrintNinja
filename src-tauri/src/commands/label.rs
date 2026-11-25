@@ -1,11 +1,14 @@
 //! The label track's IPC surface (LABEL_PRINTING_PLAN.md, WP2).
 //!
-//! Four commands, all keyed on the template's `track` column: saving a
-//! scene template (`track = 'scene'`, payload in `scene_json`), preparing
-//! one (validate → plan → render, no wire), printing one (the prepared
-//! units go out over this app's own transports under the printer's queue
-//! permit), and listing the bundled printer profiles. The track follows
-//! the template, not the printer's whim: `html` rows are refused here and
+//! Six commands, all keyed on the template's `track` column: saving a
+//! scene template (`track = 'scene'`, payload in `scene_json` — a fresh
+//! row, or an in-place re-save of one the designer already wrote),
+//! preparing one (validate → plan → render, no wire), printing one (the
+//! prepared units go out over this app's own transports under the
+//! printer's queue permit), listing the bundled printer profiles,
+//! previewing an unsaved scene straight from the designer, and encoding
+//! a barcode/QR symbol for the designer's canvas. The track follows the
+//! template, not the printer's whim: `html` rows are refused here and
 //! stay on the existing document path (`print_html`).
 
 use std::time::Instant;
@@ -21,19 +24,26 @@ use crate::label_pipeline::{
 };
 use crate::queue::PrintQueue;
 use pn_profiles::Profile;
-use pn_scene::{Records, Template};
+use pn_render::{barcode_modules, qr_matrix, QR_QUIET_MODULES, QUIET_MODULES};
+use pn_scene::{BarcodeKind, Records, Template};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
 /// Save a scene template: validate the payload, then write a
-/// `track = 'scene'` row. Reuses the html track's write path, so name
-/// uniqueness, readme scaffolding and sync bookkeeping behave exactly as
-/// they do for document templates.
+/// `track = 'scene'` row. Without `id` this is a fresh row through the
+/// html track's write path (name uniqueness, readme scaffolding and sync
+/// bookkeeping behave exactly as they do for document templates); with
+/// `id` it re-saves that row in place, because the server is html-only
+/// and a scene row's local copy is the whole truth.
 #[derive(Debug, Deserialize)]
 pub struct LabelSaveTemplateRequest {
     pub name: String,
     /// The scene template as the designer serializes it.
     pub scene: String,
+    /// The row's local id when re-saving an existing scene template.
+    /// Absent (or null) for a new template.
+    #[serde(default)]
+    pub id: Option<i64>,
 }
 
 #[tauri::command]
@@ -44,6 +54,10 @@ pub fn label_save_template(
     let guard = db
         .lock()
         .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let conn = guard.connection();
+    if let Some(id) = req.id {
+        return template::update_scene_template(conn, id, &req.name, &req.scene);
+    }
     let inner = CreateTemplateRequest {
         name: req.name,
         page_w_mm: None,
@@ -64,7 +78,107 @@ pub fn label_save_template(
         server_revision: None,
         base_revision: None,
     };
-    template::write_template(guard.connection(), &inner)
+    template::write_template(conn, &inner)
+}
+
+/// What one encoded symbol looks like on the designer's canvas: a row
+/// of modules (1 dark, 0 light — a QR matrix is `side × side`, read
+/// row-major) plus the quiet zone the symbol needs around it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SymbolEncoding {
+    /// Quiet-zone modules on every side, at the symbol's own scale.
+    pub quiet: usize,
+    pub modules: Vec<u8>,
+    /// The QR matrix's side in modules; absent for linear barcodes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub side: Option<usize>,
+}
+
+/// Encode a barcode or QR value the way the renderer will draw it, so
+/// the canvas can show the real symbol and whether it fits its box.
+/// `None` when the value cannot be encoded in that symbology.
+#[tauri::command]
+pub fn label_encode_symbol(kind: String, value: String) -> Option<SymbolEncoding> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+    if kind == "qr" {
+        return qr_matrix(value).map(|m| SymbolEncoding {
+            quiet: QR_QUIET_MODULES,
+            modules: m.modules,
+            side: Some(m.side),
+        });
+    }
+    let kind = match kind.as_str() {
+        "code39" => BarcodeKind::Code39,
+        "code93" => BarcodeKind::Code93,
+        "ean13" => BarcodeKind::Ean13,
+        "upca" => BarcodeKind::Upca,
+        "itf" => BarcodeKind::Itf,
+        _ => BarcodeKind::Code128,
+    };
+    barcode_modules(&kind, value).map(|modules| SymbolEncoding {
+        quiet: QUIET_MODULES,
+        modules,
+        side: None,
+    })
+}
+
+/// Prepare an unsaved scene — the designer's preview: the scene JSON
+/// straight from the editor, a saved printer, and the data it would
+/// print. Same report shape as [`label_prepare`], minus the template
+/// row.
+#[derive(Debug, Deserialize)]
+pub struct LabelPreviewRequest {
+    /// The scene template as the designer serializes it.
+    pub scene: String,
+    /// The saved printer's name.
+    pub printer: String,
+    /// The preview's data as JSON — one record or an array of them.
+    pub records: String,
+    /// Sets to preview; defaults to one.
+    #[serde(default)]
+    pub copies: Option<u32>,
+}
+
+#[tauri::command]
+pub async fn label_preview(
+    db: State<'_, DbState>,
+    req: LabelPreviewRequest,
+) -> AppResult<LabelPrepareResponse> {
+    let stored = lookup_printer(&db, &req.printer).ok_or_else(|| {
+        AppError::NotFound(format!(
+            "Printer '{}' is not saved; add it in Settings",
+            req.printer
+        ))
+    })?;
+    let (profile, choice) = resolve_profile_for_printer(&stored).map_err(AppError::Validation)?;
+    let template = Template::from_json(&req.scene)
+        .map_err(|e| AppError::Validation(format!("the scene is not valid: {e}")))?;
+    template
+        .validate()
+        .map_err(|e| AppError::Validation(format!("the scene is not valid: {e}")))?;
+    let records =
+        Records::from_json(&req.records).map_err(|e| AppError::Validation(e.to_string()))?;
+    let copies = req.copies.unwrap_or(1).max(1);
+    let choice = choice.clone();
+    tokio::task::spawn_blocking(move || {
+        prepare_units(&template, &profile, &records, copies)
+    })
+    .await
+    .map_err(|e| AppError::Internal(format!("the preview task ended before finishing: {e}")))?
+    .map_err(|e| AppError::Validation(e.to_string()))
+    .map(|units| LabelPrepareResponse {
+        profile: choice.model,
+        profile_source: if choice.user_chosen {
+            "user"
+        } else {
+            "default"
+        },
+        report: units.report,
+    })
 }
 
 /// One scene job's request: which template, which printer, which data,

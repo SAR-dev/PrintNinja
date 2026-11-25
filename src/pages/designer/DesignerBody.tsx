@@ -5,11 +5,14 @@ import { EmptyState } from "@/components/EmptyState";
 import { PhoneDesignerViewer } from "@/components/designer/PhoneDesignerViewer";
 import { DesignerWorkspace, type Controls } from "./DesignerWorkspace";
 import { TabletView } from "./TabletView";
+import { SceneDesigner } from "./scene/SceneDesigner";
+import { ScenePreview } from "./scene/ScenePreview";
 import type { useDesignerDocument } from "./useDesignerDocument";
 import type { useTemplateSync } from "./useTemplateSync";
 import type { useNewTemplate } from "./useNewTemplate";
 import type { useDesignerWorkspace } from "./useDesignerWorkspace";
 import type { useDebouncedTemplate } from "./useDebouncedTemplate";
+import type { useSceneTemplate } from "./scene/useSceneTemplate";
 
 /**
  * The main body under the top bar: the list-loading and no-template
@@ -23,6 +26,10 @@ export function DesignerBody({
   doc,
   sync,
   newTemplate,
+  isScene,
+  scene,
+  sampleJson,
+  onSampleJsonChange,
   workspace,
   debounced,
   controls,
@@ -41,6 +48,14 @@ export function DesignerBody({
   doc: ReturnType<typeof useDesignerDocument>;
   sync: ReturnType<typeof useTemplateSync>;
   newTemplate: ReturnType<typeof useNewTemplate>;
+  /** The open template is a scene (label) track row: the body is the
+   * label designer (canvas + inspector) instead of the document views. */
+  isScene: boolean;
+  scene: ReturnType<typeof useSceneTemplate>;
+  /** The sample data as the dataset edits it; the scene track edits it
+   * in a plain textarea, the document track in the dataset dialog. */
+  sampleJson: string;
+  onSampleJsonChange: (json: string) => void;
   workspace: ReturnType<typeof useDesignerWorkspace>;
   debounced: ReturnType<typeof useDebouncedTemplate>;
   controls: Controls;
@@ -58,6 +73,7 @@ export function DesignerBody({
   // Phone: Templates / Page Setup / Custom input live in a bottom sheet
   // opened from a single Settings button.
   const [controlsOpen, setControlsOpen] = useState(false);
+  const sceneTemplate = isScene ? scene.template : null;
 
   return doc.templatesLoading ? (
     <p className="text-sm text-muted-foreground" role="status">
@@ -79,6 +95,27 @@ export function DesignerBody({
         }
       />
     </Card>
+  ) : sceneTemplate ? (
+    // The scene track: phones see the label page read-only, desktop and
+    // tablet the full designer (the canvas beside the inspector cards).
+    isPhone ? (
+      <ScenePreview
+        template={sceneTemplate}
+        dpi={scene.dpi}
+        sampleJson={sampleJson}
+        samplePanel={samplePanel(false)}
+        dirty={scene.dirty}
+        templateName={doc.templateName}
+      />
+    ) : (
+      <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+        <SceneDesigner
+          scene={scene}
+          sampleJson={sampleJson}
+          onSampleJsonChange={onSampleJsonChange}
+        />
+      </div>
+    )
   ) : isDesktop ? (
     <DesignerWorkspace
       controls={controls}

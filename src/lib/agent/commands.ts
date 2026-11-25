@@ -19,6 +19,7 @@ import type {
   HistoryJob,
   LabelJobReq,
   LabelPrepareResponse,
+  LabelPreviewReq,
   LabelPrintResponse,
   LabelSaveTemplateReq,
   PrintHtmlReq,
@@ -47,6 +48,7 @@ import type {
   ResetReport,
   SaveDatasetReq,
   SaveProfileReq,
+  SymbolEncoding,
   SyncStateRow,
   SyncedDatasetRow,
   SystemPrinterRow,
@@ -378,6 +380,13 @@ export interface AgentCommands {
     { printer_id: number; profile_id: string | null },
     ProfileChoice,
   ];
+  /** Preview an unsaved scene straight from the designer: same answer
+   * as `label_prepare`, minus the template row. */
+  label_preview: [{ req: LabelPreviewReq }, LabelPrepareResponse];
+  /** Encode a barcode/QR the way the renderer draws it, for the
+   * designer's canvas; `null` when the value cannot be encoded in that
+   * symbology. */
+  label_encode_symbol: [{ kind: string; value: string }, SymbolEncoding | null];
   // Misc
   ping: [{}, null];
   parse_deeplink: [{ url: string }, DeeplinkResult];

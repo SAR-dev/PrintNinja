@@ -788,6 +788,10 @@ const acknowledgedStubs: string[] = [
   // printer row by Rust; the model picker UI lands with the WP4 label
   // screen, so the fake agent only acknowledges it.
   "label_set_printer_profile",
+  // Label track (WP4): the designer's preview and canvas symbol
+  // encoding, both computed in Rust; no e2e drives them yet.
+  "label_preview",
+  "label_encode_symbol",
   // mDNS discovery is implemented above
 ];
 

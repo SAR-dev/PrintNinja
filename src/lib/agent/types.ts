@@ -874,6 +874,31 @@ export interface LabelSaveTemplateReq {
   name: string;
   /** The scene template's JSON, as serialized by the designer. */
   scene: string;
+  /** The row's local id when re-saving an existing scene template;
+   * omitted for a new template. */
+  id?: number | null;
+}
+
+/** `label_preview`'s argument — the scene straight from the designer. */
+export interface LabelPreviewReq {
+  /** The scene template's JSON, as serialized by the designer. */
+  scene: string;
+  /** The saved printer's name. */
+  printer: string;
+  /** The preview's data records, as a JSON string. */
+  records: string;
+  /** Sets to preview; omitted means one. */
+  copies?: number | null;
+}
+
+/** One encoded symbol, the way the designer's canvas draws it. */
+export interface SymbolEncoding {
+  /** Quiet-zone modules on every side, at the symbol's own scale. */
+  quiet: number;
+  /** 1 dark, 0 light; a QR matrix is `side × side`, read row-major. */
+  modules: number[];
+  /** The QR matrix's side in modules; absent for linear barcodes. */
+  side?: number;
 }
 
 /** The argument of `label_prepare` and `label_print`. */

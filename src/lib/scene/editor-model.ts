@@ -403,6 +403,31 @@ export function clampToBounds(
   };
 }
 
+/**
+ * The first record of a sample-data JSON string: the first element of a
+ * parsed array, or a parsed object sample. `null` when the sample is not
+ * a record — the canvas has nothing to substitute the bindings from.
+ */
+export function firstRecordOf(sample: string): Record<string, unknown> | null {
+  try {
+    const arr: unknown = JSON.parse(sample);
+    if (
+      Array.isArray(arr) &&
+      arr.length > 0 &&
+      typeof arr[0] === "object" &&
+      arr[0] !== null
+    ) {
+      return arr[0] as Record<string, unknown>;
+    }
+    if (typeof arr === "object" && arr !== null) {
+      return arr as Record<string, unknown>;
+    }
+  } catch {
+    // not JSON — nothing to substitute from
+  }
+  return null;
+}
+
 /** How tall one group row is, in mm — an estimate for the canvas. */
 export function rowHeightMm(item: Element): number {
   switch (item.type) {
