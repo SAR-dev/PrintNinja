@@ -95,6 +95,18 @@ png = "0.17"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tauri-plugin-opener = "2"
 mdns-sd = "0.13"
+# The label track (WP2, ../LABEL_PRINTING_PLAN.md): scene templates are
+# planned and encoded by the vendored core crates, then delivered through
+# this crate's own transports (src/label_pipeline.rs wraps the returned
+# PrinterTransport in a pn-transport/pn-job adapter).
+pn-scene = { path = "../core/scene" }
+pn-browser = { path = "../core/browser" }
+pn-render = { path = "../core/render" }
+pn-planner = { path = "../core/planner" }
+pn-profiles = { path = "../core/profiles" }
+pn-encoders = { path = "../core/encoders" }
+pn-transport = { path = "../core/transport" }
+pn-job = { path = "../core/job" }
 # PDF-input rasterization (render/pdfium.rs): interprets a submitted PDF's
 # first page into a 1-bit raster for command-language printers. The binary
 # is vendored at resources/pdfium (pdfium.dll on Windows, libpdfium.so on

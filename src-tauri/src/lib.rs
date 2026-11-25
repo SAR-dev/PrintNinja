@@ -10,6 +10,7 @@ pub mod db;
 mod deeplink;
 pub mod discovery;
 mod error;
+pub mod label_pipeline;
 pub mod logfile;
 pub mod metrics;
 pub mod queue;
@@ -432,6 +433,10 @@ pub fn run() {
             commands::print::discover_network_printers_mdns,
             commands::print::discover_peers_mdns,
             commands::print::spike_test_print,
+            commands::label::label_save_template,
+            commands::label::label_prepare,
+            commands::label::label_print,
+            commands::label::label_list_profiles,
             commands::remote_print::remote_print,
             commands::remote_print::remote_printers,
             commands::remote_print::pc_templates,

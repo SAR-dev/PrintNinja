@@ -28,6 +28,12 @@ CREATE TABLE IF NOT EXISTS templates (
     css TEXT NOT NULL DEFAULT '',
     compiled_css TEXT NOT NULL DEFAULT '',
     compiled_key TEXT NOT NULL DEFAULT '',
+    -- The print track (LABEL_PRINTING_PLAN.md): `html` is the existing
+    -- mustache document track; `scene` is the label track, whose
+    -- serialized `pn_scene::Template` lives in `scene_json` (NULL for
+    -- html rows).
+    track TEXT NOT NULL DEFAULT 'html' CHECK (track IN ('html', 'scene')),
+    scene_json TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

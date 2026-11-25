@@ -9,6 +9,7 @@ pub mod deeplink_cmd;
 pub mod fix;
 pub mod font;
 pub mod history;
+pub mod label;
 pub mod logfile;
 pub mod print;
 pub mod printer;

@@ -518,6 +518,8 @@ fn new_template(name: &str) -> CreateTemplateRequest {
         compiled_key: None,
         readme: None,
         summary: None,
+        track: None,
+        scene_json: None,
         server_id: None,
         sync_state: None,
         kind: None,

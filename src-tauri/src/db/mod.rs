@@ -97,7 +97,28 @@ pub fn init(conn: &Connection) -> rusqlite::Result<()> {
     ensure_p2_checks(conn)?;
     ensure_template_content_schema(conn)?;
     ensure_pairing_schema(conn)?;
-    ensure_idempotency_scope(conn)
+    ensure_idempotency_scope(conn)?;
+    ensure_template_track_schema(conn)
+}
+
+/// The template track (LABEL_PRINTING_PLAN.md, WP2): one `track` column
+/// says which print path a template belongs to — `html` (the existing
+/// mustache track) or `scene` (the label track, whose serialized
+/// `pn_scene::Template` lives in `scene_json`). Every existing row is an
+/// HTML template, so the backfill is the column default and nothing is
+/// rewritten.
+pub fn ensure_template_track_schema(conn: &Connection) -> rusqlite::Result<()> {
+    if !column_exists(conn, "templates", "track")? {
+        conn.execute(
+            "ALTER TABLE templates ADD COLUMN track TEXT NOT NULL DEFAULT 'html'
+                 CHECK (track IN ('html', 'scene'))",
+            [],
+        )?;
+    }
+    if !column_exists(conn, "templates", "scene_json")? {
+        conn.execute("ALTER TABLE templates ADD COLUMN scene_json TEXT", [])?;
+    }
+    Ok(())
 }
 
 /// Scope the idempotency-key reservation to the caller.
