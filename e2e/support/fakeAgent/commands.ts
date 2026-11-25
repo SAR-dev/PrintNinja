@@ -776,6 +776,14 @@ const acknowledgedStubs: string[] = [
   // and read back by the Android print path; the e2e browser never sends a
   // Bluetooth job, so the fake agent only acknowledges it.
   "set_printer_bluetooth_delivery",
+  // Label track (WP2): scene templates save, prepare and print through
+  // Rust (label_pipeline); the label designer UI that will call these
+  // lands in a later milestone, so the fake agent only acknowledges
+  // them for the contract test.
+  "label_save_template",
+  "label_prepare",
+  "label_print",
+  "label_list_profiles",
   // mDNS discovery is implemented above
 ];
 
