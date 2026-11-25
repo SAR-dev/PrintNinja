@@ -97,7 +97,7 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - name: Install Tauri system dependencies
         run: |
@@ -124,7 +124,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - name: Install Tauri system dependencies
         run: |
@@ -305,7 +305,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - uses: actions/download-artifact@v8
         with:
@@ -341,7 +341,7 @@ jobs:
           targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - name: Install Java
         uses: actions/setup-java@v5
@@ -443,7 +443,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - name: Install Tauri system dependencies
         run: |
@@ -494,7 +494,7 @@ jobs:
           TAURI=$(jq -r .version src-tauri/tauri.conf.json)
           CARGO=$(awk '/^\[package\]/{p=1;next} /^\[/{p=0} p && /^version *=/{gsub(/[" ]/,"",$3); print $3; exit}' src-tauri/Cargo.toml)
           # Cargo.lock stores the same version for the crate
-          LOCK=$(awk '/^\[\[package\]\]/{p=0} /name = "printninja"/{p=1;next} p && /^version =/{gsub(/"/,"",$3); print $3; exit}' src-tauri/Cargo.lock)
+          LOCK=$(awk '/^\[\[package\]\]/{p=0} /name = "printninja"/{p=1;next} p && /^version =/{gsub(/"/,"",$3); print $3; exit}' Cargo.lock)
           # Layout.tsx topbar fallback literal "vX.Y.Z"
           LAYOUT=$(grep -o '"v[0-9]\+\.[0-9]\+\.[0-9]\+"' src/components/Layout.tsx | head -n1 | tr -d '"' | sed 's/^v//')
           echo "tag=$TAG_VERSION package.json=$PKG tauri.conf.json=$TAURI Cargo.toml=$CARGO Cargo.lock=$LOCK Layout.tsx=$LAYOUT"
@@ -526,7 +526,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       # Icon changed via `tauri icon` — Rust cache would restore old
       # target/release/build/printninja-*/out/resource.rc with stale ICO.
@@ -535,14 +535,14 @@ jobs:
       # name 'rf'". Use bash explicitly.
       - name: Clear stale icon build cache
         shell: bash
-        run: rm -rf src-tauri/target/release/build/printninja-* src-tauri/target/release/bundle || true
+        run: rm -rf target/release/build/printninja-* target/release/bundle || true
       - run: pnpm install --frozen-lockfile
       # MSI only. Without --target, output lands in target/release/bundle.
       - run: pnpm exec tauri build --bundles msi
       - uses: actions/upload-artifact@v7
         with:
           name: windows-msi
-          path: src-tauri/target/release/bundle/msi/*.msi
+          path: target/release/bundle/msi/*.msi
           if-no-files-found: error
           retention-days: 30
 
@@ -562,7 +562,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - name: Install Tauri Linux dependencies
         run: |
@@ -576,8 +576,8 @@ jobs:
         with:
           name: linux
           path: |
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
+            target/release/bundle/deb/*.deb
+            target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
           retention-days: 30
 
@@ -599,10 +599,10 @@ jobs:
           targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - name: Clear stale launcher icon cache
-        run: rm -rf src-tauri/target/aarch64-linux-android src-tauri/gen/android/app/build || true
+        run: rm -rf target/aarch64-linux-android src-tauri/gen/android/app/build || true
       - name: Install Java
         uses: actions/setup-java@v5
         with:

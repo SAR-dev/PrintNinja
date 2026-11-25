@@ -1,0 +1,33 @@
+# The on-hand test device (phase 1 / phase 2 hardware target).
+# Mined from docs/todo/RAW-CONSOLE-MINIMAL.md and code comments.
+# Geometry and status behavior are not recorded in the current app.
+
+[profile]
+model = "B-FP2D"
+aliases = ["bf fp2d"]
+status = "untested"
+language = "zpl"
+mode = "zpl"
+media = ["label"]
+
+[delivery]
+chunk_bytes = 512
+pause_ms = 50
+close_delay_ms = 0
+flow_control = "none"
+keep_open_for_status = true
+
+[[quirks]]
+id = "physical-mode-switch"
+note = "Dual-mode device: the ZPL/ESC-POS mode is switched on the printer itself (CMD SETTING), not by a command the app can send"
+evidence = "docs/todo/RAW-CONSOLE-MINIMAL.md:108-118"
+
+[[quirks]]
+id = "zpl-newline-blanks"
+note = "Real newline bytes inside a ZPL job feed blank lines"
+evidence = "src/pages/raw-console/templates.ts:112-120"
+
+[[quirks]]
+id = "bt-double-connect-wedge"
+note = "A second Bluetooth connect wedges the head - the driverless BT test opens one connection, not two"
+evidence = "src-tauri/src/commands/printer.rs:983-992"

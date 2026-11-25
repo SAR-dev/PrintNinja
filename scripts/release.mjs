@@ -37,7 +37,7 @@ const FILES = {
 	pkg: "package.json",
 	tauri: "src-tauri/tauri.conf.json",
 	cargo: "src-tauri/Cargo.toml",
-	lock: "src-tauri/Cargo.lock",
+	lock: "Cargo.lock",
 	layout: "src/components/Layout.tsx",
 	readme: "README.md",
 	// Frozen by `bumpChangelog` below, not by `applyVersion`.

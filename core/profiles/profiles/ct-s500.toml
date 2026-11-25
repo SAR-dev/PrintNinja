@@ -1,0 +1,33 @@
+# Mined from the current app (CPCL family): src-tauri/src/transport/
+# label_langs.rs:220-232. App path is an EG hex raster; the CPCL
+# header hard-codes 200 dpi regardless of the row dpi.
+
+[profile]
+model = "CT-S500"
+aliases = ["citizen ct-s500"]
+status = "untested"
+language = "cpcl"
+dpi = 200
+head_width_dots = 800
+media = ["label"]
+
+[fonts]
+native = ["4"]
+unicode_native = false
+
+[delivery]
+chunk_bytes = 512
+pause_ms = 50
+close_delay_ms = 0
+flow_control = "none"
+keep_open_for_status = false
+
+[[quirks]]
+id = "hardcoded-200dpi"
+note = "The CPCL job header (! 0 200 200 <height> 1) hard-codes 200 dpi; the per-printer dpi row value is not used for CPCL"
+evidence = "src-tauri/src/transport/label_langs.rs:220-232"
+
+[[quirks]]
+id = "no-status"
+note = "CPCL has no status dialect at all - no pre-send query, no reply parsing (dialect_for returns None)"
+evidence = "src-tauri/src/transport/status.rs:136-145"

@@ -1,0 +1,42 @@
+# Reference profile — the canonical example of the profile schema.
+# Status stays `untested` until the hardware checklist has been run on a
+# real GK420d (phase 2 exit criterion).
+
+[profile]
+model = "GK420d"
+aliases = ["zebra gk420"]
+status = "untested"
+language = "zpl"
+mode = "zpl"
+dpi = 203
+head_width_dots = 864
+media = ["label"]
+min_gap_dots = 8
+
+[fonts]
+native = ["0", "1", "2", "3", "4"]
+code_pages = ["437", "850", "1252"]
+unicode_native = false
+
+[barcodes]
+native = ["CODE128", "EAN13", "QR", "PDF417"]
+
+[delivery]
+chunk_bytes = 1024
+pause_ms = 10
+close_delay_ms = 500
+flow_control = "pace"
+keep_open_for_status = true
+
+[status]
+query = "^U"
+expected_prefix = "STATUS"
+poll_after_ms = 200
+reports_paper = true
+reports_cover = false
+reports_paused = true
+
+[[quirks]]
+id = "needs-finalize"
+note = "Last line must be followed by ^PKS or a 200ms delay"
+evidence = "raw-console/2026-11-18-gk420d.txt"

@@ -237,7 +237,7 @@ if (!skipChecks) {
 
 // ---- commit + tag --------------------------------------------------------
 
-sh("git", ["add", "--", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "src/components/Layout.tsx", "README.md"]);
+sh("git", ["add", "--", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "Cargo.lock", "src/components/Layout.tsx", "README.md"]);
 try {
   execFileSync("git", ["-c", "user.name=Release", "-c", "user.email=release@local", "commit", "-m", `release: ${tag}${labelSuffix}`, "-m", `Release printninja ${version}${label ? `\n\nLabel: ${label}` : ""}`], { cwd: ROOT, stdio: "inherit" });
 } catch {
@@ -257,12 +257,12 @@ const artifacts = [];
 if (process.platform === "win32") {
   // MSI only.
   sh(PNPM, ["exec", "tauri", "build", "--bundles", "msi"], { env: buildEnv });
-  artifacts.push(...findFiles(join(ROOT, "src-tauri/target/release/bundle/msi"), [".msi"]));
+  artifacts.push(...findFiles(join(ROOT, "target/release/bundle/msi"), [".msi"]));
 } else if (process.platform === "linux") {
   // deb + AppImage only.
   sh(PNPM, ["exec", "tauri", "build", "--bundles", "deb", "appimage"], { env: buildEnv });
-  artifacts.push(...findFiles(join(ROOT, "src-tauri/target/release/bundle/deb"), [".deb"]));
-  artifacts.push(...findFiles(join(ROOT, "src-tauri/target/release/bundle/appimage"), [".AppImage"]));
+  artifacts.push(...findFiles(join(ROOT, "target/release/bundle/deb"), [".deb"]));
+  artifacts.push(...findFiles(join(ROOT, "target/release/bundle/appimage"), [".AppImage"]));
 } else {
   console.log(`(no desktop bundles configured for ${process.platform}; skipping)`);
 }

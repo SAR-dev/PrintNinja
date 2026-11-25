@@ -1,0 +1,29 @@
+# Mined from the current app (ESC/POS family): the generic 58 mm
+# fixture (src-tauri/src/transport/capabilities.rs:493-506). 58 mm at
+# 203 dpi -> 384 dots (src-tauri/src/render/raster.rs:194-205).
+
+[profile]
+model = "Generic Thermal Printer 58mm"
+aliases = ["thermal 58mm", "pos-58"]
+status = "untested"
+language = "escpos"
+dpi = 203
+head_width_dots = 384
+media = ["continuous"]
+
+[delivery]
+chunk_bytes = 512
+pause_ms = 50
+close_delay_ms = 0
+flow_control = "none"
+keep_open_for_status = true
+
+[[quirks]]
+id = "status-dialect"
+note = "ESC/POS status: DLE EOT 1..4, 4-byte binary replies (n=1: 0x08 offline; n=2: 0x04 cover open, 0x20 paper end, 0x40 error); a reply of 4+ bytes counts as answered, structure bits (b&0x12)!=0x12 or (b&0x81)==0 -> skip"
+evidence = "src-tauri/src/transport/status.rs:115-207"
+
+[[quirks]]
+id = "compact-band-cap"
+note = "Compact printers accept the GS v 0 command but not tall bands (small receive buffer / firmware height cap) and print stray characters; band height is a per-printer knob (escpos.bandRows, 8..=2303 rows)"
+evidence = "src-tauri/src/transport/escpos.rs:8-16"

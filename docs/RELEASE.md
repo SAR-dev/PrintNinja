@@ -64,7 +64,7 @@ places (`release-local.mjs` checks the first, second, third and fifth), plus the
 - `package.json`
 - `src-tauri/tauri.conf.json` (version and the platform overrides above)
 - `src-tauri/Cargo.toml` (`[package]` version)
-- `src-tauri/Cargo.lock` (the crate's own entry)
+- `Cargo.lock` (the crate's own entry)
 - `src/components/Layout.tsx` (the topbar `"vX.Y.Z"` fallback literal)
 
 Then it commits `release: vX.Y.Z` and creates an annotated tag `vX.Y.Z`. It refuses to run
@@ -108,7 +108,7 @@ Store your certificate as `scripts/certs/windows.pfx` (not committed).
 pnpm tauri:build -- --target x86_64-pc-windows-msvc --bundles msi
 
 # Optional: sign the resulting MSI with signtool
-signtool sign /f ./scripts/certs/windows.pfx /p password /tr http://timestamp.digicert.com /td sha256 /fd sha256 src-tauri/target/release/bundle/msi/*.msi
+signtool sign /f ./scripts/certs/windows.pfx /p password /tr http://timestamp.digicert.com /td sha256 /fd sha256 target/release/bundle/msi/*.msi
 ```
 
 ### Android (APK / AAB)

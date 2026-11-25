@@ -1,0 +1,18 @@
+[package]
+name = "pn-render"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ab_glyph = { workspace = true }
+barcoders = { workspace = true }
+flate2 = { workspace = true }
+pn-scene = { path = "../scene" }
+qrcode = { workspace = true }
+swash = { workspace = true }
+
+[dev-dependencies]
+golden-harness = { path = "../../tests/golden" }
+# decode side of the round-trip tests only; never in the renderer
+rxing = { version = "0.9", default-features = false, features = ["decoders", "encoding_rs", "oned", "qrcode"] }

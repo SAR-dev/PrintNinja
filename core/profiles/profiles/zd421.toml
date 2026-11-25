@@ -1,0 +1,47 @@
+# Mined from the current app (ZPL family): src-tauri/src/transport/
+# label_langs.rs, status.rs, raw_tcp.rs. App path is a 1-bit ^GFA
+# graphic; fonts/barcodes are raster, native text only in raw-console
+# test templates.
+
+[profile]
+model = "ZD421"
+aliases = ["zebra zd421"]
+status = "untested"
+language = "zpl"
+mode = "zpl"
+dpi = 203
+head_width_dots = 812
+media = ["label"]
+min_gap_dots = 8
+
+[fonts]
+native = ["0", "1", "2", "3", "4"]
+code_pages = ["437", "850", "1252"]
+unicode_native = false
+
+[delivery]
+chunk_bytes = 512
+pause_ms = 50
+close_delay_ms = 0
+flow_control = "none"
+keep_open_for_status = true
+
+[status]
+# ~HS reply is STX-framed (first byte always STX); fields are
+# comma-separated, fields[1]=="1" -> paper out, fields[2]=="1" -> paused.
+query = "~HS"
+expected_prefix = "\u0002"
+poll_after_ms = 200
+reports_paper = true
+reports_cover = true
+reports_paused = true
+
+[[quirks]]
+id = "silence-is-fault"
+note = "A Zebra sends no ~HS reply at all when media is out, ribbon is out or the head is open - silence after a previous answer is a fault, not 'unknown'"
+evidence = "src-tauri/src/transport/raw_tcp.rs:231-235"
+
+[[quirks]]
+id = "no-darkness-command"
+note = "Darkness (~SD) is intentionally never sent; left to the printer"
+evidence = "src-tauri/src/transport/label_langs.rs:235-238"

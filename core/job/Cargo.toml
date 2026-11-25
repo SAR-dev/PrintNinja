@@ -1,0 +1,12 @@
+[package]
+name = "pn-job"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+pn-transport = { path = "../transport" }
+pn-profiles = { path = "../profiles" }
+
+[dev-dependencies]
+pn-transport = { path = "../transport" }

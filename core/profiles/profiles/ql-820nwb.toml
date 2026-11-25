@@ -1,0 +1,27 @@
+# Mined from the current app (ESC/POS family, label stock): seed data
+# in scripts/screenshots.mjs (62 mm, network, escpos) + shared ESC/POS
+# transport behavior (src-tauri/src/transport/escpos.rs, status.rs).
+
+[profile]
+model = "QL-820NWB"
+aliases = ["brother ql-820"]
+status = "untested"
+language = "escpos"
+media = ["label"]
+
+[delivery]
+chunk_bytes = 512
+pause_ms = 50
+close_delay_ms = 0
+flow_control = "none"
+keep_open_for_status = true
+
+[[quirks]]
+id = "status-dialect"
+note = "ESC/POS status: DLE EOT 1..4, 4-byte binary replies (n=1: 0x08 offline; n=2: 0x04 cover open, 0x20 paper end, 0x40 error); a reply of 4+ bytes counts as answered, structure bits (b&0x12)!=0x12 or (b&0x81)==0 -> skip"
+evidence = "src-tauri/src/transport/status.rs:115-207"
+
+[[quirks]]
+id = "label-stock"
+note = "Prints on die-cut label rolls (62 mm); the app raster path is identical to receipt stock, only the media differs"
+evidence = "scripts/screenshots.mjs:175-179"

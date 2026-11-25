@@ -1,0 +1,13 @@
+[package]
+name = "pn-browser"
+description = "Headless browser renderer for the html document track (plan §5.3)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# std-only on purpose: one-shot `--print-to-pdf` against the system's
+# Edge (Windows) or Chromium/Chrome (Linux). No tokio, no CDP, no
+# downloaded browser — the app already assumes a desktop OS ships one.
+[dependencies]
+thiserror = { workspace = true }

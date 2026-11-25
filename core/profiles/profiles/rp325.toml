@@ -1,0 +1,23 @@
+# Mined from the current app (ESC/POS family): fixture
+# src-tauri/src/transport/capabilities.rs:493-506. The model name does
+# not match any brand table entry, so the current app falls back to a
+# generic ESC/POS row; geometry is not recorded in code.
+
+[profile]
+model = "RP325"
+aliases = ["ruijie rp325"]
+status = "untested"
+language = "escpos"
+media = ["continuous"]
+
+[delivery]
+chunk_bytes = 512
+pause_ms = 50
+close_delay_ms = 0
+flow_control = "none"
+keep_open_for_status = true
+
+[[quirks]]
+id = "status-dialect"
+note = "ESC/POS status: DLE EOT 1..4, 4-byte binary replies (n=1: 0x08 offline; n=2: 0x04 cover open, 0x20 paper end, 0x40 error); a reply of 4+ bytes counts as answered, structure bits (b&0x12)!=0x12 or (b&0x81)==0 -> skip"
+evidence = "src-tauri/src/transport/status.rs:115-207"

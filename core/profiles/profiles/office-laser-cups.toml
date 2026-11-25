@@ -1,0 +1,21 @@
+# Mined from the current app (PDF/document family): seed data
+# scripts/screenshots.mjs:175-179. Document printers have no native
+# command language; the OS print path (CUPS/IPP on Linux, spooler on
+# Windows) owns delivery and fault states.
+
+[profile]
+model = "Office Laser (CUPS)"
+aliases = ["office laser"]
+status = "untested"
+language = "pdf"
+media = ["page"]
+
+[delivery]
+# OS spooler path: no raw pacing; keep_open is meaningless.
+flow_control = "none"
+keep_open_for_status = false
+
+[[quirks]]
+id = "no-per-send-status"
+note = "The spooler path deliberately does no per-send status precheck - the queue is durable and fault state is surfaced by the test action instead; a stopped job is a failure even with a successful operation status"
+evidence = "src-tauri/src/transport/windows_spooler.rs:586-601"
