@@ -16,9 +16,11 @@
 # (was src-tauri/target) — .github/workflows/ci.yml and
 # src-tauri/docker-compose.test.yml were updated to match.
 #
-# `tests/e2e/support/virtual-printer` is deliberately EXCLUDED: it is a
+# Both virtual-printer fixture copies are deliberately EXCLUDED: each is a
 # standalone std-only crate with its own Cargo.lock, compiled on demand
-# and spawned as a subprocess by the e2e tests.
+# and spawned as a subprocess. `e2e/support/virtual-printer` serves the
+# old app's src-tauri integration tests and the Playwright e2e Docker
+# job; `tests/e2e/support/virtual-printer` serves the vendored pn-e2e.
 [workspace]
 resolver = "2"
 members = [
@@ -34,7 +36,10 @@ members = [
     "tests/golden",
     "tests/e2e",
 ]
-exclude = ["tests/e2e/support/virtual-printer"]
+exclude = [
+    "e2e/support/virtual-printer",
+    "tests/e2e/support/virtual-printer",
+]
 
 [workspace.package]
 version = "2026.1124.0"
