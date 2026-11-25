@@ -9,6 +9,13 @@ CREATE TABLE IF NOT EXISTS printers (
     paper_width_mm INTEGER CHECK(paper_width_mm IS NULL OR paper_width_mm > 0),
     dpi INTEGER DEFAULT 203 CHECK(dpi IS NULL OR dpi > 0),
     label_gap_mm REAL CHECK(label_gap_mm IS NULL OR label_gap_mm > 0),
+    -- The label track's printer model (LABEL_PRINTING_PLAN.md, WP3):
+    -- the bundled profile's id — the file stem of one of
+    -- core/profiles/profiles/*.toml. NULL means the row has no pick and
+    -- prints scene jobs with the language-based default. Validated
+    -- app-side when written; no CHECK, so a stray value cannot wedge
+    -- the row — resolution falls back to the default.
+    label_profile TEXT,
     username TEXT,
     password TEXT,
     skip_tls_verification INTEGER NOT NULL DEFAULT 0,

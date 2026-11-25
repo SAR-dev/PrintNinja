@@ -2223,6 +2223,11 @@ pub struct StoredPrinter {
     pub dpi: Option<i64>,
     /// TSPL media gap in mm; `None` means the encoder default (2 mm).
     pub label_gap_mm: Option<f64>,
+    /// The label track's bundled model the row prints scene jobs with
+    /// (LABEL_PRINTING_PLAN.md, WP3): the profile's id — a file stem
+    /// from `core/profiles/profiles/`. `None` keeps the language-based
+    /// default.
+    pub label_profile: Option<String>,
     /// TSPL darkness, speed and media type from the row's
     /// `default_settings_json`; defaults send nothing extra.
     pub tspl: crate::transport::label_langs::tspl::TsplTuning,
@@ -2253,8 +2258,9 @@ pub fn lookup_printer(db: &DbState, name: &str) -> Option<StoredPrinter> {
     let conn = guard.connection();
     conn.query_row(
         "SELECT type, COALESCE(address, ''), COALESCE(language, 'pdf'), \
-                paper_width_mm, dpi, label_gap_mm, username, password, \
-                skip_tls_verification, via_driver, default_settings_json \
+                paper_width_mm, dpi, label_gap_mm, label_profile, username, \
+                password, skip_tls_verification, via_driver, \
+                default_settings_json \
          FROM printers WHERE name = ?1 COLLATE NOCASE",
         [name],
         |r| {
@@ -2265,18 +2271,19 @@ pub fn lookup_printer(db: &DbState, name: &str) -> Option<StoredPrinter> {
                 paper_width_mm: r.get(3)?,
                 dpi: r.get(4)?,
                 label_gap_mm: r.get(5)?,
-                username: r.get(6)?,
-                password: r.get(7)?,
-                skip_tls_verification: r.get(8)?,
-                via_driver: r.get(9)?,
+                label_profile: r.get(6)?,
+                username: r.get(7)?,
+                password: r.get(8)?,
+                skip_tls_verification: r.get(9)?,
+                via_driver: r.get(10)?,
                 tspl: crate::transport::label_langs::tspl::TsplTuning::from_settings_json(
-                    r.get::<_, Option<String>>(10)?.as_deref(),
+                    r.get::<_, Option<String>>(11)?.as_deref(),
                 ),
                 escpos: crate::transport::escpos::EscPosTuning::from_settings_json(
-                    r.get::<_, Option<String>>(10)?.as_deref(),
+                    r.get::<_, Option<String>>(11)?.as_deref(),
                 ),
                 bluetooth: crate::transport::BluetoothDelivery::from_settings_json(
-                    r.get::<_, Option<String>>(10)?.as_deref(),
+                    r.get::<_, Option<String>>(11)?.as_deref(),
                 ),
             })
         },

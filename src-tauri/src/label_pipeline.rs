@@ -136,6 +136,9 @@ pub struct DeliveryInfo {
 /// A profile as the UI's printer list shows it.
 #[derive(Debug, Clone, Serialize)]
 pub struct ProfileInfo {
+    /// The bundled profile's id — the file stem of its TOML, the value
+    /// a saved printer row's `label_profile` holds (WP3).
+    pub id: String,
     pub model: String,
     pub aliases: Vec<String>,
     /// The profile's language, in words: "zpl", "escpos", "pdf", …
@@ -163,9 +166,13 @@ fn media_word(media: &Media) -> &'static str {
 /// The profile set's printers, in the shape the UI lists them.
 pub fn profile_infos(set: &ProfileSet) -> Vec<ProfileInfo> {
     set.profiles()
-        .map(|(_, p)| {
+        .map(|(path, p)| {
             let meta = &p.profile;
             ProfileInfo {
+                id: path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| meta.model.clone()),
                 model: meta.model.clone(),
                 aliases: meta.aliases.clone(),
                 language: meta.language.to_string(),
@@ -484,30 +491,156 @@ pub fn embedded_profile_set() -> Result<ProfileSet, String> {
     Ok(set)
 }
 
+/// Which bundled model a saved printer row prints scene jobs with, and
+/// whether the user picked it (LABEL_PRINTING_PLAN.md, WP3 — the main
+/// design decision). The row's `label_profile` column holds the pick;
+/// `None` means the language-based default applies.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ProfileChoice {
+    /// The bundled profile's id — the file stem of one of
+    /// `core/profiles/profiles/*.toml`.
+    pub model: String,
+    /// True when the user picked this model for the row; false for the
+    /// language-based default (the UI flags the latter as "auto").
+    pub user_chosen: bool,
+}
+
+/// The bundled profile ids, in the order they ship.
+pub fn bundled_profile_ids() -> Vec<&'static str> {
+    EMBEDDED_PROFILES.iter().map(|(name, _)| *name).collect()
+}
+
+/// The model a row without a pick prints with, by its language — the
+/// same bases the WP2 mapping used. A raster row talks the raw ESC/POS
+/// family on the wire, so it takes the ESC/POS base.
+pub fn default_model_for_language(row_language: &str) -> &'static str {
+    match crate::transport::parse_printer_language(row_language) {
+        crate::transport::PrinterLanguage::Pdf => "office-laser-cups",
+        crate::transport::PrinterLanguage::Zpl => "zt411",
+        crate::transport::PrinterLanguage::Tspl => "ql-820nwb",
+        crate::transport::PrinterLanguage::Cpcl => "ct-s500",
+        crate::transport::PrinterLanguage::Escpos | crate::transport::PrinterLanguage::Raster => {
+            "generic-thermal-58mm"
+        }
+    }
+}
+
+/// The profile language a pick must speak, so a row cannot be pointed
+/// at a model whose dialect it cannot send. A raster row takes the
+/// ESC/POS family — on the wire it is an ESC/POS printer.
+fn expected_language(row_language: &str) -> pn_profiles::Language {
+    match crate::transport::parse_printer_language(row_language) {
+        crate::transport::PrinterLanguage::Pdf => pn_profiles::Language::Pdf,
+        crate::transport::PrinterLanguage::Zpl => pn_profiles::Language::Zpl,
+        crate::transport::PrinterLanguage::Tspl => pn_profiles::Language::Tspl,
+        crate::transport::PrinterLanguage::Cpcl => pn_profiles::Language::Cpcl,
+        crate::transport::PrinterLanguage::Escpos | crate::transport::PrinterLanguage::Raster => {
+            pn_profiles::Language::Escpos
+        }
+    }
+}
+
+/// A pick is usable when the profile exists in the bundled set and
+/// speaks the row's language family.
+pub fn validate_profile_pick(profile_id: &str, row_language: &str) -> Result<(), String> {
+    let Some((_, text)) = EMBEDDED_PROFILES
+        .iter()
+        .find(|(name, _)| *name == profile_id)
+    else {
+        return Err(format!(
+            "no bundled profile '{profile_id}'; the ids the app knows: {}",
+            bundled_profile_ids().join(", ")
+        ));
+    };
+    let want = expected_language(row_language);
+    let got = parse(text)
+        .map(|p| p.profile.language)
+        .map_err(|e| e.to_string())?;
+    if got != want {
+        return Err(format!(
+            "profile '{profile_id}' speaks {got}, but this printer's language is {want}"
+        ));
+    }
+    Ok(())
+}
+
+/// The model a saved row prints with: the user's pick when the row
+/// carries one (validated), else the language-based default.
+pub fn resolve_profile_choice(
+    printer: &crate::commands::print::StoredPrinter,
+) -> Result<ProfileChoice, String> {
+    match &printer.label_profile {
+        Some(pick) => {
+            validate_profile_pick(pick, &printer.language)?;
+            Ok(ProfileChoice {
+                model: pick.clone(),
+                user_chosen: true,
+            })
+        }
+        None => Ok(ProfileChoice {
+            model: default_model_for_language(&printer.language).to_string(),
+            user_chosen: false,
+        }),
+    }
+}
+
 /// The profile a saved printer row prints scene jobs with: the bundled
-/// base for its language, merged with the row's own geometry. This is
-/// WP2's minimal mapping — WP3 makes the model choice user-facing.
+/// base for its model, merged with the row's own geometry.
+///
+/// A row without a pick takes the language-based default and is mapped
+/// exactly as WP2 mapped it: the row's language family and media are
+/// forced, the dpi falls back to 203, and the row's width brings its
+/// head. A user pick (WP3) changes which base the job runs on — its
+/// language, media, fonts and barcodes win — and only the row's
+/// geometry is applied on top: the dpi and width each fall back to the
+/// model's values, and when both are known the head is recomputed so
+/// the profile validator's cross-check holds.
 pub fn resolve_profile_for_printer(
     printer: &crate::commands::print::StoredPrinter,
-) -> Result<Profile, String> {
+) -> Result<(Profile, ProfileChoice), String> {
+    let choice = resolve_profile_choice(printer)?;
+    let base = parse(embedded_text(&choice.model)).map_err(|e| e.to_string())?;
+
+    if choice.user_chosen {
+        let meta = &base.profile;
+        let dpi: Option<u32> = printer
+            .dpi
+            .and_then(|d| u32::try_from(d).ok())
+            .or_else(|| meta.dpi.map(u16::into));
+        let width_mm: Option<f64> = printer
+            .paper_width_mm
+            .map(|w| w as f64)
+            .or(meta.printable_width_mm);
+        let mut override_toml = String::from("[profile]\n");
+        match (dpi, width_mm) {
+            (Some(d), Some(w)) => {
+                // All three together: the profile validator
+                // cross-checks them only when all are present.
+                let head = (d as f64 * w / 25.4).round() as u32;
+                override_toml.push_str(&format!(
+                    "dpi = {d}\nprintable_width_mm = {w}\nhead_width_dots = {head}\n"
+                ));
+            }
+            (Some(d), None) => override_toml.push_str(&format!("dpi = {d}\n")),
+            (None, Some(w)) => override_toml.push_str(&format!("printable_width_mm = {w}\n")),
+            (None, None) => return Ok((base, choice)),
+        }
+        return merge(&base, &override_toml)
+            .map(|p| (p, choice))
+            .map_err(|e| e.to_string());
+    }
+
     let lang = crate::transport::parse_printer_language(&printer.language);
-    let (base_name, lang_word, media) = match lang {
-        crate::transport::PrinterLanguage::Pdf => ("office-laser-cups", "pdf", "[\"page\"]"),
-        crate::transport::PrinterLanguage::Zpl => ("zt411", "zpl", "[\"label\", \"continuous\"]"),
-        crate::transport::PrinterLanguage::Tspl => {
-            ("ql-820nwb", "tspl", "[\"label\", \"continuous\"]")
-        }
-        crate::transport::PrinterLanguage::Cpcl => {
-            ("ct-s500", "cpcl", "[\"label\", \"continuous\"]")
-        }
+    let (lang_word, media) = match lang {
+        crate::transport::PrinterLanguage::Pdf => ("pdf", "[\"page\"]"),
+        crate::transport::PrinterLanguage::Zpl => ("zpl", "[\"label\", \"continuous\"]"),
+        crate::transport::PrinterLanguage::Tspl => ("tspl", "[\"label\", \"continuous\"]"),
+        crate::transport::PrinterLanguage::Cpcl => ("cpcl", "[\"label\", \"continuous\"]"),
         // A raster row still talks the raw ESC/POS family on the wire.
-        crate::transport::PrinterLanguage::Escpos | crate::transport::PrinterLanguage::Raster => (
-            "generic-thermal-58mm",
-            "escpos",
-            "[\"label\", \"continuous\"]",
-        ),
+        crate::transport::PrinterLanguage::Escpos | crate::transport::PrinterLanguage::Raster => {
+            ("escpos", "[\"label\", \"continuous\"]")
+        }
     };
-    let base = parse(embedded_text(base_name)).map_err(|e| e.to_string())?;
     let dpi = printer.dpi.unwrap_or(203);
     let mut override_toml =
         format!("[profile]\nlanguage = \"{lang_word}\"\nmedia = {media}\ndpi = {dpi}\n");
@@ -519,7 +652,9 @@ pub fn resolve_profile_for_printer(
             "head_width_dots = {head}\nprintable_width_mm = {width_mm}\n"
         ));
     }
-    merge(&base, &override_toml).map_err(|e| e.to_string())
+    merge(&base, &override_toml)
+        .map(|p| (p, choice))
+        .map_err(|e| e.to_string())
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -1350,5 +1485,158 @@ expected_prefix = "\u0002"
             10,
             "an override that does not parse is dropped, not a failure"
         );
+    }
+
+    // ── Printer mapping (WP3) ─────────────────────────────────────
+
+    /// A stored row for the mapping tests: only the fields the mapping
+    /// consults vary; everything else is the built-in default.
+    fn stored_row(
+        language: &str,
+        dpi: Option<i64>,
+        width_mm: Option<i64>,
+    ) -> crate::commands::print::StoredPrinter {
+        crate::commands::print::StoredPrinter {
+            printer_type: "raw_tcp".into(),
+            address: "127.0.0.1:9100".into(),
+            language: language.into(),
+            paper_width_mm: width_mm,
+            dpi,
+            label_gap_mm: None,
+            label_profile: None,
+            tspl: crate::transport::label_langs::tspl::TsplTuning::from_settings_json(None),
+            escpos: crate::transport::escpos::EscPosTuning::from_settings_json(None),
+            bluetooth: crate::transport::BluetoothDelivery::from_settings_json(None),
+            username: None,
+            password: None,
+            skip_tls_verification: false,
+            via_driver: false,
+        }
+    }
+
+    /// A row without a pick takes the language-based default model,
+    /// and a raster row takes the ESC/POS base — on the wire it is an
+    /// ESC/POS printer.
+    #[test]
+    fn a_row_without_a_pick_takes_the_language_default() {
+        for (language, model, want) in [
+            ("pdf", "office-laser-cups", pn_profiles::Language::Pdf),
+            ("zpl", "zt411", pn_profiles::Language::Zpl),
+            ("tspl", "ql-820nwb", pn_profiles::Language::Tspl),
+            ("cpcl", "ct-s500", pn_profiles::Language::Cpcl),
+            (
+                "escpos",
+                "generic-thermal-58mm",
+                pn_profiles::Language::Escpos,
+            ),
+            (
+                "raster",
+                "generic-thermal-58mm",
+                pn_profiles::Language::Escpos,
+            ),
+        ] {
+            let (profile, choice) =
+                resolve_profile_for_printer(&stored_row(language, None, None)).unwrap();
+            assert_eq!(choice.model, model, "language {language}");
+            assert!(!choice.user_chosen, "language {language}");
+            assert_eq!(profile.profile.language, want, "language {language}");
+            assert_eq!(
+                profile.profile.dpi,
+                Some(203),
+                "language {language}: a row without a dpi keeps 203"
+            );
+        }
+    }
+
+    /// The default path maps the row's geometry exactly as WP2 did:
+    /// the row's width wins, its head is recomputed, the dpi falls
+    /// back to 203.
+    #[test]
+    fn the_default_mapping_keeps_the_row_geometry() {
+        let (profile, choice) =
+            resolve_profile_for_printer(&stored_row("zpl", None, Some(58))).unwrap();
+        assert!(!choice.user_chosen);
+        let meta = &profile.profile;
+        assert_eq!(meta.dpi, Some(203));
+        assert_eq!(meta.printable_width_mm, Some(58.0), "the row's width wins");
+        assert_eq!(
+            meta.head_width_dots,
+            Some(464),
+            "round(203 dpi × 58 mm / 25.4)"
+        );
+    }
+
+    /// A user pick changes which bundled model the job runs on; the
+    /// row's own geometry is applied on top of it — dpi and width win
+    /// over the model's values, and the head is recomputed with them
+    /// so the validator's cross-check holds.
+    #[test]
+    fn a_picked_model_drives_the_job_and_the_row_geometry_wins() {
+        let mut row = stored_row("escpos", Some(300), Some(100));
+        row.label_profile = Some("tm-t88vii".into());
+        let (profile, choice) = resolve_profile_for_printer(&row).unwrap();
+        assert_eq!(choice.model, "tm-t88vii");
+        assert!(choice.user_chosen);
+        let meta = &profile.profile;
+        assert_eq!(
+            meta.language,
+            pn_profiles::Language::Escpos,
+            "the pick's language"
+        );
+        assert_eq!(meta.dpi, Some(300), "the row's dpi wins");
+        assert_eq!(meta.printable_width_mm, Some(100.0), "the row's width wins");
+        assert_eq!(
+            meta.head_width_dots,
+            Some(1181),
+            "recomputed: round(300 × 100 / 25.4)"
+        );
+    }
+
+    /// A pick on a row that carries no geometry of its own: the
+    /// model's values stand, and a pick whose model has no geometry
+    /// at all leaves the bundled profile untouched.
+    #[test]
+    fn a_pick_without_row_geometry_keeps_the_bundled_values() {
+        let mut row = stored_row("zpl", None, None);
+        row.label_profile = Some("zt411".into());
+        let (profile, choice) = resolve_profile_for_printer(&row).unwrap();
+        assert!(choice.user_chosen);
+        let base = pn_profiles::parse(embedded_text("zt411")).unwrap();
+        assert_eq!(profile.profile.model, base.profile.model);
+        assert_eq!(profile.profile.dpi, base.profile.dpi);
+        assert_eq!(
+            profile.profile.head_width_dots,
+            base.profile.head_width_dots
+        );
+
+        let mut pdf_row = stored_row("pdf", None, None);
+        pdf_row.label_profile = Some("office-laser-cups".into());
+        let (profile, choice) = resolve_profile_for_printer(&pdf_row).unwrap();
+        assert!(choice.user_chosen);
+        let base = pn_profiles::parse(embedded_text("office-laser-cups")).unwrap();
+        assert_eq!(profile.profile.model, base.profile.model);
+        assert_eq!(profile.profile.dpi, base.profile.dpi, "nothing to override");
+    }
+
+    /// A pick must name a bundled profile and speak the row's
+    /// language family — a raster row takes the ESC/POS family.
+    #[test]
+    fn a_pick_outside_the_row_language_family_is_refused() {
+        let mut row = stored_row("zpl", None, None);
+        row.label_profile = Some("generic-thermal-58mm".into());
+        let err = resolve_profile_for_printer(&row).unwrap_err();
+        assert!(err.contains("escpos"), "{err}");
+        assert!(err.contains("zpl"), "{err}");
+
+        let err = validate_profile_pick("no-such-model", "zpl").unwrap_err();
+        assert!(err.contains("no-such-model"), "{err}");
+        assert!(err.contains("zt411"), "the known ids are named: {err}");
+
+        // The same pick fits a raster row: on the wire it is ESC/POS.
+        let mut raster = stored_row("raster", None, None);
+        raster.label_profile = Some("generic-thermal-58mm".into());
+        let (profile, choice) = resolve_profile_for_printer(&raster).unwrap();
+        assert!(choice.user_chosen);
+        assert_eq!(profile.profile.language, pn_profiles::Language::Escpos);
     }
 }

@@ -784,6 +784,10 @@ const acknowledgedStubs: string[] = [
   "label_prepare",
   "label_print",
   "label_list_profiles",
+  // Label track (WP3): the per-printer model pick, stored on the
+  // printer row by Rust; the model picker UI lands with the WP4 label
+  // screen, so the fake agent only acknowledges it.
+  "label_set_printer_profile",
   // mDNS discovery is implemented above
 ];
 

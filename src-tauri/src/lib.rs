@@ -437,6 +437,7 @@ pub fn run() {
             commands::label::label_prepare,
             commands::label::label_print,
             commands::label::label_list_profiles,
+            commands::label::label_set_printer_profile,
             commands::remote_print::remote_print,
             commands::remote_print::remote_printers,
             commands::remote_print::pc_templates,

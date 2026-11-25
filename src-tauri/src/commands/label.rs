@@ -15,8 +15,9 @@ use crate::commands::template::{self, CreateTemplateRequest};
 use crate::db::DbState;
 use crate::error::{AppError, AppResult};
 use crate::label_pipeline::{
-    embedded_profile_set, prepare_units, print_units, profile_infos, report_of,
-    resolve_profile_for_printer, AppTransportFactory, JobReport, PrepareReport, ProfileInfo,
+    default_model_for_language, embedded_profile_set, prepare_units, print_units, profile_infos,
+    report_of, resolve_profile_for_printer, validate_profile_pick, AppTransportFactory, JobReport,
+    PrepareReport, ProfileChoice, ProfileInfo,
 };
 use crate::queue::PrintQueue;
 use pn_profiles::Profile;
@@ -84,6 +85,9 @@ pub struct LabelJobRequest {
 struct SceneJob {
     template: Template,
     profile: Profile,
+    /// The model the row prints with, and whether the user picked it
+    /// (WP3) — the prepare report shows it.
+    choice: ProfileChoice,
     records: Records,
     /// The printer's display name — the queue's per-printer key.
     printer_name: String,
@@ -149,16 +153,30 @@ fn resolve_scene_job(
         .map_err(|e| AppError::Validation(format!("the template's scene is not valid: {e}")))?;
     let records =
         Records::from_json(records_json).map_err(|e| AppError::Validation(e.to_string()))?;
-    let profile = resolve_profile_for_printer(&stored).map_err(AppError::Validation)?;
+    let (profile, choice) = resolve_profile_for_printer(&stored).map_err(AppError::Validation)?;
 
     Ok(SceneJob {
         template,
         profile,
+        choice,
         records,
         printer_name: printer.to_string(),
         printer_id,
         stored,
     })
+}
+
+/// What a prepared scene job would print, and which model the row
+/// prints it with (WP3: the user's pick, or the language-based
+/// default — the UI shows the latter as "auto").
+#[derive(Debug, Clone, Serialize)]
+pub struct LabelPrepareResponse {
+    #[serde(flatten)]
+    pub report: PrepareReport,
+    /// The bundled model id the job prepared against.
+    pub profile: String,
+    /// "user" when the row carries a pick, "default" otherwise.
+    pub profile_source: &'static str,
 }
 
 /// Prepare a scene job — validate, plan, render — and report what it
@@ -167,9 +185,10 @@ fn resolve_scene_job(
 pub async fn label_prepare(
     db: State<'_, DbState>,
     req: LabelJobRequest,
-) -> AppResult<PrepareReport> {
+) -> AppResult<LabelPrepareResponse> {
     let scene_job = resolve_scene_job(&db, req.template_id, &req.printer, &req.records)?;
     let copies = req.copies.unwrap_or(1).max(1);
+    let choice = scene_job.choice.clone();
     tokio::task::spawn_blocking(move || {
         prepare_units(
             &scene_job.template,
@@ -181,7 +200,15 @@ pub async fn label_prepare(
     .await
     .map_err(|e| AppError::Internal(format!("the prepare task ended before finishing: {e}")))?
     .map_err(|e| AppError::Validation(e.to_string()))
-    .map(|units| units.report)
+    .map(|units| LabelPrepareResponse {
+        profile: choice.model,
+        profile_source: if choice.user_chosen {
+            "user"
+        } else {
+            "default"
+        },
+        report: units.report,
+    })
 }
 
 /// What a printed scene job answered, in the shape the UI shows.
@@ -377,4 +404,61 @@ pub async fn label_print(
 pub fn label_list_profiles() -> AppResult<Vec<ProfileInfo>> {
     let set = embedded_profile_set().map_err(AppError::Internal)?;
     Ok(profile_infos(&set))
+}
+
+/// Set (or clear) the label model a saved printer row prints scene
+/// jobs with (WP3 — the main design decision). The pick is validated
+/// at write time: the id must name a bundled profile, and that
+/// profile must speak the row's language family (a raster row takes
+/// the ESC/POS family). `None` clears the pick; the row prints with
+/// the language-based default again. Returns the effective choice
+/// either way, so the UI can show it straight back.
+pub fn set_printer_label_profile(
+    conn: &rusqlite::Connection,
+    printer_id: i64,
+    profile_id: Option<&str>,
+) -> AppResult<ProfileChoice> {
+    let language: String = conn
+        .query_row(
+            "SELECT language FROM printers WHERE id = ?1",
+            [printer_id],
+            |r| r.get(0),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => {
+                AppError::NotFound(format!("Printer {printer_id} not found"))
+            }
+            other => other.into(),
+        })?;
+    if let Some(pick) = profile_id {
+        validate_profile_pick(pick, &language).map_err(AppError::Validation)?;
+    }
+    conn.execute(
+        "UPDATE printers SET label_profile = ?1, updated_at = datetime('now')
+         WHERE id = ?2",
+        rusqlite::params![profile_id, printer_id],
+    )?;
+    Ok(match profile_id {
+        Some(pick) => ProfileChoice {
+            model: pick.to_string(),
+            user_chosen: true,
+        },
+        None => ProfileChoice {
+            model: default_model_for_language(&language).to_string(),
+            user_chosen: false,
+        },
+    })
+}
+
+/// The Tauri wrapper: lock, delegate, no logic.
+#[tauri::command(rename_all = "snake_case")]
+pub fn label_set_printer_profile(
+    db: State<DbState>,
+    printer_id: i64,
+    profile_id: Option<String>,
+) -> AppResult<ProfileChoice> {
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    set_printer_label_profile(guard.connection(), printer_id, profile_id.as_deref())
 }
