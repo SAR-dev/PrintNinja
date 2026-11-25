@@ -791,7 +791,7 @@ const MAX_RAW_PAYLOAD_BYTES: usize = 1024 * 1024;
 ///
 /// An experiment tool by contract: no render, no history row, no queue.
 /// It logs byte counts and timings — never the payload.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn send_raw_bytes(
     db: State<'_, DbState>,
     printer_id: i64,
