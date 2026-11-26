@@ -1,3 +1,7 @@
+## Commits
+
+Commit automatically when a change is complete and validated — do not wait to be asked. Every commit message is a single line in `type: short description` form (e.g. `feat: its a feature`), using `feat:`, `fix:`, `docs:`, `chore:`, `test:` or `refactor:` as the type. No body, no bullet lists, no Co-Authored-By or other attribution lines.
+
 ## Running tests locally (Docker, not native)
 
 The heavy test suites run in Linux containers, not natively:
