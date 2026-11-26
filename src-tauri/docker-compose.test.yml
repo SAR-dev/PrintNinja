@@ -1,6 +1,9 @@
-# Test runner for the desktop crate. The image (Dockerfile.test) is the
-# toolchain + system build deps; the workspace is mounted in, so the
-# tests always run against the current checkout.
+# Test runner for the Rust workspace: the desktop crate (src-tauri) plus
+# the vendored label-track crates — `golden-harness` (the golden-file
+# suite) and `pn-e2e` (delivery e2e; it builds the virtual-printer
+# fixture on demand into the `target/fixture` volume). The image
+# (Dockerfile.test) is the toolchain + system build deps; the workspace
+# is mounted in, so the tests always run against the current checkout.
 #
 #   docker compose -f src-tauri/docker-compose.test.yml run --rm rust-test
 #   # JUnit report (the test:rust:report script):
@@ -22,7 +25,7 @@ services:
       context: .
       dockerfile: Dockerfile.test
     image: printninja/rust-test
-    working_dir: /workspace/src-tauri
+    working_dir: /workspace
     volumes:
       - ..:/workspace
       - rust-test-target:/workspace/target

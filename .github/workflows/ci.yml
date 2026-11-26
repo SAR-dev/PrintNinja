@@ -111,9 +111,11 @@ jobs:
         with:
           name: web-dist
           path: dist
-      # Rust failures block: no continue-on-error.
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      # Rust failures block: no continue-on-error. Workspace-wide, so the
+      # vendored label-track crates (core/*, tests/golden, tests/e2e) are
+      # covered too.
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
 
   rust-test:
     if: github.head_ref != 'refactoring'
@@ -137,7 +139,15 @@ jobs:
         with:
           name: web-dist
           path: dist
-      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      # The whole workspace: src-tauri plus the vendored label-track
+      # crates (core/*, golden-harness, pn-e2e — the delivery e2e builds
+      # the virtual-printer fixture on demand).
+      - run: cargo test --workspace
+      # The virtual printer fixture is a standalone std-only crate
+      # (excluded from the workspace); its own tests run on the runner,
+      # the same split the reference repo's rust-test-linux job uses.
+      - name: Virtual printer fixture tests
+        run: cargo test --manifest-path tests/e2e/support/virtual-printer/Cargo.toml
 
   # Gate with the old job name. Passes only when both Rust jobs passed.
   # `always()` so that a failed or cancelled job reports a failure here
@@ -311,7 +321,9 @@ jobs:
         with:
           name: web-dist
           path: dist
-      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - run: cargo test --workspace
+      - name: Virtual printer fixture tests
+        run: cargo test --manifest-path tests/e2e/support/virtual-printer/Cargo.toml
 
   # Android compiles Rust and Kotlin only here and in android-build, so a
   # break (the v4.1.6 duplicate `testPrinter`) used to surface on the

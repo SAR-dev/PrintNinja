@@ -1,4 +1,5 @@
-# Test container for the desktop crate (src-tauri).
+# Test container for the Rust workspace (src-tauri + the vendored
+# label-track crates: golden-harness, pn-e2e).
 #
 # The image is the toolchain only; the workspace is mounted at run time
 # by docker-compose.test.yml, so the image never goes stale against the
