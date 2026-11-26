@@ -986,9 +986,47 @@ pub async fn run_claimed_job(
     let start = Instant::now();
 
     let (mut req, replay) = match load_job_request(db, job_id) {
-        Ok(v) => v,
+        Ok(ClaimedJob::Document { req, replay }) => (req, replay),
+        Ok(ClaimedJob::Scene {
+            template_id,
+            printer_name,
+            records_json,
+            copies,
+            ..
+        }) => {
+            // The row already exists, so the scene run closes it.
+            // `source`/`is_test` are intake fields the scene run does not
+            // use on a replay; the row keeps its own values.
+            let outcome = super::label::run_label_job(
+                db,
+                queue,
+                Some(job_id),
+                &super::label::LabelJobRun {
+                    template_id,
+                    printer: printer_name,
+                    records_json,
+                    copies: copies.max(1) as u32,
+                    source: "ui",
+                    is_test: false,
+                    requested_by_device_id: None,
+                },
+            )
+            .await;
+            return Ok(PrintResponse {
+                success: matches!(&outcome, Ok(o) if o.status == "success"),
+                job_id: job_id.to_string(),
+                duration_ms: outcome.as_ref().map_or(0, |o| o.duration_ms.max(0) as u128),
+                error: match outcome {
+                    Ok(o) => o.error,
+                    Err(e) => Some(e.to_string()),
+                },
+                timings: None,
+                rendered_by: None,
+                warnings: Vec::new(),
+            });
+        }
         Err(e) => {
-            close_job(db, job_id, "failed", Some(e.to_string()), "", &[], 0)?;
+            close_job(db, job_id, "failed", Some(e.to_string()), "", &[], 0, None)?;
             return Ok(PrintResponse {
                 success: false,
                 job_id: job_id.to_string(),
@@ -1010,7 +1048,7 @@ pub async fn run_claimed_job(
             req.fit_mode = fit_mode;
         }
         Err(e) => {
-            close_job(db, job_id, "failed", Some(e.to_string()), "", &[], 0)?;
+            close_job(db, job_id, "failed", Some(e.to_string()), "", &[], 0, None)?;
             return Ok(PrintResponse {
                 success: false,
                 job_id: job_id.to_string(),
@@ -1064,6 +1102,7 @@ pub async fn run_claimed_job(
                     "",
                     &secrets_of(&req),
                     0,
+                    None,
                 )?;
                 return Ok(PrintResponse {
                     success: false,
@@ -2489,6 +2528,7 @@ fn finish_job(
         rendered_html,
         &secrets_of(req),
         duration_ms,
+        None,
     )
 }
 
@@ -2507,9 +2547,15 @@ fn secrets_of(req: &PrintRequest) -> Vec<String> {
 /// the plain-text test in `commands::printer`, which runs the send
 /// itself and closes its own row.
 ///
+/// `result` is the label track's honest delivery word
+/// (LABEL_PRINTING_PLAN.md, WP5) — `confirmed`, `sent_unconfirmed`,
+/// `partially_printed`, `failed` or `wrong_mode_suspected`. Document jobs
+/// pass `None`: `status` alone is their honest word.
+///
 /// The `status = 'printing'` guard keeps a row that was already terminal —
 /// cancelled out from under a running print — from being resurrected; such a
 /// row keeps its state.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn close_job(
     db: &DbState,
     job_id: i64,
@@ -2518,6 +2564,7 @@ pub(crate) fn close_job(
     rendered_html: &str,
     secrets: &[String],
     duration_ms: i64,
+    result: Option<&str>,
 ) -> AppResult<()> {
     let guard = db
         .lock()
@@ -2530,10 +2577,10 @@ pub(crate) fn close_job(
 
     let transitioned = conn.execute(
         "UPDATE print_jobs
-         SET status = ?2, error = ?3, rendered_html = ?4,
-             finished_at = datetime('now'), duration_ms = ?5
+         SET status = ?2, error = ?3, rendered_html = ?4, result = ?5,
+             finished_at = datetime('now'), duration_ms = ?6
          WHERE id = ?1 AND status = 'printing'",
-        rusqlite::params![job_id, status, error, redacted_html, duration_ms],
+        rusqlite::params![job_id, status, error, redacted_html, result, duration_ms],
     )?;
 
     // Count only real transitions: a finish racing a cancel lands on an
@@ -2554,6 +2601,12 @@ pub(crate) fn close_job(
 /// template nor data; its `data_url` is dropped so a replay cannot fail on
 /// a fetch it does not need. A row with neither fails here, and the worker
 /// ends it `failed` with this error.
+///
+/// Label-track rows (LABEL_PRINTING_PLAN.md, WP5) are not document
+/// requests at all: their `settings_json` carries `"track": "scene"` and
+/// their `data_json` holds the records, so the worker re-runs them through
+/// the scene pipeline against the row that already exists.
+///
 /// The columns [`load_job_request`] reads to rebuild a queued job.
 struct JobRow {
     printer_id: Option<i64>,
@@ -2570,7 +2623,28 @@ struct JobRow {
     pdf_data: Option<Vec<u8>>,
 }
 
-fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Option<String>)> {
+/// What a claimed job row is, once its track is known (WP5).
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum ClaimedJob {
+    /// A document-track job: the rebuilt request, plus the stored HTML to
+    /// replay when the row carries it.
+    Document {
+        req: PrintRequest,
+        replay: Option<String>,
+    },
+    /// A label-track job: the inputs the scene pipeline re-runs through
+    /// [`super::label::run_label_job`] against the row that exists. The
+    /// row's own `source` and device stamp stand — the scene run only
+    /// closes the row, never re-opens it.
+    Scene {
+        template_id: i64,
+        printer_name: String,
+        records_json: String,
+        copies: i64,
+    },
+}
+
+fn load_job_request(db: &DbState, job_id: i64) -> AppResult<ClaimedJob> {
     let guard = db
         .lock()
         .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
@@ -2622,8 +2696,9 @@ fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Optio
 
     let replay = rendered_html.filter(|h| !h.trim().is_empty());
 
-    let data: Option<serde_json::Value> = match data_json {
-        Some(s) if !s.trim().is_empty() => Some(serde_json::from_str(&s).map_err(|e| {
+    // By reference: the scene branch below re-reads the same column.
+    let data: Option<serde_json::Value> = match data_json.as_deref() {
+        Some(s) if !s.trim().is_empty() => Some(serde_json::from_str(s).map_err(|e| {
             AppError::Internal(format!("stored data for job {job_id} is unreadable: {e}"))
         })?),
         _ => None,
@@ -2641,6 +2716,28 @@ fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Optio
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or(serde_json::json!({}));
+
+    // Label-track rows re-run through the scene pipeline, not the
+    // document one (LABEL_PRINTING_PLAN.md, WP5).
+    if settings.get("track").and_then(|v| v.as_str()) == Some("scene") {
+        let template_id = template_id.ok_or_else(|| {
+            AppError::Validation("this scene job has no template to re-run".into())
+        })?;
+        let records_json = data_json
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .ok_or_else(|| {
+                AppError::Validation("this scene job has no stored records to re-run".into())
+            })?
+            .to_string();
+        return Ok(ClaimedJob::Scene {
+            template_id,
+            printer_name,
+            records_json,
+            copies,
+        });
+    }
+
     let margins = settings.get("margins");
     let page = settings.get("page");
 
@@ -2685,7 +2782,7 @@ fn load_job_request(db: &DbState, job_id: i64) -> AppResult<(PrintRequest, Optio
         // A retry still prints for the phone that asked first.
         requested_by_device_id,
     };
-    Ok((req, replay))
+    Ok(ClaimedJob::Document { req, replay })
 }
 
 /// Enumerate system printers.

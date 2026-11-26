@@ -778,7 +778,16 @@ async fn test_printer_text(
     let duration_ms = start.elapsed().as_millis() as i64;
     match result {
         Ok(()) => {
-            crate::commands::print::close_job(db, job_id, "success", None, "", &[], duration_ms)?;
+            crate::commands::print::close_job(
+                db,
+                job_id,
+                "success",
+                None,
+                "",
+                &[],
+                duration_ms,
+                None,
+            )?;
             Ok(())
         }
         Err(error) => {
@@ -791,6 +800,7 @@ async fn test_printer_text(
                 "",
                 &[],
                 duration_ms,
+                None,
             );
             Err(AppError::Internal(error))
         }

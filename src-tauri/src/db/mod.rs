@@ -99,7 +99,8 @@ pub fn init(conn: &Connection) -> rusqlite::Result<()> {
     ensure_pairing_schema(conn)?;
     ensure_idempotency_scope(conn)?;
     ensure_template_track_schema(conn)?;
-    ensure_printer_label_profile_schema(conn)
+    ensure_printer_label_profile_schema(conn)?;
+    ensure_job_result_schema(conn)
 }
 
 /// The template track (LABEL_PRINTING_PLAN.md, WP2): one `track` column
@@ -131,6 +132,18 @@ pub fn ensure_template_track_schema(conn: &Connection) -> rusqlite::Result<()> {
 pub fn ensure_printer_label_profile_schema(conn: &Connection) -> rusqlite::Result<()> {
     if !column_exists(conn, "printers", "label_profile")? {
         conn.execute("ALTER TABLE printers ADD COLUMN label_profile TEXT", [])?;
+    }
+    Ok(())
+}
+
+/// The label track's delivery word (LABEL_PRINTING_PLAN.md, WP5): a
+/// nullable `result` column on `print_jobs` holds the honest outcome of a
+/// label job (`confirmed`, `sent_unconfirmed`, `partially_printed`,
+/// `failed`, `wrong_mode_suspected`). Document jobs leave it NULL —
+/// `status` alone is their honest word.
+pub fn ensure_job_result_schema(conn: &Connection) -> rusqlite::Result<()> {
+    if !column_exists(conn, "print_jobs", "result")? {
+        conn.execute("ALTER TABLE print_jobs ADD COLUMN result TEXT", [])?;
     }
     Ok(())
 }

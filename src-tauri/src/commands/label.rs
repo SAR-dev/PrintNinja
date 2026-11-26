@@ -334,12 +334,16 @@ pub struct LabelPrintResponse {
 /// Open the `printing` job row before anything slow, the same
 /// convention as the document path: the row is visible in History while
 /// the job runs, and a failure reports its own row's id.
+#[allow(clippy::too_many_arguments)]
 fn begin_label_job(
     db: &DbState,
     template_id: i64,
     printer_id: Option<i64>,
     copies: u32,
     records: &str,
+    source: &str,
+    is_test: bool,
+    requested_by_device_id: Option<&str>,
 ) -> AppResult<i64> {
     let guard = db
         .lock()
@@ -348,14 +352,18 @@ fn begin_label_job(
     let settings = serde_json::json!({ "track": "scene", "copies": copies });
     conn.execute(
         "INSERT INTO print_jobs (template_id, printer_id, source, status, copies,
-                settings_json, rendered_html, is_test, started_at, data_json)
-         VALUES (?1, ?2, 'ui', 'printing', ?3, ?4, '', 0, datetime('now'), ?5)",
+                settings_json, rendered_html, is_test, started_at, data_json,
+                requested_by_device_id)
+         VALUES (?1, ?2, ?3, 'printing', ?4, ?5, '', ?6, datetime('now'), ?7, ?8)",
         rusqlite::params![
             template_id,
             printer_id,
+            source,
             copies as i64,
             settings.to_string(),
-            records
+            is_test as i64,
+            records,
+            requested_by_device_id
         ],
     )?;
     Ok(conn.last_insert_rowid())
@@ -388,26 +396,59 @@ fn job_status(report: &JobReport) -> (&'static str, Option<String>) {
     }
 }
 
+/// One scene print as the shared runner is fed it (LABEL_PRINTING_PLAN.md,
+/// WP5): the same inputs the `label_print` command takes, so the REST API
+/// and the worker's retry path can drive the pipeline without the command
+/// envelope.
+pub(crate) struct LabelJobRun {
+    pub template_id: i64,
+    pub printer: String,
+    pub records_json: String,
+    pub copies: u32,
+    pub source: &'static str,
+    pub is_test: bool,
+    pub requested_by_device_id: Option<String>,
+}
+
+/// A finished scene job: its row, the honest report, the terminal status
+/// the row closed with, and the error text on failure.
+pub(crate) struct LabelJobOutcome {
+    pub job_id: i64,
+    pub report: JobReport,
+    pub status: String,
+    pub error: Option<String>,
+    pub duration_ms: i64,
+}
+
 /// Print a scene job: prepare it, then deliver its units over the
 /// printer's own transport under that printer's queue permit. The job
 /// row closes with the result; the report keeps the plain words.
-#[tauri::command]
-pub async fn label_print(
-    db: State<'_, DbState>,
-    queue: State<'_, PrintQueue>,
-    req: LabelJobRequest,
-) -> AppResult<LabelPrintResponse> {
+///
+/// `job_id` reuses an existing row (the worker's retry of a scene row);
+/// `None` opens a fresh one from `run`.
+pub(crate) async fn run_label_job(
+    db: &DbState,
+    queue: &PrintQueue,
+    job_id: Option<i64>,
+    run: &LabelJobRun,
+) -> AppResult<LabelJobOutcome> {
     let started = Instant::now();
-    let scene_job = resolve_scene_job(&db, req.template_id, &req.printer, &req.records)?;
-    let copies = req.copies.unwrap_or(1).max(1);
+    let scene_job = resolve_scene_job(db, run.template_id, &run.printer, &run.records_json)?;
+    let copies = run.copies.max(1);
 
-    let job_id = begin_label_job(
-        &db,
-        req.template_id,
-        scene_job.printer_id,
-        copies,
-        &req.records,
-    )?;
+    let job_id = match job_id {
+        Some(job_id) => job_id,
+        None => begin_label_job(
+            db,
+            run.template_id,
+            scene_job.printer_id,
+            copies,
+            &run.records_json,
+            run.source,
+            run.is_test,
+            run.requested_by_device_id.as_deref(),
+        )?,
+    };
     let duration = |started: &Instant| started.elapsed().as_millis() as i64;
 
     let profile = scene_job.profile;
@@ -427,26 +468,28 @@ pub async fn label_print(
         Ok(Ok(units)) => units,
         Ok(Err(e)) => {
             let _ = close_job(
-                &db,
+                db,
                 job_id,
                 "failed",
                 Some(e.to_string()),
                 "",
                 &[],
                 duration(&started),
+                None,
             );
             return Err(AppError::Validation(e.to_string()));
         }
         Err(e) => {
             let reason = format!("the prepare task ended before finishing: {e}");
             let _ = close_job(
-                &db,
+                db,
                 job_id,
                 "failed",
                 Some(reason.clone()),
                 "",
                 &[],
                 duration(&started),
+                None,
             );
             return Err(AppError::Internal(reason));
         }
@@ -488,13 +531,14 @@ pub async fn label_print(
         Ok(result) => result,
         Err(e) => {
             let _ = close_job(
-                &db,
+                db,
                 job_id,
                 "failed",
                 Some(e.clone()),
                 "",
                 &[],
                 duration(&started),
+                None,
             );
             return Err(AppError::Internal(e));
         }
@@ -502,12 +546,48 @@ pub async fn label_print(
 
     let report = report_of(result);
     let (status, error) = job_status(&report);
-    close_job(&db, job_id, status, error, "", &[], duration(&started))?;
+    close_job(
+        db,
+        job_id,
+        status,
+        error.clone(),
+        "",
+        &[],
+        duration(&started),
+        Some(report.result.as_str()),
+    )?;
 
-    Ok(LabelPrintResponse {
+    Ok(LabelJobOutcome {
         job_id,
         report,
+        status: status.to_string(),
+        error,
         duration_ms: duration(&started),
+    })
+}
+
+/// Print a scene job from the app: the shared runner over a fresh job
+/// row, with the IPC response shape the print screen reads.
+#[tauri::command]
+pub async fn label_print(
+    db: State<'_, DbState>,
+    queue: State<'_, PrintQueue>,
+    req: LabelJobRequest,
+) -> AppResult<LabelPrintResponse> {
+    let run = LabelJobRun {
+        template_id: req.template_id,
+        printer: req.printer,
+        records_json: req.records,
+        copies: req.copies.unwrap_or(1).max(1),
+        source: "ui",
+        is_test: false,
+        requested_by_device_id: None,
+    };
+    let outcome = run_label_job(&db, &queue, None, &run).await?;
+    Ok(LabelPrintResponse {
+        job_id: outcome.job_id,
+        report: outcome.report,
+        duration_ms: outcome.duration_ms,
     })
 }
 

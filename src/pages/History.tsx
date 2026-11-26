@@ -24,6 +24,7 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -106,11 +107,21 @@ const fmtTime = (job: HistoryJob) => {
   return Number.isNaN(d.getTime()) ? raw : d.toLocaleString(currentLanguage());
 };
 
+/** The label track's delivery words (LABEL_PRINTING_PLAN.md, WP5). A job
+ * that carries a `result` shows it in the avatar and badge instead of the
+ * plain status; document jobs have no result and render exactly as before. */
+type JobBadgeKey =
+  | HistoryJob["status"]
+  | "confirmed"
+  | "sent_unconfirmed"
+  | "partially_printed"
+  | "wrong_mode_suspected";
+
 /** Round status marker for the phone job cards: colour plus a distinct shape,
  * so a failed job is findable at a glance without relying on colour alone.
  * The status word stays next to it as a badge. */
 const JOB_AVATAR: Record<
-  HistoryJob["status"],
+  JobBadgeKey,
   { icon: LucideIcon; tone: string; spin?: boolean }
 > = {
   success: { icon: Check, tone: "bg-success-soft text-success" },
@@ -118,9 +129,19 @@ const JOB_AVATAR: Record<
   printing: { icon: Loader2, tone: "bg-info-soft text-info", spin: true },
   queued: { icon: Clock, tone: "bg-neutral-soft text-neutral" },
   cancelled: { icon: Ban, tone: "bg-neutral-soft text-neutral" },
+  confirmed: { icon: Check, tone: "bg-success-soft text-success" },
+  sent_unconfirmed: { icon: Check, tone: "bg-success-soft text-success" },
+  partially_printed: {
+    icon: TriangleAlert,
+    tone: "bg-warning-soft text-warning",
+  },
+  wrong_mode_suspected: {
+    icon: TriangleAlert,
+    tone: "bg-danger-soft text-danger",
+  },
 };
 
-function JobAvatar({ status }: { status: HistoryJob["status"] }) {
+function JobAvatar({ status }: { status: JobBadgeKey }) {
   const { icon: Icon, tone, spin } = JOB_AVATAR[status];
   return (
     <span
@@ -233,7 +254,14 @@ export function HistoryPage() {
     () =>
       store.jobs.filter((job) => {
         const f = store.filter;
-        if (f.status !== "all" && job.status !== f.status) return false;
+        // The label track's delivery words are filterable too: a job
+        // matches on its status or on its result (WP5).
+        if (
+          f.status !== "all" &&
+          job.status !== f.status &&
+          job.result !== f.status
+        )
+          return false;
         if (f.printer !== "all" && job.printer_id?.toString() !== f.printer)
           return false;
         if (f.source !== "all" && job.source !== f.source) return false;
@@ -490,15 +518,19 @@ export function HistoryPage() {
     persistSaved(next);
   };
 
-  // Raw-wire success (USB, driverless Bluetooth): the bytes left the app,
-  // but nothing confirms the paper came out, so the badge says "Sent"
-  // instead of "Printed" (B3).
+  // A label job ends with an honest delivery word (LABEL_PRINTING_PLAN.md,
+  // WP5); the badge shows it as its word (the status prop is the result),
+  // so there is no label override to return here. Raw-wire success (USB,
+  // driverless Bluetooth): the bytes left the app, but nothing confirms
+  // the paper came out, so the badge says "Sent" instead of "Printed" (B3).
   const jobStatusLabel = (job: HistoryJob) =>
-    job.status === "success" &&
-    job.printer_type != null &&
-    isRawWire(job.printer_type, job.via_driver ?? false)
-      ? t("status.sent")
-      : undefined;
+    job.result
+      ? undefined
+      : job.status === "success" &&
+          job.printer_type != null &&
+          isRawWire(job.printer_type, job.via_driver ?? false)
+        ? t("status.sent")
+        : undefined;
 
   const columns = useMemo<ColumnDef<HistoryJob>[]>(
     () => [
@@ -567,7 +599,10 @@ export function HistoryPage() {
             : null;
           return (
             <div>
-              <JobStatusBadge status={j.status} label={jobStatusLabel(j)} />
+              <JobStatusBadge
+                status={j.result ?? j.status}
+                label={jobStatusLabel(j)}
+              />
               {j.printed_by && (
                 <p className="text-xs text-muted-foreground">
                   {t("history.printed_via", { pc: j.printed_by })}
@@ -742,6 +777,17 @@ export function HistoryPage() {
             <SelectItem value="queued">{t("status.queued")}</SelectItem>
             <SelectItem value="printing">{t("status.printing")}</SelectItem>
             <SelectItem value="cancelled">{t("status.cancelled")}</SelectItem>
+            {/* The label track's delivery words (WP5). */}
+            <SelectItem value="confirmed">{t("status.confirmed")}</SelectItem>
+            <SelectItem value="sent_unconfirmed">
+              {t("status.sent_unconfirmed")}
+            </SelectItem>
+            <SelectItem value="partially_printed">
+              {t("status.partially_printed")}
+            </SelectItem>
+            <SelectItem value="wrong_mode_suspected">
+              {t("status.wrong_mode_suspected")}
+            </SelectItem>
           </SelectContent>
         </Select>,
       ),
@@ -904,11 +950,14 @@ export function HistoryPage() {
   // the card opens the details via the DataTable's onRowActivate.
   const historyCard = (job: HistoryJob) => (
     <div className="flex items-center gap-3">
-      <JobAvatar status={job.status} />
+      <JobAvatar status={job.result ?? job.status} />
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm font-semibold">#{job.id}</span>
-          <JobStatusBadge status={job.status} label={jobStatusLabel(job)} />
+          <JobStatusBadge
+            status={job.result ?? job.status}
+            label={jobStatusLabel(job)}
+          />
         </div>
         <p className="truncate text-xs text-muted-foreground">
           {printerName(job.printer_id)}
@@ -1359,7 +1408,7 @@ export function HistoryPage() {
                   </dt>
                   <dd>
                     <JobStatusBadge
-                      status={job.status}
+                      status={job.result ?? job.status}
                       label={jobStatusLabel(job)}
                     />
                   </dd>

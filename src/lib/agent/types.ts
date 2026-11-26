@@ -122,6 +122,17 @@ export interface HistoryJob {
   printer_type: string | null;
   /** The job's printer's `via_driver` flag; null when the printer is gone. */
   via_driver: boolean | null;
+  /** The label track's honest delivery word (LABEL_PRINTING_PLAN.md,
+   *  WP5): `confirmed`, `sent_unconfirmed`, `partially_printed`,
+   *  `failed` or `wrong_mode_suspected`. Null for document jobs and
+   *  for label jobs that died before delivery. */
+  result:
+    | "confirmed"
+    | "sent_unconfirmed"
+    | "partially_printed"
+    | "failed"
+    | "wrong_mode_suspected"
+    | null;
 }
 
 export interface BatchSummary {
@@ -727,6 +738,13 @@ export interface DeeplinkPrint {
   /** Printer name, as shown in the Print page's picker. */
   printer: string | null;
   url: string | null;
+  /** The track the print must run on (WP5): `html` or `scene`, raw
+   *  like `orientation` — the print screen is the gate. Null: the
+   *  template's own track decides. */
+  format: string | null;
+  /** The scene job's records as JSON (WP5), raw like `url`: the print
+   *  screen parses it when the template is a scene template. */
+  data: string | null;
   copies: number | null;
   orientation: string | null;
   fit: string | null;

@@ -64,6 +64,9 @@ function parseDeepLink(url: string): unknown {
         template: params.get("template") ?? null,
         printer: params.get("printer") ?? null,
         url: params.get("url") ?? null,
+        // WP5: raw passthroughs like `url` — the print screen is the gate.
+        format: params.get("format") ?? null,
+        data: params.get("data") ?? null,
         copies:
           Number.isInteger(copiesNum) && copiesNum <= 4294967295
             ? copiesNum

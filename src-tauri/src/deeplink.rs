@@ -19,6 +19,13 @@ pub struct DeepLinkPrint {
     pub template: Option<String>,
     pub printer: Option<String>,
     pub url: Option<String>,
+    /// The track the print must run on (LABEL_PRINTING_PLAN.md, WP5):
+    /// `html` or `scene`, raw like `orientation` — the print screen is
+    /// the gate. Absent: the template's own track decides.
+    pub format: Option<String>,
+    /// The scene job's records as JSON (WP5), raw like `url`: the print
+    /// screen parses it when the template is a scene template.
+    pub data: Option<String>,
     pub copies: Option<u32>,
     pub orientation: Option<String>,
     pub fit: Option<String>,
@@ -61,6 +68,8 @@ pub fn parse_deep_link(url: &str) -> Result<DeepLinkAction, String> {
                 template: params.get("template").map(|s| s.to_string()),
                 printer: params.get("printer").map(|s| s.to_string()),
                 url: params.get("url").map(|s| s.to_string()),
+                format: params.get("format").map(|s| s.to_string()),
+                data: params.get("data").map(|s| s.to_string()),
                 copies: params.get("copies").and_then(|s| s.parse().ok()),
                 orientation: params.get("orientation").map(|s| s.to_string()),
                 fit: params.get("fit").map(|s| s.to_string()),
@@ -275,6 +284,30 @@ mod tests {
             let p = print(&format!("printninja://print?margin_top={raw}"));
             assert_eq!(p.margin_top, None, "margin_top={raw} must drop");
         }
+    }
+
+    /// `format` and `data` (WP5): raw passthroughs like `url` — the
+    /// deep link carries them, the print screen is the gate.
+    #[test]
+    fn parse_deep_link_scene_format_and_data() {
+        let print = |url: &str| match parse_deep_link(url).unwrap() {
+            DeepLinkAction::Print(p) => p,
+            other => panic!("expected Print for {url}, got {other:?}"),
+        };
+
+        assert_eq!(
+            print("printninja://print?format=scene").format.as_deref(),
+            Some("scene")
+        );
+        assert_eq!(print("printninja://print?template=Label").format, None);
+        // `data` is raw JSON, percent-encoded like every other param.
+        assert_eq!(
+            print("printninja://print?data=%5B%7B%22name%22%3A%22M8%22%7D%5D")
+                .data
+                .as_deref(),
+            Some("[{\"name\":\"M8\"}]")
+        );
+        assert_eq!(print("printninja://print?template=Label").data, None);
     }
 
     /// The contract the e2e fake mirrors (e2e/tests/deeplink.e2e.ts

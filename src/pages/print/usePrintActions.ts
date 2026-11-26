@@ -227,8 +227,9 @@ export function usePrintActions({
   };
 
   // The scene (label) track's print: the same data fields, but the
-  // job is a prepared label — the data URL is fetched here (the label
-  // command takes the records as a JSON string), so a failed fetch is a
+  // job is a prepared label — a deep link's inline `data` (WP5) is
+  // used as-is, else the data URL is fetched here (the label command
+  // takes the records as a JSON string), so a failed fetch is a
   // failed print, not a sample-data fallback. One object repeats for
   // `records` sheets, an array prints its own length: the records the
   // preview's `label_prepare` showed.
@@ -241,7 +242,10 @@ export function usePrintActions({
 
     let data: unknown;
     try {
-      if (store.useTestData || !store.dataUrl.trim()) {
+      if (store.dataJson.trim()) {
+        // A deep link's `data` carries the records themselves (WP5).
+        data = JSON.parse(store.dataJson);
+      } else if (store.useTestData || !store.dataUrl.trim()) {
         data = DEFAULT_MOCK_DATA;
       } else {
         const ctrl = new AbortController();

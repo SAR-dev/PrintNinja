@@ -134,6 +134,8 @@ export function usePrintPreview(
   // pipeline uses) and falls back to the mock with a notice when the
   // fetch fails.
   const dataUrl = store.dataUrl;
+  // A deep link's `data` (WP5): inline records for the scene track.
+  const dataJson = store.dataJson;
   const useTestData = store.useTestData;
   const httpMethod = store.httpMethod;
   const pageCount = Math.min(500, Math.max(1, Math.floor(store.records || 1)));
@@ -162,7 +164,14 @@ export function usePrintPreview(
   }> => {
     let data: unknown = DEFAULT_MOCK_DATA;
     let notice = "";
-    if (!useTestData && debouncedDataUrl.trim()) {
+    if (dataJson.trim()) {
+      // The link's records win over the URL and the test data alike.
+      try {
+        data = JSON.parse(dataJson);
+      } catch (e) {
+        notice = t("print.preview_data_failed", { error: describeError(e) });
+      }
+    } else if (!useTestData && debouncedDataUrl.trim()) {
       const ctrl = new AbortController();
       const timeout = window.setTimeout(
         () => ctrl.abort(),
@@ -305,6 +314,7 @@ export function usePrintPreview(
     };
   }, [
     previewTemplate,
+    dataJson,
     debouncedDataUrl,
     useTestData,
     httpMethod,
@@ -370,6 +380,7 @@ export function usePrintPreview(
     };
   }, [
     previewTemplate,
+    dataJson,
     debouncedDataUrl,
     useTestData,
     httpMethod,

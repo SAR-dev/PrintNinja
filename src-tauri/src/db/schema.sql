@@ -115,7 +115,13 @@ CREATE TABLE IF NOT EXISTS print_jobs (
     -- The document a PDF-input job prints, as raw bytes — the PDF analog
     -- of `data_json`: run-input, never exposed through `PrintJob`, kept so
     -- retry/reprint can run the job again. NULL for HTML/template jobs.
-    pdf_data BLOB
+    pdf_data BLOB,
+    -- The label track's honest delivery word (LABEL_PRINTING_PLAN.md,
+    -- WP5): `confirmed`, `sent_unconfirmed`, `partially_printed`,
+    -- `failed` or `wrong_mode_suspected`. NULL for document jobs and for
+    -- label jobs that died before delivery (status alone is not honest
+    -- enough on the label track).
+    result TEXT
 );
 
 CREATE TABLE IF NOT EXISTS settings (

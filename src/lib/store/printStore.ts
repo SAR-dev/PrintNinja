@@ -24,6 +24,10 @@ interface PrintState {
   printerId: string;
   templateId: string;
   dataUrl: string;
+  /** Inline records JSON for the scene (label) track — a deep link's
+   * `data` param (WP5). Takes precedence over `dataUrl`/test data on
+   * the scene track; empty means "use the usual data source". */
+  dataJson: string;
   httpMethod: "GET" | "POST";
   orientation: "portrait" | "landscape";
   marginTop: number;
@@ -56,6 +60,7 @@ interface PrintState {
   setPrinterId: (v: string) => void;
   setTemplateId: (v: string) => void;
   setDataUrl: (v: string) => void;
+  setDataJson: (v: string) => void;
   setHttpMethod: (v: "GET" | "POST") => void;
   setOrientation: (v: "portrait" | "landscape") => void;
   setMarginTop: (v: number) => void;
@@ -88,6 +93,7 @@ export const usePrintStore = create<PrintState>((set) => ({
   printerId: "",
   templateId: "",
   dataUrl: "",
+  dataJson: "",
   httpMethod: "GET",
   orientation: "portrait",
   marginTop: 5,
@@ -113,6 +119,7 @@ export const usePrintStore = create<PrintState>((set) => ({
   setPrinterId: (printerId) => set({ printerId }),
   setTemplateId: (templateId) => set({ templateId }),
   setDataUrl: (dataUrl) => set({ dataUrl }),
+  setDataJson: (dataJson) => set({ dataJson }),
   setHttpMethod: (httpMethod) => set({ httpMethod }),
   setOrientation: (orientation) => set({ orientation }),
   setMarginTop: (marginTop) => set({ marginTop }),

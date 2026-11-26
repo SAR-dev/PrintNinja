@@ -973,6 +973,11 @@ const en = {
     queued: "Queued",
     printing: "Printing",
     cancelled: "Cancelled",
+    // The label track's delivery words (LABEL_PRINTING_PLAN.md, WP5).
+    confirmed: "Confirmed",
+    sent_unconfirmed: "Sent, not confirmed",
+    partially_printed: "Partially printed",
+    wrong_mode_suspected: "Wrong mode",
     draft: "Draft",
     published: "Published",
     saved: "Saved",

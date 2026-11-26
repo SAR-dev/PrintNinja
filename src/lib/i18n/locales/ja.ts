@@ -991,6 +991,11 @@ const ja: Translation = {
     queued: "待機中",
     printing: "印刷中",
     cancelled: "キャンセル済み",
+    // ラベルトラックの配送の言葉（LABEL_PRINTING_PLAN.md, WP5）。
+    confirmed: "確認済み",
+    sent_unconfirmed: "送信済み（未確認）",
+    partially_printed: "一部印刷済み",
+    wrong_mode_suspected: "モード誤りの疑い",
     draft: "下書き",
     published: "公開中",
     saved: "保存済み",

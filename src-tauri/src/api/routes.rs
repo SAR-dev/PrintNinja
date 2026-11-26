@@ -336,6 +336,11 @@ struct PrintJobRequest {
     /// which keep the name lookup.
     template_server_id: Option<String>,
     template_server_revision: Option<i64>,
+    /// The track the job must run on (LABEL_PRINTING_PLAN.md, WP5):
+    /// `"html"` or `"scene"`. Absent: the template's own track decides.
+    /// Present: it must name a known track and match the job's effective
+    /// track — unknown versions are refused, never guessed.
+    format: Option<String>,
     printer: String,
     /// Existing PDF to print, base64-encoded (the REST API takes no binary
     /// body). Mutually exclusive with `template`/`template_server_id`,
@@ -644,7 +649,7 @@ async fn print_job(
     // `MutexGuard` is definitely released before the print. Holding it across
     // a network round-trip to a thermal printer would stall every other
     // command, and the pipeline takes the lock again for its history write.
-    let template_id: Option<i64> = {
+    let (template_id, template_track) = {
         let guard = db.lock().map_err(ApiRejection::from)?;
         let conn = guard.connection();
 
@@ -666,6 +671,15 @@ async fn print_job(
             Some(resolve_template_by_name(conn, req.template.as_deref())?)
         };
 
+        // Which track the resolved template prints on (WP5): a PDF job is
+        // always the document track, a template job follows its row.
+        let template_track = template_id.and_then(|id| {
+            conn.query_row("SELECT track FROM templates WHERE id = ?1", [id], |r| {
+                r.get::<_, String>(0)
+            })
+            .ok()
+        });
+
         // Fail early with 404 rather than after a pointless render.
         let known: i64 = conn
             .query_row(
@@ -681,8 +695,55 @@ async fn print_job(
             )));
         }
 
-        template_id
+        (template_id, template_track)
     };
+
+    // The job's effective track (LABEL_PRINTING_PLAN.md, WP5): a PDF is a
+    // document no matter what; otherwise the template's row decides.
+    let effective_track = if has_pdf {
+        "html"
+    } else {
+        template_track.as_deref().unwrap_or("html")
+    };
+
+    // `format` (WP5): refused, never guessed — an unknown value is not a
+    // track we can route, and a known value must match the effective
+    // track or the caller asked for the wrong pipeline.
+    if let Some(format) = req.format.as_deref() {
+        if format != "html" && format != "scene" {
+            return Err(ApiRejection::BadRequestWithCode(
+                format!("`format` must be 'html' or 'scene' (got '{format}')"),
+                "unsupported_format",
+            ));
+        }
+        if format != effective_track {
+            return Err(ApiRejection::BadRequestWithCode(
+                format!("`format: '{format}'` does not match the job's '{effective_track}' track"),
+                "track_mismatch",
+            ));
+        }
+    }
+
+    // Scene jobs (WP5): the records come from `data` and the scene
+    // pipeline renders them itself — no document request to build.
+    if effective_track == "scene" {
+        if req.data.is_none() {
+            return Err(ApiRejection::BadRequestWithCode(
+                "a scene job takes its records from `data`".into(),
+                "missing_records",
+            ));
+        }
+        if req
+            .data_url
+            .as_deref()
+            .is_some_and(|u| !u.trim().is_empty())
+        {
+            return Err(ApiRejection::BadRequestWithCode(
+                "a scene job takes its records from `data`; `data_url` conflicts".into(),
+                "conflicting_content",
+            ));
+        }
+    }
 
     // Run the real pipeline. This used to insert a row with
     // `status = 'queued'` and return 202 without printing anything, so every
@@ -695,6 +756,60 @@ async fn print_job(
         .unwrap_or_default();
     let idempotency_key_for_cb = idempotency_key.clone();
     let callback_url_for_dispatch = callback_url.clone();
+
+    // Scene jobs run the label pipeline directly: records in, honest
+    // report out. The response keeps the document job's shape and adds
+    // the `report` (WP5).
+    if effective_track == "scene" {
+        let template_id = template_id.expect("a scene job always resolved a template row");
+        let run = crate::commands::label::LabelJobRun {
+            template_id,
+            printer: req.printer.clone(),
+            records_json: req.data.as_ref().unwrap().to_string(),
+            copies,
+            source: "api",
+            is_test: req.test.unwrap_or(false),
+            requested_by_device_id: authed.device_id,
+        };
+        let outcome =
+            crate::commands::label::run_label_job(&state.db, &state.queue, None, &run).await;
+        return match outcome {
+            Ok(o) => {
+                if let Some(url) = callback_url_for_dispatch {
+                    crate::api::callback::dispatch_callback(
+                        crate::api::callback::CallbackDispatch {
+                            job_id: o.job_id.to_string(),
+                            status: o.status.clone(),
+                            event: if o.status == "success" {
+                                "print.succeeded".into()
+                            } else {
+                                "print.failed".into()
+                            },
+                            printer: printer_name_for_cb,
+                            template: template_name_for_cb,
+                            error: o.error.clone(),
+                            duration_ms: o.duration_ms as u64,
+                            idempotency_key: idempotency_key_for_cb,
+                            callback_url: url,
+                        },
+                    );
+                }
+                Ok((
+                    StatusCode::OK,
+                    Json(json!({
+                        "job_id": o.job_id.to_string(),
+                        "status": o.status,
+                        "duration_ms": o.duration_ms,
+                        "report": o.report,
+                    })),
+                ))
+            }
+            // Pre-report failures (resolve, prepare, the delivery task
+            // dying) keep the document path's rejection flow; the job row
+            // is already closed `failed` by the runner.
+            Err(e) => Err(ApiRejection::from(e)),
+        };
+    }
 
     let print_req = crate::commands::print::PrintRequest {
         printer_name: req.printer.clone(),
@@ -1001,7 +1116,7 @@ async fn get_job(
         .prepare(
             "SELECT j.id, j.status, j.error, j.duration_ms, j.copies, j.source, j.created_at,
                     j.requested_by_device_id, j.template_revision,
-                    j.printer_id, p.name, j.template_id, t.name, j.settings_json
+                    j.printer_id, p.name, j.template_id, t.name, j.settings_json, j.result
              FROM print_jobs j
              LEFT JOIN printers p ON p.id = j.printer_id
              LEFT JOIN templates t ON t.id = j.template_id
@@ -1033,6 +1148,8 @@ async fn get_job(
         "created_at": row.get::<_, String>(6)?,
         "requested_by_device_id": row.get::<_, Option<String>>(7)?,
         "template_revision": row.get::<_, Option<i64>>(8)?,
+        // The label track's honest delivery word; null for document jobs.
+        "result": row.get::<_, Option<String>>(14)?,
         "details": job_details(printer_id, printer_name, template_id, template_name, settings_json.as_deref()),
     })))
 }
@@ -1052,7 +1169,7 @@ async fn list_jobs(
     let mut sql = String::from(
         "SELECT j.id, j.status, j.source, j.copies, j.created_at,
                 j.requested_by_device_id, j.template_revision,
-                j.printer_id, p.name, j.template_id, t.name, j.settings_json
+                j.printer_id, p.name, j.template_id, t.name, j.settings_json, j.result
          FROM print_jobs j
          LEFT JOIN printers p ON p.id = j.printer_id
          LEFT JOIN templates t ON t.id = j.template_id",
@@ -1106,6 +1223,8 @@ async fn list_jobs(
                 "created_at": row.get::<_, String>(4)?,
                 "requested_by_device_id": row.get::<_, Option<String>>(5)?,
                 "template_revision": row.get::<_, Option<i64>>(6)?,
+                // The label track's honest delivery word; null for document jobs.
+                "result": row.get::<_, Option<String>>(12)?,
                 "details": job_details(printer_id, printer_name, template_id, template_name, settings_json.as_deref()),
             }))
         })
