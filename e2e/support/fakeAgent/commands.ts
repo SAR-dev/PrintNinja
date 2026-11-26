@@ -2,6 +2,18 @@ import { getSetting, seedJobs, seedPrinters, setSetting } from "./store.js";
 import { createFakeCache, type SyncChangeIn } from "./cache.js";
 import * as label from "./label.js";
 
+// Stand-in values for {{placeholders}} when the opt-in rendered preview mode
+// ("fake-agent:render-html") has no record data, so gallery shots look like
+// a filled-in label instead of "[name]".
+const SAMPLE_PREVIEW_VALUES: Record<string, string> = {
+  name: "Aiko Tanaka",
+  address: "1-2-3 Shibuya, Tokyo 150-0002",
+  sku: "SKU-10482",
+  price: "¥1,280",
+  total: "¥3,450",
+  item: "Green tea 500 ml",
+};
+
 // In-memory implementation of the IPC commands. Phase 1 implements the
 // commands the sign-in and shell screens need; every other command the
 // Rust backend offers is registered as an acknowledged stub (warn and
@@ -450,10 +462,42 @@ const implemented: Record<string, Handler> = {
   // null stub here pushes every preview onto the raw-source fallback,
   // whose multi-page iframes break the strict getByTitle("Canvas preview")
   // locators (page 2 is titled "Canvas preview 2", a substring match).
+  //
+  // Opt-in rendered mode: when localStorage "fake-agent:render-html" is
+  // "true" (the screenshot script sets it), each record instead renders to
+  // the template's real HTML with {{placeholders}} filled from the record
+  // and the template CSS applied, so gallery images show a label rather
+  // than source code. Handlebars helpers/blocks are NOT evaluated; this is
+  // a visual stand-in, not the engine.
   render_template_preview: (args) => {
     const html = String(args["html"] ?? "");
     const records = Array.isArray(args["records"]) ? args["records"] : [];
     const list = records.length > 0 ? records : [null];
+    let renderHtml = false;
+    try {
+      renderHtml = localStorage.getItem("fake-agent:render-html") === "true";
+    } catch {
+      // Storage unavailable: keep the source view.
+    }
+    if (renderHtml) {
+      const css =
+        String(args["css"] ?? "") + "\n" + String(args["compiled_css"] ?? "");
+      return list.map((record) => {
+        const data = (record ?? {}) as Record<string, unknown>;
+        const body = html.replace(
+          /\{\{\{?\s*([\w.]+)\s*\}?\}\}/g,
+          (_m, key: string) => {
+            const v = data[key] ?? SAMPLE_PREVIEW_VALUES[key];
+            return v === undefined || v === null ? `[${key}]` : String(v);
+          },
+        );
+        return (
+          '<!DOCTYPE html><html><head><meta charset="UTF-8">' +
+          `<style>html,body{margin:0;padding:0;background:#fff}${css}</style>` +
+          `</head><body>${body}</body></html>`
+        );
+      });
+    }
     const escaped = html
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")

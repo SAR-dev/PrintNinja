@@ -23,6 +23,21 @@ On the PC, choose **Invite guest**. You decide how long the invite lasts (24 hou
 - **Shared rendering.** The PC prepares the page and the phone prints it on its own printer. If the PC is off or away, the job fails right away and tells you which PC did not answer. Nothing is silently left waiting. Retry from **History** when the PC is back.
 - **Print via PC (Android).** The whole job runs on the PC's printers using the PC's templates. If the phone's copy of a template is out of date, you are asked to **Sync** instead of getting a wrong print. There is no hidden fallback to the phone's printers; switch the option off to print on the phone again.
 
+```mermaid
+flowchart LR
+    P[Phone] --> T{Job type?}
+    T -->|"thermal: ESC/POS · ZPL · TSPL · CPCL · raster"| DIRECT["Phone renders and prints directly<br/>no pairing needed"]
+    T -->|"PDF from a template"| R{Paired PC?}
+    R -->|"shared rendering"| PREP["PC prepares the page<br/>phone prints on its own printer"]
+    R -->|"print via PC"| FULL["PC prints on its own printer<br/>using the PC's templates"]
+    DIRECT --> PAPER[Paper]
+    PREP --> PAPER
+    FULL --> PAPER
+```
+
+Both paired-PC modes stop with a clear error if the PC is offline; the phone
+never quietly falls back to a different printer.
+
 ## 🔒 You stay in control
 
 The PC lists every paired phone. You can rename a phone, turn printing off for it, or remove it. Turning sharing off disconnects all phones.

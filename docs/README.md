@@ -11,6 +11,7 @@ Pick the guide that matches what you want to do. New here? Start with the [main 
 - 🚧 [Known limitations](./LIMITATIONS.md): what PrintNinja cannot do yet, and what to do instead
 - 📖 [Glossary](./GLOSSARY.md): the plain meaning of every term the app uses
 - 📋 [Test checklist](./TEST_CHECKLIST.md): a real-printer test checklist (not yet run on hardware)
+- 🖼️ [Screenshot gallery](./SCREENSHOT_GALLERY.md): every screen on Windows and Android phone, light theme
 
 ## ⚡ For power users
 

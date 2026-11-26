@@ -8,7 +8,7 @@
 
 Works on Windows 🪟, Android 🤖 and Linux 🐧. Pair a Bluetooth printer and go, or use any printer you already have.
 
-[![Version](https://img.shields.io/badge/version-2026.1120.0-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
+[![Version](https://img.shields.io/badge/version-2026.1126.0-e43636)](https://github.com/SAR-dev/PrintNinja/releases)
 ![Platforms](https://img.shields.io/badge/Windows%20%C2%B7%20Linux%20%C2%B7%20Android-supported-2ea44f)
 
 [📦 Install](#install) ·
@@ -76,9 +76,22 @@ This takes about five minutes. ⏱️ The **Setup checklist** in **Settings** wa
 3. ▶️ **Print.** Open **Print**, choose your printer and template, add your information (sample data, a link to your data, or a CSV file), choose how many copies, check the preview and press **Print**.
 4. ✅ **Check the result.** **History** lists every job with a clear success or failure message. Reprint or retry from there.
 
-| 1. Design a template | 2. Print it | 3. Check the result |
-|:---:|:---:|:---:|
-| ![Designer with live canvas](assets/designer.png) | ![Print page with preview](assets/print.png) | ![History: every job with its outcome, and the real reason when it fails](assets/history.png) |
+### 🧭 How a print travels
+
+```mermaid
+flowchart TB
+    IN["Entry points<br/>Print · API · deep link · reprint"] --> DATA["Data + template"]
+    DATA --> DESIGN["Design pages<br/>like the Designer"]
+    DESIGN --> SHEETS["Sheets<br/>on physical paper"]
+    SHEETS --> OUT["Image or PDF<br/>a paired PC can render for a phone"]
+    OUT --> LANG["Printer language<br/>ESC/POS · ZPL · TSPL<br/>CPCL · PDF"]
+    LANG --> WIRE["Wire<br/>network · USB<br/>Bluetooth · system spooler"]
+    WIRE --> PAPER["Paper"]
+```
+
+Every entry point uses this one pipeline. Design pages are finished before they
+are placed on sheets, so the preview always matches what prints. The full story
+is in [the architecture guide](docs/ARCHITECTURE.md).
 
 ### 🔌 Which kind of printer do I have?
 
@@ -130,6 +143,7 @@ An Android phone can print straight to a Bluetooth or USB receipt or label print
 - 🛠️ [Troubleshooting](docs/TROUBLESHOOTING.md): fixes for common problems
 - ⚡ [Templates and automation](docs/AUTOMATION.md): placeholders, the REST API and deep links
 - 📖 [Glossary](docs/GLOSSARY.md): plain meanings for every term the app uses
+- 🖼️ [Screenshot gallery](docs/SCREENSHOT_GALLERY.md): every screen on Windows and Android phone, light theme
 - 🗂️ [All documentation](docs/README.md)
 
 <a id="for-developers"></a>

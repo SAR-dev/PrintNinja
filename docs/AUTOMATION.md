@@ -60,6 +60,24 @@ curl -X POST http://127.0.0.1:17717/v1/print \
 - **Observable.** Health checks, metrics (JSON and Prometheus) and a live OpenAPI document at `/v1/openapi.json`.
 - **Try it in the app.** **Automation → Try the API** lets you send test requests (desktop app only).
 
+### How the entry points fit
+
+```mermaid
+flowchart LR
+    SCRIPT["Script · till · back office"] -->|"POST /v1/print"| API["Local REST API"]
+    REMOTE["Other devices"] -->|"device token"| API
+    LINK["Web page link"] -->|"printninja://print?"| GATE{"Trusted source?"}
+    GATE -->|yes| CORE
+    GATE -->|no| CONFIRM["Confirmation sheet"]
+    CONFIRM --> CORE
+    UI["Print page · reprint"] --> CORE["One print pipeline"]
+    API --> CORE
+    CORE --> CB["Optional HTTPS callback<br/>print.succeeded / print.failed"]
+```
+
+All four ways in print through the same pipeline, so an idempotency key, a
+safe retry and an honest result work the same everywhere.
+
 ## 🔗 Deep links
 
 Deep links print from a link or a button on a web page:
