@@ -61,6 +61,10 @@ interface SceneTemplateArgs {
   setCurrentTemplateId: (id: number) => void;
   currentTemplateDbId: number | null;
   setCurrentTemplateDbId: (id: number) => void;
+  /** Keep the shared header name in sync after a create or re-save;
+   * without it the header keeps showing the previous template's name,
+   * and the next Save would rename the row back to that stale value. */
+  setTemplateName: (name: string) => void;
   /** The sample data as the dataset edits it; the preview sends it
    * verbatim — the backend accepts one record or an array of them. */
   sampleJson: string;
@@ -73,6 +77,7 @@ export function useSceneTemplate({
   setCurrentTemplateId,
   currentTemplateDbId,
   setCurrentTemplateDbId,
+  setTemplateName,
   sampleJson,
 }: SceneTemplateArgs) {
   const { t } = useTranslation();
@@ -285,6 +290,14 @@ export function useSceneTemplate({
         return next;
       });
       setBaseline(structuredClone(t));
+      // The header name is the document's; a create or re-save must move
+      // it to the name the row now carries, or Save would persist the
+      // previous template's name over it.
+      setTemplateName(saved.name);
+      // The row is local-only, so no server pull will ever carry it:
+      // broadcast the same list-changed signal the sync uses, and the
+      // other pages (Templates, Print) re-read the fresh local list.
+      window.dispatchEvent(new Event("sync:pulled"));
       if (id === null) {
         setCurrentTemplateId(saved.id);
         setCurrentTemplateDbId(saved.id);

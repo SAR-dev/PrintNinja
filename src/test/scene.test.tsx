@@ -85,6 +85,7 @@ const renderScene = (over: Partial<SceneArgs> = {}) =>
         setCurrentTemplateId: rest.setCurrentTemplateId ?? vi.fn(),
         currentTemplateDbId,
         setCurrentTemplateDbId: rest.setCurrentTemplateDbId ?? vi.fn(),
+        setTemplateName: rest.setTemplateName ?? vi.fn(),
         sampleJson,
       }),
     {
@@ -233,7 +234,8 @@ describe("useSceneTemplate", () => {
 
   it("saves through the label pipeline and resets the baseline", async () => {
     const setTemplates = vi.fn();
-    const { result } = renderScene({ setTemplates });
+    const setTemplateName = vi.fn();
+    const { result } = renderScene({ setTemplates, setTemplateName });
     act(() => result.current.addElement([], "text"));
     expect(result.current.dirty).toBe(true);
 
@@ -247,6 +249,8 @@ describe("useSceneTemplate", () => {
     });
     expect(setTemplates).toHaveBeenCalled();
     expect(result.current.dirty).toBe(false);
+    // The header name follows the row the save now carries.
+    expect(setTemplateName).toHaveBeenCalledWith("Shipping");
     expect(notify.success).toHaveBeenCalled();
   });
 
@@ -273,11 +277,18 @@ describe("useSceneTemplate", () => {
     const setTemplates = vi.fn();
     const setCurrentTemplateId = vi.fn();
     const setCurrentTemplateDbId = vi.fn();
+    const setTemplateName = vi.fn();
     const { result } = renderScene({
       setTemplates,
       setCurrentTemplateId,
       setCurrentTemplateDbId,
+      setTemplateName,
     });
+    agentMock.mockImplementation((cmd: string) =>
+      cmd === "label_save_template"
+        ? Promise.resolve({ ...savedRow, name: "New label" })
+        : Promise.reject(new Error(`unmocked ${cmd}`)),
+    );
 
     let ok: boolean | undefined;
     await act(async () => {
@@ -287,6 +298,9 @@ describe("useSceneTemplate", () => {
     expect(agentMock).toHaveBeenCalledWith("label_save_template", {
       req: expect.objectContaining({ name: "New label", id: null }),
     });
+    // The header name moves to the new row's name — the bug was that it
+    // kept showing the previous template's name after a create.
+    expect(setTemplateName).toHaveBeenCalledWith("New label");
     expect(setCurrentTemplateId).toHaveBeenCalledWith(7);
     expect(setCurrentTemplateDbId).toHaveBeenCalledWith(7);
     // The row lands in the list under the saved id.

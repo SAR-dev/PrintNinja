@@ -44,7 +44,11 @@ export type TemplateRow = {
  * `datasetsDirty` comes from `useSampleDataset`: a pending sample-data
  * edit is part of the document's unsaved state.
  */
-export function useDesignerDocument(datasetsDirty: boolean) {
+export function useDesignerDocument(
+  datasetsDirty: boolean,
+  /** The `/template/:id` deep link: open that template on mount. */
+  openTemplateId: number | null = null,
+) {
   const { t } = useTranslation();
   const [htmlCode, setHtmlCode] = useState(DEFAULT_TEMPLATE_HTML);
   const [cssCode, setCssCode] = useState(DEFAULT_TEMPLATE_CSS);
@@ -96,6 +100,11 @@ export function useDesignerDocument(datasetsDirty: boolean) {
   // the editor. `loadTemplate` writes content directly since rows carry
   // their own html/css.
   const contentLoaded = useRef<Set<number>>(new Set());
+
+  // Mirrors `currentTemplateDbId` for the async effects below: null means
+  // nothing is open yet, so the list load may open the first template.
+  const currentTemplateDbIdRef = useRef(currentTemplateDbId);
+  currentTemplateDbIdRef.current = currentTemplateDbId;
 
   const loadTemplate = (tpl: {
     id: number;
@@ -209,6 +218,34 @@ export function useDesignerDocument(datasetsDirty: boolean) {
     };
   };
 
+  /** Merge freshly read rows into the working list: update the rows that
+   * are there, append the new ones, and keep rows the read doesn't know
+   * about (created while the read was in flight). The same rule the
+   * sync:pulled handler applies. */
+  const mergeRows = (prev: TemplateRow[], next: TemplateRow[]) => {
+    const byId = new Map(next.map((r) => [r.id, r]));
+    const merged = prev.map((t) => {
+      const r = byId.get(t.id);
+      if (!r) return t;
+      return {
+        ...t,
+        name: r.name,
+        html: r.html || t.html,
+        css: r.css || t.css,
+        page_w_mm: r.page_w_mm,
+        page_h_mm: r.page_h_mm,
+        orientation: r.orientation,
+        origin: r.origin ?? t.origin ?? null,
+        track: r.track ?? t.track ?? "html",
+        scene_json: r.scene_json ?? t.scene_json ?? null,
+      };
+    });
+    for (const r of next) {
+      if (!merged.some((t) => t.id === r.id)) merged.push(r);
+    }
+    return merged;
+  };
+
   // Load the template list from SQLite on mount. Nothing is seeded: an
   // empty list means no templates yet, and the empty state offers the
   // one action that matters — make one.
@@ -218,7 +255,7 @@ export function useDesignerDocument(datasetsDirty: boolean) {
       try {
         const rows = await listTemplates();
         if (cancelled) return;
-        const hydrated = rows.map((r) => ({
+        const hydrated: TemplateRow[] = rows.map((r) => ({
           id: r.id,
           name: r.name,
           html: r.html || "",
@@ -230,35 +267,20 @@ export function useDesignerDocument(datasetsDirty: boolean) {
           track: r.track ?? "html",
           scene_json: r.scene_json ?? null,
         }));
-        setTemplates(hydrated);
-        const first = hydrated[0];
-        if (!first) return;
-        setCurrentTemplateId(first.id);
-        setTemplateName(first.name);
-        setHtmlCode(formatHtml(first.html));
-        setCssCode(formatCss(first.css));
-        setPageWidth(first.page_w_mm ?? NEW_TEMPLATE_PAGE_W_MM);
-        setPageHeight(first.page_h_mm ?? NEW_TEMPLATE_PAGE_H_MM);
-        setBaseline({
-          name: first.name,
-          html: formatHtml(first.html),
-          css: formatCss(first.css),
-          w: first.page_w_mm ?? NEW_TEMPLATE_PAGE_W_MM,
-          h: first.page_h_mm ?? NEW_TEMPLATE_PAGE_H_MM,
-        });
-        setCurrentTemplateDbId(first.id);
-        // README and publish info live on the full row.
-        try {
-          const full = await agent("get_template", { id: first.id });
-          loadReadme(full.readme ?? "");
-          setRemoteId(full.server_id ?? full.remote_id ?? null);
-          setPublishedAt(full.published_at ?? null);
-          setOrigin(full.origin === "saved" ? "saved" : "own");
-        } catch {
-          loadReadme("");
-          setRemoteId(null);
-          setPublishedAt(null);
-        }
+        // Merge instead of replacing: a template created while this fetch
+        // was in flight (the new-label dialog from the Templates page)
+        // must not be wiped from the list when the stale snapshot
+        // resolves.
+        setTemplates((prev) => mergeRows(prev, hydrated));
+        // Open one only if the user hasn't already opened or created one
+        // while the fetch was in flight; the /template/:id deep link
+        // wins over the first row.
+        if (currentTemplateDbIdRef.current != null) return;
+        const target =
+          (openTemplateId != null
+            ? hydrated.find((r) => r.id === openTemplateId)
+            : undefined) ?? hydrated[0];
+        if (target) loadTemplate(target);
       } catch {
         /* web mode / backend unavailable: the empty state applies */
       } finally {
@@ -271,10 +293,20 @@ export function useDesignerDocument(datasetsDirty: boolean) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A /template/:id deep link that arrives while the page is already
+  // mounted (the routes share the component): open that template. The
+  // mount effect owns the fresh-mount load, so this only acts on a
+  // param change once the list is in state.
+  useEffect(() => {
+    if (openTemplateId == null) return;
+    const row = templates.find((t) => t.id === openTemplateId);
+    if (!row) return;
+    loadTemplate(row);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTemplateId]);
+
   // Templates reload on sync pulls so a save on another PC (or the
   // topbar sync button) refreshes this list without a remount.
-  const currentTemplateDbIdRef = useRef(currentTemplateDbId);
-  currentTemplateDbIdRef.current = currentTemplateDbId;
   useEffect(() => {
     const onPulled = async () => {
       try {
