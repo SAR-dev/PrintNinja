@@ -79,13 +79,13 @@ This takes about five minutes. ⏱️ The **Setup checklist** in **Settings** wa
 ### 🧭 How a print travels
 
 ```mermaid
-flowchart LR
-    IN["Print page · REST API · deep link · reprint"] --> DATA["Data + template"]
-    DATA --> DESIGN["Design pages<br/>exactly like the Designer"]
-    DESIGN --> SHEETS["Sheets<br/>placed on physical paper"]
-    SHEETS --> OUT["Image or PDF<br/>a paired PC can do this step for a phone"]
-    OUT --> LANG["Printer language<br/>ESC/POS · ZPL · TSPL · CPCL · PDF"]
-    LANG --> WIRE["Wire<br/>network · USB · Bluetooth · system spooler"]
+flowchart TB
+    IN["Entry points<br/>Print · API · deep link · reprint"] --> DATA["Data + template"]
+    DATA --> DESIGN["Design pages<br/>like the Designer"]
+    DESIGN --> SHEETS["Sheets<br/>on physical paper"]
+    SHEETS --> OUT["Image or PDF<br/>a paired PC can render for a phone"]
+    OUT --> LANG["Printer language<br/>ESC/POS · ZPL · TSPL<br/>CPCL · PDF"]
+    LANG --> WIRE["Wire<br/>network · USB<br/>Bluetooth · system spooler"]
     WIRE --> PAPER["Paper"]
 ```
 
