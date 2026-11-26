@@ -1271,7 +1271,17 @@ media = ["page"]
         let factory = tcp_factory(fake.port);
         let result = print_units(&units.spec, &zpl_profile(), &factory);
         assert_eq!(result, JobResult::Confirmed, "the reply says ready");
-        let received = fake.received();
+        // The fake logs the payload as its reader thread pulls it off
+        // the socket — wait for the last bytes to be logged.
+        let mut received = Vec::new();
+        for _ in 0..500 {
+            received = fake.received();
+            let text = String::from_utf8_lossy(&received);
+            if text.contains("BOLT M8") && text.contains("NUT M8") {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
         let text = String::from_utf8_lossy(&received);
         assert!(
             text.contains("^XA"),
@@ -1348,11 +1358,13 @@ media = ["page"]
             "nothing was confirmed, and nothing failed"
         );
         // The fake's accept thread serves the job's connection a moment
-        // after the probe's; wait for the job bytes instead of racing it.
+        // after the probe's, and it logs the payload as it reads it —
+        // wait for the last bytes to be logged instead of racing them.
         let mut received = Vec::new();
-        for _ in 0..200 {
+        for _ in 0..500 {
             received = fake.received();
-            if String::from_utf8_lossy(&received).contains("^XA") {
+            let text = String::from_utf8_lossy(&received);
+            if text.contains("BOLT M8") && text.contains("NUT M8") {
                 break;
             }
             thread::sleep(Duration::from_millis(10));
