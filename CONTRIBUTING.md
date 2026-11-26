@@ -66,7 +66,7 @@ You do not have to know how it could be built. Describing the problem is the mos
 
 Printers are all a little different, and we cannot own every model. If you have a receipt, label or office printer, you can help by trying it out and telling us what happened, good or bad.
 
-- 📋 The [real-printer test checklist](docs/todo/TEST_CHECKLIST.md) lists simple things to print (text, a barcode, an image, a long job). It has not been run on real hardware yet, so your results are valuable.
+- 📋 The [real-printer test checklist](docs/TEST_CHECKLIST.md) lists simple things to print (text, a barcode, an image, a long job). It has not been run on real hardware yet, so your results are valuable.
 
 When you report back, say which printer you used, how it was connected and which of the checks worked. A short "it worked" is useful too! 🎉
 
@@ -136,7 +136,7 @@ For the share service, copy `server/env.example` to `server/.env` and run `pnpm 
 | OpenAPI | `pnpm --filter server openapi:generate`, then confirm `server/openapi/openapi.json` is unchanged |
 | End to end | `pnpm e2e` (starts its own local servers and SQLite files, no Docker) |
 
-`pnpm test:rust` runs the whole Rust suite in a Linux container (`src-tauri/Dockerfile.test`). Prefer it over local `cargo test`: the debug build of this crate peaks near 1.5 GB of RAM per job and the container caps jobs and memory, so a run that would pressure the host fails fast inside the box instead. It also runs on Linux, where the PDFium tests exercise the vendored `libpdfium.so` instead of self-skipping. `pnpm test:rust:report` writes a JUnit file instead; any other cargo subcommand can be passed after it.
+`pnpm test:rust` runs the whole Rust suite in a Linux container (`src-tauri/Dockerfile.test`). Prefer it over local `cargo test`: the debug build of this crate peaks near 1.5 GB of RAM per job and the container caps jobs and memory, so a run that would pressure the host fails fast inside the box instead. `pnpm test:rust:report` writes a JUnit file instead; any other cargo subcommand can be passed after it.
 
 The Playwright suite can run the same way, in a Linux container: `pnpm e2e:docker` builds the image from the current checkout (`e2e/Dockerfile`) and runs the suite against it. It mirrors the `app-e2e` CI job (Node 22, pnpm 10, Chromium, Ubuntu 24.04), so the committed screenshot baselines compare cleanly and the run is not affected by host-OS quirks (Windows cannot always bind the worker ports, and host-rendered screenshots never match the Linux baselines). To run a single project or test, override the command: `docker compose -f e2e/docker-compose.e2e.yml run --rm e2e pnpm --filter e2e exec playwright test --project=mobile-pixel7`.
 

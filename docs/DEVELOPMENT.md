@@ -115,9 +115,6 @@ The image holds only the toolchain and the Tauri Linux build deps; the
 workspace is mounted, so the tests always run against the current
 checkout, and a named volume keeps the dependency build between runs
 (first run compiles everything, later runs recompile only the crate).
-The PDFium unit tests run on Linux too: the crate binds the vendored
-`resources/pdfium/libpdfium.so` from the mounted workspace, so the
-suite is platform-complete here.
 
 ## Release
 

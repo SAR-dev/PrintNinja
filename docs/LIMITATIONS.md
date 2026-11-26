@@ -43,6 +43,6 @@ These are not bugs. They are things we looked at and decided not to build — or
 
 ## 🧪 Real printers
 
-**🖨️ Nothing has been verified on a real print head yet.** Output has only been checked against simulated printers, so the command-language fixes now in the code — TSPL tuning, ZPL sizing, the CPCL graphics header, the receipt raster width — still need a real head. That is what the [real-printer test checklist](./todo/TEST_CHECKLIST.md) is for; if you have a printer, running it is the most valuable thing you can do for the project.
+**🖨️ Nothing has been verified on a real print head yet.** Output has only been checked against simulated printers, so the command-language fixes now in the code — TSPL tuning, ZPL sizing, the CPCL graphics header, the receipt raster width — still need a real head. That is what the [real-printer test checklist](./TEST_CHECKLIST.md) is for; if you have a printer, running it is the most valuable thing you can do for the project.
 
 [⬅️ Back to the README](../README.md)
