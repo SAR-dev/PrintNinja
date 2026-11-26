@@ -164,21 +164,19 @@ pub async fn label_preview(
         Records::from_json(&req.records).map_err(|e| AppError::Validation(e.to_string()))?;
     let copies = req.copies.unwrap_or(1).max(1);
     let choice = choice.clone();
-    tokio::task::spawn_blocking(move || {
-        prepare_units(&template, &profile, &records, copies)
-    })
-    .await
-    .map_err(|e| AppError::Internal(format!("the preview task ended before finishing: {e}")))?
-    .map_err(|e| AppError::Validation(e.to_string()))
-    .map(|units| LabelPrepareResponse {
-        profile: choice.model,
-        profile_source: if choice.user_chosen {
-            "user"
-        } else {
-            "default"
-        },
-        report: units.report,
-    })
+    tokio::task::spawn_blocking(move || prepare_units(&template, &profile, &records, copies))
+        .await
+        .map_err(|e| AppError::Internal(format!("the preview task ended before finishing: {e}")))?
+        .map_err(|e| AppError::Validation(e.to_string()))
+        .map(|units| LabelPrepareResponse {
+            profile: choice.model,
+            profile_source: if choice.user_chosen {
+                "user"
+            } else {
+                "default"
+            },
+            report: units.report,
+        })
 }
 
 /// One scene job's request: which template, which printer, which data,

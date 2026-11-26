@@ -401,9 +401,7 @@ pub fn update_scene_template(
         rusqlite::params![name, page_w_mm, page_h_mm, orientation, scene_json, id],
     )?;
     if affected == 0 {
-        return Err(AppError::NotFound(format!(
-            "Scene template {id} not found"
-        )));
+        return Err(AppError::NotFound(format!("Scene template {id} not found")));
     }
     tx_guard_to_template(conn, id).map_err(Into::into)
 }
