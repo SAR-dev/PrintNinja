@@ -89,3 +89,6 @@ graphify-out/*
 # Output of `pnpm shots`
 screenshots/
 shots/
+# The curated gallery from `pnpm shots:gallery` is committed,
+# unlike the full local capture output above.
+!docs/screenshots/

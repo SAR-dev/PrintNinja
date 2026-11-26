@@ -26,6 +26,10 @@ screenshots/
   ...
 ```
 
+## Committed gallery
+
+`pnpm shots:gallery` is the same capture with `--platforms=windows,android-phone --themes=light --langs=en --out=docs/screenshots`. Its 22 images are committed and shown in the [Screenshot gallery](./SCREENSHOT_GALLERY.md); re-run the command after an intentional UI change and commit the refreshed files.
+
 ## Options
 
 | Flag | Values | Default |
