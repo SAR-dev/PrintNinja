@@ -72,12 +72,15 @@ Settings (general and profile) and the API explorer. Edit `ROUTES` in
 - A full default matrix (6 platforms x 2 themes x 11 pages = 132 images)
   takes about 5 minutes on a laptop-class machine, mostly Vite compiling
   each page on first visit.
-- **Template previews show source code, not a rendered page.** The capture
-  runs in web mode, and the fake agent has no Rust print engine: its
-  `render_template_preview` stub returns the escaped template HTML in a
-  `<pre>` (see `e2e/support/fakeAgent/commands.ts`). That is what the
-  Designer canvas and Print preview show in these images. The real desktop
-  app renders previews with the same Rust engine that prints, so its
-  previews look completely different. The screenshots are for reviewing the
-  surrounding app layout, not template output; change the stub yourself if
-  you need rendered previews in the gallery.
+- **Template previews are an approximation, not the print engine.** The
+  capture runs in web mode, and the fake agent has no Rust print engine. By
+  default its `render_template_preview` stub (see
+  `e2e/support/fakeAgent/commands.ts`) returns the escaped template HTML in
+  a `<pre>`, which is what e2e specs see. The screenshot script turns on an
+  opt-in rendered mode (`localStorage["fake-agent:render-html"] = "true"`),
+  so the Designer canvas and Print preview show the template's real HTML
+  and CSS with `{{placeholders}}` filled from the record, or from built-in
+  sample values. Handlebars helpers and blocks are not evaluated, so
+  complex templates may differ from the real desktop app, which renders
+  previews with the same Rust engine that prints. Use the images to review
+  app layout, not exact template output.

@@ -341,7 +341,7 @@ async function main() {
             };
             const encoded = Buffer.from(JSON.stringify(seed), "utf8").toString("base64");
             await context.addInitScript({
-              content: `localStorage.setItem('fake-agent:seed','${encoded}');localStorage.setItem('printninja.language','${lang}');`,
+              content: `localStorage.setItem('fake-agent:seed','${encoded}');localStorage.setItem('printninja.language','${lang}');localStorage.setItem('fake-agent:render-html','true');`,
             });
             await context.addInitScript({ path: bundlePath });
             // Never hit the network: the update check would add a badge.
