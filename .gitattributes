@@ -18,4 +18,4 @@ Dockerfile text eol=lf
 src-tauri/tests/fixtures/*.json text eol=lf
 # Printer-language goldens intentionally carry CRLF line endings; never let
 # a Windows checkout normalize them to LF (the byte-for-byte tests would fail).
-tests/golden/cases/*.bin -text
+tests/golden/cases/**/*.bin -text
