@@ -5,6 +5,7 @@
 // account allow-list matches the server (ui_density, brand_name,
 // brand_logo); device keys are never dirty.
 
+import { defaultModelForLanguage, validateProfilePick } from "./label.js";
 import { getSetting, seedPrinters, setSetting } from "./store.js";
 import type { ApplyReport } from "./cache.js";
 
@@ -54,6 +55,8 @@ export interface FakePrinterRow {
   address: string;
   language: string;
   paper_width_mm: number | null;
+  // WP3: the picked bundled label model (null = language-based default).
+  label_profile: string | null;
 }
 
 const DATASETS_KEY = "fake-agent:datasets";
@@ -177,6 +180,8 @@ export function createFakeLibrary(deps: {
         address: row.address ?? "",
         language: row.language ?? "pdf",
         paper_width_mm: widthOf(row.paper_width_mm),
+        label_profile:
+          typeof row.label_profile === "string" ? row.label_profile : null,
       });
       nextPrinterId = Math.max(nextPrinterId, row.id + 1);
     }
@@ -191,6 +196,7 @@ export function createFakeLibrary(deps: {
           address: String(p["address"] ?? ""),
           language: String(p["language"] ?? "pdf"),
           paper_width_mm: widthOf(p["paper_width_mm"]),
+          label_profile: null,
         });
       }
       if (printers.size > 0) persistAll();
@@ -288,6 +294,7 @@ export function createFakeLibrary(deps: {
         address: input.address ?? "",
         language,
         paper_width_mm: widthOf(input.paper_width_mm),
+        label_profile: null,
       };
       printers.set(created.id, created);
       persistAll();
@@ -324,6 +331,26 @@ export function createFakeLibrary(deps: {
     // ── printers (device-local) ──
     listPrinters(): FakePrinterRow[] {
       return [...printers.values()];
+    },
+    /** WP3: set or clear the picked label model (null clears). */
+    setPrinterLabelProfile(
+      id: number,
+      pick: string | null,
+    ): { model: string; user_chosen: boolean } {
+      const row = printers.get(id);
+      if (!row) throw new Error(`Printer ${id} not found`);
+      if (pick !== null) {
+        validateProfilePick(pick, row.language);
+        row.label_profile = pick;
+        persistAll();
+        return { model: pick, user_chosen: true };
+      }
+      row.label_profile = null;
+      persistAll();
+      return {
+        model: defaultModelForLanguage(row.language),
+        user_chosen: false,
+      };
     },
     addPrinter(input: {
       name: string;

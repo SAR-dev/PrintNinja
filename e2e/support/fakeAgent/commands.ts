@@ -1,5 +1,6 @@
 import { getSetting, seedJobs, seedPrinters, setSetting } from "./store.js";
 import { createFakeCache, type SyncChangeIn } from "./cache.js";
+import * as label from "./label.js";
 
 // In-memory implementation of the IPC commands. Phase 1 implements the
 // commands the sign-in and shell screens need; every other command the
@@ -720,6 +721,34 @@ const implemented: Record<string, Handler> = {
       },
     };
   },
+  // Label track (WP2–WP4): scene templates save, prepare and print
+  // through the label pipeline in Rust; the fake mirrors the wire
+  // shapes, the resolution order and the error strings (label.ts).
+  label_list_profiles: () => label.listProfiles(),
+  label_set_printer_profile: (args) =>
+    cache.library.setPrinterLabelProfile(
+      Number(args["printer_id"]),
+      args["profile_id"] == null ? null : String(args["profile_id"]),
+    ),
+  label_save_template: (args) => {
+    const req = (args["req"] ?? args) as Record<string, unknown>;
+    const payload = {
+      name: String(req["name"] ?? ""),
+      scene: String(req["scene"] ?? ""),
+    };
+    if (req["id"] == null) {
+      return label.saveSceneTemplate(cache, payload);
+    }
+    return label.updateSceneTemplate(cache, Number(req["id"]), payload);
+  },
+  label_preview: (args) =>
+    label.prepareScene(cache, (args["req"] ?? args) as Record<string, unknown>),
+  label_prepare: (args) =>
+    label.prepareJob(cache, (args["req"] ?? args) as Record<string, unknown>),
+  label_print: (args) =>
+    label.printJob(cache, (args["req"] ?? args) as Record<string, unknown>),
+  label_encode_symbol: (args) =>
+    label.encodeSymbol(String(args["kind"] ?? ""), String(args["value"] ?? "")),
 };
 
 /** Every Rust command without real behavior yet (src-tauri/src/lib.rs).
@@ -776,22 +805,6 @@ const acknowledgedStubs: string[] = [
   // and read back by the Android print path; the e2e browser never sends a
   // Bluetooth job, so the fake agent only acknowledges it.
   "set_printer_bluetooth_delivery",
-  // Label track (WP2): scene templates save, prepare and print through
-  // Rust (label_pipeline); the label designer UI that will call these
-  // lands in a later milestone, so the fake agent only acknowledges
-  // them for the contract test.
-  "label_save_template",
-  "label_prepare",
-  "label_print",
-  "label_list_profiles",
-  // Label track (WP3): the per-printer model pick, stored on the
-  // printer row by Rust; the model picker UI lands with the WP4 label
-  // screen, so the fake agent only acknowledges it.
-  "label_set_printer_profile",
-  // Label track (WP4): the designer's preview and canvas symbol
-  // encoding, both computed in Rust; no e2e drives them yet.
-  "label_preview",
-  "label_encode_symbol",
   // mDNS discovery is implemented above
 ];
 
