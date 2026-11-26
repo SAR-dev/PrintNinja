@@ -45,6 +45,8 @@ Only use the headings you actually have entries for.
 
 ## Unreleased
 
+## [2026.1126.0] - 2026-11-26
+
 ### Added
 
 - **A label designer for thermal printers.** Design receipts and labels on a canvas in millimetres — text, barcodes, QR codes, images, lines and frames — with undo, arrow-key nudging, and a preview that matches what the printer produces.
