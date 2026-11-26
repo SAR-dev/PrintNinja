@@ -76,9 +76,22 @@ This takes about five minutes. ⏱️ The **Setup checklist** in **Settings** wa
 3. ▶️ **Print.** Open **Print**, choose your printer and template, add your information (sample data, a link to your data, or a CSV file), choose how many copies, check the preview and press **Print**.
 4. ✅ **Check the result.** **History** lists every job with a clear success or failure message. Reprint or retry from there.
 
-| 1. Design a template | 2. Print it | 3. Check the result |
-|:---:|:---:|:---:|
-| ![Designer with live canvas](assets/designer.png) | ![Print page with preview](assets/print.png) | ![History: every job with its outcome, and the real reason when it fails](assets/history.png) |
+### 🧭 How a print travels
+
+```mermaid
+flowchart LR
+    IN["Print page · REST API · deep link · reprint"] --> DATA["Data + template"]
+    DATA --> DESIGN["Design pages<br/>exactly like the Designer"]
+    DESIGN --> SHEETS["Sheets<br/>placed on physical paper"]
+    SHEETS --> OUT["Image or PDF<br/>a paired PC can do this step for a phone"]
+    OUT --> LANG["Printer language<br/>ESC/POS · ZPL · TSPL · CPCL · PDF"]
+    LANG --> WIRE["Wire<br/>network · USB · Bluetooth · system spooler"]
+    WIRE --> PAPER["Paper"]
+```
+
+Every entry point uses this one pipeline. Design pages are finished before they
+are placed on sheets, so the preview always matches what prints. The full story
+is in [the architecture guide](docs/ARCHITECTURE.md).
 
 ### 🔌 Which kind of printer do I have?
 
