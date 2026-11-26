@@ -687,6 +687,10 @@ const ja: Translation = {
     escpos_band_rows: "ESC/POS画像バンドの高さ (行)",
     escpos_band_rows_hint:
       "ESC/POS専用: 1回のラスターコマンドで送る画像の行数。空欄なら組み込み既定値 (256) が使われます。テストページが画像ではなく数文字しか印刷されない場合は、64 または 24 をお試しください。",
+    label_model: "ラベルモデル",
+    label_model_auto: "自動（言語の既定値）",
+    label_model_hint:
+      "ラベルジョブでこのプリンターをどの組み込みモデルとして扱うかを指定します。自動は言語の既定モデルを使います。実際のモデルがわかればそれを選ぶと、その寸法・DPIでレイアウトが計画されます。",
     ipp_signin: "サインイン（任意）",
     ipp_username: "ユーザー名",
     ipp_password: "パスワード",

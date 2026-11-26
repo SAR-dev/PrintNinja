@@ -72,6 +72,27 @@ export function isRawWire(printerType: string, viaDriver: boolean): boolean {
 export type TestKind = "page" | "text";
 
 /**
+ * The bundled-model family a row's language takes, or `null` for a
+ * document (PDF) printer that has no label model at all: `raster` rows
+ * print ESC/POS bytes, every command language speaks its own. Mirrors
+ * the backend's `expected_language`, which validates the pick the same
+ * way at write time.
+ */
+export function labelProfileFamily(language: string): string | null {
+  switch (language) {
+    case "escpos":
+    case "raster":
+      return "escpos";
+    case "zpl":
+    case "tspl":
+    case "cpcl":
+      return language;
+    default:
+      return null;
+  }
+}
+
+/**
  * Whether Test Print can send the plain-text test on top of the image
  * page. The command languages print text natively; pdf and raster only
  * accept bitmaps, so they have the page test and nothing cheaper.

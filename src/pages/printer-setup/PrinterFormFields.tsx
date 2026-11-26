@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import { isAndroid, isLinux } from "@/lib/platform";
 import { defaultLanguageFor, type LoosePrinterForm } from "@/lib/printerSchema";
-import type { ProbeCapabilitiesResult } from "@/lib/agent/types";
+import type { ProfileInfo, ProbeCapabilitiesResult } from "@/lib/agent/types";
 import { AlertTriangle, Info, Scan } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { FoldSection } from "@/components/printers/FoldSection";
 import { DisabledReason } from "@/components/ui/disabled-reason";
-import { PAPERS, isRawWire } from "./constants";
+import { PAPERS, isRawWire, labelProfileFamily } from "./constants";
 
 const field = "space-y-1.5";
 
@@ -36,6 +36,7 @@ export function PrinterFormFields({
   dialogTypes,
   visibleLanguages,
   languagesLimited,
+  labelModelOptions,
   addressLabelKey,
   addressHintKey,
   addressDormant,
@@ -72,6 +73,7 @@ export function PrinterFormFields({
   dialogTypes: readonly { value: string; labelKey: string }[];
   visibleLanguages: readonly { value: string; labelKey: string }[];
   languagesLimited: boolean;
+  labelModelOptions: ProfileInfo[];
   addressLabelKey: string;
   addressHintKey: string | null;
   addressDormant: boolean;
@@ -679,6 +681,48 @@ export function PrinterFormFields({
                   {t(formErrorKey)}
                 </p>
               )}
+            </div>
+          )}
+
+          {/* Which bundled label model the row prints scene jobs with:
+              a pick only exists for label languages (a PDF row has no
+              model), so the field is hidden on a document printer.
+              "Auto" is the language's default; the Radix select needs
+              a non-empty value, so blank maps to the "auto" sentinel. */}
+          {labelProfileFamily(form.language) !== null && (
+            <div className={field}>
+              <Label htmlFor="printer-label-model">
+                {t("printers.label_model")}
+              </Label>
+              <Select
+                value={form.label_profile || "auto"}
+                onValueChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    label_profile: v === "auto" ? "" : v,
+                  }))
+                }
+              >
+                <SelectTrigger
+                  id="printer-label-model"
+                  aria-label={t("printers.label_model")}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">
+                    {t("printers.label_model_auto")}
+                  </SelectItem>
+                  {labelModelOptions.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.model}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {t("printers.label_model_hint")}
+              </p>
             </div>
           )}
 

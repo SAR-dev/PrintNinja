@@ -674,6 +674,10 @@ const en = {
     escpos_band_rows: "ESC/POS image band height (rows)",
     escpos_band_rows_hint:
       "ESC/POS only: how many image rows go in each raster command. Blank keeps the built-in default (256). If a test page prints a couple of stray characters instead of the image, try 64 or 24.",
+    label_model: "Label model",
+    label_model_auto: "Auto (language default)",
+    label_model_hint:
+      "Which of the bundled models this printer is, for label jobs. Auto uses the language's default model; pick the exact model when you know it — the label layout is planned from its geometry.",
     ipp_signin: "Sign-in (optional)",
     ipp_username: "Username",
     ipp_password: "Password",

@@ -79,6 +79,7 @@ const btForm = (over: Partial<LoosePrinterForm> = {}): LoosePrinterForm => ({
   password: "",
   skip_tls_verification: false,
   via_driver: false,
+  label_profile: "",
   ...over,
 });
 
@@ -184,7 +185,11 @@ describe("usePrinterForm sheet lifecycle", () => {
       await Promise.all([first, second]);
     });
 
-    expect(invoke).toHaveBeenCalledTimes(1);
+    // The label-profile fetch on mount is the only other call; the point
+    // is that the add itself fires once, not twice.
+    expect(
+      invoke.mock.calls.filter((c) => c[0] === "add_printer"),
+    ).toHaveLength(1);
     expect(result.current.showAdd).toBe(false);
   });
 

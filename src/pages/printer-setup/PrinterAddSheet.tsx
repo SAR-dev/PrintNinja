@@ -59,6 +59,7 @@ export function PrinterAddSheet({
     dialogTypes,
     visibleLanguages,
     languagesLimited,
+    labelModelOptions,
     addressDormant,
     addressLabelKey,
     addressHintKey,
@@ -181,6 +182,7 @@ export function PrinterAddSheet({
             dialogTypes={dialogTypes}
             visibleLanguages={visibleLanguages}
             languagesLimited={languagesLimited}
+            labelModelOptions={labelModelOptions}
             addressLabelKey={addressLabelKey}
             addressHintKey={addressHintKey}
             addressDormant={addressDormant}

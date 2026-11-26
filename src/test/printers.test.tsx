@@ -20,6 +20,7 @@ vi.mock("sonner", () => ({
 }));
 
 import { PrinterSetupPage } from "@/pages/PrinterSetup";
+import type { ProfileInfo } from "@/lib/agent/types";
 
 const P = (o: object) => ({
   paper_width_mm: 80,
@@ -1053,5 +1054,257 @@ describe("Add / edit dialog layout", () => {
         await screen.findByRole("option", { name: "PDF" }),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("Per-printer label model picker (WP4 UI 4/5)", () => {
+  const PROFILES: ProfileInfo[] = [
+    {
+      id: "zt411",
+      model: "Zebra ZT411",
+      aliases: ["ZT410"],
+      language: "zpl",
+      media: ["label"],
+      dpi: 203,
+      head_width_dots: 816,
+      can_confirm: true,
+      delivery: { chunk_bytes: 2048, pause_ms: 0, close_delay_ms: 250 },
+    },
+    {
+      id: "generic-thermal-58mm",
+      model: "Generic 58 mm thermal",
+      aliases: [],
+      language: "escpos",
+      media: ["continuous"],
+      dpi: 203,
+      head_width_dots: 384,
+      can_confirm: false,
+      delivery: { chunk_bytes: 512, pause_ms: 50, close_delay_ms: 250 },
+    },
+  ];
+
+  beforeEach(() => {
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "list_printers") return PRINTERS;
+      if (cmd === "enumerate_system_printers") return [];
+      if (cmd === "label_list_profiles") return PROFILES;
+      // The model pick rides a second call after the row exists, so the
+      // add/edit has to answer with the saved row's id.
+      if (cmd === "add_printer") return { id: 100, ...args.req };
+      if (cmd === "update_printer") return { id: args.id, ...args.req };
+      return null;
+    });
+  });
+
+  async function openAdd() {
+    renderPage();
+    await screen.findByText("Dock Zebra");
+    fireEvent.click(screen.getByRole("button", { name: /Add printer/i }));
+    return screen.findByRole("dialog");
+  }
+
+  const openAdvanced = (panel: HTMLElement) =>
+    fireEvent.click(within(panel).getByTestId("printer-advanced-toggle"));
+
+  const pickLanguage = async (panel: HTMLElement, name: string) => {
+    fireEvent.click(within(panel).getByLabelText("Language"));
+    fireEvent.click(await screen.findByRole("option", { name }));
+  };
+
+  it("hides the model picker on a document (PDF) row, shows it for a label language", async () => {
+    const panel = await openAdd();
+    openAdvanced(panel);
+    expect(within(panel).queryByLabelText("Label model")).toBeNull();
+    await pickLanguage(panel, "ZPL (label)");
+    expect(
+      await within(panel).findByLabelText("Label model"),
+    ).toBeInTheDocument();
+  });
+
+  it("offers only the row's own language family", async () => {
+    const panel = await openAdd();
+    await pickLanguage(panel, "ZPL (label)");
+    openAdvanced(panel);
+    fireEvent.click(within(panel).getByLabelText("Label model"));
+    expect(
+      await screen.findByRole("option", { name: "Zebra ZT411" }),
+    ).toBeInTheDocument();
+    // The ESC/POS family is not a ZPL row's business.
+    expect(
+      screen.queryByRole("option", { name: "Generic 58 mm thermal" }),
+    ).toBeNull();
+  });
+
+  it("saves a pick on a new row with its own call after the add", async () => {
+    const panel = await openAdd();
+    fireEvent.change(within(panel).getByLabelText("Printer name"), {
+      target: { value: "Shop Zebra" },
+    });
+    fireEvent.change(within(panel).getByLabelText("Address"), {
+      target: { value: "10.0.0.20" },
+    });
+    await pickLanguage(panel, "ZPL (label)");
+    openAdvanced(panel);
+    fireEvent.click(within(panel).getByLabelText("Label model"));
+    fireEvent.click(await screen.findByRole("option", { name: "Zebra ZT411" }));
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Save printer" }),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "add_printer",
+        expect.objectContaining({
+          req: expect.objectContaining({ language: "zpl" }),
+        }),
+      ),
+    );
+    // The pick is stored outside the core row, so it rides a second
+    // call against the saved row's id — not part of the add itself.
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("label_set_printer_profile", {
+        printer_id: 100,
+        profile_id: "zt411",
+      }),
+    );
+  });
+
+  it("sends no profile call while the row keeps the auto default", async () => {
+    const panel = await openAdd();
+    fireEvent.change(within(panel).getByLabelText("Printer name"), {
+      target: { value: "Shop Zebra" },
+    });
+    fireEvent.change(within(panel).getByLabelText("Address"), {
+      target: { value: "10.0.0.20" },
+    });
+    await pickLanguage(panel, "ZPL (label)");
+    openAdvanced(panel);
+    expect(within(panel).getByLabelText("Label model")).toHaveTextContent(
+      "Auto (language default)",
+    );
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Save printer" }),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "add_printer",
+        expect.objectContaining({
+          req: expect.objectContaining({ language: "zpl" }),
+        }),
+      ),
+    );
+    expect(
+      invoke.mock.calls.some((c) => c[0] === "label_set_printer_profile"),
+    ).toBe(false);
+  });
+
+  it("prefills the saved pick on an edit and skips the call while unchanged", async () => {
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "list_printers")
+        return [
+          ...PRINTERS,
+          P({
+            id: 5,
+            name: "Shop Zebra",
+            printer_type: "ipp",
+            address: "10.0.0.20",
+            language: "zpl",
+            label_profile: "zt411",
+          }),
+        ];
+      if (cmd === "enumerate_system_printers") return [];
+      if (cmd === "label_list_profiles") return PROFILES;
+      if (cmd === "update_printer") return { id: args.id, ...args.req };
+      return null;
+    });
+    renderPage();
+    await screen.findByText("Shop Zebra");
+    fireEvent.click(screen.getByRole("button", { name: "Edit Shop Zebra" }));
+    const panel = await screen.findByRole("dialog");
+    openAdvanced(panel);
+    // The row's own pick comes back into the field.
+    await waitFor(() =>
+      expect(within(panel).getByLabelText("Label model")).toHaveTextContent(
+        "Zebra ZT411",
+      ),
+    );
+    // An untouched pick never round-trips the backend.
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Save printer" }),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "update_printer",
+        expect.objectContaining({ id: 5 }),
+      ),
+    );
+    expect(
+      invoke.mock.calls.some((c) => c[0] === "label_set_printer_profile"),
+    ).toBe(false);
+  });
+
+  it("clears the stored pick to the language default with profile_id null", async () => {
+    invoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd === "list_printers")
+        return [
+          ...PRINTERS,
+          P({
+            id: 5,
+            name: "Shop Zebra",
+            printer_type: "ipp",
+            address: "10.0.0.20",
+            language: "zpl",
+            label_profile: "zt411",
+          }),
+        ];
+      if (cmd === "enumerate_system_printers") return [];
+      if (cmd === "label_list_profiles") return PROFILES;
+      if (cmd === "update_printer") return { id: args.id, ...args.req };
+      return null;
+    });
+    renderPage();
+    await screen.findByText("Shop Zebra");
+    fireEvent.click(screen.getByRole("button", { name: "Edit Shop Zebra" }));
+    const panel = await screen.findByRole("dialog");
+    openAdvanced(panel);
+    await waitFor(() =>
+      expect(within(panel).getByLabelText("Label model")).toHaveTextContent(
+        "Zebra ZT411",
+      ),
+    );
+    fireEvent.click(within(panel).getByLabelText("Label model"));
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Auto (language default)" }),
+    );
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Save printer" }),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("label_set_printer_profile", {
+        printer_id: 5,
+        profile_id: null,
+      }),
+    );
+  });
+
+  it("orphaned by a language change, the pick starts over at auto", async () => {
+    const panel = await openAdd();
+    await pickLanguage(panel, "ZPL (label)");
+    openAdvanced(panel);
+    fireEvent.click(within(panel).getByLabelText("Label model"));
+    fireEvent.click(await screen.findByRole("option", { name: "Zebra ZT411" }));
+    expect(within(panel).getByLabelText("Label model")).toHaveTextContent(
+      "Zebra ZT411",
+    );
+    await pickLanguage(panel, "ESC/POS (receipt)");
+    // The ZPL pick belongs to a family this row no longer is: back to
+    // auto, and the family's own models.
+    expect(within(panel).getByLabelText("Label model")).toHaveTextContent(
+      "Auto (language default)",
+    );
+    fireEvent.click(within(panel).getByLabelText("Label model"));
+    expect(
+      await screen.findByRole("option", { name: "Generic 58 mm thermal" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Zebra ZT411" })).toBeNull();
   });
 });
