@@ -400,8 +400,16 @@ async function main() {
                 await page.close();
               }
             };
-            // Small worker pool: JOBS pages at a time per context.
             const queue = [...routes];
+            // Guest pages set a localStorage flag shared by this whole
+            // context. Capture the sign-in shot first, before any guest
+            // page can write it and silently skip the gate.
+            const signin = queue.find((r) => r.guest === false);
+            if (signin) {
+              queue.splice(queue.indexOf(signin), 1);
+              await capture(signin);
+            }
+            // Small worker pool: JOBS pages at a time per context.
             await Promise.all(
               Array.from({ length: Math.min(JOBS, queue.length) }, async () => {
                 while (queue.length) await capture(queue.shift());
