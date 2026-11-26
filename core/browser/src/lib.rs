@@ -179,67 +179,73 @@ pub fn render_pdf_with(
     let html_path = work_dir.join("job.html");
     let pdf_path = work_dir.join("job.pdf");
     let stderr_path = work_dir.join("job.stderr");
-    fs::write(&html_path, html).map_err(|e| BrowserError::Io(e.to_string()))?;
-    if pdf_path.exists() {
-        fs::remove_file(&pdf_path).map_err(|e| BrowserError::Io(e.to_string()))?;
-    }
+    let args = print_args(&pdf_path, &file_url(&html_path), work_dir);
+    // Root containers and locked-down runners cannot start Chromium's
+    // sandbox, so give the one-shot launch the same single unsandboxed
+    // retry the app's persistent browser gets. Normal users stay
+    // sandboxed; a genuine render failure is still reported as one.
+    let mut unsandboxed = false;
+    let result = loop {
+        fs::write(&html_path, html).map_err(|e| BrowserError::Io(e.to_string()))?;
+        if pdf_path.exists() {
+            fs::remove_file(&pdf_path).map_err(|e| BrowserError::Io(e.to_string()))?;
+        }
 
-    let stderr_file =
-        fs::File::create(&stderr_path).map_err(|e| BrowserError::Io(e.to_string()))?;
-    // stderr goes to a file, not a pipe: a chatty browser must never be
-    // able to fill the pipe and hang the render.
-    let mut child = Command::new(&browser)
-        .args(print_args(&pdf_path, &file_url(&html_path), work_dir))
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::from(stderr_file))
-        .spawn()
-        .map_err(|e| BrowserError::Launch(e.to_string()))?;
+        let stderr_file =
+            fs::File::create(&stderr_path).map_err(|e| BrowserError::Io(e.to_string()))?;
+        let run_args = if unsandboxed {
+            no_sandbox_args(&args)
+        } else {
+            args.clone()
+        };
+        // stderr goes to a file, not a pipe: a chatty browser must never be
+        // able to fill the pipe and hang the render.
+        let mut child = Command::new(&browser)
+            .args(&run_args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::from(stderr_file))
+            .spawn()
+            .map_err(|e| BrowserError::Launch(e.to_string()))?;
 
-    let started = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(s)) => break Ok(s),
-            Ok(None) => {
-                if started.elapsed() > RENDER_DEADLINE {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    break Err(BrowserError::Deadline(RENDER_DEADLINE.as_secs()));
+        let started = Instant::now();
+        let outcome = loop {
+            match child.try_wait() {
+                Ok(Some(s)) => break Ok(s),
+                Ok(None) => {
+                    if started.elapsed() > RENDER_DEADLINE {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        break Err(BrowserError::Deadline(RENDER_DEADLINE.as_secs()));
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
                 }
-                std::thread::sleep(Duration::from_millis(100));
+                Err(e) => break Err(BrowserError::Launch(e.to_string())),
             }
-            Err(e) => break Err(BrowserError::Launch(e.to_string())),
+        };
+        let stderr = fs::read_to_string(&stderr_path).unwrap_or_default();
+        match outcome {
+            Ok(s) if s.success() => break pdf_bytes(&pdf_path, &stderr),
+            Ok(s) if !unsandboxed && sandbox_unavailable(&s, &stderr) => {
+                unsandboxed = true;
+                continue;
+            }
+            Ok(s) => {
+                break Err(BrowserError::NoPdf {
+                    status: s
+                        .code()
+                        .map(|c| format!("exit {c}"))
+                        .unwrap_or_else(|| "killed".into()),
+                    detail: stderr_excerpt(&stderr),
+                });
+            }
+            Err(e) => break Err(e),
         }
     };
-    let stderr = fs::read_to_string(&stderr_path).unwrap_or_default();
     let clean = |path: &Path| {
         if path.exists() {
             let _ = fs::remove_file(path);
         }
-    };
-    let result = match status {
-        Ok(s) if s.success() => match fs::read(&pdf_path) {
-            Ok(bytes) if looks_like_pdf(&bytes) => Ok(bytes),
-            Ok(_) => Err(BrowserError::NoPdf {
-                status: "exit 0".into(),
-                detail: format!("the output file is not a PDF ({})", stderr_excerpt(&stderr)),
-            }),
-            Err(_) => Err(BrowserError::NoPdf {
-                status: "exit 0".into(),
-                detail: format!(
-                    "the browser exited without writing a PDF ({})",
-                    stderr_excerpt(&stderr)
-                ),
-            }),
-        },
-        Ok(s) => Err(BrowserError::NoPdf {
-            status: s
-                .code()
-                .map(|c| format!("exit {c}"))
-                .unwrap_or_else(|| "killed".into()),
-            detail: stderr_excerpt(&stderr),
-        }),
-        Err(e) => Err(e),
     };
     clean(&html_path);
     clean(&pdf_path);
@@ -283,6 +289,48 @@ fn print_args(pdf_path: &Path, html_url: &str, work_dir: &Path) -> Vec<String> {
     args.push(format!("--print-to-pdf={}", pdf_path.display()));
     args.push(html_url.to_string());
     args
+}
+
+/// Read the browser's output, or say plainly why it cannot be used.
+fn pdf_bytes(pdf_path: &Path, stderr: &str) -> Result<Vec<u8>, BrowserError> {
+    match fs::read(pdf_path) {
+        Ok(bytes) if looks_like_pdf(&bytes) => Ok(bytes),
+        Ok(_) => Err(BrowserError::NoPdf {
+            status: "exit 0".into(),
+            detail: format!("the output file is not a PDF ({})", stderr_excerpt(stderr)),
+        }),
+        Err(_) => Err(BrowserError::NoPdf {
+            status: "exit 0".into(),
+            detail: format!(
+                "the browser exited without writing a PDF ({})",
+                stderr_excerpt(stderr)
+            ),
+        }),
+    }
+}
+
+/// Put the sandbox-off flag first, where Chromium sees it before any
+/// subcommand or document URL.
+fn no_sandbox_args(args: &[String]) -> Vec<String> {
+    let mut out = vec!["--no-sandbox".to_string()];
+    out.extend(args.iter().cloned());
+    out
+}
+
+/// Whether this failure is Chromium refusing to start its sandbox:
+/// the plain refusal as root, an AppArmor-locked runner, or a crash
+/// before an exit code exists. The app's persistent renderer retries
+/// on the same conditions (`run_chromium` in `src-tauri`).
+#[cfg(target_os = "linux")]
+fn sandbox_unavailable(status: &std::process::ExitStatus, stderr: &str) -> bool {
+    status.code().is_none()
+        || stderr.contains("Running as root without --no-sandbox")
+        || stderr.contains("No usable sandbox")
+}
+
+#[cfg(not(target_os = "linux"))]
+fn sandbox_unavailable(_status: &std::process::ExitStatus, _stderr: &str) -> bool {
+    false
 }
 
 /// The `file://` URL of a local document, in the form the browser
@@ -367,6 +415,60 @@ mod tests {
         assert!(args
             .iter()
             .any(|a| a == &format!("--print-to-pdf={}", pdf.display())));
+    }
+
+    #[test]
+    fn the_sandbox_retry_flag_precedes_the_print_args() {
+        let args = no_sandbox_args(&["--headless=new".to_string(), "file:///x".to_string()]);
+        assert_eq!(args[0], "--no-sandbox");
+        assert_eq!(args.last().unwrap(), "file:///x");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_browser_refusing_the_sandbox_is_retried_unsandboxed() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!("pn-browser-retry-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let browser = dir.join("fake-browser");
+        let counter = dir.join("launches");
+        // The first launch refuses the sandbox; only the retry prints a
+        // PDF. A launch count proves the retry happened exactly once.
+        fs::write(
+            &browser,
+            format!(
+                r#"#!/bin/sh
+echo x >> "{}"
+for a in "$@"; do
+  case "$a" in
+    --no-sandbox) OK=1 ;;
+    --print-to-pdf=*) OUT="${{a#--print-to-pdf=}}" ;;
+  esac
+done
+if [ -z "$OK" ]; then
+  echo 'Running as root without --no-sandbox is not supported.' >&2
+  exit 1
+fi
+printf '\045PDF-1.4 fake\n' > "$OUT"
+"#,
+                counter.display()
+            ),
+        )
+        .unwrap();
+        let mut perms = fs::metadata(&browser).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&browser, perms).unwrap();
+
+        let pdf = render_pdf_with("<html>hi</html>", &dir.join("work"), Some(&browser)).unwrap();
+        assert!(pdf.starts_with(b"%PDF-"));
+        assert_eq!(
+            fs::read_to_string(&counter).unwrap().lines().count(),
+            2,
+            "one sandboxed launch and one retry"
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
