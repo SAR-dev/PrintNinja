@@ -26,10 +26,6 @@ impl<R: Runtime> AndroidPrint<R> {
         self.unavailable("htmlToPdf")
     }
 
-    pub fn probe_pdf(&self, _payload: PdfProbeRequest) -> crate::Result<PdfProbeResponse> {
-        self.unavailable("probePdf")
-    }
-
     pub fn enumerate_usb_printers(&self) -> crate::Result<Vec<UsbPrinter>> {
         self.unavailable("enumerateUsbPrinters")
     }

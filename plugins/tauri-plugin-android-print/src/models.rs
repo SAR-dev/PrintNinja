@@ -39,51 +39,6 @@ pub struct HtmlToRasterResponse {
     pub height: u32,
 }
 
-/// PDF input on Android (PLAN §2): the PDF bytes, base64-encoded — the
-/// plugin's big-payload convention (`data_base64` on the USB writes) —
-/// plus the head's dot dimensions. Kotlin renders the first page with the
-/// platform's own PDFium port (`PdfRenderer`, so no binary ships in the
-/// APK), thresholds it to dots and writes them to a cache-dir file.
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PdfToRasterRequest {
-    pub pdf_base64: String,
-    pub width_px: u32,
-    pub height_px: u32,
-}
-
-/// The packed-dot file the Kotlin `pdfToRaster` command wrote, plus the
-/// document's page count — the caller warns when it is over 1. The
-/// caller reads the file and deletes it.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PdfToRasterResponse {
-    pub path: String,
-    pub width: u32,
-    pub height: u32,
-    pub page_count: u32,
-}
-
-/// PDF metadata probe on Android: the PDF bytes, base64-encoded. Kotlin
-/// opens the document with the platform's `PdfRenderer` (no bitmap
-/// render — a fraction of `pdfToRaster`'s cost) and reports the page
-/// geometry, so the desktop's PDFium twin is not needed on the phone.
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PdfProbeRequest {
-    pub pdf_base64: String,
-}
-
-/// The probed document's first-page size in millimetres (Kotlin converts
-/// PDF points: pt / 72 × 25.4) and its total page count.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PdfProbeResponse {
-    pub page_width_mm: f64,
-    pub page_height_mm: f64,
-    pub page_count: u32,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsbPrinter {
@@ -793,50 +748,5 @@ mod tests {
         assert_eq!(r.path, "/data/user/0/com.printninja/cache/pn_raster_1.bin");
         assert_eq!(r.width, 320);
         assert_eq!(r.height, 240);
-    }
-
-    #[test]
-    fn pdf_to_raster_request_sends_camel_case_keys() {
-        let json = serde_json::to_value(PdfToRasterRequest {
-            pdf_base64: "JVBERi0xLjQ=".to_string(),
-            width_px: 320,
-            height_px: 240,
-        })
-        .unwrap();
-        assert_eq!(
-            json,
-            serde_json::json!({"pdfBase64": "JVBERi0xLjQ=", "widthPx": 320, "heightPx": 240})
-        );
-    }
-
-    #[test]
-    fn pdf_to_raster_response_parses_the_object_kotlin_sends() {
-        let r: PdfToRasterResponse = serde_json::from_str(
-            r#"{"path":"/data/user/0/com.printninja/cache/pn_raster_2.bin","width":320,"height":240,"pageCount":2}"#,
-        )
-        .unwrap();
-        assert_eq!(r.path, "/data/user/0/com.printninja/cache/pn_raster_2.bin");
-        assert_eq!(r.width, 320);
-        assert_eq!(r.height, 240);
-        assert_eq!(r.page_count, 2);
-    }
-
-    #[test]
-    fn pdf_probe_request_sends_camel_case_keys() {
-        let json = serde_json::to_value(PdfProbeRequest {
-            pdf_base64: "JVBERi0xLjQ=".to_string(),
-        })
-        .unwrap();
-        assert_eq!(json, serde_json::json!({"pdfBase64": "JVBERi0xLjQ="}));
-    }
-
-    #[test]
-    fn pdf_probe_response_parses_the_object_kotlin_sends() {
-        let r: PdfProbeResponse =
-            serde_json::from_str(r#"{"pageWidthMm":58.0,"pageHeightMm":39.7,"pageCount":2}"#)
-                .unwrap();
-        assert_eq!(r.page_width_mm, 58.0);
-        assert_eq!(r.page_height_mm, 39.7);
-        assert_eq!(r.page_count, 2);
     }
 }
