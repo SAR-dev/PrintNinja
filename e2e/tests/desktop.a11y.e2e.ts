@@ -2,18 +2,15 @@ import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { signedSeed } from "../support/fixtures";
 
-// Desktop visual-regression + axe floor. Mirrors the phone spec's
-// screenshot + axe checks (mobile.mobile.e2e.ts) at the desktop viewport,
-// in both themes, so a layout change in light or dark is caught on every
-// page — not just on phones.
-//
-// Baselines mint per-platform in CI (the -linux baselines are font-bound to
-// the runner); refresh them the same way as the phone spec:
-//   pnpm --filter e2e exec playwright test desktop.screenshots --update-snapshots
+// Desktop layout + axe floor. Mirrors the phone spec's structural checks
+// (mobile.mobile.e2e.ts) at the desktop viewport, in both themes, so a
+// broken layout in light or dark is caught on every page — not just on
+// phones. Checks are DOM- and metric-based, never pixel baselines: they
+// run identically on every runner and need no refresh dance.
 //
 // The Designer is not here: "/" rewrites to "/print" at boot, and reaching
 // the real editor needs the templates -> Edit flow. Add it beside the phone
-// designer test when a desktop designer baseline is wanted.
+// designer test when a desktop designer check is wanted.
 
 const ROUTES = [
   "/templates",
@@ -27,9 +24,7 @@ const ROUTES = [
 
 for (const theme of ["light", "dark"] as const) {
   for (const route of ROUTES) {
-    test(`${theme} desktop ${route}: screenshot and axe`, async ({
-      browser,
-    }) => {
+    test(`${theme} desktop ${route}: layout and axe`, async ({ browser }) => {
       const seeded = await signedSeed(browser, `shots-${theme}`, {
         settings: { ui_theme: theme },
         printers: [{ name: "Desktop Zebra" }],
@@ -46,20 +41,24 @@ for (const theme of ["light", "dark"] as const) {
       await page.goto(route);
       await expect(page.getByRole("main")).toBeVisible({ timeout: 15_000 });
       // The theme lands on <html> asynchronously (PrefsProvider resolves the
-      // ui_theme setting); wait for it so the screenshot is deterministic.
+      // ui_theme setting); assert it so both palettes are really exercised.
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme, {
         timeout: 15_000,
       });
-      // Let debounced previews and share polling settle before measuring.
-      await page.waitForTimeout(1000);
+      // Data-driven pages mount their h1 after the first load; wait for it
+      // so axe sees the same settled DOM the user sees.
+      await expect(page.locator("h1")).toBeVisible({ timeout: 15_000 });
 
-      // Review screenshot (Playwright appends project and platform).
-      await expect(page).toHaveScreenshot(`${route.slice(1)}-${theme}.png`, {
-        animations: "disabled",
-        caret: "initial",
-        scale: "css",
-        maxDiffPixelRatio: 0.02,
-      });
+      // Layout floor instead of a pixel baseline: a sideways scroll catches
+      // a blown-wide page without depending on the runner's fonts.
+      const overflow = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+      }));
+      expect(
+        overflow.scrollWidth,
+        `sideways scroll on desktop ${theme} ${route}: ${overflow.scrollWidth} > ${overflow.innerWidth}`,
+      ).toBeLessThanOrEqual(overflow.innerWidth + 1);
 
       // Axe at the desktop viewport (same rule disables as the phone pass).
       // The sandboxed preview iframes hold generated template output, not
