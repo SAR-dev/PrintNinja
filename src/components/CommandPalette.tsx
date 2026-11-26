@@ -9,6 +9,7 @@ import {
   Search,
   Settings2,
   SlidersHorizontal,
+  Sticker,
   Workflow,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -267,14 +268,24 @@ export function CommandPalette({
             </Command.Group>
             <Command.Group heading={t("shell.group_actions")} className={GROUP}>
               {!isPhone && (
-                <Command.Item
-                  value="action new template"
-                  onSelect={() => run(() => onNavigate("/"))}
-                  className={ITEM}
-                >
-                  <FilePlus className="h-4 w-4" aria-hidden="true" />
-                  {t("shell.new_template")}
-                </Command.Item>
+                <>
+                  <Command.Item
+                    value="action new label template"
+                    onSelect={() => run(() => onNavigate("/?new=scene"))}
+                    className={ITEM}
+                  >
+                    <Sticker className="h-4 w-4" aria-hidden="true" />
+                    {t("shell.new_label_template")}
+                  </Command.Item>
+                  <Command.Item
+                    value="action new document template"
+                    onSelect={() => run(() => onNavigate("/?new=document"))}
+                    className={ITEM}
+                  >
+                    <FilePlus className="h-4 w-4" aria-hidden="true" />
+                    {t("shell.new_document_template")}
+                  </Command.Item>
+                </>
               )}
               <Command.Item
                 value="action refresh"

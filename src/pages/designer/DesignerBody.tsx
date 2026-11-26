@@ -9,8 +9,6 @@ import { SceneDesigner } from "./scene/SceneDesigner";
 import { ScenePreview } from "./scene/ScenePreview";
 import type { useDesignerDocument } from "./useDesignerDocument";
 import type { useTemplateSync } from "./useTemplateSync";
-import type { useNewTemplate } from "./useNewTemplate";
-import type { useNewSceneTemplate } from "./scene/NewSceneDialog";
 import type { useDesignerWorkspace } from "./useDesignerWorkspace";
 import type { useDebouncedTemplate } from "./useDebouncedTemplate";
 import type { useSceneTemplate } from "./scene/useSceneTemplate";
@@ -26,8 +24,6 @@ export function DesignerBody({
   isPhone,
   doc,
   sync,
-  newTemplate,
-  newScene,
   isScene,
   scene,
   sampleJson,
@@ -49,8 +45,6 @@ export function DesignerBody({
   isPhone: boolean;
   doc: ReturnType<typeof useDesignerDocument>;
   sync: ReturnType<typeof useTemplateSync>;
-  newTemplate: ReturnType<typeof useNewTemplate>;
-  newScene: ReturnType<typeof useNewSceneTemplate>;
   /** The open template is a scene (label) track row: the body is the
    * label designer (canvas + inspector) instead of the document views. */
   isScene: boolean;
@@ -84,26 +78,13 @@ export function DesignerBody({
     </p>
   ) : doc.templates.length === 0 ? (
     <Card>
+      {/* The Designer opens and edits templates; it no longer creates
+          them. Creation lives on the Templates page (the single
+          creation point), which deep-links back here with
+          ?new=scene|document. */}
       <EmptyState
         title={t("designer.no_templates_yet")}
         description={t("designer.no_templates_hint")}
-        // Creating a template is a PC-side action (PLAN §6, D4); the
-        // choice names the track: a label (scene) or a document.
-        actions={
-          isPhone
-            ? undefined
-            : [
-                {
-                  label: t("designer.new_label_template"),
-                  onClick: () => newScene.openDialog(),
-                },
-                {
-                  label: t("designer.new_document_template"),
-                  variant: "outline",
-                  onClick: () => newTemplate.openNewTemplateDialog(),
-                },
-              ]
-        }
       />
     </Card>
   ) : sceneTemplate ? (

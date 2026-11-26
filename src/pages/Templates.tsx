@@ -354,12 +354,20 @@ export function TemplatesPage() {
     if (syncing != null) return;
     setSyncing(tpl.id);
     try {
-      // Server first, then the cache: offline the button that opens this
-      // dialog is disabled, so there is no queue to drain later.
-      await deleteTemplateEverywhere(tpl);
-      notifySuccess(
-        t("templates.toast_deleted_everywhere", { name: tpl.name }),
-      );
+      if (tpl.track === "scene") {
+        // Scene rows are local-only (the server is html-only): their
+        // server id is a placeholder that no copy exists behind, so the
+        // delete is a straight local row removal, online or offline.
+        await agent("delete_template", { id: tpl.id });
+        notifySuccess(t("templates.toast_deleted_local", { name: tpl.name }));
+      } else {
+        // Server first, then the cache: offline the button that opens
+        // this dialog is disabled, so there is no queue to drain later.
+        await deleteTemplateEverywhere(tpl);
+        notifySuccess(
+          t("templates.toast_deleted_everywhere", { name: tpl.name }),
+        );
+      }
       await loadMine();
     } catch (e) {
       notifyError(describeError(e));
@@ -589,20 +597,27 @@ export function TemplatesPage() {
           {cardMenu(
             tpl.name,
             <>
-              <DropdownMenuItem
-                disabled={syncing != null}
-                onSelect={() => handleSaveToServer(tpl)}
-              >
-                <CloudUpload className="h-4 w-4" aria-hidden="true" />
-                {t("templates.action_save_server", { name: tpl.name })}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={syncing != null}
-                onSelect={() => setRefreshTarget(tpl)}
-              >
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                {t("templates.action_refresh_server", { name: tpl.name })}
-              </DropdownMenuItem>
+              {/* Scene rows are local-only: no server copy to save or
+                  refresh, so the sync actions only offer the document
+                  track. */}
+              {tpl.track !== "scene" && (
+                <>
+                  <DropdownMenuItem
+                    disabled={syncing != null}
+                    onSelect={() => handleSaveToServer(tpl)}
+                  >
+                    <CloudUpload className="h-4 w-4" aria-hidden="true" />
+                    {t("templates.action_save_server", { name: tpl.name })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={syncing != null}
+                    onSelect={() => setRefreshTarget(tpl)}
+                  >
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                    {t("templates.action_refresh_server", { name: tpl.name })}
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuItem
                 onSelect={() => navigate(`/template/${tpl.id}`)}
               >
@@ -619,7 +634,9 @@ export function TemplatesPage() {
                 className="text-danger focus:text-danger"
               >
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
-                {t("templates.action_delete_everywhere", { name: tpl.name })}
+                {tpl.track === "scene"
+                  ? t("templates.action_delete", { name: tpl.name })
+                  : t("templates.action_delete_everywhere", { name: tpl.name })}
               </DropdownMenuItem>
             </>,
           )}
@@ -793,29 +810,40 @@ export function TemplatesPage() {
               {cardMenu(
                 tpl.name,
                 <>
-                  <DropdownMenuItem
-                    disabled={syncing != null}
-                    onSelect={() => handleSaveToServer(tpl)}
-                  >
-                    <CloudUpload className="h-4 w-4" aria-hidden="true" />
-                    {t("templates.action_save_server", { name: tpl.name })}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={syncing != null}
-                    onSelect={() => setRefreshTarget(tpl)}
-                  >
-                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                    {t("templates.action_refresh_server", { name: tpl.name })}
-                  </DropdownMenuItem>
+                  {/* Scene rows are local-only: no server copy to save or
+                      refresh, so the sync actions only offer the document
+                      track. */}
+                  {tpl.track !== "scene" && (
+                    <>
+                      <DropdownMenuItem
+                        disabled={syncing != null}
+                        onSelect={() => handleSaveToServer(tpl)}
+                      >
+                        <CloudUpload className="h-4 w-4" aria-hidden="true" />
+                        {t("templates.action_save_server", { name: tpl.name })}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={syncing != null}
+                        onSelect={() => setRefreshTarget(tpl)}
+                      >
+                        <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                        {t("templates.action_refresh_server", {
+                          name: tpl.name,
+                        })}
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   <DropdownMenuItem
                     disabled={syncing != null}
                     onSelect={() => setDeleteTarget(tpl)}
                     className="text-danger focus:text-danger"
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
-                    {t("templates.action_delete_everywhere", {
-                      name: tpl.name,
-                    })}
+                    {tpl.track === "scene"
+                      ? t("templates.action_delete", { name: tpl.name })
+                      : t("templates.action_delete_everywhere", {
+                          name: tpl.name,
+                        })}
                   </DropdownMenuItem>
                 </>,
               )}
@@ -1210,10 +1238,16 @@ export function TemplatesPage() {
         }}
         title={
           deleteTarget
-            ? t("templates.delete_title", { name: deleteTarget.name })
+            ? deleteTarget.track === "scene"
+              ? t("templates.delete_title_local", { name: deleteTarget.name })
+              : t("templates.delete_title", { name: deleteTarget.name })
             : ""
         }
-        description={t("templates.delete_body")}
+        description={
+          deleteTarget?.track === "scene"
+            ? t("templates.delete_body_local")
+            : t("templates.delete_body")
+        }
         confirmLabel={t("templates.delete_confirm")}
         destructive
         busy={syncing === deleteTarget?.id}

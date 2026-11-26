@@ -1,4 +1,4 @@
-import { Check, History, Plus, Save } from "lucide-react";
+import { Check, History, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ interface Props {
   templates?: Array<{ id: number; name: string; origin?: string | null }>;
   currentTemplateId?: number | null;
   onSelectTemplate?: (id: number) => void;
-  /** No template is open yet: only New is offered. */
+  /** No template is open yet: the name and the actions are withheld. */
   noTemplate?: boolean;
   /** Why the name cannot be saved, shown under the field. */
   nameError?: string;
@@ -23,7 +23,6 @@ interface Props {
   /** Desktop workspace layout, switched from this row. */
   layout?: DesignerLayout;
   onLayoutChange?: (layout: DesignerLayout) => void;
-  onNew: () => void;
   onSave: () => void;
   /** Offline: the server owns the copies, so there is nowhere to save. */
   saveDisabled?: boolean;
@@ -53,7 +52,7 @@ function Divider() {
 }
 
 /** The Designer's top row, in three groups: which template (switch + rename),
- * how the workspace looks (layout), and what happens to it (visibility, New,
+ * how the workspace looks (layout), and what happens to it (visibility,
  * Save). Save is the one manual push to the server; offline it is disabled
  * because viewing and printing are all the cache can do. Visibility is
  * publish/unpublish applied immediately via the switch, whose Public/Private
@@ -69,7 +68,6 @@ export function DesignerToolbar({
   dirty = false,
   layout,
   onLayoutChange,
-  onNew,
   onSave,
   saveDisabled = false,
   saveTitle,
@@ -237,15 +235,6 @@ export function DesignerToolbar({
             {t("designer.history")}
           </Button>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onNew}
-          data-testid="designer-new-template"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          {t("designer.newTemplate")}
-        </Button>
         {/* The save state sits with the button it belongs to: a warning
             while edits wait, a confirmation once the server has them. A
             local-only template has no "saved" to say — its label is the

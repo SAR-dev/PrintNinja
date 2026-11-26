@@ -190,7 +190,8 @@ const en = {
     group_settings: "Settings",
     group_automation: "Automation",
     group_actions: "Actions",
-    new_template: "New template",
+    new_label_template: "New label template",
+    new_document_template: "New document template",
     reprint_last: "Reprint last job",
     reprint_job: "Reprint job #{{id}}",
     reprint_title: "Reprint job #{{id}}?",
@@ -1579,6 +1580,7 @@ const en = {
     action_save_server: "Save {{name}} to the server",
     action_refresh_server: "Refresh {{name}} from the server",
     action_delete_everywhere: "Delete {{name}} everywhere",
+    action_delete: "Delete {{name}}",
     action_print: "Print",
     action_remove: "Remove",
     action_clone: "Clone",
@@ -1606,6 +1608,9 @@ const en = {
     delete_body:
       "The server copy and the copy on this computer are both deleted. This cannot be undone.",
     delete_confirm: "Delete template",
+    delete_title_local: "Delete “{{name}}”?",
+    delete_body_local:
+      "Label templates live only on this computer — there is no server copy. This cannot be undone.",
     refresh_title: "Refresh “{{name}}” from the server?",
     refresh_body:
       "The copy on the server replaces the one on this computer, including changes you have not saved.",
@@ -1616,6 +1621,7 @@ const en = {
     remove_confirm: "Remove template",
     toast_saved_server: "Saved “{{name}}” to the server",
     toast_deleted_everywhere: "Deleted “{{name}}” everywhere",
+    toast_deleted_local: "Deleted “{{name}}”",
     toast_refreshed: "Refreshed “{{name}}” from the server",
     toast_share_unconfigured: "Share service not configured",
     toast_signin_required: "Sign in to save templates",

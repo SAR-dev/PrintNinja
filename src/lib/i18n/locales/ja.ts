@@ -195,7 +195,8 @@ const ja: Translation = {
     group_settings: "設定",
     group_automation: "自動化",
     group_actions: "操作",
-    new_template: "新規テンプレート",
+    new_label_template: "ラベルテンプレートを新規作成",
+    new_document_template: "ドキュメントテンプレートを新規作成",
     reprint_last: "直前のジョブを再印刷",
     reprint_job: "ジョブ #{{id}} を再印刷",
     reprint_title: "ジョブ #{{id}} を再印刷しますか？",
@@ -1614,6 +1615,7 @@ const ja: Translation = {
     action_save_server: "{{name}}をサーバーに保存",
     action_refresh_server: "{{name}}をサーバーから更新",
     action_delete_everywhere: "{{name}}をすべての場所から削除",
+    action_delete: "{{name}}を削除",
     action_print: "印刷",
     action_remove: "削除",
     action_clone: "複製",
@@ -1641,6 +1643,9 @@ const ja: Translation = {
     delete_body:
       "サーバー上のコピーとこのコンピューター上のコピーの両方が削除されます。元に戻すことはできません。",
     delete_confirm: "テンプレートを削除",
+    delete_title_local: "「{{name}}」を削除しますか？",
+    delete_body_local:
+      "ラベルテンプレートはこのコンピューターにのみ存在します。サーバーのコピーはありません。元に戻すことはできません。",
     refresh_title: "「{{name}}」をサーバーから更新しますか？",
     refresh_body:
       "サーバー上のコピーが、このコンピューター上のコピーを置き換えます。未保存の変更も失われます。",
@@ -1651,6 +1656,7 @@ const ja: Translation = {
     remove_confirm: "テンプレートを削除",
     toast_saved_server: "「{{name}}」をサーバーに保存しました",
     toast_deleted_everywhere: "「{{name}}」をすべての場所から削除しました",
+    toast_deleted_local: "「{{name}}」を削除しました",
     toast_refreshed: "「{{name}}」をサーバーから更新しました",
     toast_share_unconfigured: "共有サービスが設定されていません",
     toast_signin_required: "テンプレートを保存するにはサインインしてください",

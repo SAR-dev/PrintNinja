@@ -56,8 +56,6 @@ export const testids = {
   saveConflictTakeServer: "save-conflict-take-server",
   /** Tailwind warnings panel in the designer. */
   classWarnings: "class-warnings",
-  /** Designer toolbar: create a template (the empty state repeats the label). */
-  designerNewTemplate: "designer-new-template",
   /** Designer toolbar: save the editor to the server. */
   designerSave: "designer-save",
   /** Designer toolbar: explains a disabled Save on hover/focus. */

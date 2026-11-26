@@ -29,7 +29,6 @@ export type Controls = {
   templates: TemplateRow[];
   currentTemplateId: number | null;
   loadTemplate: (tpl: TemplateRow) => void;
-  onNew: () => void;
   templateName: string;
   setTemplateName: (v: string) => void;
   pageWidth: number;

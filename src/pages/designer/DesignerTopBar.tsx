@@ -20,14 +20,11 @@ export function DesignerTopBar({
   templates,
   currentTemplateId,
   noTemplate,
-  isScene,
   onSwitchTemplate,
   nameError,
   dirty,
   layout,
   onLayoutChange,
-  onNewDesktop,
-  onNewTablet,
   onSave,
   saveDisabled,
   saveTitle,
@@ -45,18 +42,12 @@ export function DesignerTopBar({
   templates: TemplateRow[];
   currentTemplateId: number | null;
   noTemplate: boolean;
-  /** The open template is a scene (label) track row. */
-  isScene: boolean;
   onSwitchTemplate: (id: number) => void;
   nameError: string;
   dirty: boolean;
   /** The scene track has no document workspace, so no layout toggle. */
   layout?: DesignerLayout;
   onLayoutChange?: (layout: DesignerLayout) => void;
-  /** Desktop toolbar New: asks first when edits are unsaved. */
-  onNewDesktop: () => void;
-  /** Tablet overflow menu New: opens the dialog directly. */
-  onNewTablet: () => void;
   onSave: () => void;
   /** Computed on the page: offline/readOnly for the document track, an
    * invalid name for the scene track (local-only, no server). */
@@ -87,7 +78,6 @@ export function DesignerTopBar({
         dirty={dirty}
         layout={layout}
         onLayoutChange={onLayoutChange}
-        onNew={onNewDesktop}
         onSave={onSave}
         saveDisabled={saveDisabled}
         saveTitle={saveTitle}
@@ -110,17 +100,16 @@ export function DesignerTopBar({
     />
   ) : (
     <PageHeader title={t("designer.title")} description={t("pages.designer")}>
-      {/* The scene body has no templates tab of its own, so the switcher
-          lives in the header. */}
-      {isScene && (
-        <TemplateSwitcher
-          templates={templates}
-          currentTemplateId={currentTemplateId}
-          onSelect={(tpl) => onSwitchTemplate(tpl.id)}
-        />
-      )}
+      {/* The tablet header is the only place to switch templates on this
+          size, so the switcher lives here for both tracks (the scene body
+          has no templates tab of its own; the document body's tab is
+          desktop-only). */}
+      <TemplateSwitcher
+        templates={templates}
+        currentTemplateId={currentTemplateId}
+        onSelect={(tpl) => onSwitchTemplate(tpl.id)}
+      />
       <DesignerOverflowMenu
-        onNew={onNewTablet}
         published={!!remoteId && !!publishedAt}
         remoteId={remoteId}
         readOnly={readOnly}

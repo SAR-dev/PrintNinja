@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { isPrintViaPc } from "@/lib/printViaPc";
@@ -70,7 +70,12 @@ export function DesignerPage() {
   const offline = shareStatus.state !== "online";
 
   const dataset = useSampleDataset();
-  const doc = useDesignerDocument(dataset.datasetsDirty);
+  // The /template/:id deep link (Templates page Edit/View): open that
+  // template instead of the first one.
+  const routeId = useParams().id;
+  const openTemplateId =
+    routeId != null && /^\d+$/.test(routeId) ? Number(routeId) : null;
+  const doc = useDesignerDocument(dataset.datasetsDirty, openTemplateId);
   const sync = useTemplateSync(doc, offline, dataset.commitDataset);
   const newTemplate = useNewTemplate({
     templates: doc.templates,
@@ -92,6 +97,7 @@ export function DesignerPage() {
     setCurrentTemplateId: doc.setCurrentTemplateId,
     currentTemplateDbId: doc.currentTemplateDbId,
     setCurrentTemplateDbId: doc.setCurrentTemplateDbId,
+    setTemplateName: doc.setTemplateName,
     sampleJson: dataset.workingDatasetJson,
   });
   const newScene = useNewSceneTemplate({
@@ -186,7 +192,6 @@ export function DesignerPage() {
     templates: doc.templates,
     currentTemplateId: doc.currentTemplateId,
     loadTemplate: (tpl) => doc.unlessDiscarding(() => doc.loadTemplate(tpl)),
-    onNew: () => newTemplate.openNewTemplateDialog(),
     templateName: doc.templateName,
     setTemplateName: doc.setTemplateName,
     pageWidth: doc.pageWidth,
@@ -208,22 +213,11 @@ export function DesignerPage() {
         noTemplate={
           doc.templates.length === 0 || doc.currentTemplateDbId == null
         }
-        isScene={isScene}
         onSwitchTemplate={isScene ? handleSwitchTemplate : doc.switchTemplate}
         nameError={doc.nameError}
         dirty={isScene ? scene.dirty || dataset.datasetsDirty : doc.dirty}
         layout={isScene ? undefined : workspace.layout}
         onLayoutChange={isScene ? undefined : workspace.setLayout}
-        onNewDesktop={() =>
-          guard(
-            isScene
-              ? () => newScene.openDialog()
-              : () => newTemplate.openNewTemplateDialog(),
-          )
-        }
-        onNewTablet={() =>
-          isScene ? newScene.openDialog() : newTemplate.openNewTemplateDialog()
-        }
         onSave={
           isScene
             ? () => void scene.save(doc.templateName)
@@ -262,8 +256,6 @@ export function DesignerPage() {
         isPhone={isPhone}
         doc={doc}
         sync={sync}
-        newTemplate={newTemplate}
-        newScene={newScene}
         isScene={isScene}
         scene={scene}
         sampleJson={dataset.workingDatasetJson}
