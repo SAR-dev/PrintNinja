@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Sets the app version in every file the release check compares:
 //   package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml,
-//   src-tauri/Cargo.lock, src/components/Layout.tsx, README.md badge
+//   Cargo.lock, src/components/Layout.tsx, README.md badge
 //
 //   pnpm version:set 1.0.0 [--dry-run]
 //
@@ -24,7 +24,7 @@ const FILES = {
 	pkg: "package.json",
 	tauri: "src-tauri/tauri.conf.json",
 	cargo: "src-tauri/Cargo.toml",
-	lock: "src-tauri/Cargo.lock",
+	lock: "Cargo.lock",
 	layout: "src/components/Layout.tsx",
 	readme: "README.md",
 };

@@ -10,6 +10,16 @@
 - Barcodes and QR codes made from your data (Code 128/39/93, EAN-13/8, UPC-A, ITF, Codabar, QR), identical in preview and on paper
 - Custom fonts, version history with compare and restore, and a notes tab for each template
 
+## 🏷️ Labels
+
+For thermal receipt and label printers:
+
+- Draw the label on a canvas in millimetres: text, barcodes, QR codes, images, lines, rectangles, frames and groups
+- Undo, redo, nudge with the arrow keys, and copy and paste
+- A model picker for your printer, with eleven models to start (Zebra, Brother, Citizen, Epson, TSC, Toshiba and friends), each with its own paper size and resolution
+- The preview goes through the same print path the printer uses, at the printer's own resolution, so the preview and the paper match
+- Labels live on this device and are not shared to the community
+
 ## 🖨️ Print
 
 - Choose a printer, template, data and number of copies, preview, then print

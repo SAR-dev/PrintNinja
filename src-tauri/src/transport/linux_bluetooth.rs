@@ -138,23 +138,81 @@ impl LinuxBluetoothPrinter {
     fn send_blocking(&self, job: RenderedJob) -> Result<(), String> {
         let (mac, channel) = self.device()?;
         let at = self.at();
+        // Borrow, not move: the closure below still borrows `job` for the
+        // precheck and the byte count.
+        let raw = job.raw.as_ref();
+        let open_start = Instant::now();
         let fd = connect_rfcomm(&mac, channel, CONNECT_TIMEOUT)?;
+        // What the operator is about to get, even if the write then
+        // fails: the report stays useful on the sends it exists to debug.
+        if let Some(raw) = &raw {
+            raw.recorder
+                .record_open(open_start.elapsed().as_millis() as u64);
+            let settle = raw.delivery.desktop_settle_ms();
+            raw.recorder.record_effective(
+                raw.delivery.chunk_bytes,
+                raw.delivery.chunk_pause_ms,
+                settle,
+            );
+        }
         let outcome = (|| {
             self.precheck(fd, &job)?;
-            let budget = send_timeout(SEND_TIMEOUT);
+            let base = send_timeout(SEND_TIMEOUT);
+            // A paced raw console send pays for the pauses it asked for;
+            // the deadline gets room for them instead of mistaking
+            // patience for a stall. Ordinary jobs take the base budget.
+            let budget = match &raw {
+                Some(raw) => {
+                    let writes =
+                        (job.data.len() as u64).div_ceil(raw.delivery.chunk_bytes.max(1) as u64);
+                    base + Duration::from_millis(
+                        writes.saturating_sub(1) * raw.delivery.chunk_pause_ms as u64,
+                    )
+                }
+                None => base,
+            };
             let t = Instant::now();
-            write_all(fd, &job.data, Instant::now() + budget, budget, &at)?;
-            tracing::debug!(
-                address = %mac.text(),
-                bytes = job.data.len(),
-                write_ms = t.elapsed().as_millis() as u64,
-                "Bluetooth write"
-            );
+            match &raw {
+                Some(raw) => write_all_paced(
+                    fd,
+                    &job.data,
+                    raw.delivery.chunk_bytes.max(1) as usize,
+                    Duration::from_millis(raw.delivery.chunk_pause_ms as u64),
+                    Instant::now() + budget,
+                    budget,
+                    &at,
+                )?,
+                None => write_all(fd, &job.data, Instant::now() + budget, budget, &at)?,
+            }
+            if let Some(raw) = &raw {
+                raw.recorder.record_write(t.elapsed().as_millis() as u64);
+                // The experiment the raw console exists for: does the
+                // head finish the label if the socket lingers after the
+                // last byte?
+                let settle = raw.delivery.desktop_settle_ms();
+                if settle > 0 {
+                    let t = Instant::now();
+                    std::thread::sleep(Duration::from_millis(settle as u64));
+                    raw.recorder.record_settle(t.elapsed().as_millis() as u64);
+                }
+            } else {
+                tracing::debug!(
+                    address = %mac.text(),
+                    bytes = job.data.len(),
+                    write_ms = t.elapsed().as_millis() as u64,
+                    "Bluetooth write"
+                );
+            }
             Ok(())
         })();
+        let close_start = Instant::now();
         // Best-effort release on every path — success, refusal or a
         // broken link. The kernel reaps the socket when we die anyway.
         unsafe { libc::close(fd) };
+        if let Some(raw) = &raw {
+            raw.recorder
+                .record_close(close_start.elapsed().as_millis() as u64);
+        }
         outcome
     }
 
@@ -526,6 +584,30 @@ fn write_all(
             return Err(format!("{at} accepted no bytes"));
         }
         off += n as usize;
+    }
+    Ok(())
+}
+
+/// The raw console's write: [`write_all`] piece by piece, with the
+/// operator's pause between pieces. Each piece still carries the full
+/// partial-write loop and the shared deadline, so a wedged link fails
+/// the same way it always has.
+fn write_all_paced(
+    fd: RawFd,
+    data: &[u8],
+    chunk: usize,
+    pause: Duration,
+    deadline: Instant,
+    budget: Duration,
+    at: &str,
+) -> Result<(), String> {
+    let mut pieces = data.chunks(chunk).peekable();
+    while let Some(piece) = pieces.next() {
+        let last = pieces.peek().is_none();
+        write_all(fd, piece, deadline, budget, at)?;
+        if !last && !pause.is_zero() {
+            std::thread::sleep(pause);
+        }
     }
     Ok(())
 }

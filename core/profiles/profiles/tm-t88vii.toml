@@ -1,0 +1,40 @@
+# Mined from the current app (ESC/POS family): src-tauri/src/transport/
+# escpos.rs, status.rs, raw_tcp.rs. App path is a 1-bit GS v 0 raster;
+# ESC t codepage switching exists but is never used; barcodes are
+# raster. Receipt/continuous media.
+
+[profile]
+model = "TM-T88VII"
+aliases = ["epson tm-t88"]
+status = "untested"
+language = "escpos"
+dpi = 203
+head_width_dots = 576
+media = ["continuous"]
+
+[delivery]
+chunk_bytes = 512
+pause_ms = 50
+close_delay_ms = 0
+flow_control = "none"
+keep_open_for_status = true
+
+[[quirks]]
+id = "status-dialect"
+note = "ESC/POS status: DLE EOT 1..4, 4-byte binary replies (n=1: 0x08 offline; n=2: 0x04 cover open, 0x20 paper end, 0x40 error); a reply of 4+ bytes counts as answered, structure bits (b&0x12)!=0x12 or (b&0x81)==0 -> skip"
+evidence = "src-tauri/src/transport/status.rs:115-207"
+
+[[quirks]]
+id = "compact-band-cap"
+note = "Compact printers accept the GS v 0 command but not tall bands (small receive buffer / firmware height cap) and print stray characters; band height is a per-printer knob (escpos.bandRows, 8..=2303 rows)"
+evidence = "src-tauri/src/transport/escpos.rs:8-16"
+
+[[quirks]]
+id = "blank-tail-trim"
+note = "Trailing blank raster rows are trimmed to avoid printing ~30 cm of blank roll"
+evidence = "src-tauri/src/transport/escpos.rs (trim_trailing_blank_rows)"
+
+[[quirks]]
+id = "unconditional-cut"
+note = "Full cut (GS V 0) is sent unconditionally; safe on non-cutter models"
+evidence = "src-tauri/src/transport/mod.rs:506-513"

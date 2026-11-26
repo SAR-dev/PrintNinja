@@ -338,14 +338,58 @@ impl PrinterTransport for AndroidBluetoothPrinter {
         if self.via_driver {
             return Err(self.no_driver_mode());
         }
+        // Borrow, not move: `send_on` below still borrows the whole job.
+        let raw = job.raw.as_ref();
+        if let Some(raw) = &raw {
+            // The Kotlin side paces the RFCOMM write with this row's
+            // delivery and settles the platen itself before answering;
+            // a `settle_ms` override cannot reach that sleep without a
+            // plugin change, so the report shows the built-in value.
+            let settle = android_builtin_settle_ms(job.data.len());
+            raw.recorder.record_effective(
+                raw.delivery.chunk_bytes,
+                raw.delivery.chunk_pause_ms,
+                settle,
+            );
+        }
         // One socket for the whole send (A2/A3): open, status query,
         // write, close. The held socket is always released below —
         // success, fault refusal, or transport error.
+        let open_start = Instant::now();
         let handle = self.open_remote().await?;
+        if let Some(raw) = &raw {
+            raw.recorder
+                .record_open(open_start.elapsed().as_millis() as u64);
+        }
+        let write_start = Instant::now();
         let outcome = self.send_on(&handle, &job).await;
+        if let Some(raw) = &raw {
+            // The Kotlin settle rides inside the write phase — it
+            // cannot be split out from here without a plugin change,
+            // so only the whole phase is timed.
+            raw.recorder
+                .record_write(write_start.elapsed().as_millis() as u64);
+        }
+        let close_start = Instant::now();
         self.close_remote(&handle).await;
+        if let Some(raw) = &raw {
+            raw.recorder
+                .record_close(close_start.elapsed().as_millis() as u64);
+        }
         outcome
     }
+}
+
+/// The settle the Kotlin side applies after the final flush
+/// (`BluetoothPacing.settleDelayMs`): 300 ms for a small job, growing
+/// 1 ms per 1 KiB, capped at 1300 ms. Mirrored here so the raw
+/// console's report can state what the head actually waited — the
+/// `settle_ms` override does not reach the plugin in this version.
+fn android_builtin_settle_ms(bytes: usize) -> u32 {
+    if bytes == 0 {
+        return 0;
+    }
+    300 + (bytes as u64 / 1024).min(1000) as u32
 }
 
 #[cfg(test)]
@@ -389,6 +433,7 @@ mod tests {
                 mime_type: "application/octet-stream".into(),
                 copies: 1,
                 language: crate::transport::PrinterLanguage::Escpos,
+                raw: None,
             })
             .await
             .unwrap_err();

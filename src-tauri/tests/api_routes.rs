@@ -2563,6 +2563,254 @@ async fn print_rejects_pipeline_invalid_setting_values_as_400() {
 }
 
 // ───────────────────────────────────────────────────────────────
+// scene track via the API (LABEL_PRINTING_PLAN.md, WP5)
+// ───────────────────────────────────────────────────────────────
+
+/// A scene template's `scene_json`: a 40×50 badge with one text field,
+/// written out by hand so the fixture is not derived from the code
+/// under test.
+const SCENE_BADGE_JSON: &str = r#"{"format":"scene","media":{"kind":"label","width_mm":40.0,"height_mm":50.0},"fields":[{"name":"name","kind":"string"}],"elements":[{"type":"text","at":{"x_mm":2.0,"y_mm":2.0},"size":{"w_mm":30.0,"h_mm":6.0},"content":"{{name}}","style":{"size_mm":3.0}}]}"#;
+
+/// The loopback printer side of a raw-tcp scene job: a Zebra that
+/// answers its status dialect healthily on the first connection (the
+/// pre-send probe — unanswered, the job would not go out) and then
+/// receives the job on its own connection. Returns the port and a
+/// handle for the job's bytes.
+async fn zebra_loopback() -> (u16, tokio::task::JoinHandle<Vec<u8>>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind loopback");
+    let port = listener.local_addr().unwrap().port();
+    let handle = tokio::spawn(async move {
+        let answer = b"\x02030,0,0,0\x03\r\n\x02000,0\x03\r\n\x020000,0\x03\r\n";
+        let mut last = Vec::new();
+        let mut first = true;
+        loop {
+            let accepted =
+                tokio::time::timeout(std::time::Duration::from_millis(250), listener.accept())
+                    .await;
+            let Ok(Ok((mut sock, _))) = accepted else {
+                break;
+            };
+            if first {
+                tokio::io::AsyncWriteExt::write_all(&mut sock, answer)
+                    .await
+                    .expect("answer the status query");
+            }
+            first = false;
+            let mut buf = Vec::new();
+            tokio::io::AsyncReadExt::read_to_end(&mut sock, &mut buf)
+                .await
+                .expect("read");
+            if !buf.is_empty() {
+                last = buf;
+            }
+        }
+        last
+    });
+    (port, handle)
+}
+
+/// A raw-tcp Zebra on the loopback port plus the scene template the
+/// WP5 scene tests route at it.
+fn seed_zebra_and_badge(db: &Db, port: u16) {
+    let guard = db.lock().unwrap();
+    let c = guard.connection();
+    c.execute(
+        "INSERT INTO printers (name, type, address, language, paper_width_mm, dpi)
+         VALUES ('Zebra', 'raw_tcp', ?1, 'zpl', 40, 203)",
+        [format!("127.0.0.1:{port}")],
+    )
+    .unwrap();
+    c.execute(
+        "INSERT INTO templates (name, page_w_mm, page_h_mm, orientation, html, css, track, scene_json)
+         VALUES ('Badge', 40, 50, 'portrait', '', '', 'scene', ?1)",
+        [SCENE_BADGE_JSON],
+    )
+    .unwrap();
+}
+
+/// A local `POST /v1/print` (loopback, no sharing key — the same
+/// access the desktop UI has), body parsed back.
+async fn local_print(
+    app: axum::Router,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/print")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = res.status();
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
+/// A scene template job runs the label pipeline end to end: the
+/// records come from `data`, the Zebra receives a ZPL job carrying the
+/// record's field, and the caller gets the pipeline's honest report.
+/// The raw wire never confirms, so delivery ends
+/// `sent_unconfirmed` — and that word is the one the job row keeps.
+#[tokio::test]
+async fn scene_job_prints_the_label_track_and_reports_it() {
+    let db = setup();
+    let (port, job) = zebra_loopback().await;
+    seed_zebra_and_badge(&db, port);
+
+    let (status, body) = local_print(
+        router(&db),
+        serde_json::json!({
+            "template": "Badge",
+            "printer": "Zebra",
+            "data": [{"name": "M8"}]
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "success", "{body}");
+    assert!(
+        body["job_id"].is_string(),
+        "the job id travels as a string, like every other endpoint: {body}"
+    );
+    assert_eq!(body["report"]["result"], "sent_unconfirmed", "{body}");
+    assert!(body["duration_ms"].is_number(), "{body}");
+
+    let bytes = job.await.expect("capture");
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(text.starts_with("^XA"), "the Zebra receives ZPL: {text}");
+    assert!(
+        text.contains("M8"),
+        "the record's field lands on the label: {text}"
+    );
+
+    let (result, status_col, source): (Option<String>, String, String) = db
+        .lock()
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT result, status, source FROM print_jobs ORDER BY id DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(result.as_deref(), Some("sent_unconfirmed"));
+    assert_eq!(status_col, "success");
+    assert_eq!(source, "api");
+}
+
+/// `format` is refused, never guessed: an unknown value and a known
+/// value on the wrong track each get their own code, on both tracks.
+#[tokio::test]
+async fn scene_format_gate_refuses_unknown_and_mismatched() {
+    let db = setup();
+    let (port, _) = zebra_loopback().await;
+    seed_printers_and_templates(&db);
+    seed_zebra_and_badge(&db, port);
+
+    // A value the router does not know.
+    let (status, body) = local_print(
+        router(&db),
+        serde_json::json!({
+            "template": "Badge",
+            "printer": "Zebra",
+            "format": "eps",
+            "data": [{"name": "M8"}]
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "unsupported_format", "{body}");
+
+    // A known value on the wrong track (the Badge is a scene row).
+    let (status, body) = local_print(
+        router(&db),
+        serde_json::json!({
+            "template": "Badge",
+            "printer": "Zebra",
+            "format": "html",
+            "data": [{"name": "M8"}]
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "track_mismatch", "{body}");
+
+    // The document side of the same gate (the Receipt is an html row).
+    let (status, body) = local_print(
+        router(&db),
+        serde_json::json!({
+            "template": "Receipt",
+            "printer": "Desk",
+            "format": "scene",
+            "data": {}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "track_mismatch", "{body}");
+
+    // The matching value passes the gate and prints.
+    let (status, body) = local_print(
+        router(&db),
+        serde_json::json!({
+            "template": "Badge",
+            "printer": "Zebra",
+            "format": "scene",
+            "data": [{"name": "M8"}]
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["report"]["result"], "sent_unconfirmed", "{body}");
+
+    assert_eq!(job_count(&db), 1, "only the matching job prints");
+}
+
+/// A scene job's records travel only in `data`: absent is
+/// `missing_records`, and a `data_url` alongside is
+/// `conflicting_content` — both before any job row exists.
+#[tokio::test]
+async fn scene_jobs_take_records_only_from_data() {
+    let db = setup();
+    let (port, _) = zebra_loopback().await;
+    seed_zebra_and_badge(&db, port);
+
+    let (status, body) = local_print(
+        router(&db),
+        serde_json::json!({ "template": "Badge", "printer": "Zebra" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "missing_records", "{body}");
+
+    let (status, body) = local_print(
+        router(&db),
+        serde_json::json!({
+            "template": "Badge",
+            "printer": "Zebra",
+            "data": [{"name": "M8"}],
+            "data_url": "http://127.0.0.1/none"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "conflicting_content", "{body}");
+
+    assert_eq!(job_count(&db), 0, "refused requests create no job");
+}
+
+// ───────────────────────────────────────────────────────────────
 // template version check (ARCHITECTURE §9)
 // ───────────────────────────────────────────────────────────────
 

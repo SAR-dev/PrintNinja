@@ -4,6 +4,7 @@
 //! exercised (not just type-checked). Tauri `State` is unwrapped via a helper.
 
 use printninja_lib::db::{strip_sqlite_prefix, Database};
+use printninja_lib::AppError;
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 
@@ -518,6 +519,8 @@ fn new_template(name: &str) -> CreateTemplateRequest {
         compiled_key: None,
         readme: None,
         summary: None,
+        track: None,
+        scene_json: None,
         server_id: None,
         sync_state: None,
         kind: None,
@@ -844,4 +847,94 @@ fn reset_database_recreates_the_file_fresh() {
     // Font bytes went with their rows.
     assert!(!font_path.exists());
     let _ = std::fs::remove_dir_all(&fonts_dir);
+}
+
+// ───────────────────────────────────────────────────────────────
+// label model pick (LABEL_PRINTING_PLAN.md, WP3)
+// ───────────────────────────────────────────────────────────────
+
+use printninja_lib::commands::label::set_printer_label_profile;
+
+/// The row's stored pick, read back the same way the pipeline reads it.
+fn stored_pick(conn: &Connection, id: i64) -> Option<String> {
+    conn.query_row(
+        "SELECT label_profile FROM printers WHERE id = ?1",
+        [id],
+        |r| r.get(0),
+    )
+    .unwrap()
+}
+
+#[test]
+fn label_profile_pick_validates_writes_and_clears() {
+    let (state, _in_memory) = test_db();
+    let zpl_id;
+    let pdf_id;
+
+    {
+        let guard = state.lock().unwrap();
+        let conn = guard.connection();
+        conn.execute(
+            "INSERT INTO printers (name, type, address, language) VALUES ('Zebra One', 'raw_tcp', '127.0.0.1:9100', 'zpl')",
+            [],
+        )
+        .unwrap();
+        zpl_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO printers (name, type, address, language) VALUES ('Laser One', 'ipp', '10.0.0.4', 'pdf')",
+            [],
+        )
+        .unwrap();
+        pdf_id = conn.last_insert_rowid();
+
+        // A row that does not exist is NotFound, not a silent no-op.
+        let err = set_printer_label_profile(conn, 9999, Some("zt411")).unwrap_err();
+        assert!(matches!(err, AppError::NotFound(_)), "{err:?}");
+
+        // An id no bundled profile carries is refused before the write.
+        let err = set_printer_label_profile(conn, zpl_id, Some("no-such-model")).unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)), "{err:?}");
+        assert_eq!(
+            stored_pick(conn, zpl_id),
+            None,
+            "a refused pick must not touch the row"
+        );
+
+        // A ZPL row cannot take an ESC/POS model.
+        let err =
+            set_printer_label_profile(conn, zpl_id, Some("generic-thermal-58mm")).unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)), "{err:?}");
+        assert_eq!(
+            stored_pick(conn, zpl_id),
+            None,
+            "a family mismatch must not touch the row"
+        );
+
+        // A valid pick is stored and reported back as user-chosen.
+        let choice = set_printer_label_profile(conn, zpl_id, Some("zt411")).unwrap();
+        assert_eq!(choice.model, "zt411");
+        assert!(choice.user_chosen);
+        assert_eq!(stored_pick(conn, zpl_id).as_deref(), Some("zt411"));
+
+        // Clearing the pick returns the row to the language default.
+        let choice = set_printer_label_profile(conn, zpl_id, None).unwrap();
+        assert_eq!(choice.model, "zt411", "zpl's language default is the ZT411");
+        assert!(!choice.user_chosen);
+        assert_eq!(stored_pick(conn, zpl_id), None);
+
+        // Each language has its own default, even with no pick written.
+        let choice = set_printer_label_profile(conn, pdf_id, None).unwrap();
+        assert_eq!(choice.model, "office-laser-cups", "pdf's default");
+        assert!(!choice.user_chosen);
+
+        // Leave the zpl row with a pick for the pipeline lookup below.
+        set_printer_label_profile(conn, zpl_id, Some("zt411")).unwrap();
+        assert_eq!(stored_pick(conn, zpl_id).as_deref(), Some("zt411"));
+    }
+
+    // The pick is visible through the row the pipeline resolves from;
+    // the guard is dropped first, so the lookup can take its own lock.
+    let row = printninja_lib::commands::print::lookup_printer(&state, "Zebra One")
+        .expect("lookup by name");
+    assert_eq!(row.label_profile.as_deref(), Some("zt411"));
 }

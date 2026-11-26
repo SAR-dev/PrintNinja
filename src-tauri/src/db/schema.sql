@@ -9,6 +9,13 @@ CREATE TABLE IF NOT EXISTS printers (
     paper_width_mm INTEGER CHECK(paper_width_mm IS NULL OR paper_width_mm > 0),
     dpi INTEGER DEFAULT 203 CHECK(dpi IS NULL OR dpi > 0),
     label_gap_mm REAL CHECK(label_gap_mm IS NULL OR label_gap_mm > 0),
+    -- The label track's printer model (LABEL_PRINTING_PLAN.md, WP3):
+    -- the bundled profile's id — the file stem of one of
+    -- core/profiles/profiles/*.toml. NULL means the row has no pick and
+    -- prints scene jobs with the language-based default. Validated
+    -- app-side when written; no CHECK, so a stray value cannot wedge
+    -- the row — resolution falls back to the default.
+    label_profile TEXT,
     username TEXT,
     password TEXT,
     skip_tls_verification INTEGER NOT NULL DEFAULT 0,
@@ -28,6 +35,12 @@ CREATE TABLE IF NOT EXISTS templates (
     css TEXT NOT NULL DEFAULT '',
     compiled_css TEXT NOT NULL DEFAULT '',
     compiled_key TEXT NOT NULL DEFAULT '',
+    -- The print track (LABEL_PRINTING_PLAN.md): `html` is the existing
+    -- mustache document track; `scene` is the label track, whose
+    -- serialized `pn_scene::Template` lives in `scene_json` (NULL for
+    -- html rows).
+    track TEXT NOT NULL DEFAULT 'html' CHECK (track IN ('html', 'scene')),
+    scene_json TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -102,7 +115,13 @@ CREATE TABLE IF NOT EXISTS print_jobs (
     -- The document a PDF-input job prints, as raw bytes — the PDF analog
     -- of `data_json`: run-input, never exposed through `PrintJob`, kept so
     -- retry/reprint can run the job again. NULL for HTML/template jobs.
-    pdf_data BLOB
+    pdf_data BLOB,
+    -- The label track's honest delivery word (LABEL_PRINTING_PLAN.md,
+    -- WP5): `confirmed`, `sent_unconfirmed`, `partially_printed`,
+    -- `failed` or `wrong_mode_suspected`. NULL for document jobs and for
+    -- label jobs that died before delivery (status alone is not honest
+    -- enough on the label track).
+    result TEXT
 );
 
 CREATE TABLE IF NOT EXISTS settings (

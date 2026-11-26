@@ -21,13 +21,18 @@ import {
   validatePrinterForm,
   type LoosePrinterForm,
 } from "@/lib/printerSchema";
-import type { PrinterRow, ProbeCapabilitiesResult } from "@/lib/agent/types";
+import type {
+  ProfileInfo,
+  PrinterRow,
+  ProbeCapabilitiesResult,
+} from "@/lib/agent/types";
 import type { DetectedKind } from "@/components/printers/DetectedDevices";
 import {
   GROUPS,
   LANGUAGES,
   PRINTER_TYPES,
   isRawWire,
+  labelProfileFamily,
   type SystemPrinter,
 } from "./constants";
 import type { usePrinterDiscovery } from "./usePrinterDiscovery";
@@ -114,6 +119,23 @@ export function usePrinterForm(
   // Whether the row being edited carries a stored password — the hint
   // under the (always blank) field depends on it.
   const [editHasPassword, setEditHasPassword] = useState(false);
+  // The model pick the row being edited already carries (null for a new
+  // row): Save rewrites the pick only when it actually changed, so an
+  // untouched pick never round-trips the backend.
+  const [editLabelProfile, setEditLabelProfile] = useState<string | null>(null);
+  // The bundled label models, as the backend ships them — embedded at
+  // compile time, so one fetch per page mount is the whole lifetime.
+  const [labelProfiles, setLabelProfiles] = useState<ProfileInfo[] | null>(
+    null,
+  );
+  useEffect(() => {
+    if (labelProfiles) return;
+    void agent("label_list_profiles", {})
+      .then((list) => {
+        if (Array.isArray(list)) setLabelProfiles(list);
+      })
+      .catch(() => {});
+  }, [labelProfiles]);
   // The generic address-format error waits for the first blur; a clear
   // connection mix-up (USB port in a Bluetooth row) shows at once.
   const [addressTouched, setAddressTouched] = useState(false);
@@ -130,6 +152,7 @@ export function usePrinterForm(
     bt_chunk_bytes: "",
     bt_chunk_pause_ms: "",
     escpos_band_rows: "",
+    label_profile: "",
     username: "",
     password: "",
     skip_tls_verification: false,
@@ -145,7 +168,15 @@ export function usePrinterForm(
   // any field clears it — the person is already on top of it.
   const [formErrorKey, setFormErrorKey] = useState<string | null>(null);
   const setForm = (update: SetStateAction<LoosePrinterForm>) => {
-    setFormRaw(update);
+    setFormRaw((prev) => {
+      const next = typeof update === "function" ? update(prev) : update;
+      // A model pick belongs to the row's language family — the backend
+      // would refuse to write it to a row of another family — so a
+      // language change orphans it and the field starts over at auto.
+      return next.language !== prev.language
+        ? { ...next, label_profile: "" }
+        : next;
+    });
     setFormErrorKey(null);
   };
 
@@ -160,6 +191,7 @@ export function usePrinterForm(
     bt_chunk_bytes: "",
     bt_chunk_pause_ms: "",
     escpos_band_rows: "",
+    label_profile: "",
     username: "",
     password: "",
     skip_tls_verification: false,
@@ -181,6 +213,7 @@ export function usePrinterForm(
     setAddressTouched(false);
     setPasswordTouched(false);
     setEditHasPassword(false);
+    setEditLabelProfile(null);
     setLanPromptOpen(false);
     setFormErrorKey(null);
   };
@@ -191,13 +224,13 @@ export function usePrinterForm(
   const closeAndReset = () => {
     setShowAdd(false);
     setEditingId(null);
-    setForm(blankForm);
+    setFormRaw(blankForm);
     resetDialogUi();
   };
 
   const openAdd = () => {
     setEditingId(null);
-    setForm(blankForm);
+    setFormRaw(blankForm);
     setDetectResult(null);
     languageTouched.current = false;
     resetDialogUi();
@@ -207,7 +240,7 @@ export function usePrinterForm(
   const openEdit = (p: PrinterRow) => {
     setEditingId(p.id);
     const pace = bluetoothPaceFromRow(p.default_settings_json);
-    setForm({
+    setFormRaw({
       name: p.name,
       printer_type: p.printer_type,
       address: p.address,
@@ -218,6 +251,8 @@ export function usePrinterForm(
       bt_chunk_bytes: pace.chunkBytes,
       bt_chunk_pause_ms: pace.pauseMs,
       escpos_band_rows: escposBandRowsFromRow(p.default_settings_json),
+      // null (no pick) reads as "" — the language-based default.
+      label_profile: p.label_profile ?? "",
       username: p.username ?? "",
       // Never prefill: the row no longer carries the value, and blank
       // means "keep what is stored".
@@ -228,6 +263,7 @@ export function usePrinterForm(
     setDetectResult(null);
     languageTouched.current = false;
     resetDialogUi();
+    setEditLabelProfile(p.label_profile ?? null);
     setEditHasPassword(Boolean(p.has_password));
     setSignInOpen(
       Boolean(p.username || p.has_password || p.skip_tls_verification),
@@ -504,6 +540,26 @@ export function usePrinterForm(
           );
         }
       }
+      if (labelProfileFamily(req.language) !== null) {
+        // The label model pick is a per-row setting stored outside the
+        // core row, so it rides a second call after the row exists — the
+        // same shape as the pacing and band height above, and skipped
+        // entirely while it matches what the row already carries. A
+        // cleared field sends null (the language-based default). A
+        // failure here loses only the pick, not the row.
+        if (form.label_profile !== (editLabelProfile ?? "")) {
+          try {
+            await agent("label_set_printer_profile", {
+              printer_id: saved.id,
+              profile_id: form.label_profile || null,
+            });
+          } catch (e) {
+            notifyError(
+              t("printers.toast_save_failed", { error: describeError(e) }),
+            );
+          }
+        }
+      }
       notifySuccess(
         editingId === null
           ? t("printers.toast_added", { name: form.name.trim() })
@@ -562,6 +618,16 @@ export function usePrinterForm(
     return current ? [...supported, current] : supported;
   }, [form.language, form.printer_type, form.via_driver]);
   const languagesLimited = visibleLanguages.length < LANGUAGES.length;
+  // The model picker's options: the bundled profiles of the row's own
+  // language family — a ZPL row never sees an ESC/POS model. Empty while
+  // the list is still loading (the trigger shows nothing yet) or for a
+  // PDF row, which has no picker at all.
+  const labelModelOptions = useMemo(() => {
+    const family = labelProfileFamily(form.language);
+    return family && labelProfiles
+      ? labelProfiles.filter((p) => p.language === family)
+      : [];
+  }, [form.language, labelProfiles]);
   const visibleGroups = useMemo(
     () =>
       GROUPS.filter(
@@ -750,6 +816,7 @@ export function usePrinterForm(
     dialogTypes,
     visibleLanguages,
     languagesLimited,
+    labelModelOptions,
     addressDormant,
     addressLabelKey,
     addressHintKey,

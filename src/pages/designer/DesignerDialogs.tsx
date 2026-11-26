@@ -5,15 +5,17 @@ import { EditDatasetDialog } from "./EditDatasetDialog";
 import { NewTemplateDialog } from "./NewTemplateDialog";
 import { SaveConflictDialog } from "./SaveConflictDialog";
 import { VersionHistory } from "./VersionHistory";
+import { NewSceneDialog } from "./scene/NewSceneDialog";
 import type { useDesignerDocument } from "./useDesignerDocument";
 import type { useTemplateSync } from "./useTemplateSync";
 import type { useSampleDataset } from "./useSampleDataset";
 import type { useNewTemplate } from "./useNewTemplate";
+import type { useNewSceneTemplate } from "./scene/NewSceneDialog";
 
 /**
  * The page's dialogs: barcode insertion, the sample-dataset editor,
- * new-template creation, the discard confirmation, save-conflict
- * resolution and the version history.
+ * new-template creation (document and scene), the discard
+ * confirmation, save-conflict resolution and the version history.
  */
 export function DesignerDialogs({
   barcodeOpen,
@@ -22,6 +24,7 @@ export function DesignerDialogs({
   sync,
   dataset,
   newTemplate,
+  newScene,
   insertHelper,
   offline,
   readOnly,
@@ -32,6 +35,7 @@ export function DesignerDialogs({
   sync: ReturnType<typeof useTemplateSync>;
   dataset: ReturnType<typeof useSampleDataset>;
   newTemplate: ReturnType<typeof useNewTemplate>;
+  newScene: ReturnType<typeof useNewSceneTemplate>;
   insertHelper: (text: string, back?: number) => void;
   offline: boolean;
   readOnly: boolean;
@@ -68,6 +72,8 @@ export function DesignerDialogs({
         creating={newTemplate.creatingTemplate}
         onCreate={() => void newTemplate.createNewTemplate()}
       />
+
+      <NewSceneDialog newScene={newScene} />
 
       <ConfirmDialog
         open={doc.discardAction !== null}

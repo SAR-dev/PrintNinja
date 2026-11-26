@@ -1,6 +1,9 @@
-# Test runner for the desktop crate. The image (Dockerfile.test) is the
-# toolchain + system build deps; the workspace is mounted in, so the
-# tests always run against the current checkout.
+# Test runner for the Rust workspace: the desktop crate (src-tauri) plus
+# the vendored label-track crates — `golden-harness` (the golden-file
+# suite) and `pn-e2e` (delivery e2e; it builds the virtual-printer
+# fixture on demand into the `target/fixture` volume). The image
+# (Dockerfile.test) is the toolchain + system build deps; the workspace
+# is mounted in, so the tests always run against the current checkout.
 #
 #   docker compose -f src-tauri/docker-compose.test.yml run --rm rust-test
 #   # JUnit report (the test:rust:report script):
@@ -22,12 +25,16 @@ services:
       context: .
       dockerfile: Dockerfile.test
     image: printninja/rust-test
-    working_dir: /workspace/src-tauri
+    working_dir: /workspace
     volumes:
       - ..:/workspace
-      - rust-test-target:/workspace/src-tauri/target
+      - rust-test-target:/workspace/target
     environment:
       CARGO_BUILD_JOBS: "2"
+      # Same as CI: debug info is never read in tests and dwarfs the
+      # binaries. Without these the cached target volume grows to ~20 GB.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     mem_limit: 6g
     command: cargo test
 volumes:

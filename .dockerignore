@@ -2,8 +2,7 @@
 # workspace lockfile). Exclude everything the build does not read.
 .git/
 node_modules/
-src-tauri/target/
-server-legacy/target/
+target/
 server/dist/
 server/node_modules/
 server/src/infra/prisma/generated/

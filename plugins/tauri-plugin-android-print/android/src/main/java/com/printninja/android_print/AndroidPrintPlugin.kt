@@ -16,9 +16,7 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Matrix
 import android.graphics.pdf.PdfDocument
-import android.graphics.pdf.PdfRenderer
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
@@ -29,7 +27,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.os.ParcelFileDescriptor
 import android.provider.Settings
 import android.util.Base64
 import android.util.Log
@@ -249,133 +246,6 @@ private fun captureDots(view: WebView, outFile: File, widthPx: Int, heightPx: In
     }
 }
 
-/**
- * The device-side half of PDF input on Android (PLAN §2): renders the
- * document's first page into exactly [widthPx] × [heightPx] device
- * pixels and thresholds it to 1-bit dots written to a fresh
- * `pn_raster_*.bin` in the cache dir — the same handoff as [renderDots].
- *
- * Renders with the platform's own PDFium port (`PdfRenderer`, API 21+),
- * so no PDF binary ships in the APK — the Android twin of the
- * desktop's vendored libpdfium. The page is fitted into the head's
- * rectangle keeping its aspect ratio, anchored top-left (the desktop
- * twin of PDFium's `scale_page_to_display_size`); a landscape page on
- * a portrait head is rotated 90° first, so the roll's width is filled
- * instead of leaving a short strip.
- *
- * Top-level like [renderDots]: it needs only a [Context], so the
- * instrumented test can call it without constructing the plugin.
- *
- * @return the dot file (the caller reads it and deletes it) and the
- *         document's page count — a count over 1 is the caller's
- *         multi-page warning.
- * @throws IllegalArgumentException when [pdf] is not a parseable PDF.
- */
-fun renderPdfDots(
-    context: Context,
-    pdf: ByteArray,
-    widthPx: Int,
-    heightPx: Int,
-): Pair<File, Int> {
-    val pdfFile = File.createTempFile("pn_pdf_", ".pdf", context.cacheDir)
-    try {
-        FileOutputStream(pdfFile).use { it.write(pdf) }
-        val renderer = PdfRenderer(
-            ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
-        )
-        try {
-            val pageCount = renderer.pageCount
-            val page = renderer.openPage(0)
-            try {
-                // A landscape page on a portrait head is turned 90° so
-                // it fills the roll's width; everything else renders
-                // straight, anchored top-left.
-                val rotate = page.width > page.height && heightPx >= widthPx
-                val boxW = if (rotate) page.height else page.width
-                val boxH = if (rotate) page.width else page.height
-                val scale = minOf(widthPx.toDouble() / boxW, heightPx.toDouble() / boxH)
-                val matrix = Matrix()
-                matrix.postScale(scale.toFloat(), scale.toFloat())
-                if (rotate) {
-                    // 90° clockwise: page (x, y) → (y, boxH - x), so the
-                    // rotated page lands top-left in the sheet.
-                    matrix.postRotate(90f)
-                    matrix.postTranslate(0f, boxH.toFloat())
-                }
-
-                val bmp = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
-                try {
-                    val canvas = Canvas(bmp)
-                    // A page that paints nothing stays white, and white is no dot.
-                    canvas.drawColor(Color.WHITE)
-                    page.render(
-                        bmp,
-                        null,
-                        matrix,
-                        PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY
-                    )
-
-                    val pixels = IntArray(widthPx * heightPx)
-                    bmp.getPixels(pixels, 0, widthPx, 0, 0, widthPx, heightPx)
-                    val outFile = File.createTempFile("pn_raster_", ".bin", context.cacheDir)
-                    FileOutputStream(outFile).use { it.write(dotsFromArgb(pixels, widthPx, heightPx)) }
-                    return Pair(outFile, pageCount)
-                } finally {
-                    bmp.recycle()
-                }
-            } finally {
-                page.close()
-            }
-        } finally {
-            renderer.close()
-        }
-    } finally {
-        pdfFile.delete()
-    }
-}
-
-/**
- * Probes a PDF's page geometry with the platform's own PDFium port
- * (`PdfRenderer`, API 21+): the first page's size in millimetres and
- * the document's page count. No bitmap render — it only opens the
- * document — so it is a fraction of [renderPdfDots]' cost. The
- * device-side twin of the desktop's vendored PDFium metadata reads,
- * behind the phone's PDF raster sizing and multi-page warning.
- *
- * Top-level like [renderPdfDots]: it needs only a [Context], so the
- * instrumented test can call it without constructing the plugin.
- *
- * @return (page width in mm, page height in mm, page count).
- * @throws IllegalArgumentException when [pdf] is not a parseable PDF.
- */
-fun probePdfPage(
-    context: Context,
-    pdf: ByteArray,
-): Triple<Float, Float, Int> {
-    val pdfFile = File.createTempFile("pn_pdf_", ".pdf", context.cacheDir)
-    try {
-        FileOutputStream(pdfFile).use { it.write(pdf) }
-        val renderer = PdfRenderer(
-            ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
-        )
-        try {
-            val page = renderer.openPage(0)
-            try {
-                // PDF points to millimetres: 1 pt = 1/72 in = 25.4/72 mm.
-                val widthMm = page.width / 72f * 25.4f
-                val heightMm = page.height / 72f * 25.4f
-                return Triple(widthMm, heightMm, renderer.pageCount)
-            } finally {
-                page.close()
-            }
-        } finally {
-            renderer.close()
-        }
-    } finally {
-        pdfFile.delete()
-    }
-}
-
 @InvokeArg
 class HtmlToPdfArgs {
     var html: String? = null
@@ -390,18 +260,6 @@ class HtmlToRasterArgs {
     var html: String? = null
     var widthPx: Int? = null
     var heightPx: Int? = null
-}
-
-@InvokeArg
-class PdfToRasterArgs {
-    var pdfBase64: String? = null
-    var widthPx: Int? = null
-    var heightPx: Int? = null
-}
-
-@InvokeArg
-class ProbePdfArgs {
-    var pdfBase64: String? = null
 }
 
 @InvokeArg
@@ -737,103 +595,6 @@ class AndroidPrintPlugin(private val activity: Activity) : Plugin(activity) {
                 )
             } else {
                 invoke.reject(it.exceptionOrNull()?.message ?: "raster render failed")
-            }
-        }
-    }
-
-    /**
-     * Rasters a submitted PDF's first page at the printer's own
-     * resolution and resolves with the dot file's path and the page
-     * count — the device-side half of PDF input (PLAN §2). The caller
-     * reads the file and deletes it; a page count over 1 is the
-     * caller's multi-page warning.
-     *
-     * Same main-thread contract as [htmlToRaster]: Tauri invokes this
-     * on the main thread, so it returns at once; the render runs on
-     * [ioPool] (synchronous, no watchdog needed) and the answer
-     * settles back on the main thread.
-     */
-    @Command
-    fun pdfToRaster(invoke: Invoke) {
-        val args = invoke.parseArgs(PdfToRasterArgs::class.java)
-        val pdfBase64 = args.pdfBase64 ?: return invoke.reject("pdfBase64 is required")
-        val widthPx = args.widthPx ?: 0
-        val heightPx = args.heightPx ?: 0
-        if (widthPx < 1 || heightPx < 1) {
-            return invoke.reject("widthPx and heightPx must be at least 1")
-        }
-        val pdf = try {
-            Base64.decode(pdfBase64, Base64.NO_WRAP)
-        } catch (e: IllegalArgumentException) {
-            return invoke.reject("pdfBase64 is not valid base64")
-        }
-        if (pdf.isEmpty()) {
-            return invoke.reject("pdfBase64 decodes to an empty document")
-        }
-
-        ioPool.execute {
-            val result = runCatching { renderPdfDots(activity, pdf, widthPx, heightPx) }
-            answer(invoke) {
-                result.fold(
-                    onSuccess = { (file, pageCount) ->
-                        invoke.resolve(
-                            JSObject()
-                                .put("path", file.absolutePath)
-                                .put("width", widthPx)
-                                .put("height", heightPx)
-                                .put("pageCount", pageCount),
-                        )
-                    },
-                    onFailure = { e ->
-                        Log.e(TAG, "PDF raster failed", e)
-                        invoke.reject("PDF raster failed: ${e.message}")
-                    },
-                )
-            }
-        }
-    }
-
-    /**
-     * Reports a submitted PDF's first-page size in millimetres and its
-     * page count — the metadata probe behind the phone's PDF raster
-     * sizing and multi-page warning (PLAN §2). No bitmap render: it
-     * only opens the document, so it is a fraction of [pdfToRaster]'s
-     * cost.
-     *
-     * Same main-thread contract as [pdfToRaster]: Tauri invokes this on
-     * the main thread, so it returns at once; the probe runs on [ioPool]
-     * and the answer settles back on the main thread.
-     */
-    @Command
-    fun probePdf(invoke: Invoke) {
-        val args = invoke.parseArgs(ProbePdfArgs::class.java)
-        val pdfBase64 = args.pdfBase64 ?: return invoke.reject("pdfBase64 is required")
-        val pdf = try {
-            Base64.decode(pdfBase64, Base64.NO_WRAP)
-        } catch (e: IllegalArgumentException) {
-            return invoke.reject("pdfBase64 is not valid base64")
-        }
-        if (pdf.isEmpty()) {
-            return invoke.reject("pdfBase64 decodes to an empty document")
-        }
-
-        ioPool.execute {
-            val result = runCatching { probePdfPage(activity, pdf) }
-            answer(invoke) {
-                result.fold(
-                    onSuccess = { (widthMm, heightMm, pageCount) ->
-                        invoke.resolve(
-                            JSObject()
-                                .put("pageWidthMm", widthMm)
-                                .put("pageHeightMm", heightMm)
-                                .put("pageCount", pageCount),
-                        )
-                    },
-                    onFailure = { e ->
-                        Log.e(TAG, "PDF probe failed", e)
-                        invoke.reject("PDF probe failed: ${e.message}")
-                    },
-                )
             }
         }
     }

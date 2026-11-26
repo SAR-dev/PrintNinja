@@ -197,11 +197,11 @@ beforeEach(() => {
   invoke.mockImplementation(defaultImpl);
 });
 
-function renderDesigner() {
+function renderDesigner(entry = "/") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={["/"]}>
+      <MemoryRouter initialEntries={[entry]}>
         <Routes>
           <Route path="/" element={<DesignerPage />} />
         </Routes>
@@ -241,7 +241,7 @@ describe("Designer page layout on a phone", () => {
     }
   });
 
-  it("shows an empty state with a New action when the account has no templates", async () => {
+  it("shows a no-create empty state when the account has no templates", async () => {
     invoke.mockImplementation(async (...args: any[]): Promise<any> => {
       const cmd = args[0] as string;
       if (EMPTY_LISTS.has(cmd)) return [];
@@ -250,21 +250,19 @@ describe("Designer page layout on a phone", () => {
     });
     try {
       renderDesigner();
-      // The workspace waits: no canvas, no tabs, just the way forward.
+      // The Designer opens and edits templates; it no longer creates them.
+      // Creation lives on the Templates page (the single creation point),
+      // so the empty state has no New buttons of its own.
       expect(await screen.findByText("No templates yet")).toBeInTheDocument();
       expect(
         screen.queryByRole("tablist", { name: "Designer views" }),
       ).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "New Template" }));
-      const dialog = await screen.findByRole("dialog");
-      expect(dialog).toBeInTheDocument();
-      // New template now has a two-step chooser: pack first, then name.
-      fireEvent.click(within(dialog).getByRole("button", { name: "Next" }));
       expect(
-        await within(dialog).findByLabelText("Template name", {
-          selector: "input",
-        }),
-      ).toBeInTheDocument();
+        screen.queryByRole("button", { name: "New label template" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "New document template" }),
+      ).not.toBeInTheDocument();
     } finally {
       invoke.mockImplementation(defaultImpl);
     }
@@ -468,9 +466,10 @@ describe("Designer page layout on desktop", () => {
     createdTemplate.current = null;
     shareStatus.getServiceUrl.mockResolvedValue("http://127.0.0.1:9");
     shareStatus.getSessionToken.mockResolvedValue("tok");
-    renderDesigner();
+    // Creation moved to the Templates page; the dialog opens from the
+    // ?new= deep link it sends, so the test enters through the same door.
+    renderDesigner("/?new=document");
     await screen.findByTitle("Canvas preview");
-    fireEvent.click(screen.getByRole("button", { name: "New Template" }));
     const dialog = await screen.findByRole("dialog");
     // Advance from pack chooser to name step
     fireEvent.click(within(dialog).getByRole("button", { name: "Next" }));
@@ -634,7 +633,6 @@ describe("Designer page layout on desktop", () => {
     await screen.findByTitle("Canvas preview");
     expect(screen.getByTestId("designer-save")).toBeInTheDocument();
     expect(screen.getByText("Only on this computer")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /New/ })).toBeInTheDocument();
   });
 });
 
@@ -1021,5 +1019,33 @@ describe("Designer top row on desktop", () => {
     await waitFor(() => expect(nameField()).toHaveValue("Community tag"));
     expect(nameField()).toBeDisabled();
     expect(screen.getByText("Read-only")).toBeInTheDocument();
+  });
+});
+
+describe("Designer page, create deep links from the Templates page", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    setViewport("desktop");
+  });
+  afterEach(() => setViewport("phone"));
+
+  const renderAt = (entry: string) => renderDesigner(entry);
+
+  it("?new=scene opens the new-label dialog", async () => {
+    renderAt("/?new=scene");
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByTestId("scene-create")).toBeInTheDocument();
+  });
+
+  it("?new=document opens the new-document dialog", async () => {
+    renderAt("/?new=document");
+    const dialog = await screen.findByRole("dialog");
+    // The document flow is the two-step pack-then-name chooser.
+    expect(
+      within(dialog).getByRole("button", { name: "Next" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByTestId("scene-create"),
+    ).not.toBeInTheDocument();
   });
 });

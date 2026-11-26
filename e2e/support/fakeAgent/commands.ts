@@ -1,5 +1,6 @@
 import { getSetting, seedJobs, seedPrinters, setSetting } from "./store.js";
 import { createFakeCache, type SyncChangeIn } from "./cache.js";
+import * as label from "./label.js";
 
 // In-memory implementation of the IPC commands. Phase 1 implements the
 // commands the sign-in and shell screens need; every other command the
@@ -63,6 +64,9 @@ function parseDeepLink(url: string): unknown {
         template: params.get("template") ?? null,
         printer: params.get("printer") ?? null,
         url: params.get("url") ?? null,
+        // WP5: raw passthroughs like `url` — the print screen is the gate.
+        format: params.get("format") ?? null,
+        data: params.get("data") ?? null,
         copies:
           Number.isInteger(copiesNum) && copiesNum <= 4294967295
             ? copiesNum
@@ -696,6 +700,58 @@ const implemented: Record<string, Handler> = {
       created_at: new Date().toISOString(),
     };
   },
+  // Raw console (developer tools): the e2e browser has no printer, so the
+  // fake reports the payload's size as sent and echoes the requested
+  // options back as applied — the page's result line renders, which is
+  // all e2e needs of this command.
+  send_raw_bytes: (args) => {
+    const bin =
+      typeof args["data_base64"] === "string" ? atob(args["data_base64"]) : "";
+    const options =
+      typeof args["options"] === "object" && args["options"] !== null
+        ? (args["options"] as Record<string, unknown>)
+        : {};
+    const pick = (key: string) =>
+      typeof options[key] === "number" ? (options[key] as number) : undefined;
+    return {
+      ok: true,
+      bytesSent: bin.length,
+      timingsMs: { open: 1, write: 1, close: 0 },
+      effectiveOptions: {
+        chunkBytes: pick("chunkBytes"),
+        chunkPauseMs: pick("chunkPauseMs"),
+        settleMs: pick("settleMs"),
+      },
+    };
+  },
+  // Label track (WP2–WP4): scene templates save, prepare and print
+  // through the label pipeline in Rust; the fake mirrors the wire
+  // shapes, the resolution order and the error strings (label.ts).
+  label_list_profiles: () => label.listProfiles(),
+  label_set_printer_profile: (args) =>
+    cache.library.setPrinterLabelProfile(
+      Number(args["printer_id"]),
+      args["profile_id"] == null ? null : String(args["profile_id"]),
+    ),
+  label_save_template: (args) => {
+    const req = (args["req"] ?? args) as Record<string, unknown>;
+    const payload = {
+      name: String(req["name"] ?? ""),
+      scene: String(req["scene"] ?? ""),
+    };
+    if (req["id"] == null) {
+      return label.saveSceneTemplate(cache, payload);
+    }
+    return label.updateSceneTemplate(cache, Number(req["id"]), payload);
+  },
+  label_preview: (args) =>
+    label.prepareScene(cache, (args["req"] ?? args) as Record<string, unknown>),
+  label_prepare: (args) =>
+    label.prepareJob(cache, (args["req"] ?? args) as Record<string, unknown>),
+  label_print: (args) =>
+    label.printJob(cache, (args["req"] ?? args) as Record<string, unknown>),
+  label_encode_symbol: (args) =>
+    label.encodeSymbol(String(args["kind"] ?? ""), String(args["value"] ?? "")),
 };
 
 /** Every Rust command without real behavior yet (src-tauri/src/lib.rs).

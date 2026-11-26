@@ -35,6 +35,10 @@ import { isNativeAvailable } from "@/lib/tauriGuard";
 export type PendingDeepLinkPrint = DeeplinkPrint & {
   /** Resolved from the link's template NAME (names are unique in the app). */
   template_id: string | null;
+  /** True when the job runs on the label (scene) track (WP5): the
+   * link's `format` says so, or the named template row is a scene row.
+   * Only then does the link's `data` prefill records. */
+  scene: boolean;
 };
 
 /* ------------------------------------------------------------------ */
@@ -191,12 +195,14 @@ export async function dispatchDeepLink(
   // Print: prefill the store, then go to the page that consumes it.
   const print = action.Print;
   let templateId: string | null = null;
+  let rowTrack: string | null = null;
   if (print.template) {
     // The link names the template; the store selects by row id.
     const rows = await listTemplates().catch((): [] => []);
     const row = rows.find((r) => r.name === print.template);
     if (row) {
       templateId = String(row.id);
+      rowTrack = row.track;
     } else {
       notifyError(
         i18n.t("deeplink.error_unknown_template", { name: print.template }),
@@ -204,7 +210,14 @@ export async function dispatchDeepLink(
       );
     }
   }
-  setPendingDeepLinkPrint({ ...print, template_id: templateId });
+  // WP5: the label track is where the link's `data` records apply —
+  // either the link pinned it or the named template is a scene row.
+  const scene = print.format === "scene" || rowTrack === "scene";
+  setPendingDeepLinkPrint({
+    ...print,
+    template_id: templateId,
+    scene,
+  });
   navigate("/print");
 }
 
@@ -218,7 +231,12 @@ export function applyPendingDeepLinkPrint(p: PendingDeepLinkPrint): void {
   const st = usePrintStore.getState();
   if (p.template_id) st.setTemplateId(p.template_id);
   if (p.printer) st.setPrinterId(p.printer);
-  if (p.url) {
+  if (p.scene && p.data && p.data.trim()) {
+    // WP5: the scene (label) track takes its records from the link
+    // itself — a data URL would conflict, so it is not prefilled.
+    st.setDataJson(p.data);
+    st.setUseTestData(false);
+  } else if (p.url) {
     st.setDataUrl(p.url);
     st.setUseTestData(false);
   }

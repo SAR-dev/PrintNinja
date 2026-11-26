@@ -157,3 +157,32 @@ test("deeplinks drop garbage copies and honor confirm/callback", async ({
   expect(withCallback.Print.confirm).toBe(false);
   expect(withCallback.Print.callback).toBe("https://example.com/done");
 });
+
+type ScenePrintOptions = {
+  Print: { format: string | null; data: string | null };
+};
+
+test("deeplinks carry the scene track's format and data raw", async ({
+  browser,
+}) => {
+  // Mirrors parse_deep_link_scene_format_and_data in
+  // src-tauri/src/deeplink.rs: format and data ride the link raw,
+  // like url — the print screen is the gate.
+  const seeded = await pc(browser, {});
+  const page = await seeded.context.newPage();
+  await page.goto("/");
+
+  const scene = (await parse(
+    page,
+    "printninja://print?format=scene&data=%5B%7B%22name%22%3A%22M8%22%7D%5D",
+  )) as ScenePrintOptions;
+  expect(scene.Print.format).toBe("scene");
+  expect(scene.Print.data).toBe('[{"name":"M8"}]');
+
+  const absent = (await parse(
+    page,
+    "printninja://print?template=Label",
+  )) as ScenePrintOptions;
+  expect(absent.Print.format).toBeNull();
+  expect(absent.Print.data).toBeNull();
+});

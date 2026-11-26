@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { History, MoreHorizontal, Plus } from "lucide-react";
+import { History, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,13 +11,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 /**
- * Phone header menu for the Designer: New template plus the
- * Public/Private toggle live here so the page keeps only the sticky
- * view tabs with Save. Same strings and test ids as the desktop
- * toolbar; the two never render together.
+ * Phone header menu for the Designer: the Public/Private toggle
+ * lives here so the page keeps only the sticky view tabs with Save.
+ * Same strings and test ids as the desktop toolbar; the two never
+ * render together.
  */
 export function DesignerOverflowMenu({
-  onNew,
   published,
   remoteId,
   readOnly,
@@ -26,7 +25,6 @@ export function DesignerOverflowMenu({
   onVisibilityChange,
   onHistory,
 }: {
-  onNew: () => void;
   published: boolean;
   remoteId: string | null;
   readOnly: boolean;
@@ -64,10 +62,6 @@ export function DesignerOverflowMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onNew}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            {t("designer.newTemplate")}
-          </DropdownMenuItem>
           {onHistory && remoteId && !readOnly && (
             <DropdownMenuItem
               onSelect={onHistory}

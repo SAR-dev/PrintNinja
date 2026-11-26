@@ -30,9 +30,9 @@ One machine does the heavy work: a **PC** (Windows or Linux) can render a
 design into an image or PDF and can print. A **phone** lays pages out and
 renders receipt and label jobs itself; producing a PDF from a template is
 the one step it cannot take, so a phone that prints to a PDF-language
-printer pairs with a PC that does that step for it. An *existing* PDF sent
-to a thermal head is the exception: the phone rasterises its first page on
-the device (the platform's own PDFium port) and prints it unpaired.
+printer pairs with a PC that does that step for it. An *existing* PDF
+document is for PDF-language printers: a command-language (thermal) head
+cannot read one, so the app refuses such a job.
 The **share service** in the cloud stores accounts, templates and fonts; it
 has no rendering engine, so a print never travels through it.
 
@@ -105,7 +105,7 @@ sequenceDiagram
     P->>C: code + account check
     C-->>P: device token minted
     Note over P,R: Every print
-    alt thermal (receipt, label, PDF input) — pair not needed
+    alt thermal (receipt, label) — pair not needed
         P->>P: lay pages on sheets, render to dots on the phone
         P->>R: send bytes
     else PDF-language job — pair needed

@@ -355,6 +355,10 @@ export interface LoosePrinterForm {
   bt_chunk_bytes: string;
   bt_chunk_pause_ms: string;
   escpos_band_rows: string;
+  // The bundled label model the row prints scene jobs with; "" is the
+  // language-based default. Stored outside the core row, so it stays out
+  // of the zod schema — a second call writes it after the row exists.
+  label_profile: string;
   username: string;
   password: string;
   skip_tls_verification: boolean;

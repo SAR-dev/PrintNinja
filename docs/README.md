@@ -10,7 +10,7 @@ Pick the guide that matches what you want to do. New here? Start with the [main 
 - 🛠️ [Troubleshooting](./TROUBLESHOOTING.md): fixes for the most common printer, computer and phone problems
 - 🚧 [Known limitations](./LIMITATIONS.md): what PrintNinja cannot do yet, and what to do instead
 - 📖 [Glossary](./GLOSSARY.md): the plain meaning of every term the app uses
-- 📋 [Test checklist](./todo/TEST_CHECKLIST.md): a real-printer test checklist (not yet run on hardware)
+- 📋 [Test checklist](./TEST_CHECKLIST.md): a real-printer test checklist (not yet run on hardware)
 
 ## ⚡ For power users
 

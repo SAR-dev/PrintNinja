@@ -1,6 +1,7 @@
 import { PhonePrintFlow } from "@/components/print/PhonePrintFlow";
 import type { TemplateListRow } from "@/lib/templates/listTemplates";
 import type { PrintPagePrinter } from "@/lib/hooks/useSystemPrinters";
+import type { LabelPreview } from "@/lib/agent/types";
 import type {
   RenderPair,
   PcPrinterInfo,
@@ -31,11 +32,13 @@ export function PhoneLayout({
   pickViaPcDevice,
   setViaPc,
   printers,
+  labelOnly,
   templates,
   onPrinterChange,
   loadPrinters,
   refreshingPrinters,
   previewPages,
+  scenePreviews,
   previewError,
   previewNotice,
   previewTemplate,
@@ -71,12 +74,20 @@ export function PhoneLayout({
   remoteCode: string | null;
   pickViaPcDevice: (id: string) => Promise<void>;
   setViaPc: (viaPc: boolean) => void;
+  /** The printer choices: all printers for an HTML template, only
+   * saved label printers for a scene one. */
   printers: PrintPagePrinter[];
+  /** True when the list is the scene track's filtered one — its empty
+   * state names the missing saved label printers specifically. */
+  labelOnly: boolean;
   templates: TemplateListRow[];
   onPrinterChange: (name: string) => void;
   loadPrinters: () => void;
   refreshingPrinters: boolean;
   previewPages: string[];
+  /** The scene track's prepared preview (1-bit sheets), or null for
+   * the html track and while nothing is prepared. */
+  scenePreviews: LabelPreview[] | null;
   previewError: string;
   previewNotice: string;
   previewTemplate: TemplateListRow | undefined;
@@ -116,11 +127,13 @@ export function PhoneLayout({
         onPickViaPcDevice={pickViaPcDevice}
         onExitViaPc={() => setViaPc(false)}
         printers={printers}
+        labelOnly={labelOnly}
         templates={templates}
         onPrinterChange={onPrinterChange}
         onRefreshPrinters={() => void loadPrinters()}
         refreshingPrinters={refreshingPrinters}
         previewPages={previewPages}
+        scenePreviews={scenePreviews}
         previewError={previewError}
         previewNotice={previewNotice}
         previewTemplate={previewTemplate}

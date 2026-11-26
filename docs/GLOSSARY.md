@@ -7,7 +7,10 @@ Terms are written *plain word first, technical name second*.
 
 ## The pipeline
 
-- **Template** — your layout: HTML and CSS with `{{placeholders}}` where your data goes. Each saved version has its own ID, so devices can agree on exactly which copy a print used.
+- **Template** — your saved layout, in one of two kinds: a **document template** or a **label template**. Each saved version has its own ID, so devices can agree on exactly which copy a print used.
+- **Document template** — the HTML and CSS kind, for document (office) printers: `{{placeholders}}` where your data goes, with barcodes and QR codes drawable from the data.
+- **Label template** — the canvas kind, for thermal receipt and label printers: text, barcodes, QR codes, images, lines, rectangles, frames and groups placed in millimetres. Labels live on the device only — they are not synced or shared to the community.
+- **Track** — the side a template is on: *document* (HTML and CSS) or *label* (a scene drawn in millimetres). The app follows the track to send each job down the right print path, and refuses a request that mixes the two.
 - **Data** — the JSON that fills the template: one order, a list of orders, or a test dataset.
 - **Design page** — one finished page, rendered at exactly the size the template was authored at, with no knowledge of any paper. A template's *design size* is the size of one of these pages.
 - **Sheet** — a physical page of paper, at the *paper size* chosen for the print. Sheets are what actually go into the printer.
@@ -54,8 +57,8 @@ Terms are written *plain word first, technical name second*.
 
 - **Print** — where you pick a printer, load data, and send a job.
 - **History** — every job with its outcome, settings, and reprint actions.
-- **Templates** — the library of saved templates, each with a preview, print, and edit.
-- **Designer** — where templates are built: canvas, editor, and palette.
+- **Templates** — the library of saved templates, each with a badge naming its kind, and a preview, print, and edit. It is the one place where new templates (label or document) are created.
+- **Designer** — where templates are opened and edited: a live HTML and CSS editor for document templates, a millimetre canvas for label templates.
 - **Printers** — the printer list with test print and per-printer settings.
 - **Automation** — the program-driven side: the local API server, an explorer console, and trusted deep links.
 - **Devices** — phone-to-PC pairing, guest invites, and Print via PC (see "Devices page" above).

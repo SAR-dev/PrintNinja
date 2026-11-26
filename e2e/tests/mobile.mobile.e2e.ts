@@ -9,25 +9,18 @@ import { testids } from "../support/testids";
 // The phone smoke spec. Runs on the two
 // mobile projects (Pixel 7 at 390x844, small at 360x640), where the
 // coarse-pointer rules and card layouts apply. Every route gets the same
-// six checks: no sideways scrolling, vertical-only layout (no horizontal
-// pan strips, no side-by-side form controls), 44px tap targets, a review
-// screenshot, and an axe pass.
-//
-// Refreshing baselines after an intentional visual change — both mobile
-// projects, or the small one's baselines stay stale:
-//   pnpm --filter e2e exec playwright test --project=mobile-pixel7 --update-snapshots
-//   pnpm --filter e2e exec playwright test --project=mobile-small --update-snapshots
-// Local runs mint the baselines for the local platform only. The CI
-// baselines (-linux) are font-bound to the runner; refresh those through
-// the E2E_UPDATE_SNAPSHOTS Actions variable (docs/CI.md), not locally.
+// five checks: no sideways scrolling, vertical-only layout (no horizontal
+// pan strips, no side-by-side form controls), 44px tap targets, and an axe
+// pass. All are DOM- and metric-based, so they run on any host without
+// font-bound pixel baselines to refresh.
 
 // Web mode bakes the app version from package.json (vite.config.ts), and the
 // update badge only renders for a release newer than it. Derive the mock from
 // the app's own version and bump its leading (date) component by one: the
 // compare walks the dotted parts left to right, so that always wins, for any
 // versioning scheme — no hardcoded value to rot on the next release. The
-// phone badge is icon-only below `sm`, so the string never reaches the
-// screenshot baselines.
+// phone badge is icon-only below `sm`, so its accessible name is checked
+// directly rather than read off a rendered image.
 const pkg = JSON.parse(
   readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
 ) as { version: string };
@@ -134,7 +127,6 @@ const TAP_ALLOW_LIST: Array<{
 async function checkRoute(
   page: import("@playwright/test").Page,
   label: string,
-  shotName: string,
 ) {
   await expect(page.getByRole("main")).toBeVisible({ timeout: 15_000 });
   // The mocked release is newer than the app and carries an APK. The
@@ -281,15 +273,7 @@ async function checkRoute(
     `undersized tap targets on ${label}: ${JSON.stringify(unexpected)}`,
   ).toEqual([]);
 
-  // 5. Review screenshot (Playwright appends project and platform).
-  await expect(page).toHaveScreenshot(shotName, {
-    animations: "disabled",
-    caret: "initial",
-    scale: "css",
-    maxDiffPixelRatio: 0.02,
-  });
-
-  // 6. Axe at the phone viewport (same rule disables as the unit pass).
+  // 5. Axe at the phone viewport (same rule disables as the unit pass).
   // The sandboxed preview iframes hold generated template output, not
   // app chrome; axe cannot message into the opaque origin and hangs,
   // so they are excluded from the run.
@@ -312,7 +296,7 @@ async function checkRoute(
 for (const route of ROUTES) {
   test(`phone checks pass on ${route}`, async ({ page }) => {
     await page.goto(route);
-    await checkRoute(page, route, `${route.slice(1)}.png`);
+    await checkRoute(page, route);
   });
 }
 
@@ -335,7 +319,7 @@ test("phone checks pass on the designer", async ({ page }) => {
   await expect(page.locator("div.cm-editor")).toHaveCount(0);
   await expect(page.locator("textarea")).toHaveCount(0);
 
-  await checkRoute(page, "designer", "designer.png");
+  await checkRoute(page, "designer");
 });
 
 // Phones have no room for the handle in the top bar, so the badge is an

@@ -195,32 +195,10 @@ Two fates follow:
   untouched — byte for byte what was sent, exactly like a rendered
   PDF-language job. The printer's own interpreter does the work.
 - **Command-language printers** (ESC/POS, TSPL, ZPL, CPCL) cannot read
-  PDF at all. The app rasterises the document's *first* page with PDFium
-  (the bundled engine on Windows and Linux, the platform's own port on
-  Android) at the printer's own dot density and feeds the raster through
-  the same encoders as an HTML-derived screenshot. The luminance rule is identical to the PNG screenshot
-  path (0.299 R + 0.587 G + 0.114 B, threshold 128), so a PDF and an
-  HTML page drawing the same picture produce the same dots. The page
-  is scaled to fit the target keeping its aspect ratio (landscape
-  pages are rotated to fill the label width), anchored top-left, and
-  the unrendered area stays white.
-
-A multi-page document prints only the first page; the job then carries
-a warning naming the pages that did not print. This matches the label
-use case (one page, one label) — whole-document rastering is a later
-concern.
-
-The PDFium binary is vendored at `src-tauri/resources/pdfium/`
-(`pdfium.dll` on Windows, `libpdfium.so` on Linux; Apache-2.0 — see its
-`LICENSE.txt`) and bundled as a Tauri resource. At runtime the engine
-binds to the first candidate that loads: `PDFIUM_LIBRARY_PATH`
-(explicit override — see `../ENV.md`), a copy beside the executable, the
-manifest directory (the `cargo run` / `cargo test` layout), then the
-system's own PDFium if one is installed. Android ships no binary: the
-first page is rasterised on the device by the platform's own PDFium port
-(`android.graphics.pdf.PdfRenderer`, through the plugin's cache-file
-handoff, like the WebView raster path), so PDF input works unpaired on a
-thermal head too.
+  PDF at all, and the app no longer ships a PDF rasteriser: the render
+  stage refuses the job with a message saying the printer cannot print
+  a submitted PDF, and that a label is designed as a template and
+  printed from that instead.
 
 The document is stored with the job (`print_jobs.pdf_data`), so a
 reprint re-runs the same bytes through the same pipeline.

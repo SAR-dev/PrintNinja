@@ -1,0 +1,58 @@
+# PrintNinja — Rust workspace.
+#
+# Added 2026-11-25 when the label-printing track was vendored from
+# PrintNinja-Next (see ../LABEL_PRINTING_PLAN.md, WP1).
+#
+# Layout:
+#   src-tauri/        the desktop crate (unchanged; keeps its own version)
+#   core/{scene,browser,render,planner,profiles,encoders,transport,job}
+#                     the label track, vendored from PrintNinja-Next
+#   tests/golden      golden-file harness + committed golden byte files
+#   tests/e2e         delivery e2e: pn-transport + pn-job vs the virtual
+#                     printer fixture
+#
+# Moving the workspace root to the repo root moved the lockfile here
+# (was src-tauri/Cargo.lock) and the default target dir to ./target
+# (was src-tauri/target) — .github/workflows/ci.yml and
+# src-tauri/docker-compose.test.yml were updated to match.
+#
+# Both virtual-printer fixture copies are deliberately EXCLUDED: each is a
+# standalone std-only crate with its own Cargo.lock, compiled on demand
+# and spawned as a subprocess. `e2e/support/virtual-printer` serves the
+# old app's src-tauri integration tests and the Playwright e2e Docker
+# job; `tests/e2e/support/virtual-printer` serves the vendored pn-e2e.
+[workspace]
+resolver = "2"
+members = [
+    "src-tauri",
+    "core/scene",
+    "core/browser",
+    "core/render",
+    "core/planner",
+    "core/profiles",
+    "core/encoders",
+    "core/transport",
+    "core/job",
+    "tests/golden",
+    "tests/e2e",
+]
+exclude = [
+    "e2e/support/virtual-printer",
+    "tests/e2e/support/virtual-printer",
+]
+
+[workspace.package]
+version = "2026.1124.0"
+edition = "2021"
+rust-version = "1.90.0"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+toml = "0.8"
+swash = "0.2"
+ab_glyph = "0.2"
+barcoders = { version = "2", default-features = false }
+flate2 = "1"
+qrcode = { version = "0.14", default-features = false }

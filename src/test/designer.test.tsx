@@ -94,20 +94,16 @@ describe("DesignerToolbar", () => {
     onVisibilityChange: (() => {}) as any,
   };
 
-  it("fires New and Save", () => {
-    const onNew = vi.fn();
+  it("fires Save", () => {
     const onSave = vi.fn();
     render(
       <DesignerToolbar
         {...base}
-        onNew={onNew}
         onSave={onSave}
         onVisibilityChange={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /New/ }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(onNew).toHaveBeenCalled();
     expect(onSave).toHaveBeenCalled();
   });
 
@@ -116,7 +112,6 @@ describe("DesignerToolbar", () => {
     render(
       <DesignerToolbar
         {...base}
-        onNew={vi.fn()}
         onSave={vi.fn()}
         onVisibilityChange={vi.fn()}
         onTemplateNameChange={onTemplateNameChange}
@@ -135,7 +130,6 @@ describe("DesignerToolbar", () => {
         templates={[{ id: 1, name: "Label" }]}
         currentTemplateId={1}
         onSelectTemplate={vi.fn()}
-        onNew={vi.fn()}
         onSave={vi.fn()}
       />,
     );
@@ -148,18 +142,16 @@ describe("DesignerToolbar", () => {
     expect(switcher).toHaveTextContent("");
   });
 
-  it("shows only New until a template is open", () => {
+  it("withholds the name and the actions until a template is open", () => {
     render(
       <DesignerToolbar
         {...base}
         noTemplate
         templates={[]}
         onSelectTemplate={vi.fn()}
-        onNew={vi.fn()}
         onSave={vi.fn()}
       />,
     );
-    expect(screen.getByRole("button", { name: /New/ })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Template name" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(
@@ -178,7 +170,6 @@ describe("DesignerToolbar", () => {
         ]}
         currentTemplateId={2}
         onSelectTemplate={onSelectTemplate}
-        onNew={vi.fn()}
         onSave={vi.fn()}
       />,
     );
@@ -199,7 +190,6 @@ describe("DesignerToolbar", () => {
         templates={[{ id: 1, name: "Receipt" }]}
         currentTemplateId={1}
         onSelectTemplate={onSelectTemplate}
-        onNew={vi.fn()}
         onSave={vi.fn()}
       />,
     );
@@ -216,7 +206,6 @@ describe("DesignerToolbar", () => {
         {...base}
         nameError="Template name taken"
         dirty
-        onNew={vi.fn()}
         onSave={vi.fn()}
       />,
     );
@@ -229,20 +218,13 @@ describe("DesignerToolbar", () => {
     // The state lives in one stable aria-live region, so a screen
     // reader announces the change (DESIGN IMPROVEMENTS 5.7).
     expect(unsaved.closest('[aria-live="polite"]')).not.toBeNull();
-    rerender(<DesignerToolbar {...base} onNew={vi.fn()} onSave={vi.fn()} />);
+    rerender(<DesignerToolbar {...base} onSave={vi.fn()} />);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText("Unsaved changes")).toBeNull();
   });
 
   it("announces the saved state in the same live region", () => {
-    render(
-      <DesignerToolbar
-        {...base}
-        remoteId="t_1"
-        onNew={vi.fn()}
-        onSave={vi.fn()}
-      />,
-    );
+    render(<DesignerToolbar {...base} remoteId="t_1" onSave={vi.fn()} />);
     const saved = screen.getByText("Saved");
     expect(saved.closest('[aria-live="polite"]')).not.toBeNull();
   });
@@ -252,7 +234,6 @@ describe("DesignerToolbar", () => {
     render(
       <DesignerToolbar
         {...base}
-        onNew={vi.fn()}
         onSave={vi.fn()}
         onVisibilityChange={vi.fn()}
         onTemplateNameChange={onTemplateNameChange}
@@ -275,7 +256,6 @@ describe("DesignerToolbar", () => {
     render(
       <DesignerToolbar
         {...base}
-        onNew={vi.fn()}
         onSave={vi.fn()}
         onVisibilityChange={vi.fn()}
       />,
@@ -289,7 +269,6 @@ describe("DesignerToolbar", () => {
     render(
       <DesignerToolbar
         {...base}
-        onNew={vi.fn()}
         onSave={vi.fn()}
         remoteId={null}
         publishedAt={null}
@@ -304,7 +283,6 @@ describe("DesignerToolbar", () => {
     render(
       <DesignerToolbar
         {...base}
-        onNew={vi.fn()}
         onSave={vi.fn()}
         onVisibilityChange={onVisibilityChange}
         remoteId="r1"
@@ -320,7 +298,6 @@ describe("DesignerToolbar", () => {
     render(
       <DesignerToolbar
         {...base}
-        onNew={vi.fn()}
         onSave={vi.fn()}
         remoteId="r1"
         publishedAt={null}
@@ -336,7 +313,6 @@ describe("DesignerToolbar", () => {
     render(
       <DesignerToolbar
         {...base}
-        onNew={vi.fn()}
         onSave={vi.fn()}
         onVisibilityChange={onVisibilityChange}
         remoteId="r1"
@@ -351,7 +327,6 @@ describe("DesignerToolbar", () => {
     render(
       <DesignerToolbar
         {...base}
-        onNew={vi.fn()}
         onSave={vi.fn()}
         remoteId="r1"
         publishedAt={null}
@@ -373,7 +348,6 @@ describe("DesignerToolbar", () => {
     render(
       <DesignerToolbar
         {...base}
-        onNew={vi.fn()}
         onSave={vi.fn()}
         readOnly
         remoteId="x1"
@@ -396,20 +370,19 @@ describe("DesignerToolbar", () => {
     const { rerender } = render(
       <DesignerToolbar
         {...base}
-        onNew={vi.fn()}
         onSave={vi.fn()}
         saveDisabled
         saveTitle="Offline — connect to save to the server"
       />,
     );
     expect(screen.getByTestId("save-disabled-reason")).toBeInTheDocument();
-    rerender(<DesignerToolbar {...base} onNew={vi.fn()} onSave={vi.fn()} />);
+    rerender(<DesignerToolbar {...base} onSave={vi.fn()} />);
     expect(screen.queryByTestId("save-disabled-reason")).toBeNull();
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
   it("lets the name field take all the free width", () => {
-    render(<DesignerToolbar {...base} onNew={vi.fn()} onSave={vi.fn()} />);
+    render(<DesignerToolbar {...base} onSave={vi.fn()} />);
     const wrapper = screen
       .getByRole("textbox", { name: "Template name" })
       .closest('[data-slot="template-field"]')!.parentElement!;
@@ -1368,15 +1341,13 @@ describe("EditorPane insertAtCursor", () => {
 });
 
 describe("DesignerOverflowMenu", () => {
-  it("hides New and visibility behind More, and reports state outside", async () => {
+  it("hides visibility behind More, and reports state outside", async () => {
     const { DesignerOverflowMenu } = await import(
       "@/components/designer/DesignerOverflowMenu"
     );
-    const onNew = vi.fn();
     const onVisibilityChange = vi.fn();
     render(
       <DesignerOverflowMenu
-        onNew={onNew}
         published={false}
         remoteId="r1"
         readOnly={false}
@@ -1386,15 +1357,9 @@ describe("DesignerOverflowMenu", () => {
     );
     // State reads without opening: unpublished server copy.
     expect(screen.getByText("Private")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "New template" })).toBeNull();
     const more = () => screen.getByRole("button", { name: "More" });
     const openMenu = () =>
       fireEvent.pointerDown(more(), { button: 0, ctrlKey: false });
-    openMenu();
-    fireEvent.click(
-      await screen.findByRole("menuitem", { name: "New Template" }),
-    );
-    expect(onNew).toHaveBeenCalledOnce();
     openMenu();
     fireEvent.click(
       await screen.findByRole("menuitemcheckbox", { name: "Private" }),

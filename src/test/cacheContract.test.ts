@@ -163,6 +163,8 @@ describe("cache cases match the fake agent", () => {
           kind: (t.kind ?? "own") as "own" | "saved",
           owner_handle: t.owner_handle ?? null,
           synced_at: null,
+          track: "html",
+          scene_json: null,
           versions: [
             {
               version_no: 1,
@@ -465,6 +467,8 @@ describe("cache ops parity", () => {
         kind: "own",
         owner_handle: null,
         synced_at: null,
+        track: "html",
+        scene_json: null,
         versions: [
           {
             version_no: 1,
@@ -663,6 +667,8 @@ describe("first-sync adoption", () => {
       kind: "own",
       owner_handle: null,
       synced_at: null,
+      track: "html",
+      scene_json: null,
       versions: [
         {
           version_no: 1,
@@ -717,6 +723,8 @@ describe("first-sync adoption", () => {
       kind: "own",
       owner_handle: null,
       synced_at: null,
+      track: "html",
+      scene_json: null,
       versions: [
         {
           version_no: 1,

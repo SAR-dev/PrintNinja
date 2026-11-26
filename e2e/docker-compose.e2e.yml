@@ -19,8 +19,6 @@
 #   docker compose -f e2e/docker-compose.e2e.yml run --rm e2e \
 #     pnpm --filter e2e exec playwright test -g "phone checks pass on /settings"
 #
-#   # rewrite the committed Linux baselines, then commit the PNGs (docs/CI.md):
-#   E2E_UPDATE_SNAPSHOTS=true pnpm e2e:docker
 name: printninja-e2e
 services:
   e2e:
@@ -31,8 +29,6 @@ services:
     environment:
       # Match CI's 4 workers; lower for a lighter local run.
       E2E_WORKERS: ${E2E_WORKERS:-4}
-      # Empty = compare against the committed baselines. "true" rewrites them.
-      E2E_UPDATE_SNAPSHOTS: ${E2E_UPDATE_SNAPSHOTS:-}
     # Cargo's target for the vendored virtual printer survives between runs,
     # so after the first build only the printer itself recompiles.
     volumes:

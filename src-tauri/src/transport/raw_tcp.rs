@@ -1,6 +1,6 @@
 use crate::transport::send_timeout;
 use crate::transport::status;
-use crate::transport::{PrinterInfo, PrinterLanguage, PrinterTransport, RenderedJob};
+use crate::transport::{PrinterInfo, PrinterLanguage, PrinterTransport, RawSend, RenderedJob};
 use async_trait::async_trait;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -133,6 +133,82 @@ impl RawTcpPrinter {
         })?
     }
 
+    /// The raw console's send: the same bytes as [`Self::send_raw`], but the
+    /// operator chooses the pacing — bytes per write, pause between writes,
+    /// and the settle before the close — and every stage's wall time is
+    /// recorded back through the job's [`RawSend`] so the report can show
+    /// what was actually applied.
+    ///
+    /// An ordinary job never reaches this function: `job.raw` is `None` and
+    /// the plain write above runs, byte for byte, exactly as before.
+    async fn send_raw_paced(&self, data: &[u8], raw: RawSend) -> Result<(), String> {
+        let delivery = raw.delivery;
+        let recorder = raw.recorder;
+        let at = self.at();
+
+        let open_start = Instant::now();
+        let mut stream = self.connect().await?;
+        recorder.record_open(open_start.elapsed().as_millis() as u64);
+        // What the operator is about to get, even if the write then fails:
+        // the report stays useful on the very sends it exists to debug.
+        let settle = delivery.desktop_settle_ms();
+        recorder.record_effective(delivery.chunk_bytes, delivery.chunk_pause_ms, settle);
+
+        let chunk = delivery.chunk_bytes.max(1) as usize;
+        let pause = Duration::from_millis(delivery.chunk_pause_ms as u64);
+        let writes = (data.len() as u64).div_ceil(delivery.chunk_bytes as u64) as u32;
+        let write_start = Instant::now();
+
+        let send = async {
+            let mut pieces = data.chunks(chunk).peekable();
+            while let Some(piece) = pieces.next() {
+                let last = pieces.peek().is_none();
+                stream.write_all(piece).await.map_err(|e| {
+                    format!("{at} closed the connection while the job was sending: {e}")
+                })?;
+                if !last && !pause.is_zero() {
+                    tokio::time::sleep(pause).await;
+                }
+            }
+            stream
+                .flush()
+                .await
+                .map_err(|e| format!("{at} stopped responding while the job was finishing: {e}"))?;
+            Ok::<(), String>(())
+        };
+
+        // The deadline must cover the pacing the operator asked for — the
+        // pauses are legitimate wall time — plus the usual allowance for a
+        // write that stops being accepted.
+        let deadline = send_timeout(SEND_TIMEOUT)
+            + Duration::from_millis(
+                (writes as u64).saturating_sub(1) * delivery.chunk_pause_ms as u64,
+            );
+        let write_outcome = tokio::time::timeout(deadline, send)
+            .await
+            .map_err(|_| {
+                format!(
+                    "{at} stopped responding after {}s — check for a paper jam or out-of-paper, or that it is still connected",
+                    deadline.as_secs()
+                )
+            })?;
+        write_outcome?;
+        recorder.record_write(write_start.elapsed().as_millis() as u64);
+
+        // The experiment this tool exists for: does the printer finish the
+        // label if the connection lingers after the last byte?
+        if settle > 0 {
+            let t = Instant::now();
+            tokio::time::sleep(Duration::from_millis(settle as u64)).await;
+            recorder.record_settle(t.elapsed().as_millis() as u64);
+        }
+
+        let close_start = Instant::now();
+        let _ = stream.shutdown().await;
+        recorder.record_close(close_start.elapsed().as_millis() as u64);
+        Ok(())
+    }
+
     /// Ask the printer about itself before the job goes out, and refuse to
     /// send if it says it cannot print.
     ///
@@ -231,7 +307,10 @@ impl PrinterTransport for RawTcpPrinter {
 
     async fn send(&self, job: RenderedJob) -> Result<(), String> {
         self.precheck(&job.language).await?;
-        self.send_raw(&job.data).await
+        match job.raw {
+            Some(raw) => self.send_raw_paced(&job.data, raw).await,
+            None => self.send_raw(&job.data).await,
+        }
     }
 }
 

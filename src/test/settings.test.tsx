@@ -10,13 +10,14 @@ import { MemoryRouter } from "react-router-dom";
 import "@/lib/i18n";
 
 const invoke = vi.fn();
+const setServiceUrl = vi.fn(async (..._args: unknown[]) => {});
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...a: unknown[]) => invoke(...a),
 }));
 vi.mock("@/lib/share/client", () => ({
   getServiceUrl: async () => null,
   getSessionToken: async () => null,
-  setServiceUrl: async () => {},
+  setServiceUrl: (...a: unknown[]) => setServiceUrl(...a),
   register: async () => ({}),
   login: async () => ({}),
   logout: async () => {},
@@ -39,6 +40,7 @@ beforeAll(() => {
 beforeEach(() => {
   invoke.mockReset();
   invoke.mockResolvedValue(null);
+  setServiceUrl.mockReset();
   localStorage.clear();
 });
 const renderPage = () =>
@@ -129,6 +131,20 @@ describe("Settings page", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it("saves the service URL without a trailing slash", async () => {
+    renderPage();
+    open("Account & sync");
+    const input = await screen.findByLabelText("Service URL");
+    fireEvent.change(input, {
+      target: { value: "https://share.example.com/" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(setServiceUrl).toHaveBeenCalledWith("https://share.example.com"),
+    );
+    expect(input).toHaveValue("https://share.example.com");
   });
 
   it("rejects a bad domain and confirms before allowing all", async () => {

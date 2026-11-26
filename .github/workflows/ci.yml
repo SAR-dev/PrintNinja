@@ -97,7 +97,7 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - name: Install Tauri system dependencies
         run: |
@@ -111,9 +111,11 @@ jobs:
         with:
           name: web-dist
           path: dist
-      # Rust failures block: no continue-on-error.
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      # Rust failures block: no continue-on-error. Workspace-wide, so the
+      # vendored label-track crates (core/*, tests/golden, tests/e2e) are
+      # covered too.
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
 
   rust-test:
     if: github.head_ref != 'refactoring'
@@ -124,7 +126,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - name: Install Tauri system dependencies
         run: |
@@ -137,7 +139,15 @@ jobs:
         with:
           name: web-dist
           path: dist
-      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      # The whole workspace: src-tauri plus the vendored label-track
+      # crates (core/*, golden-harness, pn-e2e — the delivery e2e builds
+      # the virtual-printer fixture on demand).
+      - run: cargo test --workspace
+      # The virtual printer fixture is a standalone std-only crate
+      # (excluded from the workspace); its own tests run on the runner,
+      # the same split the reference repo's rust-test-linux job uses.
+      - name: Virtual printer fixture tests
+        run: cargo test --manifest-path tests/e2e/support/virtual-printer/Cargo.toml
 
   # Gate with the old job name. Passes only when both Rust jobs passed.
   # `always()` so that a failed or cancelled job reports a failure here
@@ -262,29 +272,10 @@ jobs:
           key: playwright-${{ hashFiles('pnpm-lock.yaml') }}
       - name: Install Chromium with system dependencies
         run: pnpm --filter e2e exec playwright install --with-deps chromium
-      # E2E_UPDATE_SNAPSHOTS (Actions variable, empty by default): when set
-      # to "true" the suite rewrites the committed screenshot baselines
-      # instead of comparing against them and publishes the refreshed
-      # files as the e2e-snapshots artifact. Baselines depend on the
-      # environment (fonts), so they must be regenerated in the same
-      # environment as CI: set the variable, push, download the artifact,
-      # commit the files, remove the variable. See docs/CI.md.
+      # The suite's layout and axe checks are DOM/metric-based, so the same
+      # command works on every runner — no screenshot baselines to refresh.
       - name: Run the Playwright suite
-        env:
-          E2E_UPDATE_SNAPSHOTS: ${{ vars.E2E_UPDATE_SNAPSHOTS }}
-        run: |
-          if [ "$E2E_UPDATE_SNAPSHOTS" = "true" ]; then
-            pnpm --filter e2e exec playwright test --update-snapshots
-          else
-            pnpm e2e
-          fi
-      - name: Upload refreshed snapshot baselines
-        if: vars.E2E_UPDATE_SNAPSHOTS == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: e2e-snapshots
-          path: e2e/tests/*-snapshots
-          retention-days: 7
+        run: pnpm e2e
       - name: Upload the HTML report on failure
         if: failure()
         uses: actions/upload-artifact@v7
@@ -305,13 +296,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - uses: actions/download-artifact@v8
         with:
           name: web-dist
           path: dist
-      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - run: cargo test --workspace
+      - name: Virtual printer fixture tests
+        run: cargo test --manifest-path tests/e2e/support/virtual-printer/Cargo.toml
 
   # Android compiles Rust and Kotlin only here and in android-build, so a
   # break (the v4.1.6 duplicate `testPrinter`) used to surface on the
@@ -341,7 +334,7 @@ jobs:
           targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - name: Install Java
         uses: actions/setup-java@v5
@@ -443,7 +436,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - name: Install Tauri system dependencies
         run: |
@@ -494,7 +487,7 @@ jobs:
           TAURI=$(jq -r .version src-tauri/tauri.conf.json)
           CARGO=$(awk '/^\[package\]/{p=1;next} /^\[/{p=0} p && /^version *=/{gsub(/[" ]/,"",$3); print $3; exit}' src-tauri/Cargo.toml)
           # Cargo.lock stores the same version for the crate
-          LOCK=$(awk '/^\[\[package\]\]/{p=0} /name = "printninja"/{p=1;next} p && /^version =/{gsub(/"/,"",$3); print $3; exit}' src-tauri/Cargo.lock)
+          LOCK=$(awk '/^\[\[package\]\]/{p=0} /name = "printninja"/{p=1;next} p && /^version =/{gsub(/"/,"",$3); print $3; exit}' Cargo.lock)
           # Layout.tsx topbar fallback literal "vX.Y.Z"
           LAYOUT=$(grep -o '"v[0-9]\+\.[0-9]\+\.[0-9]\+"' src/components/Layout.tsx | head -n1 | tr -d '"' | sed 's/^v//')
           echo "tag=$TAG_VERSION package.json=$PKG tauri.conf.json=$TAURI Cargo.toml=$CARGO Cargo.lock=$LOCK Layout.tsx=$LAYOUT"
@@ -526,7 +519,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       # Icon changed via `tauri icon` — Rust cache would restore old
       # target/release/build/printninja-*/out/resource.rc with stale ICO.
@@ -535,14 +528,14 @@ jobs:
       # name 'rf'". Use bash explicitly.
       - name: Clear stale icon build cache
         shell: bash
-        run: rm -rf src-tauri/target/release/build/printninja-* src-tauri/target/release/bundle || true
+        run: rm -rf target/release/build/printninja-* target/release/bundle || true
       - run: pnpm install --frozen-lockfile
       # MSI only. Without --target, output lands in target/release/bundle.
       - run: pnpm exec tauri build --bundles msi
       - uses: actions/upload-artifact@v7
         with:
           name: windows-msi
-          path: src-tauri/target/release/bundle/msi/*.msi
+          path: target/release/bundle/msi/*.msi
           if-no-files-found: error
           retention-days: 30
 
@@ -562,7 +555,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - name: Install Tauri Linux dependencies
         run: |
@@ -576,8 +569,8 @@ jobs:
         with:
           name: linux
           path: |
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
+            target/release/bundle/deb/*.deb
+            target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
           retention-days: 30
 
@@ -599,10 +592,10 @@ jobs:
           targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
           cache-on-failure: true
       - name: Clear stale launcher icon cache
-        run: rm -rf src-tauri/target/aarch64-linux-android src-tauri/gen/android/app/build || true
+        run: rm -rf target/aarch64-linux-android src-tauri/gen/android/app/build || true
       - name: Install Java
         uses: actions/setup-java@v5
         with:

@@ -182,6 +182,7 @@ fn cups_queue_prints_pdf_through_print_job() {
         mime_type: "application/pdf".into(),
         copies: 1,
         language: printninja_lib::transport::PrinterLanguage::Pdf,
+        raw: None,
     }));
     std::env::remove_var("PRINTNINJA_CUPS_URL");
     result.expect("print-job accepted");

@@ -1,8 +1,10 @@
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PrintPreview } from "@/components/PrintPreview";
+import { SceneBitmapPreview } from "@/pages/designer/scene/SceneBitmapPreview";
 import type { PrintState } from "./types";
 import type { TemplateListRow } from "@/lib/templates/listTemplates";
+import type { LabelPreview } from "@/lib/agent/types";
 
 /**
  * The preview card: what will print — the rendered pages, the warnings
@@ -12,6 +14,7 @@ export function PreviewCard({
   store,
   previewTemplate,
   previewPages,
+  scenePreviews,
   previewError,
   previewNotice,
   thermalWarning,
@@ -27,6 +30,9 @@ export function PreviewCard({
   store: PrintState;
   previewTemplate: TemplateListRow | undefined;
   previewPages: string[];
+  /** The scene track's prepared preview (1-bit sheets), or null for
+   * the html track and while nothing is prepared. */
+  scenePreviews: LabelPreview[] | null;
   previewError: string;
   previewNotice: string;
   thermalWarning: string;
@@ -90,6 +96,15 @@ export function PreviewCard({
           <p className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning">
             {previewError}
           </p>
+        ) : scenePreviews && scenePreviews.length > 0 ? (
+          <div
+            className="max-h-sheet overflow-auto rounded-md border bg-muted p-4"
+            tabIndex={0}
+            role="region"
+            aria-label={t("print.preview_region")}
+          >
+            <SceneBitmapPreview previews={scenePreviews} />
+          </div>
         ) : previewPages.length > 0 ? (
           <div
             className="max-h-sheet overflow-auto rounded-md border bg-muted p-4"

@@ -39,7 +39,6 @@ yarn-debug.log*
 yarn-error.log*
 
 # Tauri
-src-tauri/target
 src-tauri/gen/schemas
 
 # Android / Gradle: local caches and signing material, never committed.

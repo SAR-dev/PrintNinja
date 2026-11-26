@@ -16,6 +16,11 @@ export interface TemplateRow {
   css: string;
   compiled_css: string;
   compiled_key: string;
+  /** The print track (LABEL_PRINTING_PLAN.md): `html` (the mustache
+   * document track) or `scene` (the label track). */
+  track: string;
+  /** The scene template's JSON payload; null for `html` rows. */
+  scene_json: string | null;
   readme: string;
   summary: string;
   remote_id: string | null;
@@ -117,6 +122,17 @@ export interface HistoryJob {
   printer_type: string | null;
   /** The job's printer's `via_driver` flag; null when the printer is gone. */
   via_driver: boolean | null;
+  /** The label track's honest delivery word (LABEL_PRINTING_PLAN.md,
+   *  WP5): `confirmed`, `sent_unconfirmed`, `partially_printed`,
+   *  `failed` or `wrong_mode_suspected`. Null for document jobs and
+   *  for label jobs that died before delivery. */
+  result:
+    | "confirmed"
+    | "sent_unconfirmed"
+    | "partially_printed"
+    | "failed"
+    | "wrong_mode_suspected"
+    | null;
 }
 
 export interface BatchSummary {
@@ -162,6 +178,12 @@ export interface PrinterRow {
    */
   via_driver?: boolean;
   /**
+   * The label track (LABEL_PRINTING_PLAN.md, WP3): the bundled profile's
+   * id this row prints scene jobs with; null means the language-based
+   * default applies.
+   */
+  label_profile?: string | null;
+  /**
    * Per-printer tuning JSON (TSPL gap, Bluetooth pacing) as stored on the
    * row; null when nothing was tuned. Read, never written, by the form.
    */
@@ -187,6 +209,30 @@ export interface ProbeCapabilitiesResult {
   printer_info: string | null;
   /** Document/content MIME formats the printer reported (IPP only). */
   document_formats: string[];
+}
+
+/**
+ * The raw console's send report (developer tools). `ok: false` means the
+ * send failed — `error` names why, `bytesSent` is what got out before it
+ * stopped. Timings and effective options are `null`/absent for stages that
+ * never ran; `effectiveOptions` is what the backend actually applied after
+ * clamping.
+ */
+export interface RawSendReport {
+  ok: boolean;
+  error?: string;
+  bytesSent: number;
+  timingsMs: {
+    open?: number | null;
+    write?: number | null;
+    settle?: number | null;
+    close?: number | null;
+  };
+  effectiveOptions: {
+    chunkBytes?: number | null;
+    chunkPauseMs?: number | null;
+    settleMs?: number | null;
+  };
 }
 
 export interface AddPrinterReq {
@@ -692,6 +738,13 @@ export interface DeeplinkPrint {
   /** Printer name, as shown in the Print page's picker. */
   printer: string | null;
   url: string | null;
+  /** The track the print must run on (WP5): `html` or `scene`, raw
+   *  like `orientation` — the print screen is the gate. Null: the
+   *  template's own track decides. */
+  format: string | null;
+  /** The scene job's records as JSON (WP5), raw like `url`: the print
+   *  screen parses it when the template is a scene template. */
+  data: string | null;
   copies: number | null;
   orientation: string | null;
   fit: string | null;
@@ -715,3 +768,164 @@ export type DeeplinkResult =
   | { Print: DeeplinkPrint }
   | { Open: string }
   | { Template: string };
+
+// ─────────────────────────────────────────────────────────────────────
+// The label track (LABEL_PRINTING_PLAN.md, WP2–WP4). These mirror the
+// Rust shapes in src-tauri/src/label_pipeline.rs and
+// src-tauri/src/commands/label.rs field for field.
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * One page of the job, rendered the way the job prints — serde's
+ * internally tagged `Preview` enum (tag `kind`, snake_case).
+ */
+export type LabelPreview =
+  | {
+      /** A scene page as 1-bit dots: packed eight dots per byte, row by
+       * row, at the printer's dpi. */
+      kind: "bitmap";
+      width: number;
+      height: number;
+      packed: number[];
+      width_mm: number;
+      height_mm: number;
+    }
+  | {
+      /** A document job as the PDF it will be sent as. */
+      kind: "pdf";
+      pdf: number[];
+    };
+
+/** What a prepared job looks like before it goes to the wire. */
+export interface PrepareReport {
+  /** "native", "raster", "pdf" or "browser". */
+  path: string;
+  /** The recorded fallback reason, when the track's preferred path was
+   * refused; null when the preferred path held. */
+  fallback: string | null;
+  /** How many data records the job carries. */
+  records: number;
+  /** The pages the data expands to. */
+  pages: number;
+  /** The units delivered to the printer — one label or cut each, copies
+   * included. */
+  units: number;
+  /** The job's size on the wire, in bytes. */
+  bytes: number;
+  /** The job's pages, in order — one copy's worth, the copies repeat it;
+   * null when the prepare skipped rendering. */
+  preview: LabelPreview[] | null;
+}
+
+/** What happened to a printed job, in words the UI can show. */
+export interface JobReport {
+  /** "confirmed", "sent_unconfirmed", "partially_printed", "failed" or
+   * "wrong_mode_suspected". */
+  result: string;
+  /** The "N of M" counts, for partial jobs. */
+  counts: [number, number] | null;
+  /** The plain-word reason, when there is one. */
+  reason: string | null;
+}
+
+/** The pacing and close delay a profile ships with. */
+export interface DeliveryInfo {
+  chunk_bytes: number;
+  pause_ms: number;
+  close_delay_ms: number;
+}
+
+/** A profile as the UI's printer list shows it. */
+export interface ProfileInfo {
+  /** The bundled profile's id — the file stem of its TOML, the value a
+   * saved printer row's `label_profile` holds. */
+  id: string;
+  model: string;
+  aliases: string[];
+  /** The profile's language, in words: "zpl", "escpos", "pdf", … */
+  language: string;
+  /** The media kinds the printer takes: "label", "continuous", "page". */
+  media: string[];
+  dpi: number | null;
+  head_width_dots: number | null;
+  /** Whether this printer can confirm a job with its own reply. */
+  can_confirm: boolean;
+  /** The profile's own pacing and close delay, before any override. */
+  delivery: DeliveryInfo;
+}
+
+/**
+ * Which bundled model a saved printer row prints scene jobs with, and
+ * whether the user picked it — the UI flags `user_chosen: false` as
+ * "auto".
+ */
+export interface ProfileChoice {
+  model: string;
+  user_chosen: boolean;
+}
+
+/** `label_prepare`'s answer: the report plus the model it prepared against. */
+export interface LabelPrepareResponse {
+  // PrepareReport, flattened onto the response.
+  path: string;
+  fallback: string | null;
+  records: number;
+  pages: number;
+  units: number;
+  bytes: number;
+  preview: LabelPreview[] | null;
+  /** The bundled model id the job prepared against. */
+  profile: string;
+  /** "user" when the row carries a pick, "default" otherwise. */
+  profile_source: "user" | "default";
+}
+
+/** `label_print`'s answer: the job row it opened and how it ended. */
+export interface LabelPrintResponse {
+  job_id: number;
+  report: JobReport;
+  duration_ms: number;
+}
+
+/** `label_save_template`'s argument — the scene as the designer serializes it. */
+export interface LabelSaveTemplateReq {
+  name: string;
+  /** The scene template's JSON, as serialized by the designer. */
+  scene: string;
+  /** The row's local id when re-saving an existing scene template;
+   * omitted for a new template. */
+  id?: number | null;
+}
+
+/** `label_preview`'s argument — the scene straight from the designer. */
+export interface LabelPreviewReq {
+  /** The scene template's JSON, as serialized by the designer. */
+  scene: string;
+  /** The saved printer's name. */
+  printer: string;
+  /** The preview's data records, as a JSON string. */
+  records: string;
+  /** Sets to preview; omitted means one. */
+  copies?: number | null;
+}
+
+/** One encoded symbol, the way the designer's canvas draws it. */
+export interface SymbolEncoding {
+  /** Quiet-zone modules on every side, at the symbol's own scale. */
+  quiet: number;
+  /** 1 dark, 0 light; a QR matrix is `side × side`, read row-major. */
+  modules: number[];
+  /** The QR matrix's side in modules; absent for linear barcodes. */
+  side?: number;
+}
+
+/** The argument of `label_prepare` and `label_print`. */
+export interface LabelJobReq {
+  template_id: number;
+  /** The saved printer's name. */
+  printer: string;
+  /** The job's data records, as a JSON string. */
+  records: string;
+  /** Sets to print; omitted means one. */
+  copies?: number | null;
+}

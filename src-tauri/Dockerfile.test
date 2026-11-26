@@ -1,4 +1,5 @@
-# Test container for the desktop crate (src-tauri).
+# Test container for the Rust workspace (src-tauri + the vendored
+# label-track crates: golden-harness, pn-e2e).
 #
 # The image is the toolchain only; the workspace is mounted at run time
 # by docker-compose.test.yml, so the image never goes stale against the
@@ -16,11 +17,6 @@
 # The toolchain itself: rustup reads the repo-root rust-toolchain.toml
 # (channel 1.90.0) from the mounted workspace and installs it on the
 # first build; the base image's stable is only the fallback.
-#
-# The PDFium unit tests run here too: the container has no bundled
-# layout yet, so render/pdfium.rs falls back to its
-# CARGO_MANIFEST_DIR/resources/pdfium candidate and binds the vendored
-# libpdfium.so (x86-64) from the mounted workspace.
 FROM rust:1.90.0-bookworm
 
 RUN apt-get update \

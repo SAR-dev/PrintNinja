@@ -10,6 +10,7 @@ import type { useViaPc } from "./useViaPc";
 import type { usePrintPreview } from "./usePrintPreview";
 import type { usePrintPaper } from "./usePrintPaper";
 import type { usePrintActions } from "./usePrintActions";
+import type { PrintPagePrinter } from "@/lib/hooks/useSystemPrinters";
 
 /**
  * The desktop and tablet print form: the "choose and print" card on the
@@ -20,6 +21,8 @@ export function DesktopLayout({
   paperSizeDialog,
   store,
   lists,
+  pickerPrinters,
+  labelOnly,
   viaPcApi,
   preview,
   paper,
@@ -34,6 +37,10 @@ export function DesktopLayout({
   paperSizeDialog: React.ReactNode;
   store: PrintState;
   lists: ReturnType<typeof usePrintLists>;
+  /** The printer choices the picker shows: all printers for an HTML
+   * template, only saved label printers for a scene one. */
+  pickerPrinters: PrintPagePrinter[];
+  labelOnly: boolean;
   viaPcApi: ReturnType<typeof useViaPc>;
   preview: ReturnType<typeof usePrintPreview>;
   paper: ReturnType<typeof usePrintPaper>;
@@ -46,7 +53,7 @@ export function DesktopLayout({
   field: string;
 }) {
   const { t } = useTranslation();
-  const { templates, printers, advancedOpen, toggleAdvanced } = lists;
+  const { templates, advancedOpen, toggleAdvanced } = lists;
   const {
     viaPc,
     viaPcPair,
@@ -66,6 +73,7 @@ export function DesktopLayout({
     previewTemplate,
     changeTemplate,
     previewPages,
+    scenePreviews,
     previewError,
     previewNotice,
   } = preview;
@@ -118,7 +126,8 @@ export function DesktopLayout({
             changePcTemplate={changePcTemplate}
             changeTemplate={changeTemplate}
             templates={templates}
-            printers={printers}
+            pickerPrinters={pickerPrinters}
+            labelOnly={labelOnly}
             onPrinterChange={onPrinterChange}
             loadPrinters={loadPrinters}
             refreshingPrinters={refreshingPrinters}
@@ -148,6 +157,7 @@ export function DesktopLayout({
             store={store}
             previewTemplate={previewTemplate}
             previewPages={previewPages}
+            scenePreviews={scenePreviews}
             previewError={previewError}
             previewNotice={previewNotice}
             thermalWarning={paper.thermalWarning}

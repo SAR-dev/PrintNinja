@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
 import { DesignerToolbar } from "@/components/designer/DesignerToolbar";
 import { DesignerOverflowMenu } from "@/components/designer/DesignerOverflowMenu";
+import { TemplateSwitcher } from "@/components/designer/TemplateSwitcher";
 import type { DesignerLayout } from "@/components/designer/LayoutToggle";
 import type { TemplateRow } from "./useDesignerDocument";
 import type { SyncAction } from "./useTemplateSync";
@@ -24,10 +25,9 @@ export function DesignerTopBar({
   dirty,
   layout,
   onLayoutChange,
-  onNewDesktop,
-  onNewTablet,
   onSave,
-  offline,
+  saveDisabled,
+  saveTitle,
   readOnly,
   templateName,
   onTemplateNameChange,
@@ -45,14 +45,14 @@ export function DesignerTopBar({
   onSwitchTemplate: (id: number) => void;
   nameError: string;
   dirty: boolean;
-  layout: DesignerLayout;
-  onLayoutChange: (layout: DesignerLayout) => void;
-  /** Desktop toolbar New: asks first when edits are unsaved. */
-  onNewDesktop: () => void;
-  /** Tablet overflow menu New: opens the dialog directly. */
-  onNewTablet: () => void;
+  /** The scene track has no document workspace, so no layout toggle. */
+  layout?: DesignerLayout;
+  onLayoutChange?: (layout: DesignerLayout) => void;
   onSave: () => void;
-  offline: boolean;
+  /** Computed on the page: offline/readOnly for the document track, an
+   * invalid name for the scene track (local-only, no server). */
+  saveDisabled: boolean;
+  saveTitle?: string;
   readOnly: boolean;
   templateName: string;
   onTemplateNameChange: (name: string) => void;
@@ -78,10 +78,9 @@ export function DesignerTopBar({
         dirty={dirty}
         layout={layout}
         onLayoutChange={onLayoutChange}
-        onNew={onNewDesktop}
         onSave={onSave}
-        saveDisabled={offline || readOnly || !!nameError}
-        saveTitle={offline ? t("designer.save_offline_title") : undefined}
+        saveDisabled={saveDisabled}
+        saveTitle={saveTitle}
         templateName={templateName}
         onTemplateNameChange={onTemplateNameChange}
         remoteId={remoteId}
@@ -101,8 +100,16 @@ export function DesignerTopBar({
     />
   ) : (
     <PageHeader title={t("designer.title")} description={t("pages.designer")}>
+      {/* The tablet header is the only place to switch templates on this
+          size, so the switcher lives here for both tracks (the scene body
+          has no templates tab of its own; the document body's tab is
+          desktop-only). */}
+      <TemplateSwitcher
+        templates={templates}
+        currentTemplateId={currentTemplateId}
+        onSelect={(tpl) => onSwitchTemplate(tpl.id)}
+      />
       <DesignerOverflowMenu
-        onNew={onNewTablet}
         published={!!remoteId && !!publishedAt}
         remoteId={remoteId}
         readOnly={readOnly}

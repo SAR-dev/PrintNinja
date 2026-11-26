@@ -24,6 +24,7 @@ const base = {
   password: "",
   skip_tls_verification: false,
   via_driver: false,
+  label_profile: "",
 };
 
 describe("validatePrinterForm", () => {

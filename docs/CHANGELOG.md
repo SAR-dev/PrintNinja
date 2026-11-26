@@ -45,6 +45,37 @@ Only use the headings you actually have entries for.
 
 ## Unreleased
 
+### Added
+
+- **A label designer for thermal printers.** Design receipts and labels on a canvas in millimetres — text, barcodes, QR codes, images, lines and frames — with undo, arrow-key nudging, and a preview that matches what the printer produces.
+- **Eleven label models built in.** Models from Zebra, Brother, Citizen, Epson, TSC, Toshiba and friends ship with the app; it picks a sensible default per printer, and you can change the choice in the printer's Advanced section.
+- **Templates know their kind.** Each template wears a badge naming it as a label or a document, and both kinds can be created from the Templates page.
+- **Refresh when you want.** The Printers, Templates and History lists have refresh buttons, the top-bar badge shows when the last sync happened, and on Android you can pull a page down to refresh it.
+- **Android asks once, and explains.** The first time the app needs your local network it shows a short explanation and asks once. Bluetooth and USB printers never need it.
+- **A badge for fresh templates.** Community templates published in the last two weeks wear a "New" badge, and your very first finished print earns a one-time congratulations.
+- **Phone notices can be closed.** Every notification on the phone now has a close button, instead of waiting for a swipe.
+
+### Changed
+
+- **One place to create templates.** New templates — label or document — are created from the Templates page; the Designer is where you open and edit them.
+- **Honest job results.** When the app cannot see the paper (direct printing with no driver), a finished job says "Sent to the printer" instead of "Printed", and the mode is named "Direct printing (no driver)".
+- **Test prints you can read.** Receipt and label printers get one plain line of text in their own language — if you can read it, the printer works — and document test pages get a visible border so a blank sheet is obvious.
+- **A calmer Bluetooth add.** One-tap adding a Bluetooth printer now shows the paper width (54 mm) and language before you save, so nothing is set blind.
+- **Prettier Japanese text.** In the Japanese interface, text uses the platform's own Japanese face, with roomier line spacing and labels that wrap instead of cutting off.
+- **PDFs on document printers only.** PDFs can no longer be sent to thermal printers; the app says why and points you to designing a label template instead. Office (document) printers are unaffected.
+
+### Fixed
+
+- **Label templates stay together.** A label you create appears in the Designer right away, keeps the right name, and can always be created from the Templates page — even while a document template is open.
+- **No more blank Bluetooth prints.** Some Bluetooth receipt printers dropped a job but were told it had succeeded; the send is now paced to match a slow print head.
+- **Out-of-paper Bluetooth printers tell you.** A Bluetooth printer that is out of paper, jammed or offline now refuses the job with a clear message instead of swallowing it.
+- **PDFs print over USB on Windows.** USB document printers print PDFs correctly now.
+- **More network printers found on Android.** 9100 network printers appear in the add-printer flow instead of being missed.
+- **The add sheet closes when done.** A successful one-tap printer add closes the sheet on its own.
+- **Phone history shows via-PC jobs.** Printing through a PC shows the job, its outcome and the PC's name in the phone's History again.
+- **Server addresses are cleaned up.** A share-service address saved with a slash at the end connects as you expected.
+- **Printer passwords stay private.** A printer's password no longer appears in the edit form; leaving the field blank keeps the saved password.
+
 ## [2026.1118.2] - 2026-11-18
 
 ### Changed

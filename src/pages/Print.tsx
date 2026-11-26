@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PHONE_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { isAndroid } from "@/lib/platform";
@@ -88,6 +88,14 @@ function PrintForm() {
     viaPcDevice,
   } = viaPcApi;
 
+  // The local row behind the chosen printer: its language (the PDF
+  // blocker below), its paper width (the mismatch warning below), and —
+  // for a scene template — the saved profile the label preview
+  // prepares against.
+  const selectedPrinter = !viaPc
+    ? printers.find((p) => p.name === store.printerId)
+    : undefined;
+
   const preview = usePrintPreview(
     store,
     templates,
@@ -96,12 +104,14 @@ function PrintForm() {
     pcTemplate,
     viaPcPair,
     resetOutcome,
+    selectedPrinter,
   );
   const {
     selectedPcTemplate,
     previewTemplate,
     changeTemplate,
     previewPages,
+    scenePreviews,
     previewError,
     previewNotice,
   } = preview;
@@ -109,16 +119,38 @@ function PrintForm() {
   // Via-PC prints choose from the PC's listing (by server_id); local
   // prints choose a local row. One of them must be chosen.
   const templateChosen = viaPc ? pcTemplate !== "" : store.templateId !== "";
-  // The local row, for its language (the PDF blocker below) and paper
-  // width (the mismatch warning below).
-  const selectedPrinter = !viaPc
-    ? printers.find((p) => p.name === store.printerId)
-    : undefined;
   // The saved printer's database id ("saved:<id>"). OS printers have no
   // registered width — and so no width to correct from the warning.
   const savedDbId = selectedPrinter?.id.startsWith("saved:")
     ? Number(selectedPrinter.id.slice("saved:".length))
     : null;
+
+  // The printer-class rule, in the picker: a scene (label) template
+  // offers only saved label printers — the backend plans the job
+  // against the saved row's profile, so an OS printer or a document
+  // head would refuse it. An HTML (document) template keeps today's
+  // full list: every printer is offered, thermal included.
+  const isScene = !viaPc && preview.selectedTemplate?.track === "scene";
+  const pickerPrinters = isScene
+    ? printers.filter((p) => p.id.startsWith("saved:") && p.language !== "pdf")
+    : printers;
+  // Picking a scene template can leave a printer the job cannot run on
+  // chosen (or none at all): move the selection to the first label
+  // printer — or to none, which raises the existing blocker line. A
+  // plain set, not onPrinterChange, which would restore the printer's
+  // remembered template and flip the pick away from the scene.
+  const scenePickerKey = isScene
+    ? pickerPrinters.map((p) => p.name).join("␟")
+    : "";
+  useEffect(() => {
+    if (!isScene) return;
+    const st = usePrintStore.getState();
+    const cur = printers.find((p) => p.name === st.printerId);
+    if (cur && cur.id.startsWith("saved:") && cur.language !== "pdf") return;
+    st.setPrinterId(pickerPrinters[0]?.name ?? "");
+    resetOutcome();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isScene, scenePickerKey, store.printerId]);
 
   const paper = usePrintPaper({
     store,
@@ -149,6 +181,7 @@ function PrintForm() {
     effPaperW: paper.effPaperW,
     effPaperH: paper.effPaperH,
     templateChosen,
+    sceneTemplate: isScene,
     selectedPrinter,
     refreshSystemPrinters,
     refreshPcPrinters,
@@ -261,12 +294,14 @@ function PrintForm() {
         remoteCode={remoteCode}
         pickViaPcDevice={pickViaPcDevice}
         setViaPc={setViaPc}
-        printers={printers}
+        printers={pickerPrinters}
+        labelOnly={isScene}
         templates={templates}
         onPrinterChange={onPrinterChange}
         loadPrinters={loadPrinters}
         refreshingPrinters={refreshingPrinters}
         previewPages={previewPages}
+        scenePreviews={scenePreviews}
         previewError={previewError}
         previewNotice={previewNotice}
         previewTemplate={previewTemplate}
@@ -294,6 +329,8 @@ function PrintForm() {
       paperSizeDialog={paperSizeDialog}
       store={store}
       lists={lists}
+      pickerPrinters={pickerPrinters}
+      labelOnly={isScene}
       viaPcApi={viaPcApi}
       preview={preview}
       paper={paper}

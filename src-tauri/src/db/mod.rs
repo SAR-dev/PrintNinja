@@ -97,7 +97,55 @@ pub fn init(conn: &Connection) -> rusqlite::Result<()> {
     ensure_p2_checks(conn)?;
     ensure_template_content_schema(conn)?;
     ensure_pairing_schema(conn)?;
-    ensure_idempotency_scope(conn)
+    ensure_idempotency_scope(conn)?;
+    ensure_template_track_schema(conn)?;
+    ensure_printer_label_profile_schema(conn)?;
+    ensure_job_result_schema(conn)
+}
+
+/// The template track (LABEL_PRINTING_PLAN.md, WP2): one `track` column
+/// says which print path a template belongs to — `html` (the existing
+/// mustache track) or `scene` (the label track, whose serialized
+/// `pn_scene::Template` lives in `scene_json`). Every existing row is an
+/// HTML template, so the backfill is the column default and nothing is
+/// rewritten.
+pub fn ensure_template_track_schema(conn: &Connection) -> rusqlite::Result<()> {
+    if !column_exists(conn, "templates", "track")? {
+        conn.execute(
+            "ALTER TABLE templates ADD COLUMN track TEXT NOT NULL DEFAULT 'html'
+                 CHECK (track IN ('html', 'scene'))",
+            [],
+        )?;
+    }
+    if !column_exists(conn, "templates", "scene_json")? {
+        conn.execute("ALTER TABLE templates ADD COLUMN scene_json TEXT", [])?;
+    }
+    Ok(())
+}
+
+/// The label track's printer model (LABEL_PRINTING_PLAN.md, WP3): one
+/// nullable `label_profile` column holds the bundled profile's id —
+/// the file stem of one of `core/profiles/profiles/*.toml`. `NULL`
+/// means the row has no pick and prints scene jobs with the
+/// language-based default. No CHECK: the id is validated when it is
+/// written, and a stray value must not wedge the row.
+pub fn ensure_printer_label_profile_schema(conn: &Connection) -> rusqlite::Result<()> {
+    if !column_exists(conn, "printers", "label_profile")? {
+        conn.execute("ALTER TABLE printers ADD COLUMN label_profile TEXT", [])?;
+    }
+    Ok(())
+}
+
+/// The label track's delivery word (LABEL_PRINTING_PLAN.md, WP5): a
+/// nullable `result` column on `print_jobs` holds the honest outcome of a
+/// label job (`confirmed`, `sent_unconfirmed`, `partially_printed`,
+/// `failed`, `wrong_mode_suspected`). Document jobs leave it NULL —
+/// `status` alone is their honest word.
+pub fn ensure_job_result_schema(conn: &Connection) -> rusqlite::Result<()> {
+    if !column_exists(conn, "print_jobs", "result")? {
+        conn.execute("ALTER TABLE print_jobs ADD COLUMN result TEXT", [])?;
+    }
+    Ok(())
 }
 
 /// Scope the idempotency-key reservation to the caller.

@@ -29,6 +29,12 @@ pub struct Printer {
      * Never set automatically.
      */
     pub via_driver: bool,
+    /**
+     * The label track (LABEL_PRINTING_PLAN.md, WP3): the bundled
+     * profile's id this row prints scene jobs with; null means the
+     * language-based default applies.
+     */
+    pub label_profile: Option<String>,
     pub default_settings_json: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -69,7 +75,8 @@ pub fn list_printers(db: State<DbState>) -> AppResult<Vec<Printer>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
                 label_gap_mm, username, password, skip_tls_verification,
-                via_driver, default_settings_json, created_at, updated_at
+                via_driver, label_profile, default_settings_json, created_at,
+                updated_at
          FROM printers ORDER BY name COLLATE NOCASE",
     )?;
 
@@ -88,9 +95,10 @@ pub fn list_printers(db: State<DbState>) -> AppResult<Vec<Printer>> {
                 has_password: row.get::<_, Option<String>>(9)?.is_some(),
                 skip_tls_verification: row.get(10)?,
                 via_driver: row.get(11)?,
-                default_settings_json: row.get(12)?,
-                created_at: row.get(13)?,
-                updated_at: row.get(14)?,
+                label_profile: row.get(12)?,
+                default_settings_json: row.get(13)?,
+                created_at: row.get(14)?,
+                updated_at: row.get(15)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -174,7 +182,8 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
     let printer = conn.query_row(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
                 label_gap_mm, username, password, skip_tls_verification,
-                via_driver, default_settings_json, created_at, updated_at
+                via_driver, label_profile, default_settings_json, created_at,
+                updated_at
          FROM printers WHERE id = ?1",
         [id],
         |row| {
@@ -191,9 +200,10 @@ pub fn add_printer(db: State<DbState>, req: AddPrinterRequest) -> AppResult<Prin
                 has_password: row.get::<_, Option<String>>(9)?.is_some(),
                 skip_tls_verification: row.get(10)?,
                 via_driver: row.get(11)?,
-                default_settings_json: row.get(12)?,
-                created_at: row.get(13)?,
-                updated_at: row.get(14)?,
+                label_profile: row.get(12)?,
+                default_settings_json: row.get(13)?,
+                created_at: row.get(14)?,
+                updated_at: row.get(15)?,
             })
         },
     )?;
@@ -475,7 +485,8 @@ pub fn update_printer_conn(
     conn.query_row(
         "SELECT id, name, type, address, language, paper_width_mm, dpi,
                 label_gap_mm, username, password, skip_tls_verification,
-                via_driver, default_settings_json, created_at, updated_at
+                via_driver, label_profile, default_settings_json, created_at,
+                updated_at
          FROM printers WHERE id = ?1",
         [id],
         |row| {
@@ -492,9 +503,10 @@ pub fn update_printer_conn(
                 has_password: row.get::<_, Option<String>>(9)?.is_some(),
                 skip_tls_verification: row.get(10)?,
                 via_driver: row.get(11)?,
-                default_settings_json: row.get(12)?,
-                created_at: row.get(13)?,
-                updated_at: row.get(14)?,
+                label_profile: row.get(12)?,
+                default_settings_json: row.get(13)?,
+                created_at: row.get(14)?,
+                updated_at: row.get(15)?,
             })
         },
     )
@@ -510,7 +522,8 @@ fn get_printer_inner(db: &DbState, id: i64) -> AppResult<Printer> {
         .query_row(
             "SELECT id, name, type, address, language, paper_width_mm, dpi,
                     label_gap_mm, username, password, skip_tls_verification,
-                via_driver, default_settings_json, created_at, updated_at
+                via_driver, label_profile, default_settings_json, created_at,
+                updated_at
              FROM printers WHERE id = ?1",
             [id],
             |row| {
@@ -527,9 +540,10 @@ fn get_printer_inner(db: &DbState, id: i64) -> AppResult<Printer> {
                     has_password: row.get::<_, Option<String>>(9)?.is_some(),
                     skip_tls_verification: row.get(10)?,
                     via_driver: row.get(11)?,
-                    default_settings_json: row.get(12)?,
-                    created_at: row.get(13)?,
-                    updated_at: row.get(14)?,
+                    label_profile: row.get(12)?,
+                    default_settings_json: row.get(13)?,
+                    created_at: row.get(14)?,
+                    updated_at: row.get(15)?,
                 })
             },
         )
@@ -555,6 +569,51 @@ pub fn get_printer(db: State<DbState>, id: i64) -> AppResult<Printer> {
     get_printer_inner(&db, id)
 }
 
+/// Load a stored printer row, password included.
+///
+/// The password rides along for the transport only — the `Printer` the
+/// frontend sees reports `has_password`, never the value. Shared by the
+/// test print and the raw console so both resolve a row identically.
+fn load_printer_row(db: &DbState, id: i64) -> AppResult<(Printer, Option<String>)> {
+    let guard = db
+        .lock()
+        .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
+    let conn = guard.connection();
+    conn.query_row(
+        "SELECT id, name, type, address, language, paper_width_mm, dpi,
+                label_gap_mm, username, password, skip_tls_verification,
+                via_driver, label_profile, default_settings_json, created_at,
+                updated_at
+         FROM printers WHERE id = ?1",
+        [id],
+        |row| {
+            let password = row.get::<_, Option<String>>(9)?;
+            Ok((
+                Printer {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    printer_type: row.get(2)?,
+                    address: row.get(3)?,
+                    language: row.get(4)?,
+                    paper_width_mm: row.get(5)?,
+                    dpi: row.get(6)?,
+                    label_gap_mm: row.get(7)?,
+                    username: row.get(8)?,
+                    has_password: password.as_ref().is_some(),
+                    skip_tls_verification: row.get(10)?,
+                    via_driver: row.get(11)?,
+                    label_profile: row.get(12)?,
+                    default_settings_json: row.get(13)?,
+                    created_at: row.get(14)?,
+                    updated_at: row.get(15)?,
+                },
+                password,
+            ))
+        },
+    )
+    .map_err(|_| AppError::NotFound(format!("Printer {} not found", id)))
+}
+
 /// Send a small test to a configured printer: the full test page, or —
 /// for the command languages — one line of plain text (`kind: "text"`),
 /// the fastest way to tell whether the language mode is right.
@@ -567,45 +626,8 @@ pub async fn test_printer(
     kind: Option<String>,
 ) -> AppResult<()> {
     // Load the printer so we know where to send and which language to
-    // speak. The password rides along for the transport only — the row
-    // the frontend sees reports `has_password`, never the value.
-    let (printer, password) = {
-        let guard = db
-            .lock()
-            .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
-        let conn = guard.connection();
-        conn.query_row(
-            "SELECT id, name, type, address, language, paper_width_mm, dpi,
-                    label_gap_mm, username, password, skip_tls_verification,
-                via_driver, default_settings_json, created_at, updated_at
-             FROM printers WHERE id = ?1",
-            [id],
-            |row| {
-                let password = row.get::<_, Option<String>>(9)?;
-                Ok((
-                    Printer {
-                        id: row.get(0)?,
-                        name: row.get(1)?,
-                        printer_type: row.get(2)?,
-                        address: row.get(3)?,
-                        language: row.get(4)?,
-                        paper_width_mm: row.get(5)?,
-                        dpi: row.get(6)?,
-                        label_gap_mm: row.get(7)?,
-                        username: row.get(8)?,
-                        has_password: password.as_ref().is_some(),
-                        skip_tls_verification: row.get(10)?,
-                        via_driver: row.get(11)?,
-                        default_settings_json: row.get(12)?,
-                        created_at: row.get(13)?,
-                        updated_at: row.get(14)?,
-                    },
-                    password,
-                ))
-            },
-        )
-        .map_err(|_| AppError::NotFound(format!("Printer {} not found", id)))?
-    };
+    // speak. The password rides along for the transport only.
+    let (printer, password) = load_printer_row(&db, id)?;
 
     let printer_type = crate::transport::parse_printer_type(&printer.printer_type);
     let settings = crate::transport::TransportSettings {
@@ -743,6 +765,7 @@ async fn test_printer_text(
         mime_type: "application/octet-stream".into(),
         copies: 1,
         language,
+        raw: None,
     };
     let result = crate::transport::TransportRegistry::send_to(
         printer_type,
@@ -755,7 +778,16 @@ async fn test_printer_text(
     let duration_ms = start.elapsed().as_millis() as i64;
     match result {
         Ok(()) => {
-            crate::commands::print::close_job(db, job_id, "success", None, "", &[], duration_ms)?;
+            crate::commands::print::close_job(
+                db,
+                job_id,
+                "success",
+                None,
+                "",
+                &[],
+                duration_ms,
+                None,
+            )?;
             Ok(())
         }
         Err(error) => {
@@ -768,10 +800,128 @@ async fn test_printer_text(
                 "",
                 &[],
                 duration_ms,
+                None,
             );
             Err(AppError::Internal(error))
         }
     }
+}
+
+/// The largest payload the raw console will carry, in bytes.
+const MAX_RAW_PAYLOAD_BYTES: usize = 1024 * 1024;
+
+/// Raw console (developer tool): send arbitrary bytes to a saved
+/// printer through the app's real send path — the same registry as
+/// `test_printer` — with the operator choosing the pacing, and report
+/// what was actually applied and how long each stage took.
+///
+/// An experiment tool by contract: no render, no history row, no queue.
+/// It logs byte counts and timings — never the payload.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn send_raw_bytes(
+    db: State<'_, DbState>,
+    printer_id: i64,
+    data_base64: String,
+    options: Option<crate::transport::RawSendOptions>,
+) -> AppResult<crate::transport::RawSendReport> {
+    use crate::transport::{
+        BluetoothDelivery, RawDelivery, RawRecorder, RawSend, RawSendOptions, RawSendReport,
+        RenderedJob,
+    };
+    use base64::Engine as _;
+
+    // Bound the payload before decoding: a 10 MiB base64 string must not
+    // become a 7.5 MiB allocation just to be rejected a line later.
+    if data_base64.len() > MAX_RAW_PAYLOAD_BYTES * 4 / 3 + 4 {
+        return Err(AppError::Validation(
+            "Payload is too large for the raw console (max 1 MiB)".into(),
+        ));
+    }
+    let data = base64::engine::general_purpose::STANDARD
+        .decode(data_base64.trim())
+        .map_err(|e| AppError::Validation(format!("Data is not valid base64: {e}")))?;
+    if data.is_empty() {
+        return Err(AppError::Validation(
+            "The raw console needs at least one byte to send".into(),
+        ));
+    }
+    if data.len() > MAX_RAW_PAYLOAD_BYTES {
+        return Err(AppError::Validation(
+            "Payload is too large for the raw console (max 1 MiB)".into(),
+        ));
+    }
+    let bytes = data.len();
+
+    let (printer, password) = load_printer_row(&db, printer_id)?;
+    let printer_type = crate::transport::parse_printer_type(&printer.printer_type);
+    let language = crate::transport::parse_printer_language(&printer.language);
+    let options = options.unwrap_or_default();
+    // Override where the operator gave one, else the row's stored pace,
+    // clamped to the same bounds the settings form enforces.
+    let delivery = RawDelivery::resolve(
+        &options,
+        BluetoothDelivery::from_settings_json(printer.default_settings_json.as_deref()),
+    );
+    let recorder = RawRecorder::default();
+
+    let settings = crate::transport::TransportSettings {
+        username: printer.username.clone(),
+        password,
+        skip_tls_verification: printer.skip_tls_verification,
+        via_driver: printer.via_driver,
+        // The Android transport paces the RFCOMM write from these values;
+        // the desktop raw transports read the delivery from the job.
+        bluetooth: BluetoothDelivery {
+            chunk_bytes: delivery.chunk_bytes,
+            chunk_pause_ms: delivery.chunk_pause_ms,
+        },
+    };
+
+    let job = RenderedJob {
+        job_id: "raw-console".into(),
+        printer_id: printer.id.to_string(),
+        data,
+        mime_type: "application/octet-stream".into(),
+        copies: 1,
+        language,
+        raw: Some(RawSend {
+            delivery,
+            recorder: recorder.clone(),
+        }),
+    };
+
+    let result = crate::transport::TransportRegistry::send_to(
+        &printer_type,
+        &printer.name,
+        &printer.address,
+        job,
+        &settings,
+    )
+    .await;
+
+    let ok = result.is_ok();
+    let report = RawSendReport {
+        ok,
+        error: result.err(),
+        bytes_sent: if ok { bytes as u64 } else { 0 },
+        timings_ms: recorder.timings(),
+        // The transport records what it actually applied; when it failed
+        // before it could (a dead address, an unsupported type) the
+        // resolved values are the best statement of what would have been.
+        effective_options: recorder.effective().unwrap_or(RawSendOptions {
+            chunk_bytes: Some(delivery.chunk_bytes),
+            chunk_pause_ms: Some(delivery.chunk_pause_ms),
+            settle_ms: Some(delivery.desktop_settle_ms()),
+        }),
+    };
+    tracing::info!(
+        printer = %printer.name,
+        bytes,
+        ok = report.ok,
+        ?report.timings_ms,
+        "raw console send"
+    );
+    Ok(report)
 }
 
 /// What the printer understands, asked *before* its row is saved (TODO

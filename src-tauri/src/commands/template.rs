@@ -15,6 +15,12 @@ pub struct Template {
     pub css: String,
     pub compiled_css: String,
     pub compiled_key: String,
+    /// The print track (LABEL_PRINTING_PLAN.md): `html` (the mustache
+    /// document track) or `scene` (the label track, whose serialized
+    /// `pn_scene::Template` lives in `scene_json`).
+    pub track: String,
+    /// The scene template's JSON payload; NULL for `html` rows.
+    pub scene_json: Option<String>,
     pub readme: String,
     pub summary: String,
     pub remote_id: Option<String>,
@@ -50,6 +56,7 @@ pub fn list_templates(db: State<DbState>) -> AppResult<Vec<Template>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, page_w_mm, page_h_mm,
                 orientation, html, css, compiled_css, compiled_key,
+                track, scene_json,
                 readme, summary, remote_id, server_id, published_at,
                 origin, origin_owner, withdrawn, created_at, updated_at,
                 base_revision, sync_state
@@ -69,18 +76,20 @@ pub fn list_templates(db: State<DbState>) -> AppResult<Vec<Template>> {
                 css: row.get(6)?,
                 compiled_css: row.get(7)?,
                 compiled_key: row.get(8)?,
-                readme: row.get(9)?,
-                summary: row.get(10)?,
-                remote_id: row.get(11)?,
-                server_id: row.get(12)?,
-                published_at: row.get(13)?,
-                origin: row.get(14)?,
-                origin_owner: row.get(15)?,
-                withdrawn: row.get::<_, i64>(16)? != 0,
-                created_at: row.get(17)?,
-                updated_at: row.get(18)?,
-                base_revision: row.get(19)?,
-                sync_state: row.get(20)?,
+                track: row.get(9)?,
+                scene_json: row.get(10)?,
+                readme: row.get(11)?,
+                summary: row.get(12)?,
+                remote_id: row.get(13)?,
+                server_id: row.get(14)?,
+                published_at: row.get(15)?,
+                origin: row.get(16)?,
+                origin_owner: row.get(17)?,
+                withdrawn: row.get::<_, i64>(18)? != 0,
+                created_at: row.get(19)?,
+                updated_at: row.get(20)?,
+                base_revision: row.get(21)?,
+                sync_state: row.get(22)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -103,6 +112,13 @@ pub struct CreateTemplateRequest {
     pub compiled_key: Option<String>,
     pub readme: Option<String>,
     pub summary: Option<String>,
+    /// The print track (LABEL_PRINTING_PLAN.md): `html` (default) or
+    /// `scene`. A `scene` row must also carry `scene_json`.
+    pub track: Option<String>,
+    /// The scene template's JSON payload (`pn_scene::Template`);
+    /// required when `track` is `scene`, ignored (stored NULL) for `html`.
+    #[serde(default)]
+    pub scene_json: Option<String>,
     /// Sync bookkeeping (Phase 3). Absent means a brand-new local row:
     /// a fresh server id and `dirty` with no server copy. A download
     /// passes the server's id, revision and `synced` state instead.
@@ -157,6 +173,35 @@ pub fn write_template(conn: &Connection, req: &CreateTemplateRequest) -> AppResu
             issues.join("; ")
         )));
     }
+    // The print track (LABEL_PRINTING_PLAN.md): `html` rows are the
+    // existing mustache documents; `scene` rows carry a serialized
+    // pn_scene::Template, validated before the row is written.
+    let track = req.track.clone().unwrap_or_else(|| "html".to_string());
+    if track != "html" && track != "scene" {
+        return Err(AppError::Validation(format!(
+            "Invalid track '{track}'. Expected 'html' or 'scene'."
+        )));
+    }
+    let scene_json = match &req.scene_json {
+        Some(scene) if track == "scene" => {
+            let template = pn_scene::Template::from_json(scene)
+                .map_err(|e| AppError::Validation(format!("Invalid scene template: {e}")))?;
+            template
+                .validate()
+                .map_err(|e| AppError::Validation(format!("Invalid scene template: {e}")))?;
+            Some(scene.clone())
+        }
+        None => {
+            if track == "scene" {
+                return Err(AppError::Validation(
+                    "A scene template needs its scene_json payload".into(),
+                ));
+            }
+            None
+        }
+        Some(_) => None,
+    };
+
     let readme = match req.readme.clone() {
         Some(r) if !r.trim().is_empty() => {
             crate::readme::validate_readme(&r)?;
@@ -211,9 +256,10 @@ pub fn write_template(conn: &Connection, req: &CreateTemplateRequest) -> AppResu
 
     tx.execute(
         "INSERT INTO templates (name, page_w_mm, page_h_mm, orientation, html, css, compiled_css, compiled_key,
+                track, scene_json,
                 readme, summary,
                 server_id, server_revision, base_revision, sync_state, kind, owner_handle)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
         rusqlite::params![
             name,
             page_w_mm,
@@ -223,6 +269,8 @@ pub fn write_template(conn: &Connection, req: &CreateTemplateRequest) -> AppResu
             css,
             req.compiled_css.clone().unwrap_or_default(),
             req.compiled_key.clone().unwrap_or_default(),
+            track,
+            scene_json,
             readme,
             summary,
             server_id,
@@ -245,6 +293,7 @@ fn tx_guard_to_template(conn: &rusqlite::Connection, id: i64) -> rusqlite::Resul
     conn.query_row(
         "SELECT id, name, page_w_mm, page_h_mm,
                 orientation, html, css, compiled_css, compiled_key,
+                track, scene_json,
                 readme, summary, remote_id, server_id, published_at,
                 origin, origin_owner, withdrawn, created_at, updated_at,
                 base_revision, sync_state
@@ -261,18 +310,20 @@ fn tx_guard_to_template(conn: &rusqlite::Connection, id: i64) -> rusqlite::Resul
                 css: row.get(6)?,
                 compiled_css: row.get(7)?,
                 compiled_key: row.get(8)?,
-                readme: row.get(9)?,
-                summary: row.get(10)?,
-                remote_id: row.get(11)?,
-                server_id: row.get(12)?,
-                published_at: row.get(13)?,
-                origin: row.get(14)?,
-                origin_owner: row.get(15)?,
-                withdrawn: row.get::<_, i64>(16)? != 0,
-                created_at: row.get(17)?,
-                updated_at: row.get(18)?,
-                base_revision: row.get(19)?,
-                sync_state: row.get(20)?,
+                track: row.get(9)?,
+                scene_json: row.get(10)?,
+                readme: row.get(11)?,
+                summary: row.get(12)?,
+                remote_id: row.get(13)?,
+                server_id: row.get(14)?,
+                published_at: row.get(15)?,
+                origin: row.get(16)?,
+                origin_owner: row.get(17)?,
+                withdrawn: row.get::<_, i64>(18)? != 0,
+                created_at: row.get(19)?,
+                updated_at: row.get(20)?,
+                base_revision: row.get(21)?,
+                sync_state: row.get(22)?,
             })
         },
     )
@@ -290,6 +341,69 @@ pub fn get_template(db: State<DbState>, id: i64) -> AppResult<Template> {
         }
         other => other.into(),
     })
+}
+
+/// Re-save an existing scene template in place (the designer's local
+/// save, WP4). The server is html-only, so a scene row's local copy is
+/// the whole truth: the row keeps its sync bookkeeping untouched — a
+/// `dirty` scene row is invisible to the sync pull, which neither
+/// pushes it nor forgets it (forgetting only reaches `synced` rows).
+/// The scene is validated again before the row changes, the name clash
+/// check runs as in create but excluding the row itself, and the page
+/// columns re-derive from the scene's media.
+pub fn update_scene_template(
+    conn: &Connection,
+    id: i64,
+    name: &str,
+    scene_json: &str,
+) -> AppResult<Template> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(AppError::Validation("Template name required".into()));
+    }
+    let template = pn_scene::Template::from_json(scene_json)
+        .map_err(|e| AppError::Validation(format!("Invalid scene template: {e}")))?;
+    template
+        .validate()
+        .map_err(|e| AppError::Validation(format!("Invalid scene template: {e}")))?;
+
+    let clash: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM templates WHERE name = ?1 COLLATE NOCASE AND id <> ?2 AND sync_state <> 'deleted_pending'",
+        rusqlite::params![name, id],
+        |r| r.get(0),
+    )?;
+    if clash > 0 {
+        return Err(AppError::Validation(format!(
+            "A template named '{}' already exists",
+            name
+        )));
+    }
+    let (w_mm, h_mm) = crate::label_pipeline::page_mm(&template);
+    let page_w_mm = w_mm.round() as i64;
+    let page_h_mm = h_mm.round() as i64;
+    if page_w_mm <= 0 || page_h_mm <= 0 {
+        return Err(AppError::Validation(
+            "Page dimensions must be positive".into(),
+        ));
+    }
+    let orientation = if page_w_mm > page_h_mm {
+        "landscape"
+    } else {
+        "portrait"
+    };
+
+    // `track = 'scene'` keeps this path from ever overwriting an html
+    // row, even with a bogus id from a stale client.
+    let affected = conn.execute(
+        "UPDATE templates SET name = ?1, page_w_mm = ?2, page_h_mm = ?3, orientation = ?4,
+             scene_json = ?5, updated_at = datetime('now')
+         WHERE id = ?6 AND track = 'scene'",
+        rusqlite::params![name, page_w_mm, page_h_mm, orientation, scene_json, id],
+    )?;
+    if affected == 0 {
+        return Err(AppError::NotFound(format!("Scene template {id} not found")));
+    }
+    tx_guard_to_template(conn, id).map_err(Into::into)
 }
 
 #[derive(Debug, Deserialize)]

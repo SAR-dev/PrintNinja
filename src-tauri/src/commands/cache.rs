@@ -495,11 +495,14 @@ pub struct DirtyTemplate {
 }
 
 pub fn list_dirty(conn: &Connection) -> AppResult<Vec<DirtyTemplate>> {
+    // Scene rows are excluded: they are local truth on a html-only
+    // server, so a `dirty` scene row is not an unsaved draft — counting
+    // them would promise a save that cannot happen.
     let mut stmt = conn.prepare(
         "SELECT id, server_id, name, summary, page_w_mm, page_h_mm, readme,
                 html, css, base_revision
          FROM templates
-         WHERE sync_state = 'dirty'
+         WHERE sync_state = 'dirty' AND track = 'html'
          ORDER BY id",
     )?;
     let rows = stmt.query_map([], |r| {

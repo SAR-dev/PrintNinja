@@ -41,6 +41,10 @@ export interface FakeTemplateRow {
   owner_handle: string | null;
   synced_at: string | null;
   versions: FakeVersion[];
+  /** WP2: the track (html = the old mustache templates, scene = the
+   * label scene templates). */
+  track: "html" | "scene";
+  scene_json: string | null;
 }
 
 // Mirrors find_remote_refs in src-tauri/src/render/handlebars.rs:
@@ -145,6 +149,7 @@ export interface SeedTemplate {
   server_revision?: number | null;
 }
 
+import { parseScene } from "./label.js";
 import { clearAllSettings, seedTemplates } from "./store.js";
 import { createFakeLibrary, type FakeLibrary } from "./library.js";
 
@@ -197,8 +202,14 @@ export function createFakeCache() {
   const persisted = readPersistedTemplates();
   if (persisted) {
     for (const row of persisted) {
-      // Rows persisted before remote_id existed rehydrate without it.
-      templates.set(row.id, { ...row, remote_id: row.remote_id ?? null });
+      // Rows persisted before remote_id / track existed rehydrate
+      // without them.
+      templates.set(row.id, {
+        ...row,
+        remote_id: row.remote_id ?? null,
+        track: row.track === "scene" ? "scene" : "html",
+        scene_json: typeof row.scene_json === "string" ? row.scene_json : null,
+      });
       nextId = Math.max(nextId, row.id + 1);
     }
   } else {
@@ -237,6 +248,8 @@ export function createFakeCache() {
         owner_handle: null,
         synced_at: null,
         versions: [{ version_no: 1, html, css, created_by: "manual" }],
+        track: "html",
+        scene_json: null,
       });
     }
     if (templates.size > 0) {
@@ -354,6 +367,8 @@ export function createFakeCache() {
         owner_handle: null,
         synced_at: nowIso(),
         versions: [{ version_no: 1, html, css, created_by: "sync" }],
+        track: "html",
+        scene_json: null,
       };
       templates.set(row.id, row);
       report.applied_upserts += 1;
@@ -624,6 +639,8 @@ export function createFakeCache() {
           sync_state: t.sync_state,
           created_at: t.updated_at,
           updated_at: t.updated_at,
+          track: t.track,
+          scene_json: t.scene_json,
         }));
     },
 
@@ -652,6 +669,8 @@ export function createFakeCache() {
         sync_state: row.sync_state,
         created_at: row.updated_at,
         updated_at: row.updated_at,
+        track: row.track,
+        scene_json: row.scene_json,
       };
     },
 
@@ -669,6 +688,7 @@ export function createFakeCache() {
         }
       }
       const id = nextId++;
+      const track = (req["track"] as string) ?? "html";
       const html = String(req["html"] ?? "");
       const css = String(req["css"] ?? "");
       const pageW = Number(req["page_w_mm"] ?? 210);
@@ -692,8 +712,103 @@ export function createFakeCache() {
         owner_handle: (req["owner_handle"] as string) ?? null,
         synced_at: null,
         versions: [{ version_no: 1, html, css, created_by: "manual" }],
+        track: track === "scene" ? "scene" : "html",
+        scene_json: track === "scene" ? String(req["scene_json"] ?? "") : null,
       };
       templates.set(id, row);
+      persist();
+      return row;
+    },
+
+    /** label_save_template (no id): a scene row. The page geometry
+     * follows the scene's media, like the Rust write_template. */
+    createSceneTemplate(name: string, sceneJson: string): FakeTemplateRow {
+      const n = name.trim();
+      if (!n) {
+        throw new Error("Template name required");
+      }
+      for (const t of templates.values()) {
+        if (
+          t.sync_state !== "deleted_pending" &&
+          t.name.toLowerCase() === n.toLowerCase()
+        ) {
+          throw new Error(`A template named '${n}' already exists`);
+        }
+      }
+      const scene = parseScene(sceneJson);
+      const id = nextId++;
+      const w = Math.round(scene.media.width_mm);
+      const h = Math.round(
+        scene.media.kind === "roll"
+          ? (scene.media.label_height_mm ?? 0)
+          : (scene.media.height_mm ?? 0),
+      );
+      const row: FakeTemplateRow = {
+        id,
+        // Rust mints a fresh server id for brand-new local rows.
+        server_id: crypto.randomUUID(),
+        remote_id: null,
+        name: n,
+        summary: "",
+        page_w: w,
+        page_h: h,
+        orientation: w > h ? "landscape" : "portrait",
+        readme: "",
+        published_at: null,
+        updated_at: nowIso(),
+        server_revision: null,
+        base_revision: null,
+        sync_state: "dirty",
+        kind: "own",
+        owner_handle: null,
+        synced_at: null,
+        versions: [{ version_no: 1, html: "", css: "", created_by: "manual" }],
+        track: "scene",
+        scene_json: sceneJson,
+      };
+      templates.set(id, row);
+      persist();
+      return row;
+    },
+
+    /** label_save_template (with id): rename / re-save the scene of an
+     * existing scene row. */
+    updateSceneTemplate(
+      id: number,
+      name: string,
+      sceneJson: string,
+    ): FakeTemplateRow {
+      const row = findRow(id);
+      if (row.track !== "scene") {
+        throw new Error(
+          `Template ${id} is on the '${row.track}' track; the label commands take scene templates`,
+        );
+      }
+      const n = name.trim();
+      if (!n) {
+        throw new Error("Template name required");
+      }
+      for (const t of templates.values()) {
+        if (
+          t.id !== id &&
+          t.sync_state !== "deleted_pending" &&
+          t.name.toLowerCase() === n.toLowerCase()
+        ) {
+          throw new Error(`A template named '${n}' already exists`);
+        }
+      }
+      const scene = parseScene(sceneJson);
+      row.name = n;
+      row.scene_json = sceneJson;
+      row.page_w = Math.round(scene.media.width_mm);
+      row.page_h = Math.round(
+        scene.media.kind === "roll"
+          ? (scene.media.label_height_mm ?? 0)
+          : (scene.media.height_mm ?? 0),
+      );
+      row.orientation = row.page_w > row.page_h ? "landscape" : "portrait";
+      row.updated_at = nowIso();
+      row.sync_state = "dirty";
       persist();
       return row;
     },

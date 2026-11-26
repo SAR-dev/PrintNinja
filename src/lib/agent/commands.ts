@@ -17,11 +17,19 @@ import type {
   FixReport,
   FontRow,
   HistoryJob,
+  LabelJobReq,
+  LabelPrepareResponse,
+  LabelPreviewReq,
+  LabelPrintResponse,
+  LabelSaveTemplateReq,
   PrintHtmlReq,
   PrinterRow,
   PrintResponse,
+  ProfileChoice,
+  ProfileInfo,
   ProfileRow,
   ProbeCapabilitiesResult,
+  RawSendReport,
   PairedDevice,
   PairingInvite,
   NewPairingInvite,
@@ -40,6 +48,7 @@ import type {
   ResetReport,
   SaveDatasetReq,
   SaveProfileReq,
+  SymbolEncoding,
   SyncStateRow,
   SyncedDatasetRow,
   SystemPrinterRow,
@@ -174,6 +183,25 @@ export interface AgentCommands {
     null,
   ];
   test_printer: [{ id: number; kind?: "page" | "text" }, null];
+  /**
+   * Raw console (developer tools): send the given bytes to the printer on
+   * its real send path. `data_base64` is the decoded payload; each option
+   * left out (or the whole object `null`) falls back to the stored
+   * per-printer value, then the built-in default — the report's
+   * `effectiveOptions` says what actually ran.
+   */
+  send_raw_bytes: [
+    {
+      printer_id: number;
+      data_base64: string;
+      options?: {
+        chunkBytes?: number;
+        chunkPauseMs?: number;
+        settleMs?: number;
+      } | null;
+    },
+    RawSendReport,
+  ];
   /**
    * What the printer speaks, asked before its row is saved (never an
    * error: a silent or refusing query comes back `detected: false`).
@@ -339,6 +367,26 @@ export interface AgentCommands {
     PeerCapabilities,
   ];
   peer_render_request: [{ req: PeerRenderArgs }, PeerRenderResult];
+  // Label track (LABEL_PRINTING_PLAN.md): the scene (label) templates
+  // print onto the label printers; the mustache (document) track is
+  // untouched and keeps its own commands.
+  label_save_template: [{ req: LabelSaveTemplateReq }, TemplateRow];
+  label_prepare: [{ req: LabelJobReq }, LabelPrepareResponse];
+  label_print: [{ req: LabelJobReq }, LabelPrintResponse];
+  label_list_profiles: [{}, ProfileInfo[]];
+  /** Set (or clear, `profile_id: null`) the model a saved label printer
+   * prints scene jobs with; returns the effective choice. */
+  label_set_printer_profile: [
+    { printer_id: number; profile_id: string | null },
+    ProfileChoice,
+  ];
+  /** Preview an unsaved scene straight from the designer: same answer
+   * as `label_prepare`, minus the template row. */
+  label_preview: [{ req: LabelPreviewReq }, LabelPrepareResponse];
+  /** Encode a barcode/QR the way the renderer draws it, for the
+   * designer's canvas; `null` when the value cannot be encoded in that
+   * symbology. */
+  label_encode_symbol: [{ kind: string; value: string }, SymbolEncoding | null];
   // Misc
   ping: [{}, null];
   parse_deeplink: [{ url: string }, DeeplinkResult];

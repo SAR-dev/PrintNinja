@@ -1,0 +1,11 @@
+[package]
+name = "pn-planner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+pn-encoders = { path = "../encoders" }
+pn-profiles = { path = "../profiles" }
+pn-scene = { path = "../scene" }
+thiserror = { workspace = true }

@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Link } from "react-router-dom";
 import {
   Select,
   SelectContent,
@@ -25,6 +27,7 @@ import { describeError } from "@/lib/errors";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { diagnostics } from "@/lib/diagnostics";
 import { readCachedSetting, readSetting, writeSetting } from "@/lib/settings";
+import { DEV_TOOLS_SETTING, useDeveloperTools } from "@/lib/devtools";
 import { PrintRepairCard } from "./PrintRepairCard";
 
 const BROWSER_CHOICES = ["auto", "system", "shell", "custom"];
@@ -48,6 +51,9 @@ export function DiagnosticsSection({
   recheckEngine: () => Promise<RenderEngineStatus | null>;
 }) {
   const { t } = useTranslation();
+  // Developer tools toggle: the route at /raw-console renders only while
+  // this is on, and both read the same setting through the same hook.
+  const devToolsOn = useDeveloperTools();
 
   // The engine line and the browser choice only make sense where the app
   // renders locally (Windows or Linux); "other" platforms delegate.
@@ -288,6 +294,36 @@ export function DiagnosticsSection({
           <p className="text-xs text-muted-foreground">
             {t("settings_page.diag_note")}
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            {t("raw_console.settings_title")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            {t("raw_console.settings_hint")}
+          </p>
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="settings-diag-devtools">
+              {t("raw_console.settings_title")}
+            </Label>
+            <Switch
+              id="settings-diag-devtools"
+              checked={devToolsOn}
+              onCheckedChange={(v) =>
+                void writeSetting(DEV_TOOLS_SETTING, v ? "true" : "false")
+              }
+            />
+          </div>
+          {devToolsOn && (
+            <Button asChild variant="outline" size="sm">
+              <Link to="/raw-console">{t("raw_console.settings_open")}</Link>
+            </Button>
+          )}
         </CardContent>
       </Card>
 

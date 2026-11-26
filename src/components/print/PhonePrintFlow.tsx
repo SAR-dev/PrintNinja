@@ -31,6 +31,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { ExitViaPcButton } from "@/components/ExitViaPcButton";
 import { PrintPreview } from "@/components/PrintPreview";
+import { SceneBitmapPreview } from "@/pages/designer/scene/SceneBitmapPreview";
 import { MM_TO_PX } from "@/lib/render/paginate";
 import { renderDesignPagesRust } from "@/lib/render/rustPreview";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,7 @@ import { ReadyChip } from "@/components/print/ReadyChip";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
 import type { TemplateListRow } from "@/lib/templates/listTemplates";
 import type {
+  LabelPreview,
   PcPrinterInfo,
   PcTemplateInfo,
   RenderPair,
@@ -75,13 +77,21 @@ interface PhonePrintFlowProps {
   onPickViaPcDevice: (id: string) => void;
   onExitViaPc: () => void;
 
+  /** The printer choices: all printers for an HTML template, only
+   * saved label printers for a scene one. */
   printers: PrintPagePrinter[];
+  /** True when the list is the scene track's filtered one — its empty
+   * state names the missing saved label printers specifically. */
+  labelOnly: boolean;
   templates: TemplateListRow[];
   onPrinterChange: (name: string) => void;
   onRefreshPrinters: () => void;
   refreshingPrinters: boolean;
 
   previewPages: string[];
+  /** The scene track's prepared preview (1-bit sheets), or null for
+   * the html track and while nothing is prepared. */
+  scenePreviews: LabelPreview[] | null;
   previewError: string;
   previewNotice: string;
   previewTemplate: TemplateListRow | undefined;
@@ -435,7 +445,9 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
                   <>
                     {props.printers.length === 0 && (
                       <SelectItem value="none" disabled>
-                        {t("print.no_printers")}
+                        {props.labelOnly
+                          ? t("print.no_label_printers")
+                          : t("print.no_printers")}
                       </SelectItem>
                     )}
                     {props.printers.map((p) => (
@@ -651,6 +663,18 @@ export function PhonePrintFlow(props: PhonePrintFlowProps) {
             <p className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning">
               {props.previewError}
             </p>
+          ) : props.scenePreviews && props.scenePreviews.length > 0 ? (
+            <div
+              className={cn(
+                "overflow-auto rounded-md border bg-muted p-4",
+                previewExpanded ? "max-h-sheet-lg" : "max-h-sheet-sm",
+              )}
+              tabIndex={0}
+              role="region"
+              aria-label={t("print.preview_region")}
+            >
+              <SceneBitmapPreview previews={props.scenePreviews} />
+            </div>
           ) : props.previewPages.length > 0 ? (
             <div
               className={cn(

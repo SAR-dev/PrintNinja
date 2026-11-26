@@ -43,6 +43,11 @@ pub struct PrintJob {
     /// Per-stage timing breakdown as JSON (`StageTimings`), `None` for a job
     /// that has not run yet or ran before timings were recorded.
     pub timings_json: Option<String>,
+    /// The label track's honest delivery word (LABEL_PRINTING_PLAN.md,
+    /// WP5): `confirmed`, `sent_unconfirmed`, `partially_printed`, `failed`
+    /// or `wrong_mode_suspected`. `None` for document jobs and for label
+    /// jobs that died before delivery.
+    pub result: Option<String>,
 }
 
 // The command bodies live in `*_conn` functions that take the shared
@@ -239,7 +244,7 @@ const SELECT_JOB_COLUMNS: &str = "SELECT print_jobs.id, batch_id, record_index, 
             copies, settings_json, rendered_html, idempotency_key, is_test,
             started_at, finished_at, duration_ms, timings_json, requested_by_device_id,
             template_revision, printed_by,
-            p.type AS printer_type, p.via_driver AS via_driver
+            p.type AS printer_type, p.via_driver AS via_driver, result
      FROM print_jobs
      LEFT JOIN printers p ON p.id = print_jobs.printer_id";
 
@@ -268,5 +273,6 @@ fn map_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrintJob> {
         printed_by: row.get(20)?,
         printer_type: row.get(21)?,
         via_driver: row.get(22)?,
+        result: row.get(23)?,
     })
 }

@@ -1,0 +1,35 @@
+# Mined from the current app (TSPL family): src-tauri/src/transport/
+# label_langs.rs:114-153, status.rs:242-278. App path is a 1-bit
+# BITMAP; density/speed are per-row tuning (tspl.density 0..=15,
+# tspl.speed 1..=10). Default gap 2.0 mm (src-tauri/src/db/mod.rs:514).
+
+[profile]
+model = "TTP-244 Pro"
+aliases = ["tsc ttp-244"]
+status = "untested"
+language = "tspl"
+dpi = 203
+head_width_dots = 812
+media = ["label"]
+min_gap_dots = 16
+
+[fonts]
+native = ["2"]
+unicode_native = false
+
+[delivery]
+chunk_bytes = 512
+pause_ms = 50
+close_delay_ms = 0
+flow_control = "none"
+keep_open_for_status = true
+
+[[quirks]]
+id = "status-dialect"
+note = "TSPL status: query ESC ! ? ([0x1B, 0x21, 0x3F]), reply is exactly one status byte - 0x01 head open, 0x02 jam, 0x04 paper out, 0x08 ribbon out, 0x10 paused, 0x40 cover open, 0x80 error; 0x20 (printing) is NOT a fault; any non-empty reply counts as answered"
+evidence = "src-tauri/src/transport/status.rs:242-278"
+
+[[quirks]]
+id = "media-per-roll"
+note = "Roll sensor type changes the job header: gap media -> GAP <gap> mm,0 mm (default), black mark -> BLINE, continuous -> GAP 0 mm,0 mm; it is a per-roll property, not a model property"
+evidence = "src-tauri/src/transport/label_langs.rs:114-153"

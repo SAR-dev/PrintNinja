@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,6 +187,189 @@ impl BluetoothDelivery {
             _ => Self::default(),
         }
     }
+}
+
+/// The largest post-write settle the raw console will honor, in
+/// milliseconds. Beyond it a label printer is just sitting there and a
+/// receipt printer has moved on to the next customer, so bigger values
+/// are clamped rather than honored.
+pub const MAX_SETTLE_MS: u32 = 10_000;
+
+/// Raw console options exactly as the operator sent them: each value
+/// unset means the printer row's stored value, or the transport's
+/// built-in behavior where the row stores none (the settle on Android).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct RawSendOptions {
+    /** Bytes per write; clamped to the Bluetooth chunk bounds. */
+    pub chunk_bytes: Option<u32>,
+    /** Pause between writes, in ms; clamped to the Bluetooth pause bound. */
+    pub chunk_pause_ms: Option<u32>,
+    /** Wait between the last byte and the close, in ms; clamped to `MAX_SETTLE_MS`. */
+    pub settle_ms: Option<u32>,
+}
+
+/// One raw console send's delivery, resolved and clamped: the operator's
+/// override where given, else the printer row's stored pace, else the
+/// built-in default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RawDelivery {
+    /** Bytes per write, within the Bluetooth chunk bounds. */
+    pub chunk_bytes: u32,
+    /** Pause between writes, in ms, within the Bluetooth pause bound. */
+    pub chunk_pause_ms: u32,
+    /** The requested post-write settle, or `None` for the transport's
+     * built-in behavior (an immediate close on desktop, the size-based
+     * delay on Android). */
+    pub settle_override_ms: Option<u32>,
+}
+
+impl RawDelivery {
+    /// Resolve the operator's options against the row's stored pace.
+    ///
+    /// Overrides are clamped to the same bounds `BluetoothDelivery::validate`
+    /// enforces for stored values; a bad number narrows the experiment, it
+    /// never breaks a send.
+    pub fn resolve(options: &RawSendOptions, stored: BluetoothDelivery) -> Self {
+        Self {
+            chunk_bytes: options
+                .chunk_bytes
+                .map(|v| {
+                    v.clamp(
+                        BluetoothDelivery::MIN_CHUNK_BYTES,
+                        BluetoothDelivery::MAX_CHUNK_BYTES,
+                    )
+                })
+                .unwrap_or(stored.chunk_bytes),
+            chunk_pause_ms: options
+                .chunk_pause_ms
+                .map(|v| v.min(BluetoothDelivery::MAX_PAUSE_MS))
+                .unwrap_or(stored.chunk_pause_ms),
+            settle_override_ms: options.settle_ms.map(|v| v.min(MAX_SETTLE_MS)),
+        }
+    }
+
+    /// The settle a desktop raw transport applies: the override, or an
+    /// immediate close when none was given (today's behavior).
+    pub fn desktop_settle_ms(&self) -> u32 {
+        self.settle_override_ms.unwrap_or(0)
+    }
+}
+
+/// What one raw console send actually did: the delivery values the
+/// transport applied and the wall time of each stage. The command reads
+/// the snapshot back into its report; a normal print job carries no
+/// recorder, so none of this runs on that path.
+///
+/// `Arc` because the recorder is shared with the transport's worker
+/// thread (blocking sends record from `spawn_blocking`) while the command
+/// reads after the send resolves.
+#[derive(Debug, Clone, Default)]
+pub struct RawRecorder(Arc<Mutex<RawRecorderInner>>);
+
+#[derive(Debug, Default)]
+struct RawRecorderInner {
+    open_ms: Option<u64>,
+    write_ms: Option<u64>,
+    settle_ms: Option<u64>,
+    close_ms: Option<u64>,
+    chunk_bytes: Option<u32>,
+    chunk_pause_ms: Option<u32>,
+    settle_ms_applied: Option<u32>,
+}
+
+impl RawRecorder {
+    pub fn record_open(&self, ms: u64) {
+        self.0.lock().unwrap().open_ms = Some(ms);
+    }
+
+    pub fn record_write(&self, ms: u64) {
+        self.0.lock().unwrap().write_ms = Some(ms);
+    }
+
+    pub fn record_settle(&self, ms: u64) {
+        self.0.lock().unwrap().settle_ms = Some(ms);
+    }
+
+    pub fn record_close(&self, ms: u64) {
+        self.0.lock().unwrap().close_ms = Some(ms);
+    }
+
+    /// The delivery values the transport actually applied.
+    pub fn record_effective(&self, chunk_bytes: u32, chunk_pause_ms: u32, settle_ms: u32) {
+        let mut inner = self.0.lock().unwrap();
+        inner.chunk_bytes = Some(chunk_bytes);
+        inner.chunk_pause_ms = Some(chunk_pause_ms);
+        inner.settle_ms_applied = Some(settle_ms);
+    }
+
+    /// Per-stage wall times, in ms; a stage the transport never ran stays
+    /// `None` rather than reporting a fake zero.
+    pub fn timings(&self) -> RawSendTimings {
+        let inner = self.0.lock().unwrap();
+        RawSendTimings {
+            open: inner.open_ms,
+            write: inner.write_ms,
+            settle: inner.settle_ms,
+            close: inner.close_ms,
+        }
+    }
+
+    /// The applied delivery values, or `None` until the transport
+    /// recorded them.
+    pub fn effective(&self) -> Option<RawSendOptions> {
+        let inner = self.0.lock().unwrap();
+        match (
+            inner.chunk_bytes,
+            inner.chunk_pause_ms,
+            inner.settle_ms_applied,
+        ) {
+            (Some(chunk), Some(pause), Some(settle)) => Some(RawSendOptions {
+                chunk_bytes: Some(chunk),
+                chunk_pause_ms: Some(pause),
+                settle_ms: Some(settle),
+            }),
+            _ => None,
+        }
+    }
+}
+
+/// A raw console send riding on an otherwise-normal job: the resolved
+/// delivery and the recorder the transport fills in. `None` — every
+/// ordinary print — leaves the transport's behavior unchanged.
+#[derive(Debug, Clone)]
+pub struct RawSend {
+    pub delivery: RawDelivery,
+    pub recorder: RawRecorder,
+}
+
+/// Per-stage wall times of one raw console send, in milliseconds. A stage
+/// the transport never ran stays `None` rather than reporting a fake zero.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RawSendTimings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub write: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settle: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub close: Option<u64>,
+}
+
+/// What the raw console told the operator happened.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RawSendReport {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub bytes_sent: u64,
+    pub timings_ms: RawSendTimings,
+    /// The option values that were actually applied, so the UI can show
+    /// when a transport ignored an override.
+    pub effective_options: RawSendOptions,
 }
 
 /// Payloads larger than this cross the Rust→Kotlin bridge by file
@@ -410,6 +594,10 @@ pub struct RenderedJob {
     /// printer is asked whether it can actually print. `Pdf` — the language
     /// of a printer row that carries none — asks nothing.
     pub language: PrinterLanguage,
+    /// A raw console send: pacing/settle overrides and the recorder the
+    /// transport fills with what it actually applied. `None` — every
+    /// ordinary print — changes nothing the transport does.
+    pub raw: Option<RawSend>,
 }
 
 #[async_trait]
@@ -994,6 +1182,7 @@ mod tests {
             mime_type: "application/pdf".into(),
             copies: 1,
             language: PrinterLanguage::Pdf,
+            raw: None,
         };
         // No IPP server on the loopback test port: must be Err, not Ok.
         assert!(t.send(job).await.is_err());
@@ -1139,6 +1328,7 @@ mod tests {
                 mime_type: "application/octet-stream".into(),
                 copies: 1,
                 language: PrinterLanguage::Escpos,
+                raw: None,
             },
             &TransportSettings::default(),
         )
@@ -1187,6 +1377,7 @@ mod tests {
                 mime_type: "application/octet-stream".into(),
                 copies: 1,
                 language: PrinterLanguage::Escpos,
+                raw: None,
             },
             &TransportSettings::default(),
         )
@@ -1263,6 +1454,7 @@ mod tests {
                 mime_type: "application/octet-stream".into(),
                 copies: 1,
                 language: PrinterLanguage::Escpos,
+                raw: None,
             },
             &TransportSettings {
                 via_driver: true,
@@ -1357,5 +1549,97 @@ mod tests {
         }
         .validate()
         .is_ok());
+    }
+
+    #[test]
+    fn raw_options_unset_keep_the_stored_pace() {
+        let stored = BluetoothDelivery {
+            chunk_bytes: 256,
+            chunk_pause_ms: 100,
+        };
+        let d = RawDelivery::resolve(&RawSendOptions::default(), stored);
+        assert_eq!(d.chunk_bytes, 256);
+        assert_eq!(d.chunk_pause_ms, 100);
+        assert_eq!(d.settle_override_ms, None);
+        assert_eq!(
+            d.desktop_settle_ms(),
+            0,
+            "no override means today's immediate close"
+        );
+    }
+
+    #[test]
+    fn raw_options_unset_keep_the_built_in_pace() {
+        let d = RawDelivery::resolve(&RawSendOptions::default(), BluetoothDelivery::default());
+        assert_eq!(d.chunk_bytes, 512);
+        assert_eq!(d.chunk_pause_ms, 50);
+    }
+
+    #[test]
+    fn raw_overrides_win_but_are_clamped_to_the_bluetooth_bounds() {
+        let d = RawDelivery::resolve(
+            &RawSendOptions {
+                chunk_bytes: Some(1),
+                chunk_pause_ms: Some(u32::MAX),
+                settle_ms: Some(u32::MAX),
+            },
+            BluetoothDelivery::default(),
+        );
+        assert_eq!(d.chunk_bytes, BluetoothDelivery::MIN_CHUNK_BYTES);
+        assert_eq!(d.chunk_pause_ms, BluetoothDelivery::MAX_PAUSE_MS);
+        assert_eq!(d.settle_override_ms, Some(MAX_SETTLE_MS));
+    }
+
+    #[test]
+    fn raw_overrides_at_the_bounds_pass_through() {
+        let d = RawDelivery::resolve(
+            &RawSendOptions {
+                chunk_bytes: Some(BluetoothDelivery::MAX_CHUNK_BYTES),
+                chunk_pause_ms: Some(0),
+                settle_ms: Some(300),
+            },
+            BluetoothDelivery::default(),
+        );
+        assert_eq!(d.chunk_bytes, BluetoothDelivery::MAX_CHUNK_BYTES);
+        assert_eq!(d.chunk_pause_ms, 0);
+        assert_eq!(d.settle_override_ms, Some(300));
+        assert_eq!(d.desktop_settle_ms(), 300);
+    }
+
+    #[test]
+    fn raw_recorder_round_trips_and_stays_none_where_unused() {
+        let r = RawRecorder::default();
+        assert_eq!(r.effective(), None, "nothing applied yet");
+        assert_eq!(
+            r.timings(),
+            RawSendTimings {
+                open: None,
+                write: None,
+                settle: None,
+                close: None,
+            }
+        );
+        r.record_open(12);
+        r.record_write(340);
+        r.record_settle(299);
+        r.record_close(1);
+        r.record_effective(256, 100, 300);
+        assert_eq!(
+            r.effective(),
+            Some(RawSendOptions {
+                chunk_bytes: Some(256),
+                chunk_pause_ms: Some(100),
+                settle_ms: Some(300),
+            })
+        );
+        assert_eq!(
+            r.timings(),
+            RawSendTimings {
+                open: Some(12),
+                write: Some(340),
+                settle: Some(299),
+                close: Some(1),
+            }
+        );
     }
 }

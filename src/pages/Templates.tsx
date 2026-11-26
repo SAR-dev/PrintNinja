@@ -5,13 +5,17 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   Bookmark,
   BookmarkCheck,
+  ChevronDown,
   CloudUpload,
   CopyPlus,
   Eye,
+  FileText,
   MoreHorizontal,
   Pencil,
+  Plus,
   Printer,
   RefreshCw,
+  Sticker,
   Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -86,6 +90,23 @@ function matchesSearch(row: TemplateRow, raw: string): boolean {
     row.name.toLowerCase().includes(q) ||
     row.summary.toLowerCase().includes(q) ||
     (row.origin_owner ?? "").toLowerCase().includes(q)
+  );
+}
+
+/**
+ * The print track as a badge: scene rows are labels, everything else is
+ * a document (the track follows the printer class, PLAN WP4).
+ */
+function TrackBadge({ track }: { track: string }) {
+  const { t } = useTranslation();
+  return track === "scene" ? (
+    <Badge variant="default" className="shrink-0">
+      {t("templates.badge_label")}
+    </Badge>
+  ) : (
+    <Badge variant="secondary" className="shrink-0">
+      {t("templates.badge_document")}
+    </Badge>
   );
 }
 
@@ -333,12 +354,20 @@ export function TemplatesPage() {
     if (syncing != null) return;
     setSyncing(tpl.id);
     try {
-      // Server first, then the cache: offline the button that opens this
-      // dialog is disabled, so there is no queue to drain later.
-      await deleteTemplateEverywhere(tpl);
-      notifySuccess(
-        t("templates.toast_deleted_everywhere", { name: tpl.name }),
-      );
+      if (tpl.track === "scene") {
+        // Scene rows are local-only (the server is html-only): their
+        // server id is a placeholder that no copy exists behind, so the
+        // delete is a straight local row removal, online or offline.
+        await agent("delete_template", { id: tpl.id });
+        notifySuccess(t("templates.toast_deleted_local", { name: tpl.name }));
+      } else {
+        // Server first, then the cache: offline the button that opens
+        // this dialog is disabled, so there is no queue to drain later.
+        await deleteTemplateEverywhere(tpl);
+        notifySuccess(
+          t("templates.toast_deleted_everywhere", { name: tpl.name }),
+        );
+      }
       await loadMine();
     } catch (e) {
       notifyError(describeError(e));
@@ -557,7 +586,10 @@ export function TemplatesPage() {
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold">{tpl.name}</p>
+            <div className="flex items-center gap-2">
+              <p className="truncate font-semibold">{tpl.name}</p>
+              <TrackBadge track={tpl.track} />
+            </div>
             <p className="truncate text-xs text-muted-foreground">
               {tpl.summary || t("templates.no_summary")}
             </p>
@@ -565,20 +597,27 @@ export function TemplatesPage() {
           {cardMenu(
             tpl.name,
             <>
-              <DropdownMenuItem
-                disabled={syncing != null}
-                onSelect={() => handleSaveToServer(tpl)}
-              >
-                <CloudUpload className="h-4 w-4" aria-hidden="true" />
-                {t("templates.action_save_server", { name: tpl.name })}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={syncing != null}
-                onSelect={() => setRefreshTarget(tpl)}
-              >
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                {t("templates.action_refresh_server", { name: tpl.name })}
-              </DropdownMenuItem>
+              {/* Scene rows are local-only: no server copy to save or
+                  refresh, so the sync actions only offer the document
+                  track. */}
+              {tpl.track !== "scene" && (
+                <>
+                  <DropdownMenuItem
+                    disabled={syncing != null}
+                    onSelect={() => handleSaveToServer(tpl)}
+                  >
+                    <CloudUpload className="h-4 w-4" aria-hidden="true" />
+                    {t("templates.action_save_server", { name: tpl.name })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={syncing != null}
+                    onSelect={() => setRefreshTarget(tpl)}
+                  >
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                    {t("templates.action_refresh_server", { name: tpl.name })}
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuItem
                 onSelect={() => navigate(`/template/${tpl.id}`)}
               >
@@ -595,7 +634,9 @@ export function TemplatesPage() {
                 className="text-danger focus:text-danger"
               >
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
-                {t("templates.action_delete_everywhere", { name: tpl.name })}
+                {tpl.track === "scene"
+                  ? t("templates.action_delete", { name: tpl.name })
+                  : t("templates.action_delete_everywhere", { name: tpl.name })}
               </DropdownMenuItem>
             </>,
           )}
@@ -693,7 +734,10 @@ export function TemplatesPage() {
               heightMm={c.row.original.page_h_mm}
             />
             <div className="min-w-0">
-              <p className="truncate font-medium">{c.row.original.name}</p>
+              <div className="flex items-center gap-2">
+                <p className="truncate font-medium">{c.row.original.name}</p>
+                <TrackBadge track={c.row.original.track} />
+              </div>
               <p className="truncate text-xs text-muted-foreground">
                 {c.row.original.summary || t("templates.no_summary")}
               </p>
@@ -766,29 +810,40 @@ export function TemplatesPage() {
               {cardMenu(
                 tpl.name,
                 <>
-                  <DropdownMenuItem
-                    disabled={syncing != null}
-                    onSelect={() => handleSaveToServer(tpl)}
-                  >
-                    <CloudUpload className="h-4 w-4" aria-hidden="true" />
-                    {t("templates.action_save_server", { name: tpl.name })}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={syncing != null}
-                    onSelect={() => setRefreshTarget(tpl)}
-                  >
-                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                    {t("templates.action_refresh_server", { name: tpl.name })}
-                  </DropdownMenuItem>
+                  {/* Scene rows are local-only: no server copy to save or
+                      refresh, so the sync actions only offer the document
+                      track. */}
+                  {tpl.track !== "scene" && (
+                    <>
+                      <DropdownMenuItem
+                        disabled={syncing != null}
+                        onSelect={() => handleSaveToServer(tpl)}
+                      >
+                        <CloudUpload className="h-4 w-4" aria-hidden="true" />
+                        {t("templates.action_save_server", { name: tpl.name })}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={syncing != null}
+                        onSelect={() => setRefreshTarget(tpl)}
+                      >
+                        <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                        {t("templates.action_refresh_server", {
+                          name: tpl.name,
+                        })}
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   <DropdownMenuItem
                     disabled={syncing != null}
                     onSelect={() => setDeleteTarget(tpl)}
                     className="text-danger focus:text-danger"
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
-                    {t("templates.action_delete_everywhere", {
-                      name: tpl.name,
-                    })}
+                    {tpl.track === "scene"
+                      ? t("templates.action_delete", { name: tpl.name })
+                      : t("templates.action_delete_everywhere", {
+                          name: tpl.name,
+                        })}
                   </DropdownMenuItem>
                 </>,
               )}
@@ -890,6 +945,32 @@ export function TemplatesPage() {
   return (
     <div className="space-y-4">
       <PageHeader title={t("nav.templates")} description={t("pages.templates")}>
+        {/* New templates are created in the Designer (PLAN §6, D4); the
+            dropdown picks the track and deep-links to its create dialog. */}
+        {!isPhone && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                {t("templates.new")}
+                <ChevronDown
+                  className="h-4 w-4 opacity-50"
+                  aria-hidden="true"
+                />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => navigate("/?new=scene")}>
+                <Sticker className="h-4 w-4" aria-hidden="true" />
+                {t("templates.new_label")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => navigate("/?new=document")}>
+                <FileText className="h-4 w-4" aria-hidden="true" />
+                {t("templates.new_document")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <RefreshButton />
       </PageHeader>
 
@@ -1157,10 +1238,16 @@ export function TemplatesPage() {
         }}
         title={
           deleteTarget
-            ? t("templates.delete_title", { name: deleteTarget.name })
+            ? deleteTarget.track === "scene"
+              ? t("templates.delete_title_local", { name: deleteTarget.name })
+              : t("templates.delete_title", { name: deleteTarget.name })
             : ""
         }
-        description={t("templates.delete_body")}
+        description={
+          deleteTarget?.track === "scene"
+            ? t("templates.delete_body_local")
+            : t("templates.delete_body")
+        }
         confirmLabel={t("templates.delete_confirm")}
         destructive
         busy={syncing === deleteTarget?.id}

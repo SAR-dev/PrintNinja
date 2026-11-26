@@ -40,7 +40,8 @@ export function JobCard({
   changePcTemplate,
   changeTemplate,
   templates,
-  printers,
+  pickerPrinters,
+  labelOnly,
   onPrinterChange,
   loadPrinters,
   refreshingPrinters,
@@ -73,7 +74,13 @@ export function JobCard({
   changePcTemplate: (serverId: string) => void;
   changeTemplate: (id: string) => void;
   templates: TemplateListRow[];
-  printers: PrintPagePrinter[];
+  /** The printer choices: all printers for an HTML template, only
+   * saved label printers for a scene one (the job plans against the
+   * saved row's profile). */
+  pickerPrinters: PrintPagePrinter[];
+  /** True when the list is the scene track's filtered one — its empty
+   * state names the missing saved label printers specifically. */
+  labelOnly: boolean;
   onPrinterChange: (name: string) => void;
   loadPrinters: () => void;
   refreshingPrinters: boolean;
@@ -177,12 +184,14 @@ export function JobCard({
                 </>
               ) : (
                 <>
-                  {printers.length === 0 && (
+                  {pickerPrinters.length === 0 && (
                     <SelectItem value="none" disabled>
-                      {t("print.no_printers")}
+                      {labelOnly
+                        ? t("print.no_label_printers")
+                        : t("print.no_printers")}
                     </SelectItem>
                   )}
-                  {printers.map((p) => (
+                  {pickerPrinters.map((p) => (
                     <SelectItem key={p.id} value={p.name}>
                       {p.name}
                     </SelectItem>

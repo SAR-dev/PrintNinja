@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowLeftRight, FileText, Plus } from "lucide-react";
+import { ArrowLeftRight, FileText } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   Accordion,
@@ -27,9 +27,6 @@ interface Props<
   templates: T[];
   currentTemplateId: number | null;
   loadTemplate: (tpl: T) => void;
-  /** Open the New-template dialog. Shown as the empty state when there
-   * is no template to list yet. */
-  onNew?: () => void;
   templateName: string;
   setTemplateName: (v: string) => void;
   pageWidth: number;
@@ -68,7 +65,6 @@ export function ControlsAccordion<
   templates,
   currentTemplateId,
   loadTemplate,
-  onNew,
   templateName,
   setTemplateName,
   pageWidth,
@@ -145,17 +141,6 @@ export function ControlsAccordion<
                 <p className="text-xs text-muted-foreground">
                   {t("designer.no_templates_yet")}
                 </p>
-                {onNew && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={onNew}
-                  >
-                    <Plus className="h-4 w-4" aria-hidden="true" />
-                    {t("designer.newTemplate")}
-                  </Button>
-                )}
               </div>
             ) : (
               templateGroups

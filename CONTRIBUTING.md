@@ -66,7 +66,7 @@ You do not have to know how it could be built. Describing the problem is the mos
 
 Printers are all a little different, and we cannot own every model. If you have a receipt, label or office printer, you can help by trying it out and telling us what happened, good or bad.
 
-- 📋 The [real-printer test checklist](docs/todo/TEST_CHECKLIST.md) lists simple things to print (text, a barcode, an image, a long job). It has not been run on real hardware yet, so your results are valuable.
+- 📋 The [real-printer test checklist](docs/TEST_CHECKLIST.md) lists simple things to print (text, a barcode, an image, a long job). It has not been run on real hardware yet, so your results are valuable.
 
 When you report back, say which printer you used, how it was connected and which of the checks worked. A short "it worked" is useful too! 🎉
 
@@ -136,9 +136,9 @@ For the share service, copy `server/env.example` to `server/.env` and run `pnpm 
 | OpenAPI | `pnpm --filter server openapi:generate`, then confirm `server/openapi/openapi.json` is unchanged |
 | End to end | `pnpm e2e` (starts its own local servers and SQLite files, no Docker) |
 
-`pnpm test:rust` runs the whole Rust suite in a Linux container (`src-tauri/Dockerfile.test`). Prefer it over local `cargo test`: the debug build of this crate peaks near 1.5 GB of RAM per job and the container caps jobs and memory, so a run that would pressure the host fails fast inside the box instead. It also runs on Linux, where the PDFium tests exercise the vendored `libpdfium.so` instead of self-skipping. `pnpm test:rust:report` writes a JUnit file instead; any other cargo subcommand can be passed after it.
+`pnpm test:rust` runs the whole Rust suite in a Linux container (`src-tauri/Dockerfile.test`). Prefer it over local `cargo test`: the debug build of this crate peaks near 1.5 GB of RAM per job and the container caps jobs and memory, so a run that would pressure the host fails fast inside the box instead. `pnpm test:rust:report` writes a JUnit file instead; any other cargo subcommand can be passed after it.
 
-The Playwright suite can run the same way, in a Linux container: `pnpm e2e:docker` builds the image from the current checkout (`e2e/Dockerfile`) and runs the suite against it. It mirrors the `app-e2e` CI job (Node 22, pnpm 10, Chromium, Ubuntu 24.04), so the committed screenshot baselines compare cleanly and the run is not affected by host-OS quirks (Windows cannot always bind the worker ports, and host-rendered screenshots never match the Linux baselines). To run a single project or test, override the command: `docker compose -f e2e/docker-compose.e2e.yml run --rm e2e pnpm --filter e2e exec playwright test --project=mobile-pixel7`.
+The Playwright suite can run the same way, in a Linux container: `pnpm e2e:docker` builds the image from the current checkout (`e2e/Dockerfile`) and runs the suite against it. It mirrors the `app-e2e` CI job (Node 22, pnpm 10, Chromium, Ubuntu 24.04); use it when reproducing a CI-only failure, especially on Windows, where the worker ports cannot always bind locally. The checks are DOM- and metric-based, so a native `pnpm e2e` is enough for day-to-day work. To run a single project or test in the container, override the command: `docker compose -f e2e/docker-compose.e2e.yml run --rm e2e pnpm --filter e2e exec playwright test --project=mobile-pixel7`.
 
 If you changed the Android side (the print plugin, `render/` or the android transport paths), also run the two Android checks:
 
@@ -201,7 +201,7 @@ Add a regression test for every fix. 🛡️
 - **App:** Vitest and Testing Library in `src/test/`. jsdom has no `matchMedia`, so phone behaviour is tested by stubbing it (see `src/test/mobile.test.tsx`).
 - **Rust:** unit tests next to the code and integration tests in `src-tauri/tests/`. Shared rendering is covered by `peer_consume.rs` and `peer_render_priority.rs`; the live-Chromium provider test runs only with `PRINTNINJA_TEST_REAL_CHROMIUM=1`. `virtual_printer.rs` builds a small virtual printer (vendored in `e2e/support/virtual-printer`) and switches it between `ok`, `paperout`, `jam`, `offline`, `hang` and `drop`. It needs only `cargo` and never skips. The whole suite can also run in a Linux container: `pnpm test:rust`.
 - **Share service:** unit and integration tests in `server/test/` run against local SQLite files. `pnpm --filter server test:e2e` runs over HTTP against a Docker stack (`pnpm --filter server test:e2e:stack`).
-- **End to end:** Playwright in `e2e/tests/`. Desktop projects run Chromium. The `mobile-pixel7` and `mobile-small` projects run `*.mobile.e2e.ts` and check sideways scrolling, 44px tap targets, screenshots and axe. Screenshot baselines are Linux images. To update them after an intended layout change, run `pnpm --filter e2e exec playwright test --project=mobile-pixel7 --project=mobile-small --update-snapshots` on Linux and review the diff.
+- **End to end:** Playwright in `e2e/tests/`. Desktop projects run Chromium and check layout and axe across light and dark themes. The `mobile-pixel7` and `mobile-small` projects run `*.mobile.e2e.ts` and check sideways scrolling, vertical-only layout, 44px tap targets and axe. No pixel baselines: the assertions are DOM- and metric-based, so they pass unchanged on any runner.
 
 ### 🚢 Releasing
 

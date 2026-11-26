@@ -33,13 +33,20 @@ It is built for people who print the same things again and again:
 - 🏢 **Offices** printing invoices and delivery slips
 - 📲 **Anyone** who wants printing from a phone, tablet or PC to just work
 
+### 🏷️ Two kinds of templates
+
+- 🏷️ **Label templates** are for thermal printers — receipts and labels. You design them on a canvas in millimetres: text, barcodes, QR codes, images, lines and frames. No HTML, no CSS.
+- 📄 **Document templates** are for regular office and home printers. They are HTML and CSS with `{{placeholders}}` where your data goes.
+
+Both live on the **Templates** page, and each row wears a badge that names its kind. The app sends each one to the right printer and refuses a wrong pairing before a byte is wasted.
+
 **✨ What you get**
 
 - 🚫 **No pop-up print windows.** Jobs go straight to the printer.
 - 💬 **A clear answer every time.** If a print fails, you are told why (out of paper, printer offline, and so on).
 - 🕘 **A history of every print,** with one-tap reprint.
+- 👀 **A preview that matches the paper,** barcodes and QR codes included — label previews go through the real print path at the printer's own DPI.
 - 📴 **Works without internet.** You only need a connection for live data links, template sharing and update checks.
-- 👀 **A preview that matches the paper,** barcodes and QR codes included.
 - 🌏 **English and Japanese.**
 
 <a id="install"></a>
@@ -65,7 +72,7 @@ Mac computers are not supported for printing. 🍎
 This takes about five minutes. ⏱️ The **Setup checklist** in **Settings** walks you through the same steps inside the app.
 
 1. 🖨️ **Add a printer.** Open **Printers**, then choose **Add printer**. Network, system, USB and Bluetooth printers all work. Press **Test Print** to make sure it is connected.
-2. 🎨 **Make a template.** A template is the layout of what you want to print, like a receipt or a label. Open **Designer**, create one, pick a paper size and design it. Every new template starts from a ready-made example, so you can edit instead of starting from nothing.
+2. 🎨 **Make a template.** Open **Templates**, press **New**, and pick **New label template** (for a thermal printer) or **New document template** (for a regular one). The Designer opens for you: a label template starts as a blank label you arrange on a canvas, and a document template starts from a ready-made example (Receipt, Invoice, Shipping Label, …) that you edit.
 3. ▶️ **Print.** Open **Print**, choose your printer and template, add your information (sample data, a link to your data, or a CSV file), choose how many copies, check the preview and press **Print**.
 4. ✅ **Check the result.** **History** lists every job with a clear success or failure message. Reprint or retry from there.
 
@@ -97,6 +104,7 @@ An Android phone can print straight to a Bluetooth or USB receipt or label print
 | Problem | Try this |
 |---|---|
 | 🔤 A receipt or label printer prints pages of strange characters | In **Printers**, edit the printer and set **Language** to **ESC/POS** (most receipt printers) or **ZPL**, **TSPL** or **CPCL** (label printers). |
+| 📄 A PDF will not print on a receipt or label printer | A thermal head cannot read a PDF. Send the file to a document (office) printer — or design a **label template** for that job. |
 | 🔌 My USB printer is not in the list | Install it in Windows or Linux first. It then appears under **System**. |
 | 🐧 Printing on Linux fails | Install CUPS and Chromium or Chrome. |
 | 🪟 Windows says "Edge produced no PDF" | If PrintNinja runs as administrator, restart it normally. Otherwise run **Settings → Diagnostics → Fix PC printing**. |

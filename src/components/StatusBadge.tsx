@@ -10,6 +10,7 @@ import {
   Loader2,
   MonitorSmartphone,
   PencilLine,
+  Send,
   Share2,
   ShieldAlert,
   TriangleAlert,
@@ -34,6 +35,24 @@ export const STATUS = {
   queued: { tone: "warning", icon: Clock, label: "Queued" },
   printing: { tone: "info", icon: Loader2, label: "Printing", spin: true },
   cancelled: { tone: "neutral", icon: Ban, label: "Cancelled" },
+  // Label track (LABEL_PRINTING_PLAN.md, WP5): the honest delivery word a
+  // label job ends with; History shows it in place of the plain status.
+  confirmed: { tone: "success", icon: CheckCircle2, label: "Confirmed" },
+  sent_unconfirmed: {
+    tone: "success",
+    icon: Send,
+    label: "Sent, not confirmed",
+  },
+  partially_printed: {
+    tone: "warning",
+    icon: TriangleAlert,
+    label: "Partially printed",
+  },
+  wrong_mode_suspected: {
+    tone: "danger",
+    icon: ShieldAlert,
+    label: "Wrong mode",
+  },
   // Templates
   draft: { tone: "warning", icon: PencilLine, label: "Draft" },
   published: { tone: "success", icon: Globe, label: "Published" },

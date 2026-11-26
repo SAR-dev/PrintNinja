@@ -131,7 +131,7 @@ Groups follow the job someone is doing, not the feature list. The Designer is ac
 
 | Keys | Action |
 |---|---|
-| `Ctrl+K` / `⌘K` | Open the command palette (pages, "New template", "Reprint last job", up to 50 templates) |
+| `Ctrl+K` / `⌘K` | Open the command palette (pages, "New label template", "New document template", "Reprint last job", up to 50 templates) |
 | `?` | Show the shortcut list |
 | `G` then a letter | Go to a page: `P` Print, `H` History, `D` Designer, `T` Templates, `R` Printers, `A` Automation, `S` Settings |
 

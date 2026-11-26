@@ -40,6 +40,9 @@ export function usePrintActions({
   effPaperW,
   effPaperH,
   templateChosen,
+  /** The picked template is on the scene (label) track: the job goes
+   * out as a prepared label, not a rendered HTML page. */
+  sceneTemplate,
   /** The local row behind `store.printerId` (its connection type
    * decides whether the print dials the LAN). */
   selectedPrinter,
@@ -63,6 +66,7 @@ export function usePrintActions({
   effPaperW: number;
   effPaperH: number;
   templateChosen: boolean;
+  sceneTemplate: boolean;
   selectedPrinter: PrintPagePrinter | undefined;
   refreshSystemPrinters: () => Promise<unknown>;
   refreshPcPrinters: (pairId?: string | null) => Promise<void>;
@@ -166,6 +170,12 @@ export function usePrintActions({
       await handleRemotePrint(retry);
       return;
     }
+    // The scene (label) track: the sheets go out as a prepared label
+    // job against the saved printer's profile, not a rendered page.
+    if (sceneTemplate) {
+      await doLabelPrint();
+      return;
+    }
 
     store.setStatus("printing");
     store.setError("");
@@ -209,6 +219,100 @@ export function usePrintActions({
       } else {
         store.setStatus("failed");
         store.setError(result.error || "Unknown error");
+      }
+    } catch (e) {
+      store.setStatus("failed");
+      store.setError(describeError(e));
+    }
+  };
+
+  // The scene (label) track's print: the same data fields, but the
+  // job is a prepared label — a deep link's inline `data` (WP5) is
+  // used as-is, else the data URL is fetched here (the label command
+  // takes the records as a JSON string), so a failed fetch is a
+  // failed print, not a sample-data fallback. One object repeats for
+  // `records` sheets, an array prints its own length: the records the
+  // preview's `label_prepare` showed.
+  const doLabelPrint = async () => {
+    store.setStatus("printing");
+    store.setError("");
+    store.setTimings(null);
+    store.setRenderedBy(null);
+    store.setWarnings([]);
+
+    let data: unknown;
+    try {
+      if (store.dataJson.trim()) {
+        // A deep link's `data` carries the records themselves (WP5).
+        data = JSON.parse(store.dataJson);
+      } else if (store.useTestData || !store.dataUrl.trim()) {
+        data = DEFAULT_MOCK_DATA;
+      } else {
+        const ctrl = new AbortController();
+        const timeout = window.setTimeout(() => ctrl.abort(), 10_000);
+        try {
+          const res = await fetch(store.dataUrl.trim(), {
+            method: store.httpMethod === "POST" ? "POST" : "GET",
+            headers:
+              store.httpMethod === "POST"
+                ? { "content-type": "application/json" }
+                : undefined,
+            body: store.httpMethod === "POST" ? "{}" : undefined,
+            signal: ctrl.signal,
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          data = await res.json();
+        } finally {
+          window.clearTimeout(timeout);
+        }
+      }
+    } catch (e) {
+      store.setStatus("failed");
+      store.setError(t("print.scene_data_failed", { error: describeError(e) }));
+      return;
+    }
+
+    const records = Array.isArray(data)
+      ? data
+      : Array.from(
+          {
+            length: Math.min(500, Math.max(1, Math.floor(store.records || 1))),
+          },
+          () => data,
+        );
+    if (records.length === 0) {
+      store.setStatus("failed");
+      store.setError(t("print.preview_empty_data"));
+      return;
+    }
+
+    try {
+      const result = await agent("label_print", {
+        req: {
+          template_id: Number(store.templateId),
+          printer: store.printerId,
+          records: JSON.stringify(records),
+          copies: store.copies,
+        },
+      });
+      store.setDurationMs(result.duration_ms);
+      const rep = result.report;
+      if (rep.result === "confirmed") {
+        store.setStatus("success");
+      } else if (rep.result === "sent_unconfirmed") {
+        store.setStatus("success");
+        store.setWarnings([t("print.scene_sent_unconfirmed")]);
+      } else if (rep.result === "partially_printed") {
+        store.setStatus("success");
+        store.setWarnings([
+          t("print.scene_partial", {
+            done: rep.counts?.[0] ?? 0,
+            total: rep.counts?.[1] ?? 0,
+          }),
+        ]);
+      } else {
+        store.setStatus("failed");
+        store.setError(rep.reason || t("print.scene_failed"));
       }
     } catch (e) {
       store.setStatus("failed");

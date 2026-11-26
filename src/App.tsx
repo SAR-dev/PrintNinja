@@ -40,10 +40,14 @@ const DevicesPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("./pages/Settings").then((m) => ({ default: m.SettingsPage })),
 );
+const RawConsolePage = lazy(() =>
+  import("./pages/RawConsole").then((m) => ({ default: m.RawConsolePage })),
+);
 const TemplatesPage = lazy(() =>
   import("./pages/Templates").then((m) => ({ default: m.TemplatesPage })),
 );
 import { diagnostics } from "./lib/diagnostics";
+import { useDeveloperTools } from "./lib/devtools";
 import { DeepLinkListener } from "./lib/deeplink";
 import { startOnPrint } from "./lib/shell/startRoute";
 import { notifyInfo } from "./lib/notify";
@@ -90,6 +94,17 @@ export function AutomationRoute() {
     return <Navigate to={`/devices${next.size ? `?${next}` : ""}`} replace />;
   }
   return <AutomationPage />;
+}
+
+/**
+ * The raw console is a developer tool: the route only exists while the
+ * Developer tools toggle (Settings → Diagnostics) is on, so a bookmark
+ * with the toggle off just lands on the normal start page.
+ */
+function RawConsoleRoute() {
+  const on = useDeveloperTools();
+  if (!on) return <Navigate to="/" replace />;
+  return <RawConsolePage />;
 }
 
 /**
@@ -148,6 +163,7 @@ function AppRoutes() {
             element={<Navigate to="/automation?tab=explorer" replace />}
           />
           <Route path="/settings" element={<SettingsRoute />} />
+          <Route path="/raw-console" element={<RawConsoleRoute />} />
           {UiKitPage && (
             <Route
               path="/__ui"
