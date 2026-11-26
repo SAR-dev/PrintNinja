@@ -82,25 +82,24 @@ test("F3 create on PC A appears on PC B", async ({ browser }) => {
   const handle = `f3-${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const password = "password123";
   const auth = await apiRegister(handle, password);
-  // A starts with one synced template so the Designer has somewhere to open.
-  const starterId = crypto.randomUUID();
-  await apiPutTemplate(auth.token, starterId, {
-    name: "Starter",
-    body: "<p>starter</p>",
-  });
-
   const pcA = await pc(browser, {
     settings: { share_session_token: auth.token },
   });
   const pageA = await pcA.context.newPage();
-  await openDesignerOn(pageA, "Starter");
+  await pageA.goto("/templates");
+  await expect(pageA.getByTestId(testids.shellApp)).toBeVisible({
+    timeout: 15_000,
+  });
 
-  // New template: the dialog is a two-step chooser (pack, then name) and
-  // creates server-first, then caches locally.
-  await pageA.getByRole("button", { name: "New template" }).click();
+  // Creation lives on the Templates page: the "New" dropdown picks the
+  // track and deep-links into the Designer's two-step create dialog
+  // (pack, then name), which creates server-first and caches locally.
+  await pageA.getByRole("button", { name: "New", exact: true }).click();
+  await pageA.getByRole("menuitem", { name: "New document template" }).click();
+  await pageA.getByTestId(testids.packCard("blank")).click();
   await pageA.getByTestId(testids.packNext).click();
-  await pageA.getByPlaceholder("My Template").fill("Shared Idea");
-  await pageA.getByRole("button", { name: "Create", exact: true }).click();
+  await pageA.locator("#new-template-name").fill("Shared Idea");
+  await pageA.getByTestId(testids.packCreate).click();
   await expect(
     pageA.getByText('Template "Shared Idea" created on the server'),
   ).toBeVisible({ timeout: 30_000 });
