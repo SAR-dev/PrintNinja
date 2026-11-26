@@ -187,12 +187,15 @@ export function HistoryPage() {
   const isPhone = useMediaQuery(PHONE_QUERY);
 
   const aliveRef = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // StrictMode mounts, cleans up, then mounts again in dev: reset the
+    // flag so the second load can still finish (otherwise the table
+    // stays in its skeleton state forever).
+    aliveRef.current = true;
+    return () => {
       aliveRef.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   const reload = useCallback(async () => {
     const ok = () => aliveRef.current;
