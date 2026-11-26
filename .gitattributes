@@ -16,3 +16,6 @@ Dockerfile text eol=lf
 # Golden fixtures are compared byte-for-byte (packRenders.test.ts builds the
 # expected file with LF newlines); a CRLF working copy fails the test.
 src-tauri/tests/fixtures/*.json text eol=lf
+# Printer-language goldens intentionally carry CRLF line endings; never let
+# a Windows checkout normalize them to LF (the byte-for-byte tests would fail).
+tests/golden/cases/*.bin -text
