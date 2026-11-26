@@ -72,11 +72,19 @@ async function setSetting(key: string, value: string | null): Promise<void> {
 
 export async function getServiceUrl(): Promise<string | null> {
   const v = await getSetting(SETTINGS_KEYS.serviceUrl);
-  return v && v.trim() ? v.trim().replace(/\/$/, "") : null;
+  // Strip every trailing slash, not just one: rows written before the
+  // write path normalized can carry several, and a surviving slash would
+  // double up in the `${base}${path}` request URLs.
+  return v && v.trim() ? v.trim().replace(/\/+$/, "") : null;
 }
 
 export async function setServiceUrl(url: string | null): Promise<void> {
-  await setSetting(SETTINGS_KEYS.serviceUrl, url);
+  // The stored value is canonical — trimmed and slash-free — so no caller
+  // can persist a trailing slash. Validation stays in the UI
+  // (`normalizeServiceUrl` in session.ts; importing it here would cycle):
+  // an invalid address is stored as typed and fails as "unreachable".
+  const clean = url?.trim().replace(/\/+$/, "");
+  await setSetting(SETTINGS_KEYS.serviceUrl, clean || null);
 }
 
 export async function getSessionToken(): Promise<string | null> {
