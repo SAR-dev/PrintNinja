@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 
 /// How long one document may take before the render is abandoned and
 /// the browser killed.
-pub const RENDER_DEADLINE: Duration = Duration::from_secs(60);
+pub const RENDER_DEADLINE: Duration = Duration::from_secs(90);
 
 /// The document could not be rendered to a PDF.
 #[derive(Debug, thiserror::Error)]
@@ -35,9 +35,15 @@ pub enum BrowserError {
     /// waited on).
     #[error("the browser could not be started: {0}")]
     Launch(String),
-    /// The render outlived [`RENDER_DEADLINE`].
-    #[error("the browser took more than {0} s to print the document")]
-    Deadline(u64),
+    /// The render outlived [`RENDER_DEADLINE`]. The browser's own stderr
+    /// excerpt is kept so a CI timeout says why it stalled.
+    #[error("the browser took more than {secs} s to print the document: {detail}")]
+    Deadline {
+        /// The deadline in seconds.
+        secs: u64,
+        /// The browser's own stderr, excerpted.
+        detail: String,
+    },
     /// The browser exited, but no usable PDF came out.
     #[error("the browser did not produce a PDF (exit: {status}): {detail}")]
     NoPdf {
@@ -186,6 +192,11 @@ pub fn render_pdf_with(
     // sandboxed; a genuine render failure is still reported as one.
     let mut unsandboxed = false;
     let result = loop {
+        // A retry after a killed browser must not inherit its profile lock.
+        let profile_dir = work_dir.join("profile");
+        if profile_dir.exists() {
+            let _ = fs::remove_dir_all(&profile_dir);
+        }
         fs::write(&html_path, html).map_err(|e| BrowserError::Io(e.to_string()))?;
         if pdf_path.exists() {
             fs::remove_file(&pdf_path).map_err(|e| BrowserError::Io(e.to_string()))?;
@@ -216,7 +227,11 @@ pub fn render_pdf_with(
                     if started.elapsed() > RENDER_DEADLINE {
                         let _ = child.kill();
                         let _ = child.wait();
-                        break Err(BrowserError::Deadline(RENDER_DEADLINE.as_secs()));
+                        let detail = fs::read_to_string(&stderr_path).unwrap_or_default();
+                        break Err(BrowserError::Deadline {
+                            secs: RENDER_DEADLINE.as_secs(),
+                            detail: stderr_excerpt(&detail),
+                        });
                     }
                     std::thread::sleep(Duration::from_millis(100));
                 }
@@ -266,6 +281,10 @@ fn print_args(pdf_path: &Path, html_url: &str, work_dir: &Path) -> Vec<String> {
     let mut args = vec![
         "--headless=new".to_string(),
         "--disable-gpu".to_string(),
+        // CI runners give containers a tiny /dev/shm; without this the
+        // browser can stall until the render deadline instead of printing.
+        "--disable-dev-shm-usage".to_string(),
+        "--disable-software-rasterizer".to_string(),
         "--no-first-run".to_string(),
         "--no-default-browser-check".to_string(),
         "--disable-background-networking".to_string(),
@@ -410,6 +429,7 @@ mod tests {
         assert!(args.iter().any(|a| a.starts_with("--print-to-pdf=")));
         assert_eq!(*args.last().unwrap(), "file:///tmp/work/job.html");
         assert!(args.iter().any(|a| a == "--disable-background-networking"));
+        assert!(args.iter().any(|a| a == "--disable-dev-shm-usage"));
         assert!(args.iter().any(|a| a.starts_with("--user-data-dir=")));
         // The output path in the flag is the exact file we will read.
         assert!(args

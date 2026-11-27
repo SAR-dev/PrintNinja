@@ -1076,9 +1076,9 @@ describe("Label (scene) track", () => {
   it("previews a scene template as 1-bit sheets from label_prepare, not the page renderer", async () => {
     await scenePage();
     const sheet = await screen.findByRole("img", { name: "Preview" });
-    expect(sheet).toHaveAttribute("viewBox", "0 0 4 2");
-    // Background plus one ink run per row.
-    expect(sheet.querySelectorAll("rect")).toHaveLength(3);
+    expect(sheet.tagName.toLowerCase()).toBe("canvas");
+    expect(sheet).toHaveAttribute("width", "4");
+    expect(sheet).toHaveAttribute("height", "2");
     const region = screen.getByRole("region", { name: "Print preview" });
     expect(region).toContainElement(sheet);
     await waitFor(() =>

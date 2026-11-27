@@ -11,26 +11,39 @@ import { cn } from "@/lib/utils";
 
 /** The desktop accordion section ids, in the order the accordion lists them.
  * Templates are not here: the top row switches them. */
-export type ControlsSection = "page" | "sample" | "helpers" | "custom";
+export type ControlsSection =
+  | "page"
+  | "sample"
+  | "helpers"
+  | "custom"
+  | "fields";
+
+export interface RailSection {
+  id: ControlsSection;
+  labelKey: string;
+  Icon: LucideIcon;
+}
 
 interface Props {
   /** Open the controls column, with this section open. */
   onOpenSection: (section: ControlsSection) => void;
   /** Open the controls column as it was. */
   onExpand: () => void;
+  /** Sections for the current track; the document designer keeps the default four. */
+  sections?: RailSection[];
 }
 
 /**
  * The 48 px strip the controls column shrinks to on a narrow desktop window:
  * one icon per accordion section, so the editor and canvas get the room.
  */
-export function ControlsRail({ onOpenSection, onExpand }: Props) {
+export function ControlsRail({
+  onOpenSection,
+  onExpand,
+  sections: given,
+}: Props) {
   const { t } = useTranslation();
-  const sections: {
-    id: ControlsSection;
-    labelKey: string;
-    Icon: LucideIcon;
-  }[] = [
+  const sections: RailSection[] = given ?? [
     { id: "page", labelKey: "designer.pageSetup", Icon: Ruler },
     { id: "sample", labelKey: "designer.sampleData", Icon: Database },
     { id: "helpers", labelKey: "designer.helpers", Icon: Wand2 },

@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import { agent } from "@/lib/agent/commands";
 import type { LabelPrepareResponse, PrinterRow } from "@/lib/agent/types";
 import { describeError } from "@/lib/errors";
+import { usePersistentState } from "@/lib/hooks/usePersistentState";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import {
   blankTemplate,
@@ -350,7 +351,11 @@ export function useSceneTemplate({
   // -- the preview: prepared with the same path as the print, on the
   // chosen printer at its own dpi.
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
-  const [printerName, setPrinterName] = useState("");
+  const [printerName, setPrinterName] = usePersistentState<string>(
+    "printninja.label.preview_printer",
+    "",
+    (v): v is string => typeof v === "string",
+  );
   const [preview, setPreview] = useState<LabelPrepareResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
@@ -360,14 +365,18 @@ export function useSceneTemplate({
         // An unseeded device answers null instead of an empty list.
         const list: PrinterRow[] = Array.isArray(ps) ? ps : [];
         setPrinters(list);
-        setPrinterName((p) => p || list[0]?.name || "");
+        setPrinterName(
+          list.some((p) => p.name === printerName)
+            ? printerName
+            : (list[0]?.name ?? ""),
+        );
       })
       .catch(() => setPreviewError(t("scene.printer_list_error")));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const dpi = printers.find((p) => p.name === printerName)?.dpi ?? null;
 
-  const runPreview = async () => {
-    if (template === null || !printerName) return;
+  const runPreview = async (): Promise<boolean> => {
+    if (template === null || !printerName) return false;
     setPreparing(true);
     setPreviewError(null);
     try {
@@ -381,9 +390,11 @@ export function useSceneTemplate({
           },
         }),
       );
+      return true;
     } catch (e) {
       setPreview(null);
       setPreviewError(describeError(e));
+      return false;
     } finally {
       setPreparing(false);
     }
