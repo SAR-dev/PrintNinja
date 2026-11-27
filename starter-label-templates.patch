@@ -1,0 +1,1061 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index e9c517e..10fed66 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -9,6 +9,7 @@ and this project adheres to [Calendar Versioning](YYYY.MMDD.patch) — see the c
+ 
+ ### Added
+ 
++- **Starter label templates in the new-label dialog.** Creating a label template no longer starts only from an empty canvas: the dialog now shows a card grid of starters (the label counterpart of the document packs) — Blank, Shipping label (4 × 6 in), Product price, Address, Asset tag (QR) and Name badge — each a complete scene with real media geometry, laid-out elements and flat `{{field}}` bindings, defined in `src/lib/scene/starters.ts`. Each starter also carries two sample records that fill every binding it uses; creating from one loads them into the sample-data draft (Blank leaves the data alone), so the canvas and print screen start filled. Label Save now also commits a pending sample-data edit, as the document Save already did. Picking a card suggests its name (never overwriting one you typed), the last pick is remembered, and creation still goes straight to a local row with no server step. `useSceneTemplate.create` takes the starter's scene (a blank one when omitted). A unit test pins every starter against the scene validation's geometry and binding rules, and the English and Japanese strings are covered by the locale parity test. The document track is untouched.
+ - **Brand moments and a non-status accent.** A `highlight` token (violet, off every status hue, with a lifted dark-theme value) plus a matching `Badge` variant marks attention that is not a state: community templates published in the last 14 days wear a "New" badge, and a one-time "First print — nice job" pill appears on the first completed print (desktop banner and phone card, shown once via a localStorage flag). Empty-state and sign-in screens now carry the logo/icon on a brand-soft tile. All additions are tokens covered by the contrast tests, and `docs/UI_GUIDE.md` documents them.
+ - **Toasts on phones get a close button.** Every toast on Android shows a visible ✕ (the Toaster's `closeButton`); swipe-down at the bottom edge was the only dismissal and is cramped for a thumb. Desktop toasts are unchanged.
+ - **Android local network permission: explained, asked once, never random.** The first time PrintNinja needs your local network (finding network printers, printing to an IP address, or reaching a paired PC) it shows a short explanation and asks once via Android's system dialog. While the permission is off, the Add Printer sheet and the Devices page say so with an inline notice offering "Allow access" or "Open settings", and a print that would need the network fails with a message naming the permission instead of hanging — Retry works as soon as it is on. Bluetooth and USB printers never need it.
+diff --git a/README.md b/README.md
+index 3596c0d..dd0e789 100644
+--- a/README.md
++++ b/README.md
+@@ -72,7 +72,7 @@ Mac computers are not supported for printing. 🍎
+ This takes about five minutes. ⏱️ The **Setup checklist** in **Settings** walks you through the same steps inside the app.
+ 
+ 1. 🖨️ **Add a printer.** Open **Printers**, then choose **Add printer**. Network, system, USB and Bluetooth printers all work. Press **Test Print** to make sure it is connected.
+-2. 🎨 **Make a template.** Open **Templates**, press **New**, and pick **New label template** (for a thermal printer) or **New document template** (for a regular one). The Designer opens for you: a label template starts as a blank label you arrange on a canvas, and a document template starts from a ready-made example (Receipt, Invoice, Shipping Label, …) that you edit.
++2. 🎨 **Make a template.** Open **Templates**, press **New**, and pick **New label template** (for a thermal printer) or **New document template** (for a regular one). The Designer opens for you: a label template starts from a starter you pick (Shipping label, Product price, Address, Asset tag, Name badge, or a Blank label) and arrange on a canvas, and a document template starts from a ready-made example (Receipt, Invoice, Shipping Label, …) that you edit.
+ 3. ▶️ **Print.** Open **Print**, choose your printer and template, add your information (sample data, a link to your data, or a CSV file), choose how many copies, check the preview and press **Print**.
+ 4. ✅ **Check the result.** **History** lists every job with a clear success or failure message. Reprint or retry from there.
+ 
+diff --git a/docs/CHANGELOG.md b/docs/CHANGELOG.md
+index 3537927..393b124 100644
+--- a/docs/CHANGELOG.md
++++ b/docs/CHANGELOG.md
+@@ -45,6 +45,10 @@ Only use the headings you actually have entries for.
+ 
+ ## Unreleased
+ 
++### Added
++
++- **Starter label templates.** When you create a label template you can now start from a ready-made layout — Shipping label, Product price, Address, Asset tag or Name badge — or pick Blank, just like document templates. Each starter comes with sample data, so your label looks filled in right away.
++
+ ## [2026.1126.0] - 2026-11-26
+ 
+ ### Added
+diff --git a/src/components/designer/SceneStarterChooser.tsx b/src/components/designer/SceneStarterChooser.tsx
+new file mode 100644
+index 0000000..10eaeb9
+--- /dev/null
++++ b/src/components/designer/SceneStarterChooser.tsx
+@@ -0,0 +1,107 @@
++import { useCallback, useEffect, useRef } from "react";
++import { useTranslation } from "react-i18next";
++import { PaperThumb } from "@/components/PaperThumb";
++import { SCENE_STARTERS, starterSizeMm } from "@/lib/scene/starters";
++import { cn } from "@/lib/utils";
++
++interface SceneStarterChooserProps {
++  selectedId: string;
++  onSelect: (id: string) => void;
++  disabled?: boolean;
++}
++
++/**
++ * The starter label picker: the label track's counterpart of the
++ * document `PackChooser` — the same card grid, listbox semantics and
++ * arrow-key movement, over the bundled label starters.
++ */
++export function SceneStarterChooser({
++  selectedId,
++  onSelect,
++  disabled,
++}: SceneStarterChooserProps) {
++  const { t } = useTranslation();
++  const gridRef = useRef<HTMLDivElement>(null);
++
++  const handleKeyDown = useCallback(
++    (e: React.KeyboardEvent) => {
++      if (disabled) return;
++      const idx = SCENE_STARTERS.findIndex((s) => s.id === selectedId);
++      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
++        e.preventDefault();
++        onSelect(SCENE_STARTERS[(idx + 1) % SCENE_STARTERS.length].id);
++      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
++        e.preventDefault();
++        const n = SCENE_STARTERS.length;
++        onSelect(SCENE_STARTERS[(idx - 1 + n) % n].id);
++      }
++    },
++    [selectedId, onSelect, disabled],
++  );
++
++  // Follow the selection with focus when the grid itself had it, so the
++  // arrow keys keep moving; never steal focus from the name field.
++  useEffect(() => {
++    const el = gridRef.current?.querySelector<HTMLElement>(
++      `[data-starter-id="${selectedId}"]`,
++    );
++    if (gridRef.current?.contains(document.activeElement)) el?.focus();
++  }, [selectedId]);
++
++  return (
++    <div
++      ref={gridRef}
++      role="listbox"
++      aria-label={t("scene.starter_pick")}
++      aria-orientation="vertical"
++      onKeyDown={handleKeyDown}
++      className="grid grid-cols-2 gap-3 sm:grid-cols-3"
++    >
++      {SCENE_STARTERS.map((starter) => {
++        const isSelected = starter.id === selectedId;
++        const name = t(`scene.starter_${starter.id}_name`, {
++          defaultValue: starter.name,
++        });
++        const desc = t(`scene.starter_${starter.id}_desc`, {
++          defaultValue: starter.description,
++        });
++        const { w, h } = starterSizeMm(starter);
++        return (
++          <button
++            key={starter.id}
++            type="button"
++            role="option"
++            aria-selected={isSelected}
++            aria-label={`${name}, ${desc}`}
++            data-starter-id={starter.id}
++            data-testid={`scene-starter-${starter.id}`}
++            disabled={disabled}
++            onClick={() => onSelect(starter.id)}
++            className={cn(
++              "flex flex-col items-center gap-2 rounded-lg border-2 p-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60",
++              isSelected
++                ? "border-primary bg-primary/5"
++                : "border-border bg-card hover:border-primary/40 hover:bg-accent/50",
++            )}
++          >
++            <PaperThumb widthMm={w} heightMm={h} />
++            <div className="min-w-0">
++              <p className="text-sm font-medium leading-tight">{name}</p>
++              <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
++                {desc}
++              </p>
++              <p className="mt-1 text-caption text-muted-foreground">
++                {t("scene.template_size", { w, h })}
++              </p>
++            </div>
++            {isSelected && (
++              <span className="text-caption font-semibold uppercase tracking-widest text-primary">
++                {t("designer.pack_selected")}
++              </span>
++            )}
++          </button>
++        );
++      })}
++    </div>
++  );
++}
+diff --git a/src/lib/i18n/locales/en.ts b/src/lib/i18n/locales/en.ts
+index aa27b54..e6f027d 100644
+--- a/src/lib/i18n/locales/en.ts
++++ b/src/lib/i18n/locales/en.ts
+@@ -1862,6 +1862,20 @@ const en = {
+     show_fields: "Show fields",
+     show_sample_data: "Show sample data",
+     source: "Source",
++    starter_address_desc: "Return or recipient address label",
++    starter_address_name: "Address",
++    starter_asset_desc: "Equipment tag with a QR code, id and location",
++    starter_asset_name: "Asset tag",
++    starter_badge_desc: "Event badge with a large name, company and role",
++    starter_badge_name: "Name badge",
++    starter_blank_desc: "An empty 40 × 50 mm label to design from scratch",
++    starter_blank_name: "Blank",
++    starter_pick: "Start from",
++    starter_product_desc: "Shelf label with product, price and a SKU barcode",
++    starter_product_name: "Product price",
++    starter_shipping_desc:
++      "4 × 6 in parcel label with addresses and a tracking barcode",
++    starter_shipping_name: "Shipping label",
+     sym_code128: "Code 128",
+     sym_ean13: "EAN-13",
+     sym_empty: "(empty)",
+diff --git a/src/lib/i18n/locales/ja.ts b/src/lib/i18n/locales/ja.ts
+index c5687fb..7587658 100644
+--- a/src/lib/i18n/locales/ja.ts
++++ b/src/lib/i18n/locales/ja.ts
+@@ -1902,6 +1902,20 @@ const ja: Translation = {
+     show_fields: "フィールドを表示",
+     show_sample_data: "サンプルデータを表示",
+     source: "ソース",
++    starter_address_desc: "宛名ラベル（差出人・宛先用）",
++    starter_address_name: "宛名",
++    starter_asset_desc: "QRコード・ID・設置場所付きの備品タグ",
++    starter_asset_name: "資産タグ",
++    starter_badge_desc: "大きな氏名・会社名・役職のイベント用名札",
++    starter_badge_name: "名札",
++    starter_blank_desc: "40 × 50 mm の空のラベル。一から設計できます",
++    starter_blank_name: "白紙",
++    starter_pick: "ひな形から始める",
++    starter_product_desc: "商品名・価格・SKUバーコード付きの棚ラベル",
++    starter_product_name: "商品価格",
++    starter_shipping_desc:
++      "宛先・差出人・追跡バーコード付き 4 × 6 in の荷物ラベル",
++    starter_shipping_name: "出荷ラベル",
+     sym_code128: "Code 128",
+     sym_ean13: "EAN-13",
+     sym_empty: "(空)",
+diff --git a/src/lib/scene/starters.ts b/src/lib/scene/starters.ts
+new file mode 100644
+index 0000000..daf8aba
+--- /dev/null
++++ b/src/lib/scene/starters.ts
+@@ -0,0 +1,300 @@
++/**
++ * Starter label templates: the ready-made scenes the new-label dialog
++ * offers, the label track's counterpart of the document track's packs
++ * (`src/lib/templates/packs`). Each one is a complete scene a person
++ * edits down — real media geometry, laid-out elements and `{{field}}`
++ * bindings — so a new label never starts from an empty canvas unless
++ * they pick "Blank".
++ *
++ * Every starter must pass the scene validation (`pn-scene`): fixed
++ * elements inside the media box, frame children inside their frame,
++ * flat `{{name}}` bindings. `starters.test.ts` pins those rules.
++ *
++ * The name and description here are the English fallbacks; the dialog
++ * reads `scene.starter_<id>_name` / `scene.starter_<id>_desc` first.
++ */
++import { blankTemplate, pageDims } from "./editor-model";
++import type { Element, Template } from "./schema";
++
++export interface SceneStarter {
++  id: string;
++  /** English fallback for `scene.starter_<id>_name`. */
++  name: string;
++  /** English fallback for `scene.starter_<id>_desc`. */
++  description: string;
++  /** A fresh copy of the scene each call — callers edit it freely. */
++  template: () => Template;
++  /** Sample records that fill every binding the scene uses: the print
++   * screen starts with them and the first one is what the preview shows.
++   * Blank has none (it binds nothing). A fresh copy each call. */
++  sample: () => Record<string, string>[];
++}
++
++/** Shorthand for the text elements the starters are mostly made of. */
++function text(
++  content: string,
++  x_mm: number,
++  y_mm: number,
++  w_mm: number,
++  h_mm: number,
++  size_mm: number,
++  style: {
++    bold?: boolean;
++    italic?: boolean;
++    align?: "left" | "center" | "right";
++  } = {},
++): Element {
++  return {
++    type: "text",
++    at: { x_mm, y_mm },
++    size: { w_mm, h_mm },
++    content,
++    style: { size_mm, ...style },
++  };
++}
++
++function line(
++  x_mm: number,
++  y_mm: number,
++  length_mm: number,
++  thickness_mm: number,
++): Element {
++  return { type: "line", at: { x_mm, y_mm }, length_mm, thickness_mm };
++}
++
++/** A 4 × 6 in (102 × 152 mm) parcel label: recipient, sender, service
++ * and a tracking barcode. */
++function shippingLabel(): Template {
++  return {
++    format: "scene",
++    media: { kind: "label", width_mm: 102, height_mm: 152 },
++    fields: [],
++    elements: [
++      text("SHIP TO", 5, 5, 40, 4, 2.8, { bold: true }),
++      text("{{to_name}}", 5, 10, 92, 9, 6, { bold: true }),
++      text("{{to_address}}", 5, 20, 92, 9, 4.5),
++      text("{{to_city}} {{to_postcode}}", 5, 30, 92, 8, 5),
++      text("{{to_country}}", 5, 39, 92, 7, 4.5, { bold: true }),
++      line(5, 50, 92, 0.6),
++      text("FROM", 5, 54, 40, 4, 2.8, { bold: true }),
++      text("{{from_name}}", 5, 59, 92, 6, 3.5),
++      text("{{from_address}}", 5, 66, 92, 6, 3.5),
++      line(5, 76, 92, 0.6),
++      text("{{service}}", 5, 80, 45, 10, 7, { bold: true }),
++      text("{{weight}}", 52, 80, 45, 10, 4, { align: "right" }),
++      {
++        type: "barcode",
++        at: { x_mm: 5, y_mm: 98 },
++        size: { w_mm: 92, h_mm: 36 },
++        kind: "code128",
++        value: "{{tracking}}",
++        show_text: true,
++      },
++      text("Order {{order_id}}", 5, 138, 92, 7, 3.5),
++    ],
++  };
++}
++
++/** A 50 × 30 mm shelf/price label: product, price and a SKU barcode. */
++function productLabel(): Template {
++  return {
++    format: "scene",
++    media: { kind: "label", width_mm: 50, height_mm: 30 },
++    fields: [],
++    elements: [
++      text("{{product}}", 2, 2, 46, 6, 4, { bold: true }),
++      text("{{price}}", 2, 9, 26, 10, 8, { bold: true }),
++      text("{{unit}}", 28, 12, 20, 5, 2.8, { align: "right" }),
++      {
++        type: "barcode",
++        at: { x_mm: 2, y_mm: 19 },
++        size: { w_mm: 46, h_mm: 9 },
++        kind: "code128",
++        value: "{{sku}}",
++        show_text: true,
++      },
++    ],
++  };
++}
++
++/** An 89 × 36 mm address label: four lines of recipient. */
++function addressLabel(): Template {
++  return {
++    format: "scene",
++    media: { kind: "label", width_mm: 89, height_mm: 36 },
++    fields: [],
++    elements: [
++      text("{{name}}", 4, 4, 81, 8, 5.5, { bold: true }),
++      text("{{street}}", 4, 13, 81, 6, 4),
++      text("{{city}} {{postcode}}", 4, 20, 81, 6, 4),
++      text("{{country}}", 4, 27, 81, 5, 3.5),
++    ],
++  };
++}
++
++/** A 50 × 30 mm asset tag: a QR code beside the id, name and place. */
++function assetTag(): Template {
++  return {
++    format: "scene",
++    media: { kind: "label", width_mm: 50, height_mm: 30 },
++    fields: [],
++    elements: [
++      { type: "qr", at: { x_mm: 2, y_mm: 3 }, h_mm: 24, value: "{{asset_id}}" },
++      text("{{asset_id}}", 28, 4, 20, 6, 3.5, { bold: true }),
++      text("{{asset_name}}", 28, 11, 20, 10, 3),
++      text("{{location}}", 28, 23, 20, 4, 2.5),
++    ],
++  };
++}
++
++/** An 89 × 54 mm name badge: event, a large name, company and role. */
++function nameBadge(): Template {
++  return {
++    format: "scene",
++    media: { kind: "label", width_mm: 89, height_mm: 54 },
++    fields: [],
++    elements: [
++      text("{{event}}", 4, 4, 81, 6, 4, { align: "center" }),
++      line(4, 12, 81, 0.5),
++      text("{{name}}", 4, 16, 81, 14, 10, { bold: true, align: "center" }),
++      text("{{company}}", 4, 32, 81, 7, 4.5, { align: "center" }),
++      text("{{role}}", 4, 40, 81, 6, 3.5, { italic: true, align: "center" }),
++    ],
++  };
++}
++
++/** The id of the starter the dialog opens on the first time. */
++export const DEFAULT_SCENE_STARTER_ID = "blank";
++
++export const SCENE_STARTERS: SceneStarter[] = [
++  {
++    id: "blank",
++    name: "Blank",
++    description: "An empty 40 × 50 mm label to design from scratch",
++    template: blankTemplate,
++    sample: () => [],
++  },
++  {
++    id: "shipping",
++    name: "Shipping label",
++    description: "4 × 6 in parcel label with addresses and a tracking barcode",
++    template: shippingLabel,
++    sample: () => [
++      {
++        to_name: "Aisha Rahman",
++        to_address: "45 Oak Lane, Apt 2",
++        to_city: "Dhaka",
++        to_postcode: "1212",
++        to_country: "BANGLADESH",
++        from_name: "PrintNinja Cafe",
++        from_address: "123 Main Street, Dhaka",
++        service: "EXPRESS",
++        weight: "1.2 kg",
++        tracking: "PN7X9K4242BD",
++        order_id: "1042",
++      },
++      {
++        to_name: "John Doe",
++        to_address: "8 Harbour Road",
++        to_city: "Chattogram",
++        to_postcode: "4100",
++        to_country: "BANGLADESH",
++        from_name: "PrintNinja Cafe",
++        from_address: "123 Main Street, Dhaka",
++        service: "STANDARD",
++        weight: "0.4 kg",
++        tracking: "PN3M2Q1187BD",
++        order_id: "1043",
++      },
++    ],
++  },
++  {
++    id: "product",
++    name: "Product price",
++    description: "Shelf label with product, price and a SKU barcode",
++    template: productLabel,
++    sample: () => [
++      {
++        product: "Green Tea 100 g",
++        price: "$3.50",
++        unit: "per box",
++        sku: "4901234567",
++      },
++      {
++        product: "Blueberry Muffin",
++        price: "$3.25",
++        unit: "each",
++        sku: "4909876543",
++      },
++    ],
++  },
++  {
++    id: "address",
++    name: "Address",
++    description: "Return or recipient address label",
++    template: addressLabel,
++    sample: () => [
++      {
++        name: "Aisha Rahman",
++        street: "45 Oak Lane, Apt 2",
++        city: "Dhaka",
++        postcode: "1212",
++        country: "Bangladesh",
++      },
++      {
++        name: "John Doe",
++        street: "8 Harbour Road",
++        city: "Chattogram",
++        postcode: "4100",
++        country: "Bangladesh",
++      },
++    ],
++  },
++  {
++    id: "asset",
++    name: "Asset tag",
++    description: "Equipment tag with a QR code, id and location",
++    template: assetTag,
++    sample: () => [
++      {
++        asset_id: "AST-00123",
++        asset_name: "Laptop 14 in",
++        location: "Office 2F",
++      },
++      {
++        asset_id: "AST-00124",
++        asset_name: "Label printer",
++        location: "Store room",
++      },
++    ],
++  },
++  {
++    id: "badge",
++    name: "Name badge",
++    description: "Event badge with a large name, company and role",
++    template: nameBadge,
++    sample: () => [
++      {
++        event: "PrintNinja Meetup",
++        name: "Aisha Rahman",
++        company: "PrintNinja Cafe",
++        role: "Speaker",
++      },
++      {
++        event: "PrintNinja Meetup",
++        name: "John Doe",
++        company: "Acme Corp",
++        role: "Attendee",
++      },
++    ],
++  },
++];
++
++export function getSceneStarter(id: string): SceneStarter | undefined {
++  return SCENE_STARTERS.find((s) => s.id === id);
++}
++
++/** A starter's page size in mm, from its media. */
++export function starterSizeMm(starter: SceneStarter): { w: number; h: number } {
++  return pageDims(starter.template().media);
++}
+diff --git a/src/pages/Designer.tsx b/src/pages/Designer.tsx
+index 0729fbb..10dc077 100644
+--- a/src/pages/Designer.tsx
++++ b/src/pages/Designer.tsx
+@@ -11,7 +11,8 @@ import {
+ } from "@/lib/hooks/useMediaQuery";
+ import { useShareStatus } from "@/lib/shell/useShareStatus";
+ import { isReadOnly } from "@/lib/share/sync";
+-import { notifySuccess } from "@/lib/notify";
++import { describeError } from "@/lib/errors";
++import { notifyError, notifySuccess } from "@/lib/notify";
+ import { SampleDataPanel } from "@/components/designer/SampleDataPanel";
+ import type { PagePreset } from "@/components/designer/ControlsAccordion";
+ import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
+@@ -108,8 +109,19 @@ export function DesignerPage() {
+     currentTemplateId: doc.currentTemplateId,
+     currentTemplateDbId: doc.currentTemplateDbId,
+     scene,
++    setSampleJson: dataset.setDraftDatasetJson,
+   });
+   const isScene = scene.template != null;
++  /** Save the label, then fold a pending sample-data edit into the
++   * same Save — the document track's Save already does both. */
++  const saveScene = async () => {
++    if (!(await scene.save(doc.templateName))) return;
++    try {
++      await dataset.commitDataset();
++    } catch (e) {
++      notifyError(describeError(e));
++    }
++  };
+   // Deep link from the Templates page: ?new=scene opens the new-label
+   // dialog, ?new=document the new-document dialog. The param is cleared
+   // once handled, so the effect no-ops on later renders.
+@@ -218,11 +230,7 @@ export function DesignerPage() {
+         dirty={isScene ? scene.dirty || dataset.datasetsDirty : doc.dirty}
+         layout={isScene ? undefined : workspace.layout}
+         onLayoutChange={isScene ? undefined : workspace.setLayout}
+-        onSave={
+-          isScene
+-            ? () => void scene.save(doc.templateName)
+-            : () => void sync.handleSave()
+-        }
++        onSave={isScene ? () => void saveScene() : () => void sync.handleSave()}
+         saveDisabled={
+           isScene ? !!doc.nameError : offline || readOnly || !!doc.nameError
+         }
+diff --git a/src/pages/designer/scene/NewSceneDialog.tsx b/src/pages/designer/scene/NewSceneDialog.tsx
+index 32c6e3f..a841e48 100644
+--- a/src/pages/designer/scene/NewSceneDialog.tsx
++++ b/src/pages/designer/scene/NewSceneDialog.tsx
+@@ -1,8 +1,9 @@
+ /**
+- * The "new label template" dialog: name the scene and create it as its
+- * own local row — scene rows are not shared, so there is no pack step
+- * and no offline gate. When the open template is a scene, the same
+- * dialog also offers deleting it (one extra confirm in the footer).
++ * The "new label template" dialog: pick a starter (or Blank), name the
++ * scene and create it as its own local row — scene rows are not shared,
++ * so there is no server step and no offline gate. When the open
++ * template is a scene, the same dialog also offers deleting it (one
++ * extra confirm in the footer).
+  */
+ import { useCallback, useState } from "react";
+ import { useTranslation } from "react-i18next";
+@@ -17,12 +18,30 @@ import {
+ } from "@/components/ui/dialog";
+ import { Input } from "@/components/ui/input";
+ import { Label } from "@/components/ui/label";
++import { SceneStarterChooser } from "@/components/designer/SceneStarterChooser";
+ import { agent } from "@/lib/agent/commands";
+ import { describeError } from "@/lib/errors";
+ import { notifyError, notifySuccess } from "@/lib/notify";
++import {
++  DEFAULT_SCENE_STARTER_ID,
++  getSceneStarter,
++} from "@/lib/scene/starters";
+ import type { TemplateRow } from "../useDesignerDocument";
+ import type { useSceneTemplate } from "./useSceneTemplate";
+ 
++const LAST_STARTER_KEY = "printninja.last_label_starter";
++
++/** The starter the dialog opens on: the last one used, else Blank. */
++function lastStarterId(): string {
++  try {
++    const last = localStorage.getItem(LAST_STARTER_KEY);
++    if (last && getSceneStarter(last)) return last;
++  } catch {
++    /* storage unavailable: fall through to the default */
++  }
++  return DEFAULT_SCENE_STARTER_ID;
++}
++
+ /**
+  * The "new label template" dialog state and the create round-trip.
+  * Creation goes straight to the local row (no server); deletion removes
+@@ -36,10 +55,15 @@ export function useNewSceneTemplate(deps: {
+   currentTemplateId: number | null;
+   currentTemplateDbId: number | null;
+   scene: ReturnType<typeof useSceneTemplate>;
++  /** Hands the chosen starter's sample records to the sample-data
++   * draft (unsaved until the next Save). Optional: without it the
++   * account's sample data is left alone. */
++  setSampleJson?: (json: string) => void;
+ }) {
+   const { t } = useTranslation();
+   const [showDialog, setShowDialog] = useState(false);
+   const [name, setName] = useState("");
++  const [starterId, setStarterId] = useState(DEFAULT_SCENE_STARTER_ID);
+   // Name problems show under the field, not as a toast.
+   const [nameError, setNameError] = useState("");
+   // The create round-trip is async: while it runs the dialog holds
+@@ -48,12 +72,38 @@ export function useNewSceneTemplate(deps: {
+   const [confirmDelete, setConfirmDelete] = useState(false);
+   const [deleting, setDeleting] = useState(false);
+ 
++  /** The name a starter suggests ("" for Blank, which has none). */
++  const suggestedName = useCallback(
++    (id: string) => {
++      const starter = getSceneStarter(id);
++      if (!starter || starter.id === DEFAULT_SCENE_STARTER_ID) return "";
++      return t(`scene.starter_${id}_name`, { defaultValue: starter.name });
++    },
++    [t],
++  );
++
++  /** Pick a starter. The name field follows the pick while it is empty
++   * or still holds the previous starter's suggestion; a name the person
++   * typed is never overwritten. */
++  const selectStarter = (id: string) => {
++    if (id === starterId) return;
++    setName((current) =>
++      current.trim() === "" || current === suggestedName(starterId)
++        ? suggestedName(id)
++        : current,
++    );
++    setNameError("");
++    setStarterId(id);
++  };
++
+   const openDialog = useCallback(() => {
+-    setName("");
++    const id = lastStarterId();
++    setStarterId(id);
++    setName(suggestedName(id));
+     setNameError("");
+     setConfirmDelete(false);
+     setShowDialog(true);
+-  }, []);
++  }, [suggestedName]);
+   const handleOpenChange = (open: boolean) => {
+     setShowDialog(open);
+     if (!open) {
+@@ -83,8 +133,21 @@ export function useNewSceneTemplate(deps: {
+     setNameError("");
+     setCreating(true);
+     try {
+-      const ok = await deps.scene.create(n);
+-      if (ok) setShowDialog(false);
++      const starter = getSceneStarter(starterId);
++      const ok = await deps.scene.create(n, starter?.template());
++      if (ok) {
++        // A starter brings records that fill its own bindings; Blank
++        // binds nothing and leaves the account's sample data alone.
++        const records = starter?.sample() ?? [];
++        if (records.length > 0)
++          deps.setSampleJson?.(JSON.stringify(records, null, 2));
++        try {
++          localStorage.setItem(LAST_STARTER_KEY, starterId);
++        } catch {
++          /* ignore */
++        }
++        setShowDialog(false);
++      }
+     } finally {
+       setCreating(false);
+     }
+@@ -115,6 +178,8 @@ export function useNewSceneTemplate(deps: {
+     handleOpenChange,
+     name,
+     setName,
++    starterId,
++    selectStarter,
+     nameError,
+     setNameError,
+     creating,
+@@ -136,11 +201,19 @@ export function NewSceneDialog({
+   const s = newScene;
+   return (
+     <Dialog open={s.showDialog} onOpenChange={s.handleOpenChange}>
+-      <DialogContent className="sm:max-w-md">
++      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[620px]">
+         <DialogHeader>
+           <DialogTitle>{t("scene.new_title")}</DialogTitle>
+           <DialogDescription>{t("scene.new_description")}</DialogDescription>
+         </DialogHeader>
++        <div className="space-y-3">
++          <p className="text-sm font-medium">{t("scene.starter_pick")}</p>
++          <SceneStarterChooser
++            selectedId={s.starterId}
++            onSelect={s.selectStarter}
++            disabled={s.creating}
++          />
++        </div>
+         <div className="space-y-1">
+           <Label htmlFor="new-scene-name">{t("common.name")}</Label>
+           <Input
+diff --git a/src/pages/designer/scene/useSceneTemplate.ts b/src/pages/designer/scene/useSceneTemplate.ts
+index a27256b..d452ab8 100644
+--- a/src/pages/designer/scene/useSceneTemplate.ts
++++ b/src/pages/designer/scene/useSceneTemplate.ts
+@@ -315,9 +315,10 @@ export function useSceneTemplate({
+     if (ok) notifySuccess(t("scene.saved"));
+     return ok;
+   };
+-  /** A new label template: a blank scene, saved as its own row. */
+-  const create = async (name: string) => {
+-    const ok = await persist(name, blankTemplate(), null);
++  /** A new label template saved as its own row: the chosen starter's
++   * scene, or a blank one when none is given. */
++  const create = async (name: string, start?: Template) => {
++    const ok = await persist(name, start ?? blankTemplate(), null);
+     if (ok) notifySuccess(t("scene.created"));
+     return ok;
+   };
+diff --git a/src/test/designerPage.test.tsx b/src/test/designerPage.test.tsx
+index d5775cd..12b9304 100644
+--- a/src/test/designerPage.test.tsx
++++ b/src/test/designerPage.test.tsx
+@@ -1037,6 +1037,68 @@ describe("Designer page, create deep links from the Templates page", () => {
+     expect(within(dialog).getByTestId("scene-create")).toBeInTheDocument();
+   });
+ 
++  it("?new=scene offers the starter labels and creates from the chosen one", async () => {
++    invoke.mockImplementation(async (...args: any[]): Promise<any> => {
++      if (args[0] === "label_save_template") {
++        const req = (args[1] as { req: { name: string; scene: string } }).req;
++        return {
++          id: 99,
++          name: req.name,
++          scene_json: req.scene,
++          page_w_mm: 102,
++          page_h_mm: 152,
++          orientation: "portrait",
++        };
++      }
++      return defaultImpl(...args);
++    });
++    try {
++      renderAt("/?new=scene");
++      const dialog = await screen.findByRole("dialog");
++      // Every starter is on offer; Blank is what the dialog opens on.
++      expect(within(dialog).getAllByRole("option").length).toBeGreaterThan(1);
++      expect(within(dialog).getByTestId("scene-starter-blank")).toHaveAttribute(
++        "aria-selected",
++        "true",
++      );
++      fireEvent.click(within(dialog).getByTestId("scene-starter-shipping"));
++      expect(within(dialog).getByLabelText("Name")).toHaveValue(
++        "Shipping label",
++      );
++      fireEvent.change(within(dialog).getByLabelText("Name"), {
++        target: { value: "Parcel 4x6" },
++      });
++      fireEvent.click(within(dialog).getByTestId("scene-create"));
++      await waitFor(() =>
++        expect(invoke).toHaveBeenCalledWith(
++          "label_save_template",
++          expect.anything(),
++        ),
++      );
++      const call = invoke.mock.calls.find(
++        (c) => c[0] === "label_save_template",
++      );
++      const req = (call?.[1] as { req: { name: string; scene: string } }).req;
++      expect(req.name).toBe("Parcel 4x6");
++      const scene = JSON.parse(req.scene);
++      expect(scene.media).toEqual({
++        kind: "label",
++        width_mm: 102,
++        height_mm: 152,
++      });
++      expect(scene.elements.length).toBeGreaterThan(5);
++      // The starter's own records land in the sample-data card, so the
++      // canvas shows a filled label instead of bare placeholders.
++      await waitFor(() =>
++        expect(
++          screen.getAllByDisplayValue(/Aisha Rahman/).length,
++        ).toBeGreaterThan(0),
++      );
++    } finally {
++      invoke.mockImplementation(defaultImpl);
++    }
++  });
++
+   it("?new=document opens the new-document dialog", async () => {
+     renderAt("/?new=document");
+     const dialog = await screen.findByRole("dialog");
+diff --git a/src/test/scene.test.tsx b/src/test/scene.test.tsx
+index c88027e..87616a7 100644
+--- a/src/test/scene.test.tsx
++++ b/src/test/scene.test.tsx
+@@ -362,6 +362,8 @@ describe("useSceneTemplate", () => {
+ type NewSceneArgs = Parameters<typeof useNewSceneTemplate>[0];
+ 
+ describe("useNewSceneTemplate", () => {
++  beforeEach(() => window.localStorage.clear());
++
+   const baseDeps = (
+     scene: { create: ReturnType<typeof vi.fn> },
+     over: Partial<NewSceneArgs> = {},
+@@ -398,7 +400,10 @@ describe("useNewSceneTemplate", () => {
+ 
+   it("creates through the scene hook and closes on success", async () => {
+     const scene = { create: vi.fn().mockResolvedValue(true) };
+-    const { result } = renderNew(baseDeps(scene));
++    const setSampleBlank = vi.fn();
++    const { result } = renderNew(
++      baseDeps(scene, { setSampleJson: setSampleBlank }),
++    );
+     act(() => {
+       result.current.openDialog();
+       result.current.setName("New label");
+@@ -406,10 +411,47 @@ describe("useNewSceneTemplate", () => {
+     await act(async () => {
+       await result.current.create();
+     });
+-    expect(scene.create).toHaveBeenCalledWith("New label");
++    // No starter picked: Blank, the same empty label as before.
++    expect(scene.create).toHaveBeenCalledWith("New label", blankTemplate());
++    // Blank binds nothing, so the account's sample data is left alone.
++    expect(setSampleBlank).not.toHaveBeenCalled();
+     expect(result.current.showDialog).toBe(false);
+   });
+ 
++  it("creates from the chosen starter and suggests its name", async () => {
++    const scene = { create: vi.fn().mockResolvedValue(true) };
++    const setSampleJson = vi.fn();
++    const { result } = renderNew(baseDeps(scene, { setSampleJson }));
++    act(() => result.current.openDialog());
++    expect(result.current.starterId).toBe("blank");
++    expect(result.current.name).toBe("");
++
++    act(() => result.current.selectStarter("shipping"));
++    expect(result.current.starterId).toBe("shipping");
++    expect(result.current.name).toBe("Shipping label");
++    // The suggestion follows the pick while it is untouched…
++    act(() => result.current.selectStarter("badge"));
++    expect(result.current.name).toBe("Name badge");
++    // …but a name the person typed is kept.
++    act(() => result.current.setName("Front desk"));
++    act(() => result.current.selectStarter("asset"));
++    expect(result.current.name).toBe("Front desk");
++
++    await act(async () => {
++      await result.current.create();
++    });
++    const [name, start] = scene.create.mock.calls[0] as [string, Template];
++    expect(name).toBe("Front desk");
++    expect(start.media).toEqual({ kind: "label", width_mm: 50, height_mm: 30 });
++    expect(start.elements.some((e) => e.type === "qr")).toBe(true);
++    // The starter's own records are handed to the sample-data draft.
++    const sample = JSON.parse(setSampleJson.mock.calls[0][0] as string);
++    expect(sample[0].asset_id).toBe("AST-00123");
++    // The next dialog opens on the last starter used.
++    act(() => result.current.openDialog());
++    expect(result.current.starterId).toBe("asset");
++  });
++
+   it("deletes the open scene row, and resets the open template when it was the one", async () => {
+     const scene = { create: vi.fn().mockResolvedValue(true) };
+     const setTemplates = vi.fn();
+diff --git a/src/test/sceneStarters.test.tsx b/src/test/sceneStarters.test.tsx
+new file mode 100644
+index 0000000..eebe06d
+--- /dev/null
++++ b/src/test/sceneStarters.test.tsx
+@@ -0,0 +1,174 @@
++import { describe, it, expect } from "vitest";
++import { render, screen, within, fireEvent } from "@testing-library/react";
++import "@/lib/i18n";
++import en from "@/lib/i18n/locales/en";
++import ja from "@/lib/i18n/locales/ja";
++import { SceneStarterChooser } from "@/components/designer/SceneStarterChooser";
++import { allBindings, withSyncedFields } from "@/lib/scene/editor-model";
++import type { Element, Template } from "@/lib/scene/schema";
++import {
++  DEFAULT_SCENE_STARTER_ID,
++  SCENE_STARTERS,
++  getSceneStarter,
++} from "@/lib/scene/starters";
++
++const sizeOf = (el: Element): { w: number; h: number } => {
++  switch (el.type) {
++    case "qr":
++      return { w: el.h_mm, h: el.h_mm };
++    case "line":
++      return el.vertical
++        ? { w: el.thickness_mm, h: el.length_mm }
++        : { w: el.length_mm, h: el.thickness_mm };
++    case "group":
++      return { w: el.w_mm, h: 0 };
++    default:
++      return { w: el.size.w_mm, h: el.size.h_mm };
++  }
++};
++
++/** The scene validation's geometry rules (pn-scene): fixed elements stay
++ * on the page, frame children stay inside their frame and never pick a
++ * page of their own, and a frame holds no group. */
++function geometryProblems(
++  els: Element[],
++  w: number,
++  h: number,
++  where: string,
++): string[] {
++  const out: string[] = [];
++  for (const el of els) {
++    const s = sizeOf(el);
++    if (el.at.x_mm < 0 || el.at.y_mm < 0)
++      out.push(`${where}: ${el.type} starts off the page`);
++    if (el.at.x_mm + s.w > w || (el.type !== "group" && el.at.y_mm + s.h > h))
++      out.push(
++        `${where}: ${el.type} at ${el.at.x_mm},${el.at.y_mm} leaves ${w}×${h}`,
++      );
++    if (el.type === "frame") {
++      out.push(
++        ...geometryProblems(el.children, el.size.w_mm, el.size.h_mm, "frame"),
++      );
++    }
++  }
++  return out;
++}
++
++describe("starter label templates", () => {
++  it("has unique ids, led by the blank starter", () => {
++    const ids = SCENE_STARTERS.map((s) => s.id);
++    expect(new Set(ids).size).toBe(ids.length);
++    expect(ids[0]).toBe(DEFAULT_SCENE_STARTER_ID);
++    expect(getSceneStarter("nope")).toBeUndefined();
++  });
++
++  it.each(SCENE_STARTERS.map((s) => [s.id, s] as const))(
++    "%s is a valid scene that fits its media",
++    (_id, starter) => {
++      const t: Template = starter.template();
++      expect(t.format).toBe("scene");
++      expect(t.media.kind).toBe("label");
++      const w = t.media.width_mm;
++      const h = t.media.kind === "label" ? t.media.height_mm : 0;
++      expect(w).toBeGreaterThan(0);
++      expect(h).toBeGreaterThan(0);
++      expect(geometryProblems(t.elements, w, h, "page")).toEqual([]);
++      // Declared fields follow the bindings in use, so a save never
++      // trips the "unknown binding" rule.
++      expect(withSyncedFields(t).fields?.map((f) => f.name)).toEqual(
++        allBindings(t),
++      );
++      // The wire format is plain JSON.
++      expect(JSON.parse(JSON.stringify(t))).toEqual(t);
++    },
++  );
++
++  it("every starter beyond blank has real content with bindings", () => {
++    for (const s of SCENE_STARTERS.filter((x) => x.id !== "blank")) {
++      const t = s.template();
++      expect(t.elements.length).toBeGreaterThan(2);
++      expect(allBindings(t).length).toBeGreaterThan(0);
++    }
++  });
++
++  it("each starter's sample records fill every binding it uses", () => {
++    for (const s of SCENE_STARTERS) {
++      const bindings = allBindings(s.template());
++      const records = s.sample();
++      if (bindings.length === 0) {
++        expect(records, s.id).toEqual([]);
++        continue;
++      }
++      expect(records.length, s.id).toBeGreaterThanOrEqual(2);
++      for (const r of records) {
++        for (const b of bindings)
++          expect(r[b]?.trim(), `${s.id}.${b}`).toBeTruthy();
++      }
++    }
++    // A fresh copy each call, like the scene.
++    const a = getSceneStarter("badge")?.sample();
++    a?.pop();
++    expect(getSceneStarter("badge")?.sample().length).toBe(2);
++  });
++
++  it("hands out a fresh copy each call", () => {
++    const starter = getSceneStarter("shipping");
++    const a = starter?.template();
++    const b = starter?.template();
++    expect(a).toEqual(b);
++    expect(a).not.toBe(b);
++    a?.elements.pop();
++    expect(starter?.template().elements.length).toBe(b?.elements.length);
++  });
++
++  it("has an English and a Japanese name and description for each", () => {
++    const en_ = en.scene as Record<string, string>;
++    const ja_ = ja.scene as Record<string, string>;
++    for (const s of SCENE_STARTERS) {
++      for (const suffix of ["name", "desc"]) {
++        const key = `starter_${s.id}_${suffix}`;
++        expect(en_[key], `en ${key}`).toBeTruthy();
++        expect(ja_[key], `ja ${key}`).toBeTruthy();
++      }
++    }
++  });
++});
++
++describe("SceneStarterChooser", () => {
++  it("lists every starter and reports the pick", () => {
++    const picked: string[] = [];
++    render(
++      <SceneStarterChooser
++        selectedId="blank"
++        onSelect={(id) => picked.push(id)}
++      />,
++    );
++    const list = screen.getByRole("listbox");
++    expect(within(list).getAllByRole("option")).toHaveLength(
++      SCENE_STARTERS.length,
++    );
++    expect(screen.getByTestId("scene-starter-blank")).toHaveAttribute(
++      "aria-selected",
++      "true",
++    );
++    fireEvent.click(screen.getByTestId("scene-starter-shipping"));
++    expect(picked).toEqual(["shipping"]);
++  });
++
++  it("moves the selection with the arrow keys, wrapping around", () => {
++    const picked: string[] = [];
++    render(
++      <SceneStarterChooser
++        selectedId="blank"
++        onSelect={(id) => picked.push(id)}
++      />,
++    );
++    const list = screen.getByRole("listbox");
++    fireEvent.keyDown(list, { key: "ArrowRight" });
++    fireEvent.keyDown(list, { key: "ArrowLeft" });
++    expect(picked).toEqual([
++      SCENE_STARTERS[1].id,
++      SCENE_STARTERS[SCENE_STARTERS.length - 1].id,
++    ]);
++  });
++});
