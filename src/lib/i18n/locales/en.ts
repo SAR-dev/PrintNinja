@@ -1850,6 +1850,12 @@ const en = {
       "This job also carries PDF pages, which the bitmap preview does not show.",
     preview_unavailable: "No preview to show.",
     previewing: "Preparing…",
+    prepared_preview: "Prepared preview",
+    preview_stale: "Out of date — refreshing…",
+    no_printers_preview:
+      "No label printers saved yet. Add one to prepare a preview.",
+    add_printer: "Add printer",
+    preview_details: "Details",
     printer_list_error: "The printer list could not be loaded.",
     qr_size_mm: "Size (mm)",
     readme: "README",

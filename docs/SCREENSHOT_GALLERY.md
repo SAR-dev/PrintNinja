@@ -34,9 +34,10 @@ The full editor: canvas, element tools, data bindings and a live preview.
 
 ![Label Designer on Windows](./screenshots/windows/en-light-comfortable/label-designer.png)
 
-The label track: a millimetre canvas on the left, and a right-hand
-column that keeps the README, media settings and prepared preview in view
-while the canvas scrolls.
+The label track in the shared designer workspace: Page Setup, Sample data
+and Fields on the left, Elements / Properties / README / Preview tabs in the
+middle, and a zoomable canvas on the right with the printer picker and
+prepared-preview switch in its toolbar.
 
 ### Printers
 

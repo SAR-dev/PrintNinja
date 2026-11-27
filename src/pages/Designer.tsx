@@ -240,8 +240,8 @@ export function DesignerPage() {
               doc.readme !== doc.savedReadme
             : doc.dirty
         }
-        layout={isScene ? undefined : workspace.layout}
-        onLayoutChange={isScene ? undefined : workspace.setLayout}
+        layout={workspace.layout}
+        onLayoutChange={workspace.setLayout}
         onSave={isScene ? () => void saveScene() : () => void sync.handleSave()}
         saveDisabled={
           isScene ? !!doc.nameError : offline || readOnly || !!doc.nameError
@@ -279,7 +279,6 @@ export function DesignerPage() {
         isScene={isScene}
         scene={scene}
         sampleJson={dataset.workingDatasetJson}
-        onSampleJsonChange={dataset.setDraftDatasetJson}
         workspace={workspace}
         debounced={debounced}
         controls={controls}

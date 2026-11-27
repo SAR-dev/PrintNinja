@@ -1890,6 +1890,12 @@ const ja: Translation = {
       "このジョブには PDF ページも含まれますが、ビットマッププレビューでは表示されません。",
     preview_unavailable: "表示できるプレビューがありません。",
     previewing: "準備中…",
+    prepared_preview: "準備済みプレビュー",
+    preview_stale: "古くなっています — 更新中…",
+    no_printers_preview:
+      "ラベルプリンタがまだありません。プレビューにはプリンタの追加が必要です。",
+    add_printer: "プリンタを追加",
+    preview_details: "詳細",
     printer_list_error: "プリンタリストを読み込めませんでした。",
     qr_size_mm: "サイズ (mm)",
     readme: "README",

@@ -45,6 +45,14 @@ Only use the headings you actually have entries for.
 
 ## Unreleased
 
+### Changed
+
+- **One workspace for both template kinds.** Label templates now open in the same resizable workspace as documents: page setup, sample data and data fields on the left, Elements / Properties / README / Preview tabs beside a zoomable canvas. The layout toggle works for labels too.
+
+### Fixed
+
+- **Prepared label previews keep up.** Choose the printer beside the canvas, turn on Prepared preview and the dots refresh as you edit; pages are labelled, sized in millimetres, and large labels no longer lose their preview.
+
 ## [2026.1127.0] - 2026-11-27
 
 ### Added

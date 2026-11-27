@@ -1,73 +1,10 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type TouchEvent as ReactTouchEvent,
-  type TouchList as ReactTouchList,
-} from "react";
-import { AlertTriangle, Info, ZoomIn, ZoomOut } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useRenderedPages } from "@/lib/hooks/useRenderedPages";
-import { cn } from "@/lib/utils";
 import { CanvasPane } from "./CanvasPane";
+import { MM_TO_PX, ZoomStage, fitZoom, stepZoom } from "./ZoomStage";
 
-/** CSS pixels per millimetre at 96 dpi. */
-export const MM_TO_PX = 3.7795;
-
-const MIN_ZOOM = 0.25;
-const MAX_ZOOM = 3;
-const ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3];
-/** The zoom levels offered in the picker, besides Fit. */
-const ZOOM_PRESETS = [0.5, 1];
-/** Space kept around the page inside the scroll area (Tailwind p-4, both sides). */
-const PAD_X = 32;
-
-type ZoomMode = "fit" | number;
-
-/** Space kept around the page inside the scroll area, top and bottom. */
-const PAD_Y = 32;
-/** The most Fit will enlarge a small page, so a label fills the pane without going blurry. */
-const MAX_FIT = 3;
-
-/**
- * The zoom that makes the page exactly as wide as the space it has, never above 100%.
- *
- * Given the pane's height too (desktop, where the pane has a fixed height), a
- * page that already fits at 100% is enlarged until it fills the pane, up to
- * 300%: a small label no longer sits tiny in a big canvas. A page larger than
- * the pane still fits by width and scrolls down, as before.
- */
-export function fitZoom(
-  availableWidth: number,
-  pageWidthPx: number,
-  availableHeight = 0,
-  pageHeightPx = 0,
-): number {
-  // Width is 0 before the first measurement (and in jsdom): show the page at full size.
-  if (availableWidth <= 0 || pageWidthPx <= 0) return 1;
-  const byWidth = (availableWidth - PAD_X) / pageWidthPx;
-  if (availableHeight > 0 && pageHeightPx > 0) {
-    const byHeight = (availableHeight - PAD_Y) / pageHeightPx;
-    const both = Math.min(byWidth, byHeight);
-    if (both > 1) return Math.min(MAX_FIT, both);
-  }
-  return Math.min(1, Math.max(MIN_ZOOM, byWidth));
-}
-
-/** The next zoom step above or below `zoom`, or `zoom` itself at the end of the range. */
-export function stepZoom(zoom: number, direction: 1 | -1): number {
-  const eps = 0.001;
-  if (direction > 0) return ZOOM_STEPS.find((s) => s > zoom + eps) ?? MAX_ZOOM;
-  return [...ZOOM_STEPS].reverse().find((s) => s < zoom - eps) ?? MIN_ZOOM;
-}
+export { MM_TO_PX, fitZoom, stepZoom };
 
 interface Props {
   html: string;
@@ -83,7 +20,7 @@ interface Props {
   className?: string;
 }
 
-/** The canvas with its toolbar: Fit, −, zoom %, +. Owns the zoom, which starts on Fit. */
+/** The document designer's canvas: the Rust-rendered page inside the shared zoom stage. */
 export function CanvasWorkspace({
   html,
   css,
@@ -96,184 +33,10 @@ export function CanvasWorkspace({
   className,
 }: Props) {
   const { t } = useTranslation();
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [mode, setMode] = useState<ZoomMode>("fit");
-  const [areaWidth, setAreaWidth] = useState(0);
-  const [areaHeight, setAreaHeight] = useState(0);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const measure = () => {
-      setAreaWidth(el.clientWidth);
-      // On a phone the pane is as tall as the page, so its height says nothing:
-      // only a pane with a fixed height can ask Fit to enlarge the page.
-      setAreaHeight(fill ? el.clientHeight : 0);
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [fill]);
-
-  const pageWidth = pageWidthMm * MM_TO_PX;
-  const pageHeight = pageHeightMm * MM_TO_PX;
-  const zoom =
-    mode === "fit"
-      ? fitZoom(areaWidth, pageWidth, areaHeight, pageHeight)
-      : mode;
-  const pct = Math.round(zoom * 100);
-  // The same render the print pipeline runs: the canvas shows the result,
-  // and while the template is momentarily invalid (an unclosed {{#each}},
-  // say) the page shows the raw source while `error` says why.
   const { pages, error } = useRenderedPages(html, css, compiledCss, [data]);
 
-  const isPreset = mode !== "fit" && ZOOM_PRESETS.includes(mode);
-  const selectValue =
-    mode === "fit" ? "fit" : isPreset ? String(mode) : "custom";
-
-  // Touch zoom on phones: two-finger pinch scales around
-  // the gesture, double-tap toggles 100% / fit. `touch-action: pan-x pan-y`
-  // below keeps one-finger scrolling with the browser while disabling its
-  // own pinch-zoom and tap-zoom, so these handlers own the gesture.
-  const gesture = useRef<{
-    startDist: number;
-    startZoom: number;
-    multi: boolean;
-  } | null>(null);
-  const tap = useRef<{ at: number; x: number; y: number } | null>(null);
-  const lastTapAt = useRef(0);
-  const touchDist = (touches: ReactTouchList) =>
-    Math.hypot(
-      touches[0].clientX - touches[1].clientX,
-      touches[0].clientY - touches[1].clientY,
-    );
-  const onTouchStart = (e: ReactTouchEvent) => {
-    if (e.touches.length === 2) {
-      gesture.current = {
-        startDist: touchDist(e.touches),
-        startZoom: zoom,
-        multi: true,
-      };
-      tap.current = null;
-    } else if (e.touches.length === 1 && !gesture.current) {
-      const t = e.touches[0];
-      tap.current = { at: Date.now(), x: t.clientX, y: t.clientY };
-    } else if (gesture.current) {
-      gesture.current.multi = true;
-      tap.current = null;
-    }
-  };
-  const onTouchMove = (e: ReactTouchEvent) => {
-    const g = gesture.current;
-    if (g && e.touches.length === 2 && g.startDist > 0) {
-      setMode(
-        Math.min(
-          MAX_ZOOM,
-          Math.max(
-            MIN_ZOOM,
-            (g.startZoom * touchDist(e.touches)) / g.startDist,
-          ),
-        ),
-      );
-    }
-  };
-  const onTouchEnd = (e: ReactTouchEvent) => {
-    if (e.touches.length > 0) return;
-    const g = gesture.current;
-    gesture.current = null;
-    // A fast, nearly stationary single tap counts; scrolls do not.
-    const tp = tap.current;
-    tap.current = null;
-    if (g?.multi || !tp) return;
-    const dt = Date.now() - tp.at;
-    if (dt > 250) return;
-    const now = Date.now();
-    if (now - lastTapAt.current < 300) {
-      lastTapAt.current = 0;
-      setMode((m) => (m === "fit" ? 1 : "fit"));
-    } else {
-      lastTapAt.current = now;
-    }
-  };
-
-  return (
-    <div
-      className={cn(
-        "flex flex-col overflow-hidden rounded-lg border bg-card",
-        fill && "h-full",
-        className,
-      )}
-    >
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-1.5">
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-medium">
-            {t("designer.canvas")}
-          </span>
-          {/* Real dimensions, so a phone author knows the label size at a glance. */}
-          <span className="block text-xs text-muted-foreground">
-            {t("designer.canvas_size", { w: pageWidthMm, h: pageHeightMm })}
-          </span>
-        </span>
-        {/* One joined control: zoom level, − / + and the live percentage. */}
-        <div className="inline-flex h-8 items-center overflow-hidden rounded-md border border-input bg-background">
-          <Select
-            value={selectValue}
-            onValueChange={(v) => {
-              if (v === "fit") setMode("fit");
-              else if (v !== "custom") setMode(Number(v));
-            }}
-          >
-            <SelectTrigger
-              aria-label={t("designer.zoom_level")}
-              className="h-full w-[4.5rem] rounded-none border-0 bg-transparent px-2.5 text-xs shadow-none ring-offset-0 focus:ring-inset focus:ring-offset-0"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="fit">{t("designer.zoom_fit")}</SelectItem>
-              {ZOOM_PRESETS.map((p) => (
-                <SelectItem key={p} value={String(p)}>
-                  {Math.round(p * 100)}%
-                </SelectItem>
-              ))}
-              {selectValue === "custom" && (
-                <SelectItem value="custom">{pct}%</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-          <span className="h-4 w-px bg-border" aria-hidden="true" />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-full w-8 rounded-none"
-            aria-label={t("designer.zoom_out")}
-            title={t("designer.zoom_out")}
-            disabled={zoom <= MIN_ZOOM + 0.001}
-            onClick={() => setMode(stepZoom(zoom, -1))}
-          >
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <span
-            className="w-12 text-center text-xs tabular-nums"
-            aria-live="polite"
-          >
-            {pct}%
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-full w-8 rounded-none"
-            aria-label={t("designer.zoom_in")}
-            title={t("designer.zoom_in")}
-            disabled={zoom >= MAX_ZOOM - 0.001}
-            onClick={() => setMode(stepZoom(zoom, 1))}
-          >
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+  const notices = (
+    <>
       {error && (
         <div
           role="alert"
@@ -300,32 +63,25 @@ export function CanvasWorkspace({
           <span className="min-w-0 break-words">{sampleNote}</span>
         </div>
       )}
-      {/* m-auto centres a small page and still lets a large one scroll to its left edge.
-          The stable gutter stops a scrollbar appearing and re-fitting the page in a loop. */}
-      <div
-        ref={scrollRef}
-        data-testid="canvas-scroll"
-        role="region"
-        aria-label={t("designer.canvas")}
-        tabIndex={0}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onTouchCancel={onTouchEnd}
-        className={cn(
-          "flex overflow-auto bg-muted p-4 [background-image:radial-gradient(hsl(var(--border))_1px,transparent_1px)] [background-size:16px_16px] [scrollbar-gutter:stable] [touch-action:pan-x_pan-y]",
-          fill ? "min-h-0 flex-1" : "min-h-[62dvh]",
-        )}
-      >
-        <div className="m-auto">
-          <CanvasPane
-            doc={pages[0] ?? ""}
-            width={pageWidth}
-            height={pageHeight}
-            zoom={zoom}
-          />
-        </div>
-      </div>
-    </div>
+    </>
+  );
+
+  return (
+    <ZoomStage
+      pageWidthMm={pageWidthMm}
+      pageHeightMm={pageHeightMm}
+      fill={fill}
+      className={className}
+      notices={notices}
+    >
+      {(zoom) => (
+        <CanvasPane
+          doc={pages[0] ?? ""}
+          width={pageWidthMm * MM_TO_PX}
+          height={pageHeightMm * MM_TO_PX}
+          zoom={zoom}
+        />
+      )}
+    </ZoomStage>
   );
 }

@@ -27,7 +27,6 @@ export function DesignerBody({
   isScene,
   scene,
   sampleJson,
-  onSampleJsonChange,
   workspace,
   debounced,
   controls,
@@ -52,7 +51,6 @@ export function DesignerBody({
   /** The sample data as the dataset edits it; the scene track edits it
    * in a plain textarea, the document track in the dataset dialog. */
   sampleJson: string;
-  onSampleJsonChange: (json: string) => void;
   workspace: ReturnType<typeof useDesignerWorkspace>;
   debounced: ReturnType<typeof useDebouncedTemplate>;
   controls: Controls;
@@ -100,15 +98,17 @@ export function DesignerBody({
         templateName={doc.templateName}
       />
     ) : (
-      <div className="min-h-0 flex-1 overflow-y-auto pb-4 xl:overflow-hidden">
+      <div className="min-h-0 flex-1 pb-4">
         <SceneDesigner
           scene={scene}
           sampleJson={sampleJson}
-          onSampleJsonChange={onSampleJsonChange}
           readme={doc.readme}
           onReadmeChange={doc.setReadme}
           templateName={doc.templateName}
           readOnly={readOnly}
+          layout={workspace.layout}
+          workspace={workspace}
+          samplePanel={samplePanel(false)}
         />
       </div>
     )

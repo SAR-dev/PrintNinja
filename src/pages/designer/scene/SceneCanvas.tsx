@@ -688,6 +688,7 @@ export function SceneCanvas({
   record,
   showSample,
   dpi,
+  scale: scaleOverride,
 }: {
   template: Template;
   selection: Selection | null;
@@ -704,11 +705,13 @@ export function SceneCanvas({
   record: Record<string, unknown> | null;
   showSample: boolean;
   dpi: number | null;
+  /** Pixels per millimetre; the shared ZoomStage supplies it. */
+  scale?: number;
 }) {
   const { t } = useTranslation();
   const interactive = onMove !== undefined && onSelect !== undefined;
   const { w: wMm, h: hMm } = pageDims(template.media);
-  const scale = Math.min(12, 480 / wMm);
+  const scale = scaleOverride ?? Math.min(12, 480 / wMm);
   const width = wMm * scale;
   const height = hMm * scale;
   const drag = useRef<Drag | null>(null);

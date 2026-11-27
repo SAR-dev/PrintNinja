@@ -51,6 +51,10 @@ interface Props<
   onInsertHelper?: (text: string) => void;
   /** The sample datasets. When given, a Sample data section is listed after Page Setup. */
   samplePanel?: ReactNode;
+  /** Scene-track bindings. When given, a Fields section follows Sample data. */
+  fieldsPanel?: ReactNode;
+  /** Extra page controls (media kind), rendered at the top of Page Setup. */
+  pageExtra?: ReactNode;
   /** Extra classes for the accordion; the desktop column drops the card frame it draws itself. */
   className?: string;
 }
@@ -80,6 +84,8 @@ export function ControlsAccordion<
   onInsertHelper,
   onBarcode,
   samplePanel,
+  fieldsPanel,
+  pageExtra,
   className,
 }: Props<T>) {
   const { t } = useTranslation();
@@ -152,6 +158,7 @@ export function ControlsAccordion<
       <AccordionItem value="page">
         <AccordionTrigger>{t("designer.pageSetup")}</AccordionTrigger>
         <AccordionContent className="space-y-3 px-1">
+          {pageExtra}
           {showTemplates && (
             <div className="space-y-1">
               <Label htmlFor="designer-template-name" className="text-xs">
@@ -228,6 +235,13 @@ export function ControlsAccordion<
         <AccordionItem value="sample">
           <AccordionTrigger>{t("designer.sampleData")}</AccordionTrigger>
           <AccordionContent>{samplePanel}</AccordionContent>
+        </AccordionItem>
+      )}
+
+      {fieldsPanel !== undefined && (
+        <AccordionItem value="fields">
+          <AccordionTrigger>{t("scene.data_fields")}</AccordionTrigger>
+          <AccordionContent>{fieldsPanel}</AccordionContent>
         </AccordionItem>
       )}
 

@@ -1087,12 +1087,10 @@ describe("Designer page, create deep links from the Templates page", () => {
         height_mm: 152,
       });
       expect(scene.elements.length).toBeGreaterThan(5);
-      // The starter's own records land in the sample-data card, so the
-      // canvas shows a filled label instead of bare placeholders.
+      // The starter's own records land in the shared sample-data panel,
+      // so the canvas shows a filled label instead of bare placeholders.
       await waitFor(() =>
-        expect(
-          screen.getAllByDisplayValue(/Aisha Rahman/).length,
-        ).toBeGreaterThan(0),
+        expect(screen.getAllByText(/Aisha Rahman/).length).toBeGreaterThan(0),
       );
     } finally {
       invoke.mockImplementation(defaultImpl);
