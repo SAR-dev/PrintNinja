@@ -13,8 +13,10 @@ const INK = "#18181b";
  * rects; a note is cheaper than that. */
 const MAX_PIXELS = 2_000_000;
 
-const bit = (packed: number[], i: number) =>
-  (packed[i >> 3] >> (7 - (i & 7))) & 1;
+/** Rows are packed to whole bytes; index by row stride, not pixel width. */
+const rowBytes = (width: number) => Math.ceil(width / 8);
+const bit = (packed: number[], width: number, x: number, y: number) =>
+  (packed[y * rowBytes(width) + (x >> 3)] >> (7 - (x & 7))) & 1;
 
 function BitmapPage({
   preview,
@@ -33,12 +35,11 @@ function BitmapPage({
   for (let y = 0; y < preview.height; y++) {
     let x = 0;
     while (x < preview.width) {
-      while (x < preview.width && !bit(preview.packed, y * preview.width + x))
+      while (x < preview.width && !bit(preview.packed, preview.width, x, y))
         x++;
       if (x >= preview.width) break;
       const start = x;
-      while (x < preview.width && bit(preview.packed, y * preview.width + x))
-        x++;
+      while (x < preview.width && bit(preview.packed, preview.width, x, y)) x++;
       rects.push(
         <rect
           key={`${y}-${start}`}

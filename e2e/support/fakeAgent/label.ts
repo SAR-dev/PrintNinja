@@ -474,6 +474,90 @@ const PDF_BYTES = [..."%PDF-1.4 fake preview page\n"].map((c) =>
   c.charCodeAt(0),
 );
 
+/**
+ * A tiny 5×7 dot font: thermal labels are dots, not antialiased text, so
+ * a hand-drawn glyph reads far better at preview scale than a thresholded
+ * canvas font. Only the characters a label is likely to carry are mapped.
+ */
+const FONT: Record<string, string[]> = {
+  A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+  B: ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
+  C: ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+  D: ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+  E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+  F: ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
+  G: ["01111", "10000", "10000", "10111", "10001", "10001", "01111"],
+  H: ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+  I: ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+  J: ["00111", "00010", "00010", "00010", "00010", "10010", "01100"],
+  K: ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
+  L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+  M: ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+  N: ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+  O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+  P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+  Q: ["01110", "10001", "10001", "10001", "10101", "10010", "01101"],
+  R: ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+  S: ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+  T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+  U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+  V: ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
+  W: ["10001", "10001", "10001", "10101", "10101", "10101", "01010"],
+  X: ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
+  Y: ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
+  Z: ["11111", "00001", "00010", "00100", "01000", "10000", "11111"],
+  "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+  "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+  "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+  "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+  "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+  "5": ["11111", "10000", "10000", "11110", "00001", "00001", "11110"],
+  "6": ["01110", "10000", "10000", "11110", "10001", "10001", "01110"],
+  "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+  "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+  "9": ["01110", "10001", "10001", "01111", "00001", "00001", "01110"],
+  "-": ["00000", "00000", "00000", "11111", "00000", "00000", "00000"],
+  ",": ["00000", "00000", "00000", "00000", "00110", "00110", "00100"],
+  ".": ["00000", "00000", "00000", "00000", "00000", "01100", "01100"],
+  "/": ["00001", "00010", "00010", "00100", "01000", "01000", "10000"],
+  ":": ["00000", "01100", "01100", "00000", "01100", "01100", "00000"],
+  " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
+};
+
+/** Draw one line of text as crisp dots, fitted to the element's box. */
+function drawText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  height: number,
+  maxWidth: number,
+  align: string,
+): void {
+  const chars = [...text.toUpperCase()];
+  if (!chars.length) return;
+  let scale = Math.max(1, Math.floor(height / 7));
+  const advance = 6 * scale;
+  if (maxWidth > 0 && chars.length * advance > maxWidth) {
+    scale = Math.max(1, Math.floor(maxWidth / (chars.length * 6)));
+  }
+  const step = 6 * scale;
+  const width = chars.length * step - scale;
+  let cursor =
+    align === "center" ? x - width / 2 : align === "right" ? x - width : x;
+  for (const ch of chars) {
+    const glyph = FONT[ch] ?? FONT[" "];
+    for (let row = 0; row < 7; row++) {
+      for (let col = 0; col < 5; col++) {
+        if (glyph[row][col] === "1") {
+          ctx.fillRect(cursor + col * scale, y + row * scale, scale, scale);
+        }
+      }
+    }
+    cursor += step;
+  }
+}
+
 /** Fill `{{flat.or.nested}}` bindings from one record. */
 function substitute(content: string, record: Record<string, unknown>): string {
   return content.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
@@ -563,17 +647,17 @@ function bitmapFor(
       case "text": {
         const style = (el["style"] ?? {}) as {
           size_mm?: number;
-          bold?: boolean;
           align?: string;
         };
-        ctx!.font = `${style.bold ? "bold " : ""}${Math.max(4, mm(style.size_mm ?? 4))}px sans-serif`;
-        ctx!.textAlign =
-          style.align === "center"
-            ? "center"
-            : style.align === "right"
-              ? "right"
-              : "left";
-        ctx!.fillText(substitute(String(el["content"] ?? ""), record), x, y, w);
+        drawText(
+          ctx!,
+          substitute(String(el["content"] ?? ""), record),
+          x,
+          y,
+          Math.max(7, mm(style.size_mm ?? 4)),
+          w,
+          style.align ?? "left",
+        );
         break;
       }
       case "line": {
@@ -618,9 +702,15 @@ function bitmapFor(
           cx += bar * 1.6;
         }
         if (el["show_text"]) {
-          ctx!.textAlign = "left";
-          ctx!.font = `${Math.max(6, mm(2.5))}px sans-serif`;
-          ctx!.fillText(value, x, y + h * 0.8, w);
+          drawText(
+            ctx!,
+            value,
+            x,
+            y + h * 0.8,
+            Math.max(7, mm(2.5)),
+            w,
+            "left",
+          );
         }
         break;
       }
