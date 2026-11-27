@@ -291,6 +291,7 @@ export function DesignerPage() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         handleShowCanvas={handleShowCanvas}
+        onSceneSave={saveScene}
       />
 
       <DesignerDialogs

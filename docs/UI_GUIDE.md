@@ -173,6 +173,12 @@ printer picker with its dpi, the **Prepared preview** switch and a refresh
 button. The prepared result redraws on edits when the switch is on, and is
 shown as page-labelled bitmaps with a mm size and a Details fold.
 
+On tablets the label track uses the same sticky tabs as the document
+designer — Canvas, Elements, Selected element, README and Preview — with
+Page Setup, Sample data and Fields in the settings sheet. On phones it stays
+read-only but uses the document viewer's section picker: Preview, Sample
+data and README; the sample data is the only thing a phone can edit.
+
 ## Tokens, type and shape
 
 All colours are CSS variables in `src/index.css` (HSL triplets, so opacity modifiers work),

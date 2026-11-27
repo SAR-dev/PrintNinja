@@ -113,8 +113,9 @@ The phone Designer is a read-only viewer: sections and notice, no editing panes.
 
 ![Label Designer on an Android phone](./screenshots/android-phone/en-light-comfortable/label-designer.png)
 
-On a phone a label template opens read-only: the canvas at phone width and
-the bottom tab bar, with no editing panes.
+On a phone a label template opens in the read-only section picker: the label
+preview first, then Sample data and README. The bottom tab bar stays put;
+there are no editing panes.
 
 ### Printers
 

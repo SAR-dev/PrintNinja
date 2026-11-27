@@ -6,7 +6,8 @@ import { PhoneDesignerViewer } from "@/components/designer/PhoneDesignerViewer";
 import { DesignerWorkspace, type Controls } from "./DesignerWorkspace";
 import { TabletView } from "./TabletView";
 import { SceneDesigner } from "./scene/SceneDesigner";
-import { ScenePreview } from "./scene/ScenePreview";
+import { ScenePhoneView } from "./scene/ScenePhoneView";
+import { SceneTabletView } from "./scene/SceneTabletView";
 import type { useDesignerDocument } from "./useDesignerDocument";
 import type { useTemplateSync } from "./useTemplateSync";
 import type { useDesignerWorkspace } from "./useDesignerWorkspace";
@@ -39,6 +40,7 @@ export function DesignerBody({
   activeTab,
   setActiveTab,
   handleShowCanvas,
+  onSceneSave,
 }: {
   isDesktop: boolean;
   isPhone: boolean;
@@ -63,6 +65,7 @@ export function DesignerBody({
   activeTab: string;
   setActiveTab: (tab: string) => void;
   handleShowCanvas: () => void;
+  onSceneSave: () => void;
 }) {
   const { t } = useTranslation();
   // Phone: Templates / Page Setup / Custom input live in a bottom sheet
@@ -89,13 +92,33 @@ export function DesignerBody({
     // The scene track: phones see the label page read-only, desktop and
     // tablet the full designer (the canvas beside the inspector cards).
     isPhone ? (
-      <ScenePreview
+      <ScenePhoneView
         template={sceneTemplate}
-        dpi={scene.dpi}
+        templateName={doc.templateName}
         sampleJson={sampleJson}
         samplePanel={samplePanel(false)}
+        readme={doc.readme}
+        dpi={scene.dpi}
         dirty={scene.dirty}
+        onSave={onSceneSave}
+        canSave={scene.dirty && !readOnly && !offline && !doc.nameError}
+      />
+    ) : !isDesktop ? (
+      <SceneTabletView
+        scene={scene}
+        template={sceneTemplate}
+        sampleJson={sampleJson}
+        samplePanel={samplePanel(false)}
+        readme={doc.readme}
+        onReadmeChange={doc.setReadme}
         templateName={doc.templateName}
+        readOnly={readOnly}
+        dirty={scene.dirty || doc.readme !== doc.savedReadme}
+        controlsOpen={controlsOpen}
+        onControlsOpenChange={setControlsOpen}
+        activeTab={activeTab}
+        onActiveTabChange={setActiveTab}
+        onSave={onSceneSave}
       />
     ) : (
       <div className="min-h-0 flex-1 pb-4">

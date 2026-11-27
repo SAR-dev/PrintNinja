@@ -48,6 +48,7 @@ Only use the headings you actually have entries for.
 ### Changed
 
 - **One workspace for both template kinds.** Label templates now open in the same resizable workspace as documents: page setup, sample data and data fields on the left, Elements / Properties / README / Preview tabs beside a zoomable canvas. The layout toggle works for labels too.
+- **Same designer on tablets and phones.** Tablets get the label tabs and settings sheet documents already had; phones get a read-only section picker for the label preview, sample data and README.
 
 ### Fixed
 

@@ -24,6 +24,7 @@ import {
   fitZoom,
   stepZoom,
 } from "@/components/designer/CanvasWorkspace";
+import { ZoomStage } from "@/components/designer/ZoomStage";
 import { SampleDataPanel } from "@/components/designer/SampleDataPanel";
 import { ControlsRail } from "@/components/designer/ControlsRail";
 import {
@@ -743,6 +744,22 @@ describe("CanvasPane", () => {
     await new Promise((r) => setTimeout(r, 300));
     expect(screen.getAllByTitle(/Canvas preview/)).toHaveLength(1);
     expect(screen.queryByText(/Page \d+ of/)).toBeNull();
+  });
+});
+
+describe("scene canvas stage", () => {
+  it("hands the current zoom to a scene canvas and shows the zoom toolbar", () => {
+    render(
+      <ZoomStage pageWidthMm={100} pageHeightMm={150}>
+        {(zoom) => (
+          <div data-testid="scene-page">{Math.round(zoom * 100)}%</div>
+        )}
+      </ZoomStage>,
+    );
+    expect(screen.getByTestId("canvas-scroll")).toBeInTheDocument();
+    // jsdom has no layout, so an unmeasured pane renders at full size.
+    expect(screen.getByTestId("scene-page")).toHaveTextContent("100%");
+    expect(screen.getAllByRole("button").length).toBeGreaterThan(1);
   });
 });
 
