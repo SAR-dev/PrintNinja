@@ -3,243 +3,810 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PrintNinja — print without the fuss</title>
+    <title>PrintNinja — silent printing for receipts, labels and documents</title>
     <meta
       name="description"
-      content="Print receipts, labels and documents with one click, on Windows, Android and Linux."
+      content="Print receipts, labels and documents with one click — no print dialogs, no driver headaches. Windows, Android and Linux. Thermal and office printers. Works offline."
+    />
+    <meta name="theme-color" content="#d92d2d" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d92d2d'/%3E%3Cpath d='M10 12V8h12v4M10 21H8v-7h16v7h-2M10 18h12v6H10z' fill='none' stroke='white' stroke-width='1.8' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E"
     />
     <style>
       :root {
         color-scheme: light dark;
-        --bg: #f7f8fa;
+        --bg: #fafaf9;
+        --bg-alt: #f3f2f0;
         --surface: #ffffff;
-        --ink: #18181b;
-        --muted: #5b6472;
-        --line: #e2e6ec;
-        --accent: #0f766e;
-        --accent-soft: #e7f4f1;
-        --shadow: 0 8px 30px rgba(15, 23, 42, 0.07);
+        --ink: #16161a;
+        --muted: #5a5f6b;
+        --line: #e7e5e4;
+        --accent: #d92d2d;
+        --accent-hover: #bf2323;
+        --accent-on: #ffffff;
+        --accent-soft: #fdeded;
+        --accent-text: #b91c1c;
+        --ok: #15803d;
+        --ok-soft: #e8f5ec;
+        --dark: #111318;
+        --dark-ink: #f5f5f6;
+        --dark-muted: #a7aebb;
+        --dark-line: #2a2f39;
+        --shadow-sm: 0 1px 2px rgba(22, 22, 26, 0.05);
+        --shadow-md: 0 10px 30px -12px rgba(22, 22, 26, 0.18);
+        --shadow-lg: 0 30px 60px -24px rgba(22, 22, 26, 0.3);
+        --radius: 14px;
+        --maxw: 1120px;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #101216;
-          --surface: #191c22;
-          --ink: #f4f4f5;
-          --muted: #a8b0bd;
-          --line: #30353e;
-          --accent: #5eead4;
-          --accent-soft: #153430;
-          --shadow: none;
+          --bg: #0e1014;
+          --bg-alt: #13161c;
+          --surface: #171a21;
+          --ink: #f5f5f6;
+          --muted: #a1a8b5;
+          --line: #2a2f39;
+          --accent: #ef4444;
+          --accent-hover: #f26161;
+          --accent-on: #1a0a0a;
+          --accent-soft: #2a1416;
+          --accent-text: #ff8f8f;
+          --ok: #4ade80;
+          --ok-soft: #12261a;
+          --dark: #090b0f;
+          --shadow-sm: none;
+          --shadow-md: 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+          --shadow-lg: 0 30px 60px -24px rgba(0, 0, 0, 0.7);
         }
       }
+
       * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; scroll-padding-top: 76px; }
       body {
         margin: 0;
         background: var(--bg);
         color: var(--ink);
-        font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+        font: 16px/1.65 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
       }
-      .wrap { max-width: 1060px; margin: 0 auto; padding: 0 20px 72px; }
-      header {
-        display: flex; align-items: center; justify-content: space-between;
-        gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--line);
+      a { color: inherit; }
+      :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+      .skip { position: absolute; left: -999px; top: 8px; background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; z-index: 100; }
+      .skip:focus { left: 12px; }
+      .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+      .eyebrow { display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); margin-bottom: 12px; }
+      h1, h2, h3 { line-height: 1.15; letter-spacing: -0.02em; margin: 0; }
+      h2 { font-size: clamp(26px, 3.6vw, 38px); }
+      h3 { font-size: 18px; letter-spacing: -0.01em; }
+      .section { padding: 88px 0; }
+      .section.alt { background: var(--bg-alt); border-block: 1px solid var(--line); }
+      .section-head { max-width: 680px; margin-bottom: 44px; }
+      .section-head p { color: var(--muted); font-size: 18px; margin: 14px 0 0; }
+
+      /* Buttons */
+      .btn {
+        display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: 10px;
+        font: inherit; font-weight: 600; font-size: 15px; text-decoration: none; cursor: pointer;
+        border: 1px solid transparent; transition: background 0.15s, border-color 0.15s, transform 0.15s;
       }
-      .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 19px; }
-      .brand .mark {
-        display: inline-grid; place-items: center; width: 34px; height: 34px;
-        border-radius: 9px; background: var(--accent); color: #fff;
-        font-size: 13px; font-weight: 800; letter-spacing: -0.04em;
-      }
+      .btn svg { width: 18px; height: 18px; }
+      .btn-primary { background: var(--accent); color: var(--accent-on); box-shadow: 0 6px 16px -8px var(--accent); }
+      .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+      .btn-ghost { background: var(--surface); border-color: var(--line); color: var(--ink); }
+      .btn-ghost:hover { border-color: var(--muted); }
+
+      /* Nav */
+      .nav { position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid var(--line); }
+      .nav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 20px; height: 64px; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -0.02em; text-decoration: none; }
+      .brand .mark { width: 32px; height: 32px; display: grid; place-items: center; background: var(--accent); color: var(--accent-on); border-radius: 9px; }
+      .brand .mark svg { width: 19px; height: 19px; }
+      .nav-links { display: flex; gap: 26px; font-size: 15px; font-weight: 500; }
+      .nav-links a { text-decoration: none; color: var(--muted); }
+      .nav-links a:hover { color: var(--ink); }
+      .nav-actions { display: flex; align-items: center; gap: 12px; }
       .langs { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); }
-      .langs button {
-        border: 0; background: transparent; color: var(--muted); cursor: pointer;
-        padding: 6px 14px; border-radius: 999px; font: inherit; font-size: 14px;
+      .langs button { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 5px 12px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 500; }
+      .langs button[aria-pressed="true"] { background: var(--ink); color: var(--bg); font-weight: 600; }
+      .nav .btn { padding: 8px 16px; font-size: 14px; }
+
+      /* Hero */
+      .hero { padding: 72px 0 80px; position: relative; overflow: hidden; }
+      .hero::before {
+        content: ""; position: absolute; inset: -20% -10% auto auto; width: 720px; height: 720px; z-index: -1;
+        background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 14%, transparent), transparent);
       }
-      .langs button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
-      .hero { padding: 56px 0 36px; }
-      h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.15; margin: 0 0 14px; letter-spacing: -0.02em; }
-      .lead { font-size: 19px; color: var(--muted); max-width: 720px; margin: 0; }
-      .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
-      .badge { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 5px 13px; font-size: 13px; font-weight: 600; }
-      section { padding: 26px 0; border-top: 1px solid var(--line); }
-      h2 { font-size: 24px; margin: 0 0 8px; letter-spacing: -0.01em; }
-      .section-note { color: var(--muted); margin: 0 0 22px; }
-      .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
-      .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; box-shadow: var(--shadow); }
-      .card h3 { margin: 0 0 6px; font-size: 17px; }
-      .card p { margin: 0; color: var(--muted); font-size: 15px; }
-      .diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; overflow-x: auto; box-shadow: var(--shadow); }
-      .diagram svg { display: block; min-width: 760px; width: 100%; height: auto; }
-      .diagram .box { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
-      .diagram .box.final { fill: var(--ink); stroke: var(--ink); }
-      .diagram .t { fill: var(--ink); font: 600 14px system-ui, sans-serif; text-anchor: middle; }
-      .diagram .t.final { fill: var(--surface); }
-      .diagram .sub { fill: var(--muted); font: 12px system-ui, sans-serif; text-anchor: middle; }
-      .diagram .arrow { stroke: var(--muted); stroke-width: 1.6; fill: none; marker-end: url(#head); }
-      ol.steps { margin: 0; padding-left: 22px; color: var(--muted); }
-      ol.steps li { margin: 8px 0; }
-      ol.steps strong { color: var(--ink); }
-      footer { padding: 28px 0 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
-      footer a { color: var(--accent); }
+      .hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; }
+      .hero h1 { font-size: clamp(38px, 5.6vw, 64px); letter-spacing: -0.035em; font-weight: 800; }
+      .hero h1 em { font-style: normal; color: var(--accent); }
+      .hero .lead { font-size: 19px; color: var(--muted); margin: 22px 0 30px; max-width: 540px; }
+      .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+      .platforms { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+      .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 5px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+      .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+
+      /* Product mock */
+      .mock { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-lg); overflow: hidden; }
+      .mock-bar { display: flex; align-items: center; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--line); background: var(--bg-alt); }
+      .mock-bar span { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+      .mock-bar b { margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+      .mock-body { display: grid; grid-template-columns: 1fr 1.05fr; }
+      .mock-form { padding: 18px; display: grid; gap: 12px; align-content: start; border-right: 1px solid var(--line); }
+      .field label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
+      .field div { font-size: 13px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); display: flex; justify-content: space-between; }
+      .field div::after { content: "▾"; color: var(--muted); font-size: 11px; }
+      .field.plain div::after { content: none; }
+      .mock-btn { margin-top: 4px; text-align: center; background: var(--accent); color: var(--accent-on); font-weight: 700; font-size: 14px; padding: 10px; border-radius: 9px; }
+      .mock-status { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ok); background: var(--ok-soft); padding: 8px 10px; border-radius: 8px; }
+      .mock-status svg { width: 16px; height: 16px; flex: none; }
+      .mock-preview { padding: 18px; background: repeating-conic-gradient(var(--bg-alt) 0 25%, var(--bg) 0 50%) 0 0 / 16px 16px; display: grid; place-items: center; }
+      .label-card { background: #fff; color: #111; width: 100%; max-width: 200px; aspect-ratio: 100 / 150; border-radius: 4px; box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.35); padding: 12px 11px; display: flex; flex-direction: column; gap: 6px; font-size: 9px; }
+      .label-card .lc-head { display: flex; justify-content: space-between; align-items: center; font-weight: 800; letter-spacing: 0.08em; font-size: 8px; border-bottom: 1.5px solid #111; padding-bottom: 5px; }
+      .label-card .lc-to { font-size: 8px; color: #555; margin-top: 2px; }
+      .label-card .lc-name { font-size: 13px; font-weight: 800; line-height: 1.15; }
+      .label-card .lc-addr { font-size: 8.5px; line-height: 1.35; color: #333; }
+      .label-card svg { width: 100%; display: block; }
+      .label-card .lc-foot { margin-top: auto; display: flex; gap: 8px; align-items: flex-end; }
+      .label-card .lc-qr { width: 46px; height: 46px; flex: none; }
+      .label-card .lc-code { font: 700 8px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.03em; }
+      .label-card .lc-code small { display: block; font-weight: 500; color: #666; margin-bottom: 2px; letter-spacing: 0.06em; }
+
+      /* Proof strip */
+      .proof { border-block: 1px solid var(--line); background: var(--surface); }
+      .proof-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+      .proof-item { padding: 28px 20px; text-align: center; border-right: 1px solid var(--line); }
+      .proof-item:last-child { border-right: 0; }
+      .proof-item strong { display: block; font-size: 38px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+      .proof-item span { display: block; margin-top: 6px; font-size: 14px; color: var(--muted); }
+
+      /* Before / after */
+      .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+      .compare-col { border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--surface); box-shadow: var(--shadow-sm); }
+      .compare-col.after { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: var(--shadow-md); }
+      .compare-col h3 { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+      .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; background: var(--bg-alt); color: var(--muted); }
+      .after .tag { background: var(--accent-soft); color: var(--accent-text); }
+      .compare ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+      .compare li { display: grid; grid-template-columns: 22px 1fr; gap: 12px; color: var(--muted); font-size: 15.5px; }
+      .compare li svg { width: 20px; height: 20px; margin-top: 2px; }
+      .before li svg { color: var(--muted); opacity: 0.7; }
+      .after li { color: var(--ink); }
+      .after li svg { color: var(--ok); }
+
+      /* Features */
+      .grid { display: grid; gap: 20px; grid-template-columns: repeat(3, 1fr); }
+      .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; box-shadow: var(--shadow-sm); transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s; }
+      .card:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+      .icon { width: 44px; height: 44px; border-radius: 11px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-text); margin-bottom: 18px; }
+      .icon svg { width: 22px; height: 22px; }
+      .card p { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
+
+      /* Audience */
+      .audience { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+      .aud { padding: 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+      .aud b { display: block; font-size: 16px; margin-bottom: 6px; }
+      .aud span { color: var(--muted); font-size: 14.5px; }
+
+      /* Pipeline */
+      .pipeline { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; counter-reset: s; }
+      .pipeline li { position: relative; text-align: center; padding: 0 6px; font-size: 13.5px; }
+      .pipeline li::before { counter-increment: s; content: counter(s); display: grid; place-items: center; width: 40px; height: 40px; margin: 0 auto 12px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); font-weight: 800; color: var(--accent-text); position: relative; z-index: 1; }
+      .pipeline li::after { content: ""; position: absolute; top: 19px; left: calc(50% + 24px); right: calc(-50% + 24px); height: 2px; background: var(--line); }
+      .pipeline li:last-child::after { display: none; }
+      .pipeline li:last-child::before { background: var(--accent); color: var(--accent-on); }
+      .pipeline b { display: block; font-size: 14.5px; }
+      .pipeline span { color: var(--muted); font-size: 12.5px; }
+      .note { margin-top: 36px; padding: 18px 22px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-size: 15px; display: flex; gap: 14px; align-items: flex-start; }
+      .note svg { width: 22px; height: 22px; flex: none; color: var(--ok); margin-top: 2px; }
+
+      /* Steps */
+      .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; list-style: none; margin: 56px 0 0; padding: 0; counter-reset: st; }
+      .steps li { counter-increment: st; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+      .steps li::before { content: "0" counter(st); display: block; font-size: 13px; font-weight: 800; color: var(--accent-text); letter-spacing: 0.08em; margin-bottom: 10px; }
+      .steps b { display: block; font-size: 17px; margin-bottom: 6px; }
+      .steps span { color: var(--muted); font-size: 14.5px; }
+
+      /* Automate / code */
+      .split { display: grid; grid-template-columns: 1fr 1.1fr; gap: 56px; align-items: center; }
+      .checks { list-style: none; padding: 0; margin: 26px 0 0; display: grid; gap: 16px; }
+      .checks li { display: grid; grid-template-columns: 22px 1fr; gap: 12px; font-size: 15.5px; }
+      .checks svg { width: 20px; height: 20px; color: var(--ok); margin-top: 3px; }
+      .checks b { display: block; }
+      .checks span { color: var(--muted); font-size: 14.5px; }
+      .code { background: var(--dark); color: var(--dark-ink); border-radius: var(--radius); border: 1px solid var(--dark-line); box-shadow: var(--shadow-lg); overflow: hidden; }
+      .code-bar { display: flex; justify-content: space-between; padding: 11px 16px; border-bottom: 1px solid var(--dark-line); font-size: 12px; color: var(--dark-muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
+      .code pre { margin: 0; padding: 20px; overflow-x: auto; font: 13.5px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .code .c { color: #7c8493; } .code .k { color: #ff8f8f; } .code .s { color: #8bd5a8; } .code .n { color: #8ab4ff; }
+      .code-res { border-top: 1px solid var(--dark-line); padding: 14px 20px; font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace; color: var(--dark-muted); }
+      .code-res b { color: #8bd5a8; font-weight: 600; }
+
+      /* Phone printing */
+      .sub-title { font-size: 21px; margin: 0 0 6px; letter-spacing: -0.015em; }
+      .sub-note { color: var(--muted); font-size: 15.5px; margin: 0 0 28px; max-width: 700px; }
+      .block { margin-top: 68px; }
+
+      .route { display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: auto auto; gap: 40px; align-items: stretch; }
+      .rn { position: relative; display: flex; flex-direction: column; justify-content: center; text-align: center; padding: 20px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-sm); }
+      .rn b { display: block; font-size: 15.5px; line-height: 1.3; }
+      .rn span { display: block; margin-top: 5px; color: var(--muted); font-size: 13.5px; }
+      .rn.q { grid-column: 1; grid-row: 1 / 3; background: var(--ink); color: var(--bg); border-color: var(--ink); }
+      .rn.q span { color: color-mix(in srgb, var(--bg) 72%, transparent); }
+      .rn.a1 { grid-column: 2; grid-row: 1; } .rn.a2 { grid-column: 3; grid-row: 1; } .rn.a3 { grid-column: 4; grid-row: 1; }
+      .rn.b1 { grid-column: 2; grid-row: 2; } .rn.b2 { grid-column: 3; grid-row: 2; } .rn.b3 { grid-column: 4; grid-row: 2; }
+      .rn.pc { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+      .rn.end { border: 2px solid var(--ink); }
+      .rn.arr::after, .rn.in::before { position: absolute; width: 26px; text-align: center; color: var(--accent-text); font-weight: 800; font-size: 18px; line-height: 1; top: 50%; transform: translateY(-50%); }
+      .rn.arr::after { content: "→"; right: -33px; }
+      .rn.in::before { content: "→"; left: -33px; }
+      .tagline { position: absolute; top: -12px; left: 14px; font-style: normal; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--surface); }
+      .tagline.ok { background: var(--ok-soft); color: var(--ok); }
+      .tagline.need { background: var(--accent-soft); color: var(--accent-text); }
+
+      .relay { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 30px; }
+      .relay li { position: relative; padding: 18px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-sm); }
+      .relay li:not(:last-child)::after { content: "→"; position: absolute; right: -26px; top: 50%; transform: translateY(-50%); width: 22px; text-align: center; color: var(--accent-text); font-weight: 800; font-size: 18px; line-height: 1; }
+      .relay b { display: block; font-size: 15px; line-height: 1.3; margin-bottom: 4px; }
+      .relay .d { display: block; color: var(--muted); font-size: 13px; }
+      .who { display: inline-block; font-style: normal; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 10px; border-radius: 999px; margin-bottom: 10px; }
+      .who.phone { background: var(--ink); color: var(--bg); }
+      .who.pc { background: var(--accent-soft); color: var(--accent-text); }
+      .who.hop { border: 1px dashed var(--accent); color: var(--accent-text); }
+
+      .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+      .mode { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow-sm); }
+      .mode h4 { margin: 0 0 14px; font-size: 17px; letter-spacing: -0.01em; }
+      .mini { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+      .mini span { font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); }
+      .mini span.pc { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); color: var(--accent-text); }
+      .mini i { font-style: normal; color: var(--accent-text); font-weight: 800; }
+      .mode p { margin: 0; color: var(--muted); font-size: 14.5px; }
+      .block .grid { margin-top: 4px; }
+      .share { margin-top: 20px; padding: 16px 20px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--muted); font-size: 14.5px; }
+      .share b { color: var(--ink); }
+
+      /* Install */
+      .install { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+      .dl { padding: 26px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; gap: 6px; }
+      .dl .file { font: 600 13px ui-monospace, Menlo, Consolas, monospace; color: var(--accent-text); background: var(--accent-soft); width: fit-content; padding: 3px 9px; border-radius: 6px; margin-bottom: 4px; }
+      .dl p { margin: 0; color: var(--muted); font-size: 14.5px; }
+      .good { margin-top: 28px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+      .good div { padding: 18px 20px; border-left: 3px solid var(--line); color: var(--muted); font-size: 14.5px; }
+      .good b { display: block; color: var(--ink); margin-bottom: 4px; font-size: 15px; }
+
+      /* CTA */
+      .cta-band { background: var(--dark); color: var(--dark-ink); padding: 76px 0; text-align: center; position: relative; overflow: hidden; }
+      .cta-band::before { content: ""; position: absolute; inset: auto 0 -60% 0; height: 100%; background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 30%, transparent), transparent); }
+      .cta-band .wrap { position: relative; }
+      .cta-band h2 { max-width: 640px; margin: 0 auto; }
+      .cta-band p { color: var(--dark-muted); max-width: 520px; margin: 14px auto 30px; font-size: 18px; }
+      .cta-band .cta { justify-content: center; }
+      .cta-band .btn-ghost { background: transparent; color: var(--dark-ink); border-color: var(--dark-line); }
+      .cta-band .btn-ghost:hover { border-color: var(--dark-muted); }
+
+      footer { padding: 32px 0 44px; color: var(--muted); font-size: 14px; }
+      footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 28px; justify-content: space-between; align-items: center; }
+      footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+      footer a { text-decoration: none; } footer a:hover { color: var(--ink); text-decoration: underline; }
+
+      /* Responsive */
+      @media (max-width: 980px) {
+        .hero-grid, .split { grid-template-columns: 1fr; gap: 44px; }
+        .grid, .install, .good { grid-template-columns: repeat(2, 1fr); }
+        .audience, .steps { grid-template-columns: repeat(2, 1fr); }
+        .pipeline { grid-template-columns: repeat(2, 1fr); row-gap: 28px; }
+        .pipeline li::after { display: none; }
+        .nav-links { display: none; }
+        .route { grid-template-columns: 1fr; gap: 36px; }
+        .route .rn, .route .rn.q { grid-column: auto !important; grid-row: auto !important; }
+        .rn.arr::after { content: "↓"; right: auto; left: 50%; top: auto; bottom: -31px; transform: translateX(-50%); }
+        .rn.in::before { content: "↓"; left: 50%; top: -31px; transform: translateX(-50%); }
+        .rn.b1 { margin-top: 14px; } .rn.b1::before { display: none; }
+        .relay { grid-template-columns: 1fr; gap: 34px; }
+        .relay li:not(:last-child)::after { content: "↓"; right: auto; left: 50%; top: auto; bottom: -30px; transform: translateX(-50%); }
+      }
+      @media (max-width: 680px) {
+        .section { padding: 64px 0; }
+        .hero { padding: 48px 0 56px; }
+        .wrap { padding: 0 18px; }
+        .grid, .install, .good, .audience, .steps, .compare, .modes { grid-template-columns: 1fr; }
+        .proof-grid { grid-template-columns: repeat(2, 1fr); }
+        .proof-item:nth-child(2) { border-right: 0; }
+        .proof-item:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
+        .mock-body { grid-template-columns: 1fr; }
+        .mock-form { border-right: 0; border-bottom: 1px solid var(--line); }
+        .nav .btn { display: none; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        * { transition: none !important; }
+      }
     </style>
   </head>
   <body>
-    <div class="wrap">
-      <header>
-        <div class="brand">
-          <span class="mark" aria-hidden="true">PN</span>
-          <span>PrintNinja</span>
-        </div>
-        <div class="langs" role="group" aria-label="Language / 言語">
-          <button type="button" data-lang="en" aria-pressed="true">English</button>
-          <button type="button" data-lang="ja" aria-pressed="false">日本語</button>
-        </div>
-      </header>
+    <a class="skip" href="#main" data-en="Skip to content" data-ja="本文へスキップ">Skip to content</a>
 
-      <div class="hero">
-        <h1 data-en="Printing that just works." data-ja="印刷が、ただ動きます。">Printing that just works.</h1>
-        <p class="lead" data-en="Pick a printer, pick a layout, press Print. No print dialogs, no driver headaches — receipts, labels and documents go straight to paper."
-           data-ja="プリンタを選び、レイアウトを選び、印刷ボタンを押すだけ。印刷ダイアログもドライバの悩みもありません。レシート、ラベル、書類がそのまま紙に出ます。">Pick a printer, pick a layout, press Print. No print dialogs, no driver headaches — receipts, labels and documents go straight to paper.</p>
-        <div class="badges">
-          <span class="badge" data-en="Windows" data-ja="Windows">Windows</span>
-          <span class="badge" data-en="Android" data-ja="Android">Android</span>
-          <span class="badge" data-en="Linux" data-ja="Linux">Linux</span>
-          <span class="badge" data-en="Works offline" data-ja="オフラインでも動作">Works offline</span>
+    <!-- Reusable icons -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16 9.5"/></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></symbol>
+        <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></symbol>
+        <symbol id="i-code" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 8-4 4 4 4m8-8 4 4-4 4m-2-10-4 12"/></symbol>
+      </defs>
+    </svg>
+
+    <header class="nav">
+      <div class="wrap">
+        <a class="brand" href="#top" aria-label="PrintNinja">
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9V4h10v5M7 17H5v-7h14v7h-2M7 14h10v6H7z"/></svg>
+          </span>
+          PrintNinja
+        </a>
+        <nav class="nav-links" aria-label="Primary">
+          <a href="#why" data-en="Why PrintNinja" data-ja="特長">Why PrintNinja</a>
+          <a href="#features" data-en="Features" data-ja="機能">Features</a>
+          <a href="#how" data-en="How it works" data-ja="仕組み">How it works</a>
+          <a href="#automate" data-en="Automate" data-ja="自動化">Automate</a>
+          <a href="#phone" data-en="Phone printing" data-ja="スマホ印刷">Phone printing</a>
+          <a href="#install" data-en="Install" data-ja="導入">Install</a>
+        </nav>
+        <div class="nav-actions">
+          <div class="langs" role="group" aria-label="Language / 言語">
+            <button type="button" data-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-lang="ja" aria-pressed="false">日本語</button>
+          </div>
+          <a class="btn btn-primary" href="https://github.com/SAR-dev/PrintNinja/releases" rel="noreferrer" data-en="Download" data-ja="ダウンロード">Download</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- HERO -->
+      <section class="hero" id="top">
+        <div class="wrap hero-grid">
+          <div>
+            <span class="eyebrow" data-en="Silent printing for teams that print all day" data-ja="毎日たくさん印刷するチームのための、サイレント印刷">Silent printing for teams that print all day</span>
+            <h1>
+              <span data-en="Press print." data-ja="印刷ボタンを押すだけ。">Press print.</span>
+              <em data-en="The paper just comes out." data-ja="あとは紙が出てくるだけ。">The paper just comes out.</em>
+            </h1>
+            <p class="lead" data-en="PrintNinja sends receipts, shipping labels and documents straight to the printer — no pop-up dialogs, no driver hunting, no guessing why nothing happened."
+               data-ja="レシート、配送ラベル、書類を、そのままプリンタへ。ポップアップの印刷ダイアログも、ドライバ探しも、「なぜ出ないのか」の推測も不要です。">PrintNinja sends receipts, shipping labels and documents straight to the printer — no pop-up dialogs, no driver hunting, no guessing why nothing happened.</p>
+            <div class="cta">
+              <a class="btn btn-primary" href="https://github.com/SAR-dev/PrintNinja/releases" rel="noreferrer">
+                <svg aria-hidden="true"><use href="#i-download" /></svg>
+                <span data-en="Download PrintNinja" data-ja="PrintNinja をダウンロード">Download PrintNinja</span>
+              </a>
+              <a class="btn btn-ghost" href="/demo/print.html">
+                <svg aria-hidden="true"><use href="#i-code" /></svg>
+                <span data-en="Try the API demo" data-ja="API デモを試す">Try the API demo</span>
+              </a>
+            </div>
+            <div class="platforms" aria-label="Platforms">
+              <span class="pill"><i></i>Windows</span>
+              <span class="pill"><i></i>Android</span>
+              <span class="pill"><i></i>Linux</span>
+              <span class="pill"><i></i><span data-en="Works offline" data-ja="オフライン対応">Works offline</span></span>
+            </div>
+          </div>
+
+          <!-- Product illustration -->
+          <div class="mock" role="img" aria-label="PrintNinja Print screen with a shipping label preview">
+            <div class="mock-bar"><span></span><span></span><span></span><b>PrintNinja · Print</b></div>
+            <div class="mock-body">
+              <div class="mock-form">
+                <div class="field"><label data-en="Printer" data-ja="プリンタ">Printer</label><div>Warehouse TSC</div></div>
+                <div class="field"><label data-en="Template" data-ja="テンプレート">Template</label><div>Shipping label 4×6</div></div>
+                <div class="field"><label data-en="Data" data-ja="データ">Data</label><div>orders.csv · 24 rows</div></div>
+                <div class="field plain"><label data-en="Copies" data-ja="部数">Copies</label><div>1</div></div>
+                <div class="mock-btn" data-en="Print 24 labels" data-ja="24 枚を印刷">Print 24 labels</div>
+                <div class="mock-status">
+                  <svg aria-hidden="true"><use href="#i-check" /></svg>
+                  <span data-en="Printed — saved to History" data-ja="印刷完了 — 履歴に保存しました">Printed — saved to History</span>
+                </div>
+              </div>
+              <div class="mock-preview">
+                <div class="label-card" aria-hidden="true">
+                  <div class="lc-head"><span>PRINTNINJA POST</span><span>●●</span></div>
+                  <div class="lc-to">TO</div>
+                  <div class="lc-name">John Doe</div>
+                  <div class="lc-addr">45 Oak Lane, Apt 2<br />Gulshan 1212</div>
+                  <svg id="bars" viewBox="0 0 160 38" preserveAspectRatio="none" height="34"></svg>
+                  <div class="lc-foot">
+                    <svg id="qr" class="lc-qr" viewBox="0 0 21 21" shape-rendering="crispEdges"></svg>
+                    <div class="lc-code"><small>TRACKING</small>PN-7X9K-4242-BD</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PROOF -->
+      <div class="proof">
+        <div class="wrap proof-grid">
+          <div class="proof-item"><strong>0</strong><span data-en="print dialogs, ever" data-ja="印刷ダイアログ">print dialogs, ever</span></div>
+          <div class="proof-item"><strong>5</strong><span data-en="printer languages: ESC/POS, ZPL, TSPL, CPCL, PDF" data-ja="対応言語: ESC/POS・ZPL・TSPL・CPCL・PDF">printer languages: ESC/POS, ZPL, TSPL, CPCL, PDF</span></div>
+          <div class="proof-item"><strong>4</strong><span data-en="ways to connect: network, USB, Bluetooth, system" data-ja="接続方法: ネットワーク・USB・Bluetooth・システム">ways to connect: network, USB, Bluetooth, system</span></div>
+          <div class="proof-item"><strong>3</strong><span data-en="platforms: Windows, Android, Linux" data-ja="対応 OS: Windows・Android・Linux">platforms: Windows, Android, Linux</span></div>
         </div>
       </div>
 
-      <section>
-        <h2 data-en="One path from data to paper" data-ja="データから紙まで、ひとつの流れ">One path from data to paper</h2>
-        <p class="section-note" data-en="Every entry point — the Print page, the local API, a deep link or a reprint — uses the same pipeline. Design pages are finished before they are placed on physical paper, so the preview always matches the printout."
-           data-ja="印刷画面、ローカル API、ディープリンク、再印刷 — どの入口も同じ流れを通ります。デザインページは用紙に配置される前に完成するので、プレビューは常に印刷結果と一致します。">Every entry point — the Print page, the local API, a deep link or a reprint — uses the same pipeline. Design pages are finished before they are placed on physical paper, so the preview always matches the printout.</p>
-        <div class="diagram">
-          <svg viewBox="0 0 1000 150" role="img" aria-label="Print pipeline">
-            <defs>
-              <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)" />
-              </marker>
-            </defs>
-            <g>
-              <rect class="box" x="10" y="42" width="130" height="62" rx="12" />
-              <text class="t" x="75" y="68" data-en="Data +" data-ja="データ＋">Data +</text>
-              <text class="t" x="75" y="88" data-en="template" data-ja="テンプレート">template</text>
-              <rect class="box" x="155" y="42" width="130" height="62" rx="12" />
-              <text class="t" x="220" y="68" data-en="Design" data-ja="デザイン">Design</text>
-              <text class="t" x="220" y="88" data-en="pages" data-ja="ページ">pages</text>
-              <rect class="box" x="300" y="42" width="130" height="62" rx="12" />
-              <text class="t" x="365" y="68" data-en="Sheets" data-ja="用紙">Sheets</text>
-              <text class="sub" x="365" y="88" data-en="physical paper" data-ja="実際の用紙">physical paper</text>
-              <rect class="box" x="445" y="42" width="130" height="62" rx="12" />
-              <text class="t" x="510" y="68" data-en="Image or" data-ja="画像または">Image or</text>
-              <text class="t" x="510" y="88" data-en="PDF" data-ja="PDF">PDF</text>
-              <rect class="box" x="590" y="42" width="130" height="62" rx="12" />
-              <text class="t" x="655" y="68" data-en="Printer" data-ja="プリンタ">Printer</text>
-              <text class="sub" x="655" y="88" data-en="language" data-ja="言語">language</text>
-              <rect class="box" x="735" y="42" width="110" height="62" rx="12" />
-              <text class="t" x="790" y="68" data-en="Wire" data-ja="通信">Wire</text>
-              <text class="sub" x="790" y="88" data-en="network · USB" data-ja="ネットワーク・USB">network · USB</text>
-              <rect class="box final" x="860" y="42" width="130" height="62" rx="12" />
-              <text class="t final" x="925" y="78" data-en="Paper" data-ja="紙">Paper</text>
-              <path class="arrow" d="M140 73 H155" /><path class="arrow" d="M285 73 H300" />
-              <path class="arrow" d="M430 73 H445" /><path class="arrow" d="M575 73 H590" />
-              <path class="arrow" d="M720 73 H735" /><path class="arrow" d="M845 73 H860" />
-            </g>
-          </svg>
-        </div>
-      </section>
-
-      <section>
-        <h2 data-en="Two kinds of templates" data-ja="2 種類のテンプレート">Two kinds of templates</h2>
-        <p class="section-note" data-en="Both live on the Templates page, and each row says which kind it is. The app refuses a wrong pairing before a byte is wasted."
-           data-ja="どちらも「テンプレート」ページにあり、種類はバッジで表示されます。誤った組み合わせは、データを送る前に拒否されます。">Both live on the Templates page, and each row says which kind it is. The app refuses a wrong pairing before a byte is wasted.</p>
-        <div class="grid">
-          <div class="card">
-            <h3 data-en="Label templates" data-ja="ラベルテンプレート">Label templates</h3>
-            <p data-en="For thermal printers. Design on a canvas in millimetres: text, barcodes, QR codes, images, lines and frames. Printed in the printer's own language — ESC/POS, ZPL, TSPL or CPCL."
-               data-ja="サーマルプリンタ向け。ミリ単位のキャンバスで文字、バーコード、QR コード、画像、線、枠を配置します。ESC/POS、ZPL、TSPL、CPCL などプリンタ固有の言語で印刷します。">For thermal printers. Design on a canvas in millimetres: text, barcodes, QR codes, images, lines and frames. Printed in the printer's own language — ESC/POS, ZPL, TSPL or CPCL.</p>
+      <!-- WHY -->
+      <section class="section" id="why">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow" data-en="Why PrintNinja" data-ja="PrintNinja が選ばれる理由">Why PrintNinja</span>
+            <h2 data-en="Printing stops being a task. It becomes a button." data-ja="印刷は「作業」から「ボタン一つ」へ。">Printing stops being a task. It becomes a button.</h2>
+            <p data-en="If your team prints the same receipts, labels and slips again and again, every extra click and every silent failure costs real time. PrintNinja removes both."
+               data-ja="同じレシートやラベル、伝票を何度も印刷するなら、余計なクリックや原因不明の失敗はそのまま時間のロスになります。PrintNinja はその両方をなくします。">If your team prints the same receipts, labels and slips again and again, every extra click and every silent failure costs real time. PrintNinja removes both.</p>
           </div>
-          <div class="card">
-            <h3 data-en="Document templates" data-ja="ドキュメントテンプレート">Document templates</h3>
-            <p data-en="For office and home printers. HTML and CSS with {{placeholders}} where your data goes. Start from Receipt, Invoice, Shipping Label and more."
-               data-ja="オフィスや家庭用プリンタ向け。HTML と CSS に {{プレースホルダー}} を埋め込み、データで置き換えます。レシート、請求書、配送ラベルなどから始められます。">For office and home printers. HTML and CSS with {{placeholders}} where your data goes. Start from Receipt, Invoice, Shipping Label and more.</p>
+          <div class="compare">
+            <div class="compare-col before">
+              <h3><span data-en="Printing today" data-ja="これまでの印刷">Printing today</span><span class="tag" data-en="Before" data-ja="導入前">Before</span></h3>
+              <ul>
+                <li><svg aria-hidden="true"><use href="#i-x" /></svg><span data-en="A print dialog on every job — pick printer, paper, scale, again." data-ja="毎回、印刷ダイアログでプリンタ・用紙・倍率を選び直す。">A print dialog on every job — pick printer, paper, scale, again.</span></li>
+                <li><svg aria-hidden="true"><use href="#i-x" /></svg><span data-en="Thermal printers need the right driver, and the wrong one prints pages of gibberish." data-ja="サーマルプリンタは専用ドライバが必要で、合わないと文字化けのページが出る。">Thermal printers need the right driver, and the wrong one prints pages of gibberish.</span></li>
+                <li><svg aria-hidden="true"><use href="#i-x" /></svg><span data-en="Labels are laid out by trial and error, and the paper never matches the screen." data-ja="ラベルは試し刷りの繰り返しで、画面と実物が一致しない。">Labels are laid out by trial and error, and the paper never matches the screen.</span></li>
+                <li><svg aria-hidden="true"><use href="#i-x" /></svg><span data-en="When nothing comes out, nobody knows if it is paper, power, or the network." data-ja="出力されないとき、用紙切れか電源かネットワークか分からない。">When nothing comes out, nobody knows if it is paper, power, or the network.</span></li>
+                <li><svg aria-hidden="true"><use href="#i-x" /></svg><span data-en="Reprints mean rebuilding the job from scratch." data-ja="再印刷のたびに、一からやり直し。">Reprints mean rebuilding the job from scratch.</span></li>
+              </ul>
+            </div>
+            <div class="compare-col after">
+              <h3><span data-en="With PrintNinja" data-ja="PrintNinja なら">With PrintNinja</span><span class="tag" data-en="After" data-ja="導入後">After</span></h3>
+              <ul>
+                <li><svg aria-hidden="true"><use href="#i-check" /></svg><span data-en="One click sends the job straight to the printer. No dialogs." data-ja="ワンクリックでプリンタへ直接送信。ダイアログは出ません。">One click sends the job straight to the printer. No dialogs.</span></li>
+                <li><svg aria-hidden="true"><use href="#i-check" /></svg><span data-en="Speaks the printer's own language — ESC/POS, ZPL, TSPL, CPCL — so no driver headaches." data-ja="ESC/POS・ZPL・TSPL・CPCL などプリンタ固有の言語で出力。ドライバの悩みから解放されます。">Speaks the printer's own language — ESC/POS, ZPL, TSPL, CPCL — so no driver headaches.</span></li>
+                <li><svg aria-hidden="true"><use href="#i-check" /></svg><span data-en="Design in millimetres. The preview runs through the real print path, so it matches the paper." data-ja="ミリ単位で設計。プレビューは実際の印刷経路を通るため、紙と一致します。">Design in millimetres. The preview runs through the real print path, so it matches the paper.</span></li>
+                <li><svg aria-hidden="true"><use href="#i-check" /></svg><span data-en="A clear reason for every failure — out of paper, offline, wrong language." data-ja="失敗の理由が明確 — 用紙切れ、オフライン、言語の不一致など。">A clear reason for every failure — out of paper, offline, wrong language.</span></li>
+                <li><svg aria-hidden="true"><use href="#i-check" /></svg><span data-en="Every job is kept in History, with one-tap reprint or retry." data-ja="すべてのジョブが履歴に残り、ワンタップで再印刷・再試行できます。">Every job is kept in History, with one-tap reprint or retry.</span></li>
+              </ul>
+            </div>
           </div>
         </div>
       </section>
 
-      <section>
-        <h2 data-en="Phone and PC, together" data-ja="スマホと PC の連携">Phone and PC, together</h2>
-        <p class="section-note" data-en="An Android phone prints to Bluetooth or USB receipt printers on its own. Only PDF work needs a paired PC on the same Wi-Fi — the phone asks, the PC renders and takes back the finished bytes."
-           data-ja="Android スマホは Bluetooth や USB のレシートプリンタに直接印刷できます。PDF の処理だけ、同じ Wi-Fi 内のペア済み PC が必要です。スマホが依頼し、PC が描画して結果を返します。">An Android phone prints to Bluetooth or USB receipt printers on its own. Only PDF work needs a paired PC on the same Wi-Fi — the phone asks, the PC renders and takes back the finished bytes.</p>
-        <div class="diagram">
-          <svg viewBox="0 0 920 210" role="img" aria-label="Phone and PC pairing">
-            <g>
-              <rect class="box" x="20" y="30" width="220" height="60" rx="12" />
-              <text class="t" x="130" y="54" data-en="Phone" data-ja="スマホ">Phone</text>
-              <text class="sub" x="130" y="74" data-en="layouts · thermal printing" data-ja="レイアウト・サーマル印刷">layouts · thermal printing</text>
-              <rect class="box" x="350" y="30" width="220" height="60" rx="12" />
-              <text class="t" x="460" y="54" data-en="Paired PC" data-ja="ペア済み PC">Paired PC</text>
-              <text class="sub" x="460" y="74" data-en="PDF rendering only" data-ja="PDF の描画のみ">PDF rendering only</text>
-              <rect class="box final" x="680" y="30" width="220" height="60" rx="12" />
-              <text class="t final" x="790" y="64" data-en="Printer" data-ja="プリンタ">Printer</text>
-              <path class="arrow" d="M240 60 H350" />
-              <text class="sub" x="295" y="48" data-en="one-time code" data-ja="ワンタイムコード">one-time code</text>
-              <path class="arrow" d="M570 60 H680" />
-              <text class="sub" x="625" y="48" data-en="bytes" data-ja="データ">bytes</text>
-            </g>
-            <g>
-              <rect class="box" x="20" y="125" width="880" height="60" rx="12" />
-              <text class="t" x="460" y="150" data-en="Share service — accounts, templates and fonts; never a rendering engine"
-                    data-ja="共有サービス — アカウント、テンプレート、フォント。描画エンジンではありません">Share service — accounts, templates and fonts; never a rendering engine</text>
-              <text class="sub" x="460" y="170" data-en="a print never travels through the cloud" data-ja="印刷データはクラウドを通りません">a print never travels through the cloud</text>
-            </g>
-          </svg>
-        </div>
-      </section>
-
-      <section>
-        <h2 data-en="Start in five minutes" data-ja="5 分で始められます">Start in five minutes</h2>
-        <ol class="steps">
-          <li><strong data-en="Add a printer." data-ja="プリンタを追加。">Add a printer.</strong> <span data-en="Network, system, USB and Bluetooth printers all work; press Test Print to be sure."
-              data-ja="ネットワーク、システム、USB、Bluetooth に対応。テスト印刷で接続を確認できます。">Network, system, USB and Bluetooth printers all work; press Test Print to be sure.</span></li>
-          <li><strong data-en="Make a template." data-ja="テンプレートを作る。">Make a template.</strong> <span data-en="Pick a label starter or a ready-made document example, then arrange it in the Designer."
-              data-ja="ラベルのスターターや書類のサンプルを選び、デザイナーで整えます。">Pick a label starter or a ready-made document example, then arrange it in the Designer.</span></li>
-          <li><strong data-en="Print." data-ja="印刷。">Print.</strong> <span data-en="Choose printer and template, add sample data, a link or a CSV, check the preview and press Print."
-              data-ja="プリンタとテンプレートを選び、サンプルデータ・リンク・CSV を指定してプレビューを確認し、印刷します。">Choose printer and template, add sample data, a link or a CSV, check the preview and press Print.</span></li>
-          <li><strong data-en="Check History." data-ja="履歴を確認。">Check History.</strong> <span data-en="Every job records its real outcome, with one-tap reprint or retry."
-              data-ja="すべてのジョブに実際の結果が記録され、ワンタップで再印刷・再試行できます。">Every job records its real outcome, with one-tap reprint or retry.</span></li>
-        </ol>
-      </section>
-
-      <section>
-        <h2 data-en="Also useful" data-ja="その他の便利な機能">Also useful</h2>
-        <div class="grid">
-          <div class="card">
-            <h3 data-en="Automate it" data-ja="自動化">Automate it</h3>
-            <p data-en="A local REST API, deep links and placeholders let a till, script or web page print through the same pipeline."
-               data-ja="ローカル REST API、ディープリンク、プレースホルダーにより、レジやスクリプト、Web ページから同じ流れで印刷できます。">A local REST API, deep links and placeholders let a till, script or web page print through the same pipeline.</p>
+      <!-- FEATURES -->
+      <section class="section alt" id="features">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow" data-en="Features" data-ja="機能">Features</span>
+            <h2 data-en="Everything between your data and the paper" data-ja="データから紙まで、必要なものがすべて">Everything between your data and the paper</h2>
           </div>
-          <div class="card">
-            <h3 data-en="Honest answers" data-ja="正直な結果表示">Honest answers</h3>
-            <p data-en="No silent placeholder PDFs: if printing fails, History says why — out of paper, offline, wrong language and so on."
-               data-ja="代替の PDF を黙って出すことはありません。失敗時は用紙切れやオフライン、言語の不一致などを履歴に表示します。">No silent placeholder PDFs: if printing fails, History says why — out of paper, offline, wrong language and so on.</p>
-          </div>
-          <div class="card">
-            <h3 data-en="Private by default" data-ja="基本はローカル">Private by default</h3>
-            <p data-en="Printing and editing work without internet. A connection is only needed for live data links, share service and update checks."
-               data-ja="印刷と編集はオフラインでも動きます。必要なのはデータリンク、共有サービス、更新確認のときだけです。">Printing and editing work without internet. A connection is only needed for live data links, share service and update checks.</p>
+          <div class="grid">
+            <article class="card">
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 5 13h6l-1 8 8-10h-6z"/></svg></div>
+              <h3 data-en="Silent, one-click printing" data-ja="サイレントなワンクリック印刷">Silent, one-click printing</h3>
+              <p data-en="Jobs go straight to the printer. No pop-up windows, no repeated settings — just press Print." data-ja="ジョブはプリンタへ直接送信。ポップアップも設定の繰り返しもなく、押すだけです。">Jobs go straight to the printer. No pop-up windows, no repeated settings — just press Print.</p>
+            </article>
+            <article class="card">
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h4M3 19h4M3 5v14M10 5v14M13 5v14M17 5v14M21 5v14"/></svg></div>
+              <h3 data-en="Label designer in millimetres" data-ja="ミリ単位のラベルデザイナー">Label designer in millimetres</h3>
+              <p data-en="Place text, barcodes, QR codes, images, lines and frames on a canvas. No HTML or CSS needed. Starts from ready-made label layouts." data-ja="文字、バーコード、QR コード、画像、線、枠をキャンバスに配置。HTML や CSS は不要で、ひな形から始められます。">Place text, barcodes, QR codes, images, lines and frames on a canvas. No HTML or CSS needed. Starts from ready-made label layouts.</p>
+            </article>
+            <article class="card">
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></div>
+              <h3 data-en="Preview that matches the paper" data-ja="紙と一致するプレビュー">Preview that matches the paper</h3>
+              <p data-en="Label previews run through the real print path at the printer's own DPI, barcodes and QR codes included." data-ja="ラベルのプレビューは実際の印刷経路をプリンタ本来の解像度で通り、バーコードや QR コードも一致します。">Label previews run through the real print path at the printer's own DPI, barcodes and QR codes included.</p>
+            </article>
+            <article class="card">
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg></div>
+              <h3 data-en="Batch printing from CSV or JSON" data-ja="CSV・JSON から一括印刷">Batch printing from CSV or JSON</h3>
+              <p data-en="Feed a CSV file or a data link and every record prints as its own label or page — hundreds of parcels in one go." data-ja="CSV ファイルやデータリンクを渡せば、1 レコードにつき 1 枚のラベル・ページを出力。大量の荷物も一度に印刷できます。">Feed a CSV file or a data link and every record prints as its own label or page — hundreds of parcels in one go.</p>
+            </article>
+            <article class="card">
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v4M15 3v4M7 7h10v5a5 5 0 0 1-10 0zM12 17v4"/></svg></div>
+              <h3 data-en="Works with the printers you have" data-ja="今あるプリンタをそのまま">Works with the printers you have</h3>
+              <p data-en="Network, USB, Bluetooth and system printers, with a one-tap network scan. Eleven label-printer models to start, from Zebra, Brother, Citizen, Epson, TSC and Toshiba." data-ja="ネットワーク、USB、Bluetooth、システムプリンタに対応し、ネットワークスキャンはワンタップ。Zebra、Brother、Citizen、Epson、TSC、Toshiba など 11 機種から開始できます。">Network, USB, Bluetooth and system printers, with a one-tap network scan. Eleven label-printer models to start, from Zebra, Brother, Citizen, Epson, TSC and Toshiba.</p>
+            </article>
+            <article class="card">
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 8v4l3 2"/></svg></div>
+              <h3 data-en="History with honest results" data-ja="正直な結果を残す履歴">History with honest results</h3>
+              <p data-en="Every job records its real outcome and timing. Filter, export to CSV, and reprint or retry many jobs at once." data-ja="すべてのジョブに実際の結果と所要時間を記録。絞り込み、CSV 出力、複数ジョブの一括再印刷・再試行ができます。">Every job records its real outcome and timing. Filter, export to CSV, and reprint or retry many jobs at once.</p>
+            </article>
+            <article class="card">
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0M12 19h.01M3 3l18 18"/></svg></div>
+              <h3 data-en="Offline-first and private" data-ja="オフライン優先でプライベート">Offline-first and private</h3>
+              <p data-en="Printing and template editing work without internet. A connection is only used for live data links, sharing and update checks." data-ja="印刷とテンプレート編集はインターネットなしで動作。接続が必要なのは、データリンク、共有、更新確認のときだけです。">Printing and template editing work without internet. A connection is only used for live data links, sharing and update checks.</p>
+            </article>
+            <article class="card">
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
+              <h3 data-en="Print straight from your phone" data-ja="スマホから直接印刷">Print straight from your phone</h3>
+              <p data-en="Android prints to Bluetooth or USB receipt and label printers on its own. Pair a PC on the same Wi-Fi only when a template has to become a PDF." data-ja="Android は Bluetooth・USB のレシート／ラベルプリンタへ単独で印刷可能。テンプレートを PDF にする必要があるときだけ、同じ Wi-Fi の PC とペアリングします。">Android prints to Bluetooth or USB receipt and label printers on its own. Pair a PC on the same Wi-Fi only when a template has to become a PDF.</p>
+            </article>
+            <article class="card">
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div>
+              <h3 data-en="English and Japanese" data-ja="日本語と英語に対応">English and Japanese</h3>
+              <p data-en="A fully bilingual interface, built to meet the WCAG 2.1 AA accessibility standard, with keyboard shortcuts and a Ctrl/Cmd+K command search." data-ja="日英バイリンガルの画面。WCAG 2.1 AA に準拠する設計で、キーボードショートカットと Ctrl/Cmd+K のコマンド検索も備えます。">A fully bilingual interface, built to meet the WCAG 2.1 AA accessibility standard, with keyboard shortcuts and a Ctrl/Cmd+K command search.</p>
+            </article>
           </div>
         </div>
       </section>
 
-      <footer>
-        <span data-en="PrintNinja · Windows, Android and Linux." data-ja="PrintNinja · Windows、Android、Linux 対応。">PrintNinja · Windows, Android and Linux.</span>
-        <span data-en="Project documentation: " data-ja="ドキュメント: ">Project documentation: </span>
-        <a href="https://github.com/SAR-dev/PrintNinja" rel="noreferrer">GitHub</a>
-      </footer>
-    </div>
+      <!-- WHO -->
+      <section class="section">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow" data-en="Built for repeat printing" data-ja="繰り返し印刷する現場のために">Built for repeat printing</span>
+            <h2 data-en="For anyone who prints the same things again and again" data-ja="同じものを何度も印刷するすべての人へ">For anyone who prints the same things again and again</h2>
+          </div>
+          <div class="audience">
+            <div class="aud"><b data-en="Shops and cafés" data-ja="店舗・カフェ">Shops and cafés</b><span data-en="Receipts and kitchen tickets that print the moment an order lands." data-ja="注文が入った瞬間に、レシートやキッチンチケットを印刷。">Receipts and kitchen tickets that print the moment an order lands.</span></div>
+            <div class="aud"><b data-en="Delivery and warehouses" data-ja="配送・倉庫">Delivery and warehouses</b><span data-en="Shipping and parcel labels in bulk, straight from a CSV or your system." data-ja="配送ラベルや荷札を、CSV やシステムから一括印刷。">Shipping and parcel labels in bulk, straight from a CSV or your system.</span></div>
+            <div class="aud"><b data-en="Offices" data-ja="オフィス">Offices</b><span data-en="Invoices and delivery slips on regular printers from HTML templates." data-ja="請求書や納品書を、HTML テンプレートから通常のプリンタで。">Invoices and delivery slips on regular printers from HTML templates.</span></div>
+            <div class="aud"><b data-en="Mobile teams" data-ja="モバイルチーム">Mobile teams</b><span data-en="Print from a phone or tablet to a pocket Bluetooth printer, on site." data-ja="現場でスマホやタブレットから、携帯 Bluetooth プリンタへ。">Print from a phone or tablet to a pocket Bluetooth printer, on site.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- HOW -->
+      <section class="section alt" id="how">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow" data-en="How it works" data-ja="仕組み">How it works</span>
+            <h2 data-en="One pipeline, from data to paper" data-ja="データから紙まで、ひとつの流れ">One pipeline, from data to paper</h2>
+            <p data-en="Every entry point — the Print page, the local API, a deep link or a reprint — runs through the same pipeline, so what you preview is what you get."
+               data-ja="印刷画面、ローカル API、ディープリンク、再印刷 — どの入口も同じ流れを通るので、プレビューどおりに印刷されます。">Every entry point — the Print page, the local API, a deep link or a reprint — runs through the same pipeline, so what you preview is what you get.</p>
+          </div>
+          <ol class="pipeline">
+            <li><b data-en="Data + template" data-ja="データ＋テンプレート">Data + template</b><span data-en="sample, link or CSV" data-ja="サンプル・リンク・CSV">sample, link or CSV</span></li>
+            <li><b data-en="Design pages" data-ja="デザインページ">Design pages</b><span data-en="as in the Designer" data-ja="デザイナーと同じ">as in the Designer</span></li>
+            <li><b data-en="Sheets" data-ja="用紙">Sheets</b><span data-en="on physical paper" data-ja="実際の用紙に配置">on physical paper</span></li>
+            <li><b data-en="Image or PDF" data-ja="画像または PDF">Image or PDF</b><span data-en="rendered once" data-ja="一度だけ描画">rendered once</span></li>
+            <li><b data-en="Printer language" data-ja="プリンタ言語">Printer language</b><span>ESC/POS · ZPL · TSPL · CPCL</span></li>
+            <li><b data-en="Wire" data-ja="通信">Wire</b><span data-en="network · USB · Bluetooth" data-ja="ネットワーク・USB・Bluetooth">network · USB · Bluetooth</span></li>
+            <li><b data-en="Paper" data-ja="紙">Paper</b><span data-en="done" data-ja="完了">done</span></li>
+          </ol>
+          <ol class="steps">
+            <li><b data-en="Add a printer" data-ja="プリンタを追加">Add a printer</b><span data-en="Network, system, USB or Bluetooth. Press Test Print to confirm it is connected." data-ja="ネットワーク、システム、USB、Bluetooth に対応。テスト印刷で接続を確認します。">Network, system, USB or Bluetooth. Press Test Print to confirm it is connected.</span></li>
+            <li><b data-en="Make a template" data-ja="テンプレートを作る">Make a template</b><span data-en="Pick a starter — shipping label, receipt, invoice — and adjust it in the Designer." data-ja="配送ラベル、レシート、請求書などのひな形を選び、デザイナーで調整します。">Pick a starter — shipping label, receipt, invoice — and adjust it in the Designer.</span></li>
+            <li><b data-en="Print" data-ja="印刷する">Print</b><span data-en="Choose printer and template, add your data, check the preview, press Print." data-ja="プリンタとテンプレートを選び、データを指定、プレビューを確認して印刷します。">Choose printer and template, add your data, check the preview, press Print.</span></li>
+            <li><b data-en="Check History" data-ja="履歴を確認">Check History</b><span data-en="See a clear success or failure for each job. Reprint or retry in one tap." data-ja="各ジョブの成功・失敗が明確に分かり、ワンタップで再印刷・再試行できます。">See a clear success or failure for each job. Reprint or retry in one tap.</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- AUTOMATE -->
+      <section class="section" id="automate">
+        <div class="wrap split">
+          <div>
+            <span class="eyebrow" data-en="Automation" data-ja="自動化">Automation</span>
+            <h2 data-en="Let your till, script or web page print for you" data-ja="レジ、スクリプト、Web ページから自動で印刷">Let your till, script or web page print for you</h2>
+            <p style="color:var(--muted);font-size:18px;margin:14px 0 0" data-en="PrintNinja runs a local REST API on your PC, so any system that can send an HTTP request can print through the same pipeline as the app."
+               data-ja="PrintNinja は PC 上でローカル REST API を提供するので、HTTP リクエストを送れるシステムなら、アプリと同じ流れで印刷できます。">PrintNinja runs a local REST API on your PC, so any system that can send an HTTP request can print through the same pipeline as the app.</p>
+            <ul class="checks">
+              <li><svg aria-hidden="true"><use href="#i-check" /></svg><div><b data-en="Safe retries" data-ja="安全な再送">Safe retries</b><span data-en="Send the same Idempotency-Key again and it never prints a second copy." data-ja="同じ Idempotency-Key を再送しても、二重印刷されません。">Send the same Idempotency-Key again and it never prints a second copy.</span></div></li>
+              <li><svg aria-hidden="true"><use href="#i-check" /></svg><div><b data-en="Real outcomes, plus callbacks" data-ja="実際の結果とコールバック">Real outcomes, plus callbacks</b><span data-en="The response says whether it printed or why not, and an optional HTTPS callback reports when the job finishes." data-ja="印刷できたか、できなかった理由かを応答で返し、任意の HTTPS コールバックで完了を通知します。">The response says whether it printed or why not, and an optional HTTPS callback reports when the job finishes.</span></div></li>
+              <li><svg aria-hidden="true"><use href="#i-check" /></svg><div><b data-en="Deep links" data-ja="ディープリンク">Deep links</b><span data-en="A link or button on a web page can start a print. Untrusted sources ask for confirmation first." data-ja="Web ページのリンクやボタンから印刷を開始。信頼していない送信元は、先に確認が入ります。">A link or button on a web page can start a print. Untrusted sources ask for confirmation first.</span></div></li>
+              <li><svg aria-hidden="true"><use href="#i-check" /></svg><div><b data-en="Observable" data-ja="可観測性">Observable</b><span data-en="Health checks, JSON and Prometheus metrics, and a live OpenAPI document." data-ja="ヘルスチェック、JSON・Prometheus 形式のメトリクス、最新の OpenAPI ドキュメントを提供。">Health checks, JSON and Prometheus metrics, and a live OpenAPI document.</span></div></li>
+            </ul>
+          </div>
+          <div class="code" role="img" aria-label="Example REST API request that prints a receipt">
+            <div class="code-bar"><span>POST /v1/print</span><span>127.0.0.1:17717</span></div>
+<pre><span class="c"># Print two copies of a receipt</span>
+<span class="n">curl</span> -X POST http://127.0.0.1:17717/v1/print \
+  -H <span class="s">"Content-Type: application/json"</span> \
+  -H <span class="s">"Idempotency-Key: order-1042"</span> \
+  -d <span class="s">'{
+    "template": "Receipt",
+    "printer":  "Front Desk",
+    "data": { "order": { "id": "1042", "total": 18.5 } },
+    "settings": { "copies": 2 }
+  }'</span></pre>
+            <div class="code-res">→ <b>printed</b> · GET /v1/jobs/{id} to track</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PHONE PRINTING -->
+      <section class="section alt" id="phone">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow" data-en="Phone printing" data-ja="スマホ印刷">Phone printing</span>
+            <h2 data-en="Print templates from your phone — a PC steps in only when it has to" data-ja="スマホからテンプレートを印刷 — PC の手を借りるのは、必要なときだけ">Print templates from your phone — a PC steps in only when it has to</h2>
+            <p data-en="Most jobs run on the Android phone alone. The one step a phone cannot take is turning a template into a PDF, so that is the only time it asks a paired PC for help."
+               data-ja="ほとんどのジョブは Android スマホだけで完結します。スマホにできないのはテンプレートから PDF を作る工程だけ。その場合にだけ、ペア済みの PC に依頼します。">Most jobs run on the Android phone alone. The one step a phone cannot take is turning a template into a PDF, so that is the only time it asks a paired PC for help.</p>
+          </div>
+
+          <!-- Diagram 1: which route -->
+          <h3 class="sub-title" data-en="Which route does your job take?" data-ja="ジョブはどの経路を通る？">Which route does your job take?</h3>
+          <p class="sub-note" data-en="The app checks which language the printer reads, then picks the route for you." data-ja="アプリがプリンタの読める言語を確認し、経路を自動で選びます。">The app checks which language the printer reads, then picks the route for you.</p>
+          <div class="route" role="group" aria-label="Route diagram: thermal printers are driven by the phone alone; PDF printers need a paired PC to render">
+            <div class="rn q">
+              <b data-en="You press Print on the phone" data-ja="スマホで印刷を押す">You press Print on the phone</b>
+              <span data-en="The app looks at the printer's language" data-ja="アプリがプリンタの言語を確認">The app looks at the printer's language</span>
+            </div>
+
+            <div class="rn a1 in arr">
+              <em class="tagline ok" data-en="No PC needed" data-ja="PC 不要">No PC needed</em>
+              <b data-en="Receipt or label job" data-ja="レシート／ラベルのジョブ">Receipt or label job</b>
+              <span data-en="template + your data" data-ja="テンプレート＋データ">template + your data</span>
+            </div>
+            <div class="rn a2 arr">
+              <b data-en="The phone renders it" data-ja="スマホが描画">The phone renders it</b>
+              <span>ESC/POS · ZPL · TSPL · CPCL · raster</span>
+            </div>
+            <div class="rn a3 end">
+              <b data-en="Thermal printer" data-ja="サーマルプリンタ">Thermal printer</b>
+              <span>Bluetooth · USB</span>
+            </div>
+
+            <div class="rn b1 in arr">
+              <em class="tagline need" data-en="Paired PC needed" data-ja="ペア済み PC が必要">Paired PC needed</em>
+              <b data-en="Template → PDF" data-ja="テンプレート → PDF">Template → PDF</b>
+              <span data-en="the one step a phone cannot take" data-ja="スマホにできない唯一の工程">the one step a phone cannot take</span>
+            </div>
+            <div class="rn b2 pc arr">
+              <b data-en="A paired PC renders it" data-ja="ペア済み PC が描画">A paired PC renders it</b>
+              <span data-en="Windows or Linux, with a browser engine" data-ja="ブラウザエンジンを持つ Windows／Linux">Windows or Linux, with a browser engine</span>
+            </div>
+            <div class="rn b3 end">
+              <b data-en="PDF-language printer" data-ja="PDF 対応プリンタ">PDF-language printer</b>
+              <span data-en="office printers via network or system queue" data-ja="ネットワークまたはシステムキューのオフィスプリンタ">office printers via network or system queue</span>
+            </div>
+          </div>
+
+          <!-- Diagram 2: what travels -->
+          <div class="block">
+            <h3 class="sub-title" data-en="What the paired PC actually does" data-ja="ペア済み PC が実際にやること">What the paired PC actually does</h3>
+            <p class="sub-note" data-en="Only one job is lent out: rendering. Everything else stays on the phone." data-ja="貸し出すのは「描画」だけ。それ以外はすべてスマホ側に残ります。">Only one job is lent out: rendering. Everything else stays on the phone.</p>
+            <ol class="relay">
+              <li>
+                <em class="who phone" data-en="Phone" data-ja="スマホ">Phone</em>
+                <b data-en="Lays out the pages" data-ja="ページを配置">Lays out the pages</b>
+                <span class="d" data-en="template + data → sheets" data-ja="テンプレート＋データ → 用紙">template + data → sheets</span>
+              </li>
+              <li>
+                <em class="who hop" data-en="Phone → PC" data-ja="スマホ → PC">Phone → PC</em>
+                <b data-en="Sends the finished page" data-ja="完成したページを送信">Sends the finished page</b>
+                <span class="d" data-en="with paper size, orientation, printer language and resolution" data-ja="用紙サイズ・向き・プリンタ言語・解像度つき">with paper size, orientation, printer language and resolution</span>
+              </li>
+              <li>
+                <em class="who pc" data-en="PC" data-ja="PC">PC</em>
+                <b data-en="Renders it" data-ja="描画する">Renders it</b>
+                <span class="d" data-en="with its own engine" data-ja="PC 自身のエンジンで">with its own engine</span>
+              </li>
+              <li>
+                <em class="who hop" data-en="PC → Phone" data-ja="PC → スマホ">PC → Phone</em>
+                <b data-en="Returns finished bytes" data-ja="完成データを返す">Returns finished bytes</b>
+                <span class="d" data-en="no side effects, safe to repeat" data-ja="副作用なし。再送しても安全">no side effects, safe to repeat</span>
+              </li>
+              <li>
+                <em class="who phone" data-en="Phone" data-ja="スマホ">Phone</em>
+                <b data-en="Prints and records History" data-ja="印刷して履歴を記録">Prints and records History</b>
+                <span class="d" data-en="History notes which PC rendered it" data-ja="どの PC が描画したかも履歴に残る">History notes which PC rendered it</span>
+              </li>
+            </ol>
+          </div>
+
+          <!-- Diagram 3: two modes -->
+          <div class="block">
+            <h3 class="sub-title" data-en="Two ways to use a paired PC" data-ja="ペア済み PC の使い方は 2 通り">Two ways to use a paired PC</h3>
+            <div class="modes">
+              <div class="mode">
+                <h4 data-en="Shared rendering" data-ja="描画を共有">Shared rendering</h4>
+                <div class="mini">
+                  <span data-en="Phone" data-ja="スマホ">Phone</span><i>→</i>
+                  <span class="pc" data-en="PC renders" data-ja="PC が描画">PC renders</span><i>→</i>
+                  <span data-en="Phone's printer" data-ja="スマホ側のプリンタ">Phone's printer</span>
+                </div>
+                <p data-en="The PC prepares the page and the phone prints it on its own printer." data-ja="PC がページを用意し、スマホが自分のプリンタで印刷します。">The PC prepares the page and the phone prints it on its own printer.</p>
+              </div>
+              <div class="mode">
+                <h4 data-en="Print via PC (Android)" data-ja="PC 経由で印刷（Android）">Print via PC (Android)</h4>
+                <div class="mini">
+                  <span data-en="Phone" data-ja="スマホ">Phone</span><i>→</i>
+                  <span class="pc" data-en="PC renders and prints" data-ja="PC が描画して印刷">PC renders and prints</span><i>→</i>
+                  <span data-en="PC's printer" data-ja="PC 側のプリンタ">PC's printer</span>
+                </div>
+                <p data-en="The whole job runs on the PC's printers with the PC's templates. If the phone's template is out of date you are asked to Sync — a wrong version is never printed." data-ja="ジョブ全体を PC のプリンタと PC のテンプレートで実行します。スマホ側のテンプレートが古い場合は「同期」を求められ、誤った版が印刷されることはありません。">The whole job runs on the PC's printers with the PC's templates. If the phone's template is out of date you are asked to Sync — a wrong version is never printed.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Reasons -->
+          <div class="block">
+            <h3 class="sub-title" data-en="Why it works this way" data-ja="この仕組みの理由">Why it works this way</h3>
+            <p class="sub-note" data-en="Each design choice has a reason, and none of them is a workaround." data-ja="どの設計にも理由があり、場当たり的な回避策ではありません。">Each design choice has a reason, and none of them is a workaround.</p>
+            <div class="grid">
+              <article class="card">
+                <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></svg></div>
+                <h3 data-en="Rendering needs a browser engine" data-ja="描画にはブラウザエンジンが必要">Rendering needs a browser engine</h3>
+                <p data-en="Turning HTML and CSS into a finished PDF takes a full browser engine. Windows and Linux PCs have one; phones and macOS cannot render, so they are never chosen as the PC." data-ja="HTML と CSS から完成した PDF を作るには、ブラウザエンジンが必要です。Windows と Linux の PC にはあり、スマホと macOS は描画できないため、PC 役には選ばれません。">Turning HTML and CSS into a finished PDF takes a full browser engine. Windows and Linux PCs have one; phones and macOS cannot render, so they are never chosen as the PC.</p>
+              </article>
+              <article class="card">
+                <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M7 15h10v6H7z"/></svg></div>
+                <h3 data-en="Thermal printers don't read PDF" data-ja="サーマルプリンタは PDF を読めない">Thermal printers don't read PDF</h3>
+                <p data-en="Receipt and label printers speak command languages — ESC/POS, ZPL, TSPL, CPCL. The phone converts the layout into those itself, so no PDF and no PC are involved." data-ja="レシート・ラベルプリンタは ESC/POS、ZPL、TSPL、CPCL といったコマンド言語で動きます。スマホがレイアウトを直接変換するので、PDF も PC も不要です。">Receipt and label printers speak command languages — ESC/POS, ZPL, TSPL, CPCL. The phone converts the layout into those itself, so no PDF and no PC are involved.</p>
+              </article>
+              <article class="card">
+                <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5zM3 13l9 5 9-5"/></svg></div>
+                <h3 data-en="Rendering is the heavy part" data-ja="描画は一番重い工程">Rendering is the heavy part</h3>
+                <p data-en="Producing the image or PDF is by far the most expensive step of a print. That step goes to a PC with a proper engine; everything else stays on the phone." data-ja="画像や PDF を作る工程は、印刷の中で群を抜いて重い処理です。その工程だけを十分なエンジンを持つ PC に任せ、それ以外はスマホで行います。">Producing the image or PDF is by far the most expensive step of a print. That step goes to a PC with a proper engine; everything else stays on the phone.</p>
+              </article>
+              <article class="card">
+                <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+                <h3 data-en="Your prints stay on your network" data-ja="印刷データはネットワーク内に">Your prints stay on your network</h3>
+                <p data-en="Pairing is a deliberate step on the same Wi-Fi with a short-lived code, and traffic between phone and PC is encrypted. The cloud share service has no rendering engine, so a print never goes through it." data-ja="ペアリングは同じ Wi-Fi 内で、有効期限の短いコードを使って行う明示的な操作です。スマホと PC の通信は暗号化され、描画エンジンを持たないクラウドの共有サービスを印刷データが通ることはありません。">Pairing is a deliberate step on the same Wi-Fi with a short-lived code, and traffic between phone and PC is encrypted. The cloud share service has no rendering engine, so a print never goes through it.</p>
+              </article>
+              <article class="card">
+                <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14m0 0-4-4m4 4-4 4M20 16H6m0 0 4-4m-4 4 4 4"/></svg></div>
+                <h3 data-en="The phone stays in charge" data-ja="主導権はスマホに">The phone stays in charge</h3>
+                <p data-en="A phone asks a PC, never the other way round. In shared rendering the PC never touches the phone's printers, data or History; the phone sends the bytes and records the job." data-ja="依頼するのは常にスマホから PC へ。逆はありません。描画を共有するモードでは、PC がスマホのプリンタ・データ・履歴に触れることはなく、データの送信と履歴の記録はスマホが行います。">A phone asks a PC, never the other way round. In shared rendering the PC never touches the phone's printers, data or History; the phone sends the bytes and records the job.</p>
+              </article>
+              <article class="card">
+                <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></div>
+                <h3 data-en="No silent failures" data-ja="黙って失敗しない">No silent failures</h3>
+                <p data-en="If the PC is off, asleep or away, the job fails at once and names the PC. Nothing waits silently in a queue and nothing falls back to another printer — retry from History when the PC is back." data-ja="PC が電源オフ・スリープ・不在のときは、ジョブは即座に失敗し、どの PC が応答しなかったかを表示します。黙ってキューに溜まることも、別のプリンタに切り替わることもありません。PC が戻ったら履歴から再試行できます。">If the PC is off, asleep or away, the job fails at once and names the PC. Nothing waits silently in a queue and nothing falls back to another printer — retry from History when the PC is back.</p>
+              </article>
+            </div>
+            <div class="share"><b data-en="Good to know:" data-ja="ご注意:">Good to know:</b> <span data-en="while pairing, the phone trusts the first certificate it sees, so pair on a network you trust." data-ja="ペアリング時、スマホは最初に受け取った証明書を信頼します。信頼できるネットワークでペアリングしてください。">while pairing, the phone trusts the first certificate it sees, so pair on a network you trust.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- INSTALL -->
+      <section class="section" id="install">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow" data-en="Install" data-ja="導入">Install</span>
+            <h2 data-en="Up and printing in about five minutes" data-ja="約 5 分で印刷開始">Up and printing in about five minutes</h2>
+            <p data-en="Download the installer for your device from the Releases page and open it. The in-app Setup checklist walks you through the rest."
+               data-ja="Releases ページからお使いの端末用インストーラをダウンロードして開くだけ。あとはアプリ内のセットアップチェックリストが案内します。">Download the installer for your device from the Releases page and open it. The in-app Setup checklist walks you through the rest.</p>
+          </div>
+          <div class="install">
+            <div class="dl"><span class="file">.msi</span><h3>Windows</h3><p data-en="Nothing else to install." data-ja="追加のインストールは不要です。">Nothing else to install.</p></div>
+            <div class="dl"><span class="file">.apk</span><h3>Android</h3><p data-en="Allow installs from your browser when asked, then open the file." data-ja="確認が出たらブラウザからのインストールを許可し、ファイルを開きます。">Allow installs from your browser when asked, then open the file.</p></div>
+            <div class="dl"><span class="file">.deb · AppImage</span><h3>Linux</h3><p data-en="The .deb brings what it needs. For the AppImage, install CUPS and Chromium first." data-ja=".deb は必要なものを同梱。AppImage の場合は先に CUPS と Chromium を入れてください。">The .deb brings what it needs. For the AppImage, install CUPS and Chromium first.</p></div>
+          </div>
+          <div class="cta" style="margin-top:32px">
+            <a class="btn btn-primary" href="https://github.com/SAR-dev/PrintNinja/releases" rel="noreferrer">
+              <svg aria-hidden="true"><use href="#i-download" /></svg>
+              <span data-en="Go to Releases" data-ja="Releases ページへ">Go to Releases</span>
+            </a>
+          </div>
+          <div class="good">
+            <div><b data-en="Unsigned Windows builds" data-ja="未署名の Windows 版">Unsigned Windows builds</b><span data-en="Windows may show “Windows protected your PC”. Choose More info, then Run anyway." data-ja="Windows に「PC が保護されました」と表示される場合があります。「詳細情報」→「実行」を選んでください。">Windows may show “Windows protected your PC”. Choose More info, then Run anyway.</span></div>
+            <div><b data-en="Platform support" data-ja="対応プラットフォーム">Platform support</b><span data-en="Printing runs on Windows, Android and Linux. There is no iOS app, and macOS is not supported." data-ja="印刷は Windows・Android・Linux で動作します。iOS アプリはなく、macOS は非対応です。">Printing runs on Windows, Android and Linux. There is no iOS app, and macOS is not supported.</span></div>
+            <div><b data-en="Real-printer testing" data-ja="実機での検証">Real-printer testing</b><span data-en="Output is verified against simulated printers so far; a real-printer test checklist is in the docs if you want to help." data-ja="これまでの出力検証はシミュレートされたプリンタが中心です。実機テストのチェックリストをドキュメントで公開しています。">Output is verified against simulated printers so far; a real-printer test checklist is in the docs if you want to help.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CTA -->
+      <section class="cta-band">
+        <div class="wrap">
+          <h2 data-en="Give your team their time back." data-ja="チームの時間を取り戻しましょう。">Give your team their time back.</h2>
+          <p data-en="Install PrintNinja, add a printer and print your first label in minutes." data-ja="PrintNinja を入れてプリンタを追加すれば、数分で最初のラベルが印刷できます。">Install PrintNinja, add a printer and print your first label in minutes.</p>
+          <div class="cta">
+            <a class="btn btn-primary" href="https://github.com/SAR-dev/PrintNinja/releases" rel="noreferrer">
+              <svg aria-hidden="true"><use href="#i-download" /></svg>
+              <span data-en="Download PrintNinja" data-ja="PrintNinja をダウンロード">Download PrintNinja</span>
+            </a>
+            <a class="btn btn-ghost" href="https://github.com/SAR-dev/PrintNinja#readme" rel="noreferrer" data-en="Read the docs" data-ja="ドキュメントを読む">Read the docs</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <span data-en="PrintNinja · Windows, Android and Linux · English and Japanese" data-ja="PrintNinja · Windows、Android、Linux 対応 · 日本語・英語">PrintNinja · Windows, Android and Linux · English and Japanese</span>
+        <nav aria-label="Footer">
+          <a href="https://github.com/SAR-dev/PrintNinja" rel="noreferrer">GitHub</a>
+          <a href="https://github.com/SAR-dev/PrintNinja/releases" rel="noreferrer">Releases</a>
+          <a href="/demo/print.html" data-en="API demo" data-ja="API デモ">API demo</a>
+          <a href="https://github.com/SAR-dev/PrintNinja/issues" rel="noreferrer" data-en="Report an issue" data-ja="問題を報告">Report an issue</a>
+        </nav>
+      </div>
+    </footer>
 
     <script>
       (() => {
+        /* Language toggle (EN / 日本語), remembered per browser. */
         const buttons = [...document.querySelectorAll("[data-lang]")];
         const nodes = [...document.querySelectorAll("[data-en]")];
         const setLang = (lang) => {
@@ -248,18 +815,55 @@
             const value = el.dataset[lang];
             if (value !== undefined) el.textContent = value;
           });
-          buttons.forEach((b) =>
-            b.setAttribute("aria-pressed", String(b.dataset.lang === lang)),
-          );
+          buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
           try { localStorage.setItem("printninja-landing-lang", lang); } catch {}
         };
-        let initial = "en";
+        let initial = "";
         try { initial = localStorage.getItem("printninja-landing-lang") || ""; } catch {}
         if (!initial) initial = navigator.language.toLowerCase().startsWith("ja") ? "ja" : "en";
         setLang(initial === "ja" ? "ja" : "en");
-        buttons.forEach((b) =>
-          b.addEventListener("click", () => setLang(b.dataset.lang)),
-        );
+        buttons.forEach((b) => b.addEventListener("click", () => setLang(b.dataset.lang)));
+
+        /* Decorative barcode + QR pattern for the hero label (deterministic, no data). */
+        const NS = "http://www.w3.org/2000/svg";
+        const bars = document.getElementById("bars");
+        if (bars) {
+          const widths = [2,1,3,1,1,2,3,1,2,1,1,3,2,1,2,2,1,3,1,2,1,1,2,3,1,2,1,3,2,1,1,2,1,3,2,1,2,1,1,3,1,2,2,1,3,1,2,1,2,1,3,1,1,2,2,1,3,2,1,2,1,1,2,3,1,2];
+          let x = 0, ink = true;
+          for (const w of widths) {
+            if (ink && x < 160) {
+              const r = document.createElementNS(NS, "rect");
+              r.setAttribute("x", x); r.setAttribute("y", 0);
+              r.setAttribute("width", Math.min(w * 1.15, 160 - x)); r.setAttribute("height", 38);
+              r.setAttribute("fill", "#111");
+              bars.appendChild(r);
+            }
+            x += w * 1.15; ink = !ink;
+          }
+        }
+        const qr = document.getElementById("qr");
+        if (qr) {
+          const N = 21, cell = (x, y) => {
+            const r = document.createElementNS(NS, "rect");
+            r.setAttribute("x", x); r.setAttribute("y", y);
+            r.setAttribute("width", 1); r.setAttribute("height", 1); r.setAttribute("fill", "#111");
+            qr.appendChild(r);
+          };
+          const finder = (ox, oy) => {
+            for (let i = 0; i < 7; i++) for (let j = 0; j < 7; j++) {
+              const edge = i === 0 || j === 0 || i === 6 || j === 6;
+              const core = i >= 2 && i <= 4 && j >= 2 && j <= 4;
+              if (edge || core) cell(ox + i, oy + j);
+            }
+          };
+          finder(0, 0); finder(N - 7, 0); finder(0, N - 7);
+          let seed = 7;
+          const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+          for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+            const inFinder = (x < 8 && y < 8) || (x > N - 9 && y < 8) || (x < 8 && y > N - 9);
+            if (!inFinder && rnd() > 0.52) cell(x, y);
+          }
+        }
       })();
     </script>
   </body>
