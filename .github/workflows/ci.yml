@@ -814,15 +814,33 @@ jobs:
           echo "gh not found; installing…"
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gh
-      # Re-runs reuse the draft release and overwrite same-name assets
-      # instead of duplicating them.
+      # Re-runs reuse the draft release, refresh its notes from the frozen
+      # changelog section, and overwrite same-name assets instead of
+      # duplicating them.
       - name: Create draft release and upload artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          # `pnpm release` froze this section into docs/CHANGELOG.md in the
+          # tagged commit. Take everything under its heading, up to the
+          # next released section.
+          awk -v heading="## [$VERSION]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' docs/CHANGELOG.md > release-notes.md
+          args=( "$TAG" --draft --title "PrintNinja $TAG" )
+          if [ -s release-notes.md ]; then
+            args+=( --notes-file release-notes.md )
+          else
+            args+=( --generate-notes )
+          fi
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --draft --title "PrintNinja $TAG"
+            gh release create "${args[@]}"
+          elif [ -s release-notes.md ]; then
+            gh release edit "$TAG" --title "PrintNinja $TAG" --notes-file release-notes.md
           fi
           shopt -s globstar nullglob
           fail=0

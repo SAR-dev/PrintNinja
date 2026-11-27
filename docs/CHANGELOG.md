@@ -39,7 +39,7 @@ Only use the headings you actually have entries for.
 - Add new entries under **Unreleased** below as the work lands.
 - When we release, that section becomes a dated `## [version] - date` heading and a fresh empty **Unreleased** opens on top. `pnpm release` does this for you.
 - Keep the version in sync in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json` (`pnpm version:set`).
-- Once a section is released it is the release notes. Don't go back and rewrite it.
+- Once a section is released it is the release notes. Don't go back and rewrite it; at a release `pnpm release` keeps only the five newest dated sections and removes older ones.
 
 ---
 
