@@ -12,6 +12,7 @@ Pick the guide that matches what you want to do. New here? Start with the [main 
 - 📖 [Glossary](./GLOSSARY.md): the plain meaning of every term the app uses
 - 📋 [Test checklist](./TEST_CHECKLIST.md): a real-printer test checklist (not yet run on hardware)
 - 🖼️ [Screenshot gallery](./SCREENSHOT_GALLERY.md): every screen on Windows and Android phone, light theme
+- 🌐 Project overview: opening the share service's root URL in a browser shows a short, bilingual introduction with diagrams (English / 日本語)
 
 ## ⚡ For power users
 
