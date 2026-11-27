@@ -45,6 +45,10 @@ Only use the headings you actually have entries for.
 
 ## Unreleased
 
+### Added
+
+- **Starter label templates.** When you create a label template you can now start from a ready-made layout — Shipping label, Product price, Address, Asset tag or Name badge — or pick Blank, just like document templates. Each starter comes with sample data, so your label looks filled in right away.
+
 ## [2026.1126.0] - 2026-11-26
 
 ### Added

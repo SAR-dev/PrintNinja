@@ -72,7 +72,7 @@ Mac computers are not supported for printing. 🍎
 This takes about five minutes. ⏱️ The **Setup checklist** in **Settings** walks you through the same steps inside the app.
 
 1. 🖨️ **Add a printer.** Open **Printers**, then choose **Add printer**. Network, system, USB and Bluetooth printers all work. Press **Test Print** to make sure it is connected.
-2. 🎨 **Make a template.** Open **Templates**, press **New**, and pick **New label template** (for a thermal printer) or **New document template** (for a regular one). The Designer opens for you: a label template starts as a blank label you arrange on a canvas, and a document template starts from a ready-made example (Receipt, Invoice, Shipping Label, …) that you edit.
+2. 🎨 **Make a template.** Open **Templates**, press **New**, and pick **New label template** (for a thermal printer) or **New document template** (for a regular one). The Designer opens for you: a label template starts from a starter you pick (Shipping label, Product price, Address, Asset tag, Name badge, or a Blank label) and arrange on a canvas, and a document template starts from a ready-made example (Receipt, Invoice, Shipping Label, …) that you edit.
 3. ▶️ **Print.** Open **Print**, choose your printer and template, add your information (sample data, a link to your data, or a CSV file), choose how many copies, check the preview and press **Print**.
 4. ✅ **Check the result.** **History** lists every job with a clear success or failure message. Reprint or retry from there.
 

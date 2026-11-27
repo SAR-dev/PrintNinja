@@ -1037,6 +1037,68 @@ describe("Designer page, create deep links from the Templates page", () => {
     expect(within(dialog).getByTestId("scene-create")).toBeInTheDocument();
   });
 
+  it("?new=scene offers the starter labels and creates from the chosen one", async () => {
+    invoke.mockImplementation(async (...args: any[]): Promise<any> => {
+      if (args[0] === "label_save_template") {
+        const req = (args[1] as { req: { name: string; scene: string } }).req;
+        return {
+          id: 99,
+          name: req.name,
+          scene_json: req.scene,
+          page_w_mm: 102,
+          page_h_mm: 152,
+          orientation: "portrait",
+        };
+      }
+      return defaultImpl(...args);
+    });
+    try {
+      renderAt("/?new=scene");
+      const dialog = await screen.findByRole("dialog");
+      // Every starter is on offer; Blank is what the dialog opens on.
+      expect(within(dialog).getAllByRole("option").length).toBeGreaterThan(1);
+      expect(within(dialog).getByTestId("scene-starter-blank")).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      fireEvent.click(within(dialog).getByTestId("scene-starter-shipping"));
+      expect(within(dialog).getByLabelText("Name")).toHaveValue(
+        "Shipping label",
+      );
+      fireEvent.change(within(dialog).getByLabelText("Name"), {
+        target: { value: "Parcel 4x6" },
+      });
+      fireEvent.click(within(dialog).getByTestId("scene-create"));
+      await waitFor(() =>
+        expect(invoke).toHaveBeenCalledWith(
+          "label_save_template",
+          expect.anything(),
+        ),
+      );
+      const call = invoke.mock.calls.find(
+        (c) => c[0] === "label_save_template",
+      );
+      const req = (call?.[1] as { req: { name: string; scene: string } }).req;
+      expect(req.name).toBe("Parcel 4x6");
+      const scene = JSON.parse(req.scene);
+      expect(scene.media).toEqual({
+        kind: "label",
+        width_mm: 102,
+        height_mm: 152,
+      });
+      expect(scene.elements.length).toBeGreaterThan(5);
+      // The starter's own records land in the sample-data card, so the
+      // canvas shows a filled label instead of bare placeholders.
+      await waitFor(() =>
+        expect(
+          screen.getAllByDisplayValue(/Aisha Rahman/).length,
+        ).toBeGreaterThan(0),
+      );
+    } finally {
+      invoke.mockImplementation(defaultImpl);
+    }
+  });
+
   it("?new=document opens the new-document dialog", async () => {
     renderAt("/?new=document");
     const dialog = await screen.findByRole("dialog");
