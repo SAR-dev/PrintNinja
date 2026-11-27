@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Redo2, Undo2, X } from "lucide-react";
+import { ReadmePanel } from "@/components/designer/ReadmePanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,10 +47,18 @@ export function SceneDesigner({
   scene,
   sampleJson,
   onSampleJsonChange,
+  readme,
+  onReadmeChange,
+  templateName,
+  readOnly = false,
 }: {
   scene: ReturnType<typeof useSceneTemplate>;
   sampleJson: string;
   onSampleJsonChange: (v: string) => void;
+  readme: string;
+  onReadmeChange: (v: string) => void;
+  templateName: string;
+  readOnly?: boolean;
 }) {
   const { t } = useTranslation();
   const template = scene.template;
@@ -139,7 +148,7 @@ export function SceneDesigner({
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 xl:h-full xl:min-h-0">
       <div className="flex flex-wrap items-center gap-2">
         <Badge>scene</Badge>
         <span className="text-body-sm text-muted-foreground">{sizeLabel}</span>
@@ -172,8 +181,8 @@ export function SceneDesigner({
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="flex min-w-0 flex-col gap-6">
+      <div className="grid gap-6 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="flex min-w-0 flex-col gap-6 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
           <Card>
             <CardHeader>
               <CardTitle>{t("scene.page")}</CardTitle>
@@ -206,7 +215,22 @@ export function SceneDesigner({
           </Card>
         </div>
 
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-6 xl:sticky xl:top-0 xl:max-h-full xl:min-h-0 xl:overflow-y-auto xl:self-start">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("scene.readme")}</CardTitle>
+              <CardDescription>{t("scene.readme_note")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ReadmePanel
+                readme={readme}
+                onChange={onReadmeChange}
+                templateName={templateName}
+                readOnly={readOnly}
+              />
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>{t("scene.media")}</CardTitle>

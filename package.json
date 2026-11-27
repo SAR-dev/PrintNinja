@@ -32,7 +32,8 @@
     "tauri:build": "tauri build",
     "release": "node scripts/release.mjs",
     "version:set": "node scripts/set-version.mjs",
-    "shots": "node scripts/screenshots.mjs"
+    "shots": "node scripts/screenshots.mjs",
+    "shots:gallery": "node scripts/screenshots.mjs --platforms=windows,android-phone --themes=light --langs=en --out=docs/screenshots --index=false"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",

@@ -163,6 +163,16 @@ export function usePrintPreview(
     empty: boolean;
   }> => {
     let data: unknown = DEFAULT_MOCK_DATA;
+    // A label template carries its own sample records: the preview shows
+    // them, matching the test print, unless a link or URL overrides them.
+    if (selectedTemplate?.track === "scene" && selectedTemplate.scene_json) {
+      try {
+        const scene = JSON.parse(selectedTemplate.scene_json);
+        if (scene.sample_data !== undefined) data = scene.sample_data;
+      } catch {
+        // An old or broken scene row falls back to the default mock.
+      }
+    }
     let notice = "";
     if (dataJson.trim()) {
       // The link's records win over the URL and the test data alike.

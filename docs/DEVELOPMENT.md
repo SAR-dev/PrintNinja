@@ -50,6 +50,20 @@ docs/         User guides (features, phone printing, troubleshooting, automation
 scripts/      Release and versioning helpers
 ```
 
+```mermaid
+flowchart LR
+    SRC["src/ — React app and stores"] -->|pnpm build| DIST["dist/ — built web app"]
+    CORE["core/ — shared Rust crates"] --> TAURI["src-tauri/ — desktop shell and print queue"]
+    DIST -->|embedded at build time| TAURI
+    TAURI --> INSTALL["MSI · deb · AppImage · APK"]
+    SRV["server/ — Fastify share service"] --> DB["SQLite in dev · Turso in production"]
+    E2E["e2e/ — Playwright"] --> STACK["app + fake agent + service"]
+```
+
+The web build is embedded into the desktop crate, so the Rust checks need a
+`pnpm build` first. The share service is a separate deployable; the test stacks
+start their own copies with isolated databases.
+
 ## Tech stack
 
 | Area | Technology |

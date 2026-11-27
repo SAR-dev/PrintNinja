@@ -13,8 +13,9 @@
 
 use std::time::Instant;
 
-use crate::commands::print::{close_job, lookup_printer, StoredPrinter};
+use crate::commands::print::{close_job, lookup_printer, validate_http_method, StoredPrinter};
 use crate::commands::template::{self, CreateTemplateRequest};
+use crate::data::fetcher::{DataFetcher, FetchOptions};
 use crate::db::DbState;
 use crate::error::{AppError, AppResult};
 use crate::label_pipeline::{
@@ -191,6 +192,17 @@ pub struct LabelJobRequest {
     /// Sets to print; defaults to one.
     #[serde(default)]
     pub copies: Option<u32>,
+    /// Test print: use the supplied records as sample data, never a URL.
+    #[serde(default)]
+    pub test: Option<bool>,
+    /// Fetch records from this URL with the same limits as `print_html`.
+    #[serde(default)]
+    pub data_url: Option<String>,
+    #[serde(default)]
+    pub http_method: Option<String>,
+    /// Inline records (a deep link's `data`), as JSON.
+    #[serde(default)]
+    pub data: Option<serde_json::Value>,
 }
 
 /// What a scene job resolves to before anything is prepared.
@@ -568,19 +580,52 @@ pub(crate) async fn run_label_job(
 
 /// Print a scene job from the app: the shared runner over a fresh job
 /// row, with the IPC response shape the print screen reads.
+/// Resolve the records a scene job prints, with the same data sources and
+/// limits the html track uses: inline deep-link data, a fetched URL, or
+/// the records the caller supplied (sample data on a test print).
+async fn resolve_label_records(req: &LabelJobRequest) -> AppResult<String> {
+    if req.test.unwrap_or(false) {
+        return Ok(req.records.clone());
+    }
+    if let Some(data) = &req.data {
+        return serde_json::to_string(data).map_err(|e| AppError::Validation(e.to_string()));
+    }
+    if let Some(url) = &req.data_url {
+        if !url.trim().is_empty() {
+            let method = validate_http_method(req.http_method.as_deref())?;
+            let opts = FetchOptions {
+                url: url.clone(),
+                method,
+                headers: None,
+                timeout_secs: 15,
+                max_size_bytes: 5 * 1024 * 1024,
+                json_path: None,
+            };
+            let value = DataFetcher::new()
+                .fetch(&opts)
+                .await
+                .map_err(|e| AppError::Validation(e.to_string()))?;
+            return serde_json::to_string(&value).map_err(|e| AppError::Validation(e.to_string()));
+        }
+    }
+    Ok(req.records.clone())
+}
+
 #[tauri::command]
 pub async fn label_print(
     db: State<'_, DbState>,
     queue: State<'_, PrintQueue>,
     req: LabelJobRequest,
 ) -> AppResult<LabelPrintResponse> {
+    let records_json = resolve_label_records(&req).await?;
+    let is_test = req.test.unwrap_or(false);
     let run = LabelJobRun {
         template_id: req.template_id,
         printer: req.printer,
-        records_json: req.records,
+        records_json,
         copies: req.copies.unwrap_or(1).max(1),
         source: "ui",
-        is_test: false,
+        is_test,
         requested_by_device_id: None,
     };
     let outcome = run_label_job(&db, &queue, None, &run).await?;
@@ -653,4 +698,40 @@ pub fn label_set_printer_profile(
         .lock()
         .map_err(|_| AppError::Internal("DB lock poisoned".into()))?;
     set_printer_label_profile(guard.connection(), printer_id, profile_id.as_deref())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request() -> LabelJobRequest {
+        LabelJobRequest {
+            template_id: 1,
+            printer: "Zebra".into(),
+            records: r#"[{"name":"sample"}]"#.into(),
+            copies: None,
+            test: None,
+            data_url: None,
+            http_method: None,
+            data: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_prints_use_the_supplied_records() {
+        let mut req = request();
+        req.test = Some(true);
+        req.data_url = Some("http://127.0.0.1:9/data".into());
+        assert_eq!(resolve_label_records(&req).await.unwrap(), req.records);
+    }
+
+    #[tokio::test]
+    async fn inline_data_wins_over_supplied_records() {
+        let mut req = request();
+        req.data = Some(serde_json::json!([{"name":"inline"}]));
+        assert_eq!(
+            resolve_label_records(&req).await.unwrap(),
+            r#"[{"name":"inline"}]"#
+        );
+    }
 }

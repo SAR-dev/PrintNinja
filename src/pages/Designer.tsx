@@ -11,7 +11,9 @@ import {
 } from "@/lib/hooks/useMediaQuery";
 import { useShareStatus } from "@/lib/shell/useShareStatus";
 import { isReadOnly } from "@/lib/share/sync";
-import { notifySuccess } from "@/lib/notify";
+import { agent } from "@/lib/agent/commands";
+import { describeError } from "@/lib/errors";
+import { notifyError, notifySuccess } from "@/lib/notify";
 import { SampleDataPanel } from "@/components/designer/SampleDataPanel";
 import type { PagePreset } from "@/components/designer/ControlsAccordion";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
@@ -108,8 +110,24 @@ export function DesignerPage() {
     currentTemplateId: doc.currentTemplateId,
     currentTemplateDbId: doc.currentTemplateDbId,
     scene,
+    setSampleJson: dataset.setDraftDatasetJson,
   });
   const isScene = scene.template != null;
+  /** Save the label, then fold a pending sample-data edit into the
+   * same Save — the document track's Save already does both. */
+  const saveScene = async () => {
+    const id = await scene.save(doc.templateName, dataset.workingDatasetJson);
+    if (id == null) return;
+    try {
+      if (doc.readme !== doc.savedReadme) {
+        await agent("update_readme", { req: { id, readme: doc.readme } });
+        doc.setSavedReadme(doc.readme);
+      }
+      await dataset.commitDataset();
+    } catch (e) {
+      notifyError(describeError(e));
+    }
+  };
   // Deep link from the Templates page: ?new=scene opens the new-label
   // dialog, ?new=document the new-document dialog. The param is cleared
   // once handled, so the effect no-ops on later renders.
@@ -215,14 +233,16 @@ export function DesignerPage() {
         }
         onSwitchTemplate={isScene ? handleSwitchTemplate : doc.switchTemplate}
         nameError={doc.nameError}
-        dirty={isScene ? scene.dirty || dataset.datasetsDirty : doc.dirty}
+        dirty={
+          isScene
+            ? scene.dirty ||
+              dataset.datasetsDirty ||
+              doc.readme !== doc.savedReadme
+            : doc.dirty
+        }
         layout={isScene ? undefined : workspace.layout}
         onLayoutChange={isScene ? undefined : workspace.setLayout}
-        onSave={
-          isScene
-            ? () => void scene.save(doc.templateName)
-            : () => void sync.handleSave()
-        }
+        onSave={isScene ? () => void saveScene() : () => void sync.handleSave()}
         saveDisabled={
           isScene ? !!doc.nameError : offline || readOnly || !!doc.nameError
         }

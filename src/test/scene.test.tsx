@@ -239,11 +239,11 @@ describe("useSceneTemplate", () => {
     act(() => result.current.addElement([], "text"));
     expect(result.current.dirty).toBe(true);
 
-    let ok: boolean | undefined;
+    let id: number | null | undefined;
     await act(async () => {
-      ok = await result.current.save("Shipping");
+      id = await result.current.save("Shipping");
     });
-    expect(ok).toBe(true);
+    expect(id).toBe(7);
     expect(agentMock).toHaveBeenCalledWith("label_save_template", {
       req: expect.objectContaining({ name: "Shipping", id: 7 }),
     });
@@ -252,6 +252,20 @@ describe("useSceneTemplate", () => {
     // The header name follows the row the save now carries.
     expect(setTemplateName).toHaveBeenCalledWith("Shipping");
     expect(notify.success).toHaveBeenCalled();
+  });
+
+  it("saves the sample data with the scene", async () => {
+    const { result } = renderScene();
+    act(() => result.current.addElement([], "text"));
+    await act(async () => {
+      await result.current.save("Shipping", '[{"name":"Aiko"}]');
+    });
+    const call = agentMock.mock.calls.find(
+      (args: unknown[]) => args[0] === "label_save_template",
+    );
+    expect(call).toBeDefined();
+    const saved = JSON.parse(call![1].req.scene);
+    expect(saved.sample_data).toEqual([{ name: "Aiko" }]);
   });
 
   it("keeps the scene dirty and reports an error when the save fails", async () => {
@@ -263,11 +277,11 @@ describe("useSceneTemplate", () => {
     const { result } = renderScene();
     act(() => result.current.addElement([], "text"));
 
-    let ok: boolean | undefined;
+    let id: number | null | undefined;
     await act(async () => {
-      ok = await result.current.save("Shipping");
+      id = await result.current.save("Shipping");
     });
-    expect(ok).toBe(false);
+    expect(id).toBeNull();
     expect(result.current.dirty).toBe(true);
     expect(notify.error).toHaveBeenCalled();
     expect(notify.success).not.toHaveBeenCalled();
@@ -362,6 +376,8 @@ describe("useSceneTemplate", () => {
 type NewSceneArgs = Parameters<typeof useNewSceneTemplate>[0];
 
 describe("useNewSceneTemplate", () => {
+  beforeEach(() => window.localStorage.clear());
+
   const baseDeps = (
     scene: { create: ReturnType<typeof vi.fn> },
     over: Partial<NewSceneArgs> = {},
@@ -398,7 +414,10 @@ describe("useNewSceneTemplate", () => {
 
   it("creates through the scene hook and closes on success", async () => {
     const scene = { create: vi.fn().mockResolvedValue(true) };
-    const { result } = renderNew(baseDeps(scene));
+    const setSampleBlank = vi.fn();
+    const { result } = renderNew(
+      baseDeps(scene, { setSampleJson: setSampleBlank }),
+    );
     act(() => {
       result.current.openDialog();
       result.current.setName("New label");
@@ -406,8 +425,49 @@ describe("useNewSceneTemplate", () => {
     await act(async () => {
       await result.current.create();
     });
-    expect(scene.create).toHaveBeenCalledWith("New label");
+    // No starter picked: Blank, the same empty label as before.
+    expect(scene.create).toHaveBeenCalledWith(
+      "New label",
+      blankTemplate(),
+      undefined,
+    );
+    // Blank binds nothing, so the account's sample data is left alone.
+    expect(setSampleBlank).not.toHaveBeenCalled();
     expect(result.current.showDialog).toBe(false);
+  });
+
+  it("creates from the chosen starter and suggests its name", async () => {
+    const scene = { create: vi.fn().mockResolvedValue(true) };
+    const setSampleJson = vi.fn();
+    const { result } = renderNew(baseDeps(scene, { setSampleJson }));
+    act(() => result.current.openDialog());
+    expect(result.current.starterId).toBe("blank");
+    expect(result.current.name).toBe("");
+
+    act(() => result.current.selectStarter("shipping"));
+    expect(result.current.starterId).toBe("shipping");
+    expect(result.current.name).toBe("Shipping label");
+    // The suggestion follows the pick while it is untouched…
+    act(() => result.current.selectStarter("badge"));
+    expect(result.current.name).toBe("Name badge");
+    // …but a name the person typed is kept.
+    act(() => result.current.setName("Front desk"));
+    act(() => result.current.selectStarter("asset"));
+    expect(result.current.name).toBe("Front desk");
+
+    await act(async () => {
+      await result.current.create();
+    });
+    const [name, start] = scene.create.mock.calls[0] as [string, Template];
+    expect(name).toBe("Front desk");
+    expect(start.media).toEqual({ kind: "label", width_mm: 50, height_mm: 30 });
+    expect(start.elements.some((e) => e.type === "qr")).toBe(true);
+    // The starter's own records are handed to the sample-data draft.
+    const sample = JSON.parse(setSampleJson.mock.calls[0][0] as string);
+    expect(sample[0].asset_id).toBe("AST-00123");
+    // The next dialog opens on the last starter used.
+    act(() => result.current.openDialog());
+    expect(result.current.starterId).toBe("asset");
   });
 
   it("deletes the open scene row, and resets the open template when it was the one", async () => {

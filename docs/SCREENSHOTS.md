@@ -26,6 +26,10 @@ screenshots/
   ...
 ```
 
+## Committed gallery
+
+`pnpm shots:gallery` is the same capture with `--platforms=windows,android-phone --themes=light --langs=en --out=docs/screenshots`. Its 22 images are committed and shown in the [Screenshot gallery](./SCREENSHOT_GALLERY.md); re-run the command after an intentional UI change and commit the refreshed files.
+
 ## Options
 
 | Flag | Values | Default |
@@ -68,5 +72,15 @@ Settings (general and profile) and the API explorer. Edit `ROUTES` in
 - A full default matrix (6 platforms x 2 themes x 11 pages = 132 images)
   takes about 5 minutes on a laptop-class machine, mostly Vite compiling
   each page on first visit.
-- This is for reviewing design, not a replacement for the e2e layout and
-  axe checks in `e2e/tests/`.
+- **Template previews are an approximation, not the print engine.** The
+  capture runs in web mode, and the fake agent has no Rust print engine. By
+  default its `render_template_preview` stub (see
+  `e2e/support/fakeAgent/commands.ts`) returns the escaped template HTML in
+  a `<pre>`, which is what e2e specs see. The screenshot script turns on an
+  opt-in rendered mode (`localStorage["fake-agent:render-html"] = "true"`),
+  so the Designer canvas and Print preview show the template's real HTML
+  and CSS with `{{placeholders}}` filled from the record, or from built-in
+  sample values. Handlebars helpers and blocks are not evaluated, so
+  complex templates may differ from the real desktop app, which renders
+  previews with the same Rust engine that prints. Use the images to review
+  app layout, not exact template output.
