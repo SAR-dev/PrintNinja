@@ -143,6 +143,9 @@ export interface SeedTemplate {
   readme?: string;
   page_w?: number;
   page_h?: number;
+  /** The print track; defaults to `html`. Scene rows carry `scene_json`. */
+  track?: "html" | "scene";
+  scene_json?: string;
   /** Defaults to 1 with a server_id, null without. Null with a
    * server_id simulates a migrated row never confirmed by sync. */
   base_revision?: number | null;
@@ -248,8 +251,8 @@ export function createFakeCache() {
         owner_handle: null,
         synced_at: null,
         versions: [{ version_no: 1, html, css, created_by: "manual" }],
-        track: "html",
-        scene_json: null,
+        track: seed.track === "scene" ? "scene" : "html",
+        scene_json: seed.track === "scene" ? (seed.scene_json ?? "{}") : null,
       });
     }
     if (templates.size > 0) {

@@ -133,6 +133,7 @@ const ROUTES = [
   { name: "print", path: "/print" },
   { name: "templates", path: "/templates" },
   { name: "designer", path: "/template/1" },
+  { name: "label-designer", path: "/template/5" },
   { name: "printers", path: "/printers" },
   { name: "history", path: "/history" },
   { name: "automation", path: "/automation" },
@@ -158,6 +159,47 @@ const PAIRED_PC_SETTINGS = {
 };
 
 const LABEL_CSS = ".label{font-family:sans-serif;padding:4mm}h1{margin:0;font-size:5mm}";
+// A scene (label) template for the label-designer shot: a real canvas,
+// sample data and a short README, so the right-hand preview and README
+// panel in the current designer are both visible.
+const LABEL_SCENE = {
+  format: "scene",
+  media: { kind: "label", width_mm: 100, height_mm: 150 },
+  elements: [
+    {
+      type: "text",
+      at: { x_mm: 5, y_mm: 6 },
+      size: { w_mm: 90, h_mm: 10 },
+      content: "SHIPPING LABEL",
+      style: { size_mm: 6, bold: true },
+    },
+    {
+      type: "text",
+      at: { x_mm: 5, y_mm: 22 },
+      size: { w_mm: 90, h_mm: 9 },
+      content: "{{name}}",
+      style: { size_mm: 5 },
+    },
+    {
+      type: "text",
+      at: { x_mm: 5, y_mm: 34 },
+      size: { w_mm: 90, h_mm: 9 },
+      content: "{{address}}",
+      style: { size_mm: 4.5 },
+    },
+    { type: "line", at: { x_mm: 5, y_mm: 50 }, length_mm: 90, thickness_mm: 0.6 },
+    {
+      type: "text",
+      at: { x_mm: 5, y_mm: 58 },
+      size: { w_mm: 90, h_mm: 8 },
+      content: "SKU {{sku}}",
+      style: { size_mm: 4.5 },
+    },
+  ],
+  sample_data: [
+    { name: "Aiko Tanaka", address: "1-2-3 Shibuya, Tokyo", sku: "SKU-10482" },
+  ],
+};
 const TEMPLATES = [
   ["Shipping Label 100x150", "<div class='label'><h1>{{name}}</h1><p>{{address}}</p></div>"],
   ["Product Tag 50x30", "<div class='label'><h1>{{sku}}</h1><p>{{price}}</p></div>"],
@@ -170,7 +212,19 @@ const TEMPLATES = [
   server_id: `00000000-0000-4000-8000-00000000000${i + 1}`,
   sync_state: i === 3 ? "dirty" : "synced",
   summary: `Sample ${name.toLowerCase()} used for screenshots.`,
-}));
+})).concat({
+  name: "Label Starter 100x150",
+  html: "",
+  css: LABEL_CSS,
+  track: "scene",
+  scene_json: JSON.stringify(LABEL_SCENE),
+  page_w: 100,
+  page_h: 150,
+  readme: "# Label Starter\n\nA ready-made shipping label with sample records.",
+  server_id: "00000000-0000-4000-8000-000000000005",
+  sync_state: "synced",
+  summary: "Sample label template used for screenshots.",
+});
 
 const PRINTERS = [
   { name: "Zebra ZD421", printer_type: "usb", language: "zpl", paper_width_mm: 100 },

@@ -30,6 +30,14 @@ Label and document templates in one list; the **New** menu picks the track to cr
 
 The full editor: canvas, element tools, data bindings and a live preview.
 
+### Label Designer
+
+![Label Designer on Windows](./screenshots/windows/en-light-comfortable/label-designer.png)
+
+The label track: a millimetre canvas on the left, and a right-hand
+column that keeps the README, media settings and prepared preview in view
+while the canvas scrolls.
+
 ### Printers
 
 ![Printers page on Windows](./screenshots/windows/en-light-comfortable/printers.png)
@@ -99,6 +107,13 @@ Template rows collapse into cards with compact actions for the small viewport.
 ![Designer on an Android phone](./screenshots/android-phone/en-light-comfortable/designer.png)
 
 The phone Designer is a read-only viewer: sections and notice, no editing panes.
+
+### Label Designer
+
+![Label Designer on an Android phone](./screenshots/android-phone/en-light-comfortable/label-designer.png)
+
+On a phone a label template opens read-only: the canvas at phone width and
+the bottom tab bar, with no editing panes.
 
 ### Printers
 

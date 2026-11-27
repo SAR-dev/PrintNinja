@@ -28,7 +28,7 @@ screenshots/
 
 ## Committed gallery
 
-`pnpm shots:gallery` is the same capture with `--platforms=windows,android-phone --themes=light --langs=en --out=docs/screenshots`. Its 22 images are committed and shown in the [Screenshot gallery](./SCREENSHOT_GALLERY.md); re-run the command after an intentional UI change and commit the refreshed files.
+`pnpm shots:gallery` is the same capture with `--platforms=windows,android-phone --themes=light --langs=en --out=docs/screenshots`. Its 24 images are committed and shown in the [Screenshot gallery](./SCREENSHOT_GALLERY.md); re-run the command after an intentional UI change and commit the refreshed files.
 
 ## Options
 
@@ -56,9 +56,11 @@ pnpm shots --out=shots/after
 
 ## Pages covered
 
-Sign-in, Print, Templates, Designer, Printers, History, Automation, Devices,
-Settings (general and profile) and the API explorer. Edit `ROUTES` in
-`scripts/screenshots.mjs` to add more.
+Sign-in, Print, Templates, the document Designer, the label Designer,
+Printers, History, Automation, Devices, Settings (general and profile) and
+the API explorer. Edit `ROUTES` in `scripts/screenshots.mjs` to add more.
+The label Designer shot uses a seeded scene template with sample records
+and a README, so its canvas, right-hand preview and README are all shown.
 
 ## Notes
 
@@ -69,7 +71,7 @@ Settings (general and profile) and the API explorer. Edit `ROUTES` in
 - The script exits non-zero if a page throws or never finishes loading.
 - The narrow desktop widths (900x700, 1024x768) exist to review the
   768-1100px range where the desktop layout does not fit yet.
-- A full default matrix (6 platforms x 2 themes x 11 pages = 132 images)
+- A full default matrix (6 platforms x 2 themes x 12 pages = 144 images)
   takes about 5 minutes on a laptop-class machine, mostly Vite compiling
   each page on first visit.
 - **Template previews are an approximation, not the print engine.** The
