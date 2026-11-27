@@ -84,5 +84,10 @@ and a README, so its canvas, right-hand preview and README are all shown.
   and CSS with `{{placeholders}}` filled from the record, or from built-in
   sample values. Handlebars helpers and blocks are not evaluated, so
   complex templates may differ from the real desktop app, which renders
-  previews with the same Rust engine that prints. Use the images to review
+  previews with the same Rust engine that prints. Label previews are drawn
+  by the fake agent too: it paints the scene's elements onto an offscreen
+  canvas at the printer's dpi and packs the dark pixels, filling
+  `{{placeholders}}` from the record. Barcodes and QR codes are stand-ins,
+  font metrics differ from Rust, and environments without a canvas 2D
+  context fall back to the old striped bitmap. Use the images to review
   app layout, not exact template output.
