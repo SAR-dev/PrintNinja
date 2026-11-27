@@ -100,11 +100,15 @@ export function DesignerBody({
         templateName={doc.templateName}
       />
     ) : (
-      <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+      <div className="min-h-0 flex-1 overflow-y-auto pb-4 xl:overflow-hidden">
         <SceneDesigner
           scene={scene}
           sampleJson={sampleJson}
           onSampleJsonChange={onSampleJsonChange}
+          readme={doc.readme}
+          onReadmeChange={doc.setReadme}
+          templateName={doc.templateName}
+          readOnly={readOnly}
         />
       </div>
     )

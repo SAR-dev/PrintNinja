@@ -13,6 +13,7 @@ import {
 import { writeSetting } from "@/lib/settings";
 import { cacheNow } from "@/lib/sync/useSyncStatus";
 import { DEFAULT_MOCK_DATA } from "@/lib/templates/defaultTemplate";
+import type { TemplateListRow } from "@/lib/templates/listTemplates";
 import type { PrintState } from "./types";
 import { resolvePhonePair } from "@/lib/printViaPc";
 import type { RenderPair, PcTemplateInfo } from "@/lib/agent/types";
@@ -61,7 +62,7 @@ export function usePrintActions({
   setPrintedVia: (name: string | null) => void;
   printerPrefs: PrintPrefsMap;
   setPrinterPrefs: (p: PrintPrefsMap) => void;
-  templates: { id: number | string; name: string }[];
+  templates: TemplateListRow[];
   changeTemplate: (id: string) => void;
   effPaperW: number;
   effPaperH: number;
@@ -226,13 +227,10 @@ export function usePrintActions({
     }
   };
 
-  // The scene (label) track's print: the same data fields, but the
-  // job is a prepared label — a deep link's inline `data` (WP5) is
-  // used as-is, else the data URL is fetched here (the label command
-  // takes the records as a JSON string), so a failed fetch is a
-  // failed print, not a sample-data fallback. One object repeats for
-  // `records` sheets, an array prints its own length: the records the
-  // preview's `label_prepare` showed.
+  // The scene (label) track's print: the same data fields as the html
+  // track. A data URL is fetched by the command with the same limits,
+  // deep-link `data` is passed inline, and test prints use the template's
+  // saved sample records. One object repeats for `records` sheets.
   const doLabelPrint = async () => {
     store.setStatus("printing");
     store.setError("");
@@ -240,30 +238,22 @@ export function usePrintActions({
     store.setRenderedBy(null);
     store.setWarnings([]);
 
-    let data: unknown;
+    let sample: unknown = DEFAULT_MOCK_DATA;
+    let inline: unknown;
     try {
       if (store.dataJson.trim()) {
-        // A deep link's `data` carries the records themselves (WP5).
-        data = JSON.parse(store.dataJson);
-      } else if (store.useTestData || !store.dataUrl.trim()) {
-        data = DEFAULT_MOCK_DATA;
+        inline = JSON.parse(store.dataJson);
       } else {
-        const ctrl = new AbortController();
-        const timeout = window.setTimeout(() => ctrl.abort(), 10_000);
-        try {
-          const res = await fetch(store.dataUrl.trim(), {
-            method: store.httpMethod === "POST" ? "POST" : "GET",
-            headers:
-              store.httpMethod === "POST"
-                ? { "content-type": "application/json" }
-                : undefined,
-            body: store.httpMethod === "POST" ? "{}" : undefined,
-            signal: ctrl.signal,
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          data = await res.json();
-        } finally {
-          window.clearTimeout(timeout);
+        const selected = templates.find(
+          (x) => String(x.id) === store.templateId,
+        );
+        if (selected?.scene_json) {
+          try {
+            const scene = JSON.parse(selected.scene_json);
+            if (scene.sample_data !== undefined) sample = scene.sample_data;
+          } catch {
+            // An old or broken scene row falls back to the default mock.
+          }
         }
       }
     } catch (e) {
@@ -272,13 +262,13 @@ export function usePrintActions({
       return;
     }
 
-    const records = Array.isArray(data)
-      ? data
+    const records = Array.isArray(sample)
+      ? sample
       : Array.from(
           {
             length: Math.min(500, Math.max(1, Math.floor(store.records || 1))),
           },
-          () => data,
+          () => sample,
         );
     if (records.length === 0) {
       store.setStatus("failed");
@@ -293,6 +283,10 @@ export function usePrintActions({
           printer: store.printerId,
           records: JSON.stringify(records),
           copies: store.copies,
+          test: store.useTestData || !store.dataUrl.trim(),
+          data_url: store.useTestData ? undefined : store.dataUrl || undefined,
+          http_method: store.useTestData ? undefined : store.httpMethod,
+          data: inline,
         },
       });
       store.setDurationMs(result.duration_ms);

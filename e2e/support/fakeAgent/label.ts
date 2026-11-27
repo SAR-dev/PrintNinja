@@ -622,11 +622,16 @@ export function prepareJob(
   req: Record<string, unknown>,
 ): Record<string, unknown> {
   const row = sceneTemplateRow(cache, Number(req["template_id"] ?? 0));
+  // Inline deep-link data wins over the sample records, as in Rust.
+  const records =
+    req["data"] != null
+      ? JSON.stringify(req["data"])
+      : String(req["records"] ?? "");
   return prepareFromInputs(
     cache,
     String(row["scene_json"]),
     String(req["printer"] ?? ""),
-    String(req["records"] ?? ""),
+    records,
     req["copies"] == null ? null : Number(req["copies"]),
   );
 }

@@ -1174,33 +1174,22 @@ describe("Label (scene) track", () => {
     expect(line.closest('[role="alert"]')).toHaveTextContent("Print sent");
   });
 
-  it("fails the label print when its data URL cannot be loaded", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new TypeError("Failed to fetch");
-      }),
+  it("hands the data URL to the label command", async () => {
+    await scenePage({ dataUrl: "https://down.example/data" });
+    const print = screen.getByRole("button", { name: /^Print$/ });
+    await waitFor(() => expect(print).toBeEnabled());
+    fireEvent.click(print);
+    // The command fetches URLs with the same limits as print_html, so
+    // the Print page only passes the source through.
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "label_print",
+        expect.objectContaining({
+          req: expect.objectContaining({
+            data_url: "https://down.example/data",
+          }),
+        }),
+      ),
     );
-    try {
-      await scenePage({ dataUrl: "https://down.example/data" });
-      const print = screen.getByRole("button", { name: /^Print$/ });
-      await waitFor(() => expect(print).toBeEnabled());
-      fireEvent.click(print);
-      // The failed banner carries the error — the thermal truncation
-      // warning is a second role="alert" on the page, so the error text
-      // itself locates its banner.
-      const line = await screen.findByText(
-        /Could not load the data URL for the label job/,
-      );
-      expect(line.closest('[role="alert"]')).not.toBe(
-        screen.getByTestId("thermal-truncate-warning"),
-      );
-      // Unlike the html track, a broken data URL is a failed print here:
-      // the label command takes the records, so there is no server-side
-      // fetch to fall back on.
-      expect(invoke).not.toHaveBeenCalledWith("label_print");
-    } finally {
-      vi.unstubAllGlobals();
-    }
   });
 });

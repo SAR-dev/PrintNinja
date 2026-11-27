@@ -928,4 +928,11 @@ export interface LabelJobReq {
   records: string;
   /** Sets to print; omitted means one. */
   copies?: number | null;
+  /** Test print: use the supplied records, never the data URL. */
+  test?: boolean | null;
+  /** Fetch records server-side, with the same limits as `print_html`. */
+  data_url?: string | null;
+  http_method?: string | null;
+  /** Inline records (a deep link's `data`), already parsed into JSON. */
+  data?: unknown;
 }

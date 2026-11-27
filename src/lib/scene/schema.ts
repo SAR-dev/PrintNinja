@@ -186,6 +186,8 @@ export interface Template {
   elements: Element[];
   /** The document's embedded fonts (document track only). */
   fonts?: TemplateFont[];
+  /** Sample records saved with a label template for test prints. */
+  sample_data?: unknown;
 }
 
 /**

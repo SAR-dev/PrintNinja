@@ -263,8 +263,24 @@ export function useSceneTemplate({
 
   // -- saving: the scene row is local-only; a save is a manual push to
   // SQLite. `id: null` makes the command create the row.
-  const persist = async (name: string, t: Template, id: number | null) => {
-    const scene = JSON.stringify(withSyncedFields(t));
+  const persist = async (
+    name: string,
+    t: Template,
+    id: number | null,
+    sampleJson?: string,
+  ): Promise<number | null> => {
+    let withData = t;
+    if (sampleJson?.trim()) {
+      try {
+        withData = { ...t, sample_data: JSON.parse(sampleJson) };
+      } catch (e) {
+        notifyError(
+          describeError(e instanceof Error ? e : new Error(String(e))),
+        );
+        return null;
+      }
+    }
+    const scene = JSON.stringify(withSyncedFields(withData));
     try {
       const saved = await agent("label_save_template", {
         req: { name, scene, id },
@@ -302,24 +318,33 @@ export function useSceneTemplate({
         setCurrentTemplateId(saved.id);
         setCurrentTemplateDbId(saved.id);
       }
-      return true;
+      return saved.id;
     } catch (e) {
       notifyError(describeError(e));
-      return false;
+      return null;
     }
   };
 
-  const save = async (name: string) => {
-    if (template === null) return false;
-    const ok = await persist(name, template, currentTemplateDbId);
-    if (ok) notifySuccess(t("scene.saved"));
-    return ok;
+  const save = async (
+    name: string,
+    sampleJson?: string,
+  ): Promise<number | null> => {
+    if (template === null) return null;
+    const id = await persist(name, template, currentTemplateDbId, sampleJson);
+    if (id != null) notifySuccess(t("scene.saved"));
+    return id;
   };
-  /** A new label template: a blank scene, saved as its own row. */
-  const create = async (name: string) => {
-    const ok = await persist(name, blankTemplate(), null);
-    if (ok) notifySuccess(t("scene.created"));
-    return ok;
+  /** A new label template saved as its own row: the chosen starter's
+   * scene, or a blank one when none is given. Its sample records go into
+   * the saved scene so the template prints with its own data. */
+  const create = async (
+    name: string,
+    start?: Template,
+    sampleJson?: string,
+  ) => {
+    const id = await persist(name, start ?? blankTemplate(), null, sampleJson);
+    if (id != null) notifySuccess(t("scene.created"));
+    return id != null;
   };
 
   // -- the preview: prepared with the same path as the print, on the
