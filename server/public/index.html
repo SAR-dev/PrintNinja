@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PrintNinja — print without the fuss</title>
+    <meta
+      name="description"
+      content="Print receipts, labels and documents with one click, on Windows, Android and Linux."
+    />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f7f8fa;
+        --surface: #ffffff;
+        --ink: #18181b;
+        --muted: #5b6472;
+        --line: #e2e6ec;
+        --accent: #0f766e;
+        --accent-soft: #e7f4f1;
+        --shadow: 0 8px 30px rgba(15, 23, 42, 0.07);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #101216;
+          --surface: #191c22;
+          --ink: #f4f4f5;
+          --muted: #a8b0bd;
+          --line: #30353e;
+          --accent: #5eead4;
+          --accent-soft: #153430;
+          --shadow: none;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .wrap { max-width: 1060px; margin: 0 auto; padding: 0 20px 72px; }
+      header {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--line);
+      }
+      .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 19px; }
+      .brand .mark {
+        display: inline-grid; place-items: center; width: 34px; height: 34px;
+        border-radius: 9px; background: var(--accent); color: #fff;
+        font-size: 13px; font-weight: 800; letter-spacing: -0.04em;
+      }
+      .langs { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); }
+      .langs button {
+        border: 0; background: transparent; color: var(--muted); cursor: pointer;
+        padding: 6px 14px; border-radius: 999px; font: inherit; font-size: 14px;
+      }
+      .langs button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+      .hero { padding: 56px 0 36px; }
+      h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.15; margin: 0 0 14px; letter-spacing: -0.02em; }
+      .lead { font-size: 19px; color: var(--muted); max-width: 720px; margin: 0; }
+      .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+      .badge { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 5px 13px; font-size: 13px; font-weight: 600; }
+      section { padding: 26px 0; border-top: 1px solid var(--line); }
+      h2 { font-size: 24px; margin: 0 0 8px; letter-spacing: -0.01em; }
+      .section-note { color: var(--muted); margin: 0 0 22px; }
+      .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+      .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; box-shadow: var(--shadow); }
+      .card h3 { margin: 0 0 6px; font-size: 17px; }
+      .card p { margin: 0; color: var(--muted); font-size: 15px; }
+      .diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; overflow-x: auto; box-shadow: var(--shadow); }
+      .diagram svg { display: block; min-width: 760px; width: 100%; height: auto; }
+      .diagram .box { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+      .diagram .box.final { fill: var(--ink); stroke: var(--ink); }
+      .diagram .t { fill: var(--ink); font: 600 14px system-ui, sans-serif; text-anchor: middle; }
+      .diagram .t.final { fill: var(--surface); }
+      .diagram .sub { fill: var(--muted); font: 12px system-ui, sans-serif; text-anchor: middle; }
+      .diagram .arrow { stroke: var(--muted); stroke-width: 1.6; fill: none; marker-end: url(#head); }
+      ol.steps { margin: 0; padding-left: 22px; color: var(--muted); }
+      ol.steps li { margin: 8px 0; }
+      ol.steps strong { color: var(--ink); }
+      footer { padding: 28px 0 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+      footer a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">
+          <span class="mark" aria-hidden="true">PN</span>
+          <span>PrintNinja</span>
+        </div>
+        <div class="langs" role="group" aria-label="Language / 言語">
+          <button type="button" data-lang="en" aria-pressed="true">English</button>
+          <button type="button" data-lang="ja" aria-pressed="false">日本語</button>
+        </div>
+      </header>
+
+      <div class="hero">
+        <h1 data-en="Printing that just works." data-ja="印刷が、ただ動きます。">Printing that just works.</h1>
+        <p class="lead" data-en="Pick a printer, pick a layout, press Print. No print dialogs, no driver headaches — receipts, labels and documents go straight to paper."
+           data-ja="プリンタを選び、レイアウトを選び、印刷ボタンを押すだけ。印刷ダイアログもドライバの悩みもありません。レシート、ラベル、書類がそのまま紙に出ます。">Pick a printer, pick a layout, press Print. No print dialogs, no driver headaches — receipts, labels and documents go straight to paper.</p>
+        <div class="badges">
+          <span class="badge" data-en="Windows" data-ja="Windows">Windows</span>
+          <span class="badge" data-en="Android" data-ja="Android">Android</span>
+          <span class="badge" data-en="Linux" data-ja="Linux">Linux</span>
+          <span class="badge" data-en="Works offline" data-ja="オフラインでも動作">Works offline</span>
+        </div>
+      </div>
+
+      <section>
+        <h2 data-en="One path from data to paper" data-ja="データから紙まで、ひとつの流れ">One path from data to paper</h2>
+        <p class="section-note" data-en="Every entry point — the Print page, the local API, a deep link or a reprint — uses the same pipeline. Design pages are finished before they are placed on physical paper, so the preview always matches the printout."
+           data-ja="印刷画面、ローカル API、ディープリンク、再印刷 — どの入口も同じ流れを通ります。デザインページは用紙に配置される前に完成するので、プレビューは常に印刷結果と一致します。">Every entry point — the Print page, the local API, a deep link or a reprint — uses the same pipeline. Design pages are finished before they are placed on physical paper, so the preview always matches the printout.</p>
+        <div class="diagram">
+          <svg viewBox="0 0 1000 150" role="img" aria-label="Print pipeline">
+            <defs>
+              <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)" />
+              </marker>
+            </defs>
+            <g>
+              <rect class="box" x="10" y="42" width="130" height="62" rx="12" />
+              <text class="t" x="75" y="68" data-en="Data +" data-ja="データ＋">Data +</text>
+              <text class="t" x="75" y="88" data-en="template" data-ja="テンプレート">template</text>
+              <rect class="box" x="155" y="42" width="130" height="62" rx="12" />
+              <text class="t" x="220" y="68" data-en="Design" data-ja="デザイン">Design</text>
+              <text class="t" x="220" y="88" data-en="pages" data-ja="ページ">pages</text>
+              <rect class="box" x="300" y="42" width="130" height="62" rx="12" />
+              <text class="t" x="365" y="68" data-en="Sheets" data-ja="用紙">Sheets</text>
+              <text class="sub" x="365" y="88" data-en="physical paper" data-ja="実際の用紙">physical paper</text>
+              <rect class="box" x="445" y="42" width="130" height="62" rx="12" />
+              <text class="t" x="510" y="68" data-en="Image or" data-ja="画像または">Image or</text>
+              <text class="t" x="510" y="88" data-en="PDF" data-ja="PDF">PDF</text>
+              <rect class="box" x="590" y="42" width="130" height="62" rx="12" />
+              <text class="t" x="655" y="68" data-en="Printer" data-ja="プリンタ">Printer</text>
+              <text class="sub" x="655" y="88" data-en="language" data-ja="言語">language</text>
+              <rect class="box" x="735" y="42" width="110" height="62" rx="12" />
+              <text class="t" x="790" y="68" data-en="Wire" data-ja="通信">Wire</text>
+              <text class="sub" x="790" y="88" data-en="network · USB" data-ja="ネットワーク・USB">network · USB</text>
+              <rect class="box final" x="860" y="42" width="130" height="62" rx="12" />
+              <text class="t final" x="925" y="78" data-en="Paper" data-ja="紙">Paper</text>
+              <path class="arrow" d="M140 73 H155" /><path class="arrow" d="M285 73 H300" />
+              <path class="arrow" d="M430 73 H445" /><path class="arrow" d="M575 73 H590" />
+              <path class="arrow" d="M720 73 H735" /><path class="arrow" d="M845 73 H860" />
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <section>
+        <h2 data-en="Two kinds of templates" data-ja="2 種類のテンプレート">Two kinds of templates</h2>
+        <p class="section-note" data-en="Both live on the Templates page, and each row says which kind it is. The app refuses a wrong pairing before a byte is wasted."
+           data-ja="どちらも「テンプレート」ページにあり、種類はバッジで表示されます。誤った組み合わせは、データを送る前に拒否されます。">Both live on the Templates page, and each row says which kind it is. The app refuses a wrong pairing before a byte is wasted.</p>
+        <div class="grid">
+          <div class="card">
+            <h3 data-en="Label templates" data-ja="ラベルテンプレート">Label templates</h3>
+            <p data-en="For thermal printers. Design on a canvas in millimetres: text, barcodes, QR codes, images, lines and frames. Printed in the printer's own language — ESC/POS, ZPL, TSPL or CPCL."
+               data-ja="サーマルプリンタ向け。ミリ単位のキャンバスで文字、バーコード、QR コード、画像、線、枠を配置します。ESC/POS、ZPL、TSPL、CPCL などプリンタ固有の言語で印刷します。">For thermal printers. Design on a canvas in millimetres: text, barcodes, QR codes, images, lines and frames. Printed in the printer's own language — ESC/POS, ZPL, TSPL or CPCL.</p>
+          </div>
+          <div class="card">
+            <h3 data-en="Document templates" data-ja="ドキュメントテンプレート">Document templates</h3>
+            <p data-en="For office and home printers. HTML and CSS with {{placeholders}} where your data goes. Start from Receipt, Invoice, Shipping Label and more."
+               data-ja="オフィスや家庭用プリンタ向け。HTML と CSS に {{プレースホルダー}} を埋め込み、データで置き換えます。レシート、請求書、配送ラベルなどから始められます。">For office and home printers. HTML and CSS with {{placeholders}} where your data goes. Start from Receipt, Invoice, Shipping Label and more.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 data-en="Phone and PC, together" data-ja="スマホと PC の連携">Phone and PC, together</h2>
+        <p class="section-note" data-en="An Android phone prints to Bluetooth or USB receipt printers on its own. Only PDF work needs a paired PC on the same Wi-Fi — the phone asks, the PC renders and takes back the finished bytes."
+           data-ja="Android スマホは Bluetooth や USB のレシートプリンタに直接印刷できます。PDF の処理だけ、同じ Wi-Fi 内のペア済み PC が必要です。スマホが依頼し、PC が描画して結果を返します。">An Android phone prints to Bluetooth or USB receipt printers on its own. Only PDF work needs a paired PC on the same Wi-Fi — the phone asks, the PC renders and takes back the finished bytes.</p>
+        <div class="diagram">
+          <svg viewBox="0 0 920 210" role="img" aria-label="Phone and PC pairing">
+            <g>
+              <rect class="box" x="20" y="30" width="220" height="60" rx="12" />
+              <text class="t" x="130" y="54" data-en="Phone" data-ja="スマホ">Phone</text>
+              <text class="sub" x="130" y="74" data-en="layouts · thermal printing" data-ja="レイアウト・サーマル印刷">layouts · thermal printing</text>
+              <rect class="box" x="350" y="30" width="220" height="60" rx="12" />
+              <text class="t" x="460" y="54" data-en="Paired PC" data-ja="ペア済み PC">Paired PC</text>
+              <text class="sub" x="460" y="74" data-en="PDF rendering only" data-ja="PDF の描画のみ">PDF rendering only</text>
+              <rect class="box final" x="680" y="30" width="220" height="60" rx="12" />
+              <text class="t final" x="790" y="64" data-en="Printer" data-ja="プリンタ">Printer</text>
+              <path class="arrow" d="M240 60 H350" />
+              <text class="sub" x="295" y="48" data-en="one-time code" data-ja="ワンタイムコード">one-time code</text>
+              <path class="arrow" d="M570 60 H680" />
+              <text class="sub" x="625" y="48" data-en="bytes" data-ja="データ">bytes</text>
+            </g>
+            <g>
+              <rect class="box" x="20" y="125" width="880" height="60" rx="12" />
+              <text class="t" x="460" y="150" data-en="Share service — accounts, templates and fonts; never a rendering engine"
+                    data-ja="共有サービス — アカウント、テンプレート、フォント。描画エンジンではありません">Share service — accounts, templates and fonts; never a rendering engine</text>
+              <text class="sub" x="460" y="170" data-en="a print never travels through the cloud" data-ja="印刷データはクラウドを通りません">a print never travels through the cloud</text>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <section>
+        <h2 data-en="Start in five minutes" data-ja="5 分で始められます">Start in five minutes</h2>
+        <ol class="steps">
+          <li><strong data-en="Add a printer." data-ja="プリンタを追加。">Add a printer.</strong> <span data-en="Network, system, USB and Bluetooth printers all work; press Test Print to be sure."
+              data-ja="ネットワーク、システム、USB、Bluetooth に対応。テスト印刷で接続を確認できます。">Network, system, USB and Bluetooth printers all work; press Test Print to be sure.</span></li>
+          <li><strong data-en="Make a template." data-ja="テンプレートを作る。">Make a template.</strong> <span data-en="Pick a label starter or a ready-made document example, then arrange it in the Designer."
+              data-ja="ラベルのスターターや書類のサンプルを選び、デザイナーで整えます。">Pick a label starter or a ready-made document example, then arrange it in the Designer.</span></li>
+          <li><strong data-en="Print." data-ja="印刷。">Print.</strong> <span data-en="Choose printer and template, add sample data, a link or a CSV, check the preview and press Print."
+              data-ja="プリンタとテンプレートを選び、サンプルデータ・リンク・CSV を指定してプレビューを確認し、印刷します。">Choose printer and template, add sample data, a link or a CSV, check the preview and press Print.</span></li>
+          <li><strong data-en="Check History." data-ja="履歴を確認。">Check History.</strong> <span data-en="Every job records its real outcome, with one-tap reprint or retry."
+              data-ja="すべてのジョブに実際の結果が記録され、ワンタップで再印刷・再試行できます。">Every job records its real outcome, with one-tap reprint or retry.</span></li>
+        </ol>
+      </section>
+
+      <section>
+        <h2 data-en="Also useful" data-ja="その他の便利な機能">Also useful</h2>
+        <div class="grid">
+          <div class="card">
+            <h3 data-en="Automate it" data-ja="自動化">Automate it</h3>
+            <p data-en="A local REST API, deep links and placeholders let a till, script or web page print through the same pipeline."
+               data-ja="ローカル REST API、ディープリンク、プレースホルダーにより、レジやスクリプト、Web ページから同じ流れで印刷できます。">A local REST API, deep links and placeholders let a till, script or web page print through the same pipeline.</p>
+          </div>
+          <div class="card">
+            <h3 data-en="Honest answers" data-ja="正直な結果表示">Honest answers</h3>
+            <p data-en="No silent placeholder PDFs: if printing fails, History says why — out of paper, offline, wrong language and so on."
+               data-ja="代替の PDF を黙って出すことはありません。失敗時は用紙切れやオフライン、言語の不一致などを履歴に表示します。">No silent placeholder PDFs: if printing fails, History says why — out of paper, offline, wrong language and so on.</p>
+          </div>
+          <div class="card">
+            <h3 data-en="Private by default" data-ja="基本はローカル">Private by default</h3>
+            <p data-en="Printing and editing work without internet. A connection is only needed for live data links, share service and update checks."
+               data-ja="印刷と編集はオフラインでも動きます。必要なのはデータリンク、共有サービス、更新確認のときだけです。">Printing and editing work without internet. A connection is only needed for live data links, share service and update checks.</p>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <span data-en="PrintNinja · Windows, Android and Linux." data-ja="PrintNinja · Windows、Android、Linux 対応。">PrintNinja · Windows, Android and Linux.</span>
+        <span data-en="Project documentation: " data-ja="ドキュメント: ">Project documentation: </span>
+        <a href="https://github.com/SAR-dev/PrintNinja" rel="noreferrer">GitHub</a>
+      </footer>
+    </div>
+
+    <script>
+      (() => {
+        const buttons = [...document.querySelectorAll("[data-lang]")];
+        const nodes = [...document.querySelectorAll("[data-en]")];
+        const setLang = (lang) => {
+          document.documentElement.lang = lang;
+          nodes.forEach((el) => {
+            const value = el.dataset[lang];
+            if (value !== undefined) el.textContent = value;
+          });
+          buttons.forEach((b) =>
+            b.setAttribute("aria-pressed", String(b.dataset.lang === lang)),
+          );
+          try { localStorage.setItem("printninja-landing-lang", lang); } catch {}
+        };
+        let initial = "en";
+        try { initial = localStorage.getItem("printninja-landing-lang") || ""; } catch {}
+        if (!initial) initial = navigator.language.toLowerCase().startsWith("ja") ? "ja" : "en";
+        setLang(initial === "ja" ? "ja" : "en");
+        buttons.forEach((b) =>
+          b.addEventListener("click", () => setLang(b.dataset.lang)),
+        );
+      })();
+    </script>
+  </body>
+</html>

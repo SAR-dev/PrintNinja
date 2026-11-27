@@ -6,6 +6,7 @@
 //! Raw/JetDirect, LPD, IPP and HTTP traffic, so the tests exercise the
 //! shipped [`pn_transport`] and [`pn_job`] crates end to end.
 
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
@@ -99,13 +100,30 @@ impl Printer {
             .collect()
     }
 
-    /// Poll until at least `n` job files have been saved (the fixture
-    /// saves a job when its connection closes, a beat after the job ends).
+    /// Poll until at least `n` job files have been saved *and finished
+    /// writing*. The fixture writes with `fs::write`, so a file can appear
+    /// before all its bytes land; callers read the bytes straight away.
+    /// A non-zero size unchanged across two polls means the write is done.
     pub fn wait_for_jobs(&self, n: usize, timeout: Duration) -> Vec<PathBuf> {
         let start = Instant::now();
+        let mut previous: HashMap<PathBuf, u64> = HashMap::new();
         loop {
             let jobs = self.saved_jobs();
-            if jobs.len() >= n || start.elapsed() > timeout {
+            let sizes: HashMap<PathBuf, u64> = jobs
+                .iter()
+                .map(|p| {
+                    (
+                        p.clone(),
+                        std::fs::metadata(p).map(|m| m.len()).unwrap_or(0),
+                    )
+                })
+                .collect();
+            let complete = sizes
+                .iter()
+                .filter(|(p, size)| **size > 0 && previous.get(*p) == Some(size))
+                .count();
+            previous = sizes;
+            if complete >= n || start.elapsed() > timeout {
                 return jobs;
             }
             std::thread::sleep(Duration::from_millis(25));

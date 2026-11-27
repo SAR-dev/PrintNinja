@@ -19,6 +19,7 @@ import { demoRoutes } from "./http/routes/demo.js";
 import { accountRoutes } from "./http/routes/account.js";
 import { libraryRoutes } from "./http/routes/library.js";
 import { healthRoutes } from "./http/routes/health.js";
+import { rootRoutes } from "./http/routes/root.js";
 import { internalRoutes } from "./http/routes/internal.js";
 import { savedRoutes } from "./http/routes/saved.js";
 import { syncRoutes } from "./http/routes/sync.js";
@@ -128,7 +129,8 @@ export async function buildApp(args: {
   // The health routes own their full /v2/health and /v2/ready paths;
   // no prefix here.
   await app.register(healthRoutes, { ping: deps.ping });
-  // No deps: the demo page is a static file served for local dev.
+  // No deps: the landing and demo pages are static files served locally.
+  await app.register(rootRoutes);
   await app.register(demoRoutes);
 
   await app.register(authRoutes, {
