@@ -420,8 +420,8 @@ export function parseScene(raw: string): Scene {
   };
 }
 
-/** Mirrors Records::from_json; returns the record count. */
-export function parseRecords(raw: string): number {
+/** Mirrors Records::from_json: keep the records so previews can fill bindings. */
+export function parseRecords(raw: string): Array<Record<string, unknown>> {
   let value: unknown;
   try {
     value = JSON.parse(raw);
@@ -436,9 +436,11 @@ export function parseRecords(raw: string): number {
         );
       }
     });
-    return value.length;
+    return value as Array<Record<string, unknown>>;
   }
-  if (typeof value === "object" && value !== null) return 1;
+  if (typeof value === "object" && value !== null) {
+    return [value as Record<string, unknown>];
+  }
   throw new Error(`the data must be a JSON object or an array of objects`);
 }
 
@@ -472,18 +474,279 @@ const PDF_BYTES = [..."%PDF-1.4 fake preview page\n"].map((c) =>
   c.charCodeAt(0),
 );
 
-function bitmapFor(widthMm: number, heightMm: number, dpi: number): Preview {
+/**
+ * A tiny 5×7 dot font: thermal labels are dots, not antialiased text, so
+ * a hand-drawn glyph reads far better at preview scale than a thresholded
+ * canvas font. Only the characters a label is likely to carry are mapped.
+ */
+const FONT: Record<string, string[]> = {
+  A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+  B: ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
+  C: ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+  D: ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+  E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+  F: ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
+  G: ["01111", "10000", "10000", "10111", "10001", "10001", "01111"],
+  H: ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+  I: ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+  J: ["00111", "00010", "00010", "00010", "00010", "10010", "01100"],
+  K: ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
+  L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+  M: ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+  N: ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+  O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+  P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+  Q: ["01110", "10001", "10001", "10001", "10101", "10010", "01101"],
+  R: ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+  S: ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+  T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+  U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+  V: ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
+  W: ["10001", "10001", "10001", "10101", "10101", "10101", "01010"],
+  X: ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
+  Y: ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
+  Z: ["11111", "00001", "00010", "00100", "01000", "10000", "11111"],
+  "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+  "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+  "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+  "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+  "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+  "5": ["11111", "10000", "10000", "11110", "00001", "00001", "11110"],
+  "6": ["01110", "10000", "10000", "11110", "10001", "10001", "01110"],
+  "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+  "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+  "9": ["01110", "10001", "10001", "01111", "00001", "00001", "01110"],
+  "-": ["00000", "00000", "00000", "11111", "00000", "00000", "00000"],
+  ",": ["00000", "00000", "00000", "00000", "00110", "00110", "00100"],
+  ".": ["00000", "00000", "00000", "00000", "00000", "01100", "01100"],
+  "/": ["00001", "00010", "00010", "00100", "01000", "01000", "10000"],
+  ":": ["00000", "01100", "01100", "00000", "01100", "01100", "00000"],
+  " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
+};
+
+/** Draw one line of text as crisp dots, fitted to the element's box. */
+function drawText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  height: number,
+  maxWidth: number,
+  align: string,
+): void {
+  const chars = [...text.toUpperCase()];
+  if (!chars.length) return;
+  let scale = Math.max(1, Math.floor(height / 7));
+  const advance = 6 * scale;
+  if (maxWidth > 0 && chars.length * advance > maxWidth) {
+    scale = Math.max(1, Math.floor(maxWidth / (chars.length * 6)));
+  }
+  const step = 6 * scale;
+  const width = chars.length * step - scale;
+  let cursor =
+    align === "center" ? x - width / 2 : align === "right" ? x - width : x;
+  for (const ch of chars) {
+    const glyph = FONT[ch] ?? FONT[" "];
+    for (let row = 0; row < 7; row++) {
+      for (let col = 0; col < 5; col++) {
+        if (glyph[row][col] === "1") {
+          ctx.fillRect(cursor + col * scale, y + row * scale, scale, scale);
+        }
+      }
+    }
+    cursor += step;
+  }
+}
+
+/** Fill `{{flat.or.nested}}` bindings from one record. */
+function substitute(content: string, record: Record<string, unknown>): string {
+  return content.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
+    let value: unknown = record;
+    for (const part of key.split(".")) {
+      if (value !== null && typeof value === "object" && part in value) {
+        value = (value as Record<string, unknown>)[part];
+      } else {
+        value = undefined;
+        break;
+      }
+    }
+    return value === undefined || value === null ? "" : String(value);
+  });
+}
+
+/** The old fallback: a deterministic diagonal, so two sheets differ. */
+function diagonalBitmap(
+  widthMm: number,
+  heightMm: number,
+  dpi: number,
+): Preview {
   const width = Math.max(1, Math.round((widthMm * dpi) / 25.4));
   const height = Math.max(1, Math.round((heightMm * dpi) / 25.4));
   const rowBytes = Math.ceil(width / 8);
-  // A deterministic diagonal, so a spec can tell two sheets apart
-  // without asserting pixels.
-  const packed: number[] = [];
+  const packed = new Array<number>(rowBytes * height).fill(0);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       if ((x + y) % 7 === 0) {
-        const i = y * rowBytes + Math.floor(x / 8);
-        packed[i] = (packed[i] ?? 0) | (1 << (7 - (x % 8)));
+        packed[y * rowBytes + (x >> 3)] |= 1 << (7 - (x & 7));
+      }
+    }
+  }
+  return {
+    kind: "bitmap",
+    width,
+    height,
+    packed,
+    width_mm: widthMm,
+    height_mm: heightMm,
+  };
+}
+
+/**
+ * Draw the scene onto an offscreen canvas, then pack the dark pixels the
+ * way `SceneBitmapPreview` reads them (MSB first per byte). This is a
+ * visual stand-in for the Rust renderer: enough for a design-review
+ * screenshot, never byte-identical to what a printer receives.
+ */
+function bitmapFor(
+  widthMm: number,
+  heightMm: number,
+  dpi: number,
+  scene: Scene,
+  record: Record<string, unknown>,
+): Preview {
+  const width = Math.max(1, Math.round((widthMm * dpi) / 25.4));
+  const height = Math.max(1, Math.round((heightMm * dpi) / 25.4));
+  let ctx: CanvasRenderingContext2D | null = null;
+  try {
+    if (typeof document !== "undefined") {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      ctx = canvas.getContext("2d", { willReadFrequently: true });
+    }
+  } catch {
+    ctx = null;
+  }
+  if (!ctx) return diagonalBitmap(widthMm, heightMm, dpi);
+
+  const mm = (value: number) => (value * dpi) / 25.4;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#000000";
+  ctx.strokeStyle = "#000000";
+  ctx.textBaseline = "top";
+
+  const draw = (el: Record<string, unknown>, ox: number, oy: number): void => {
+    const at = (el["at"] ?? {}) as { x_mm?: number; y_mm?: number };
+    const size = (el["size"] ?? {}) as { w_mm?: number; h_mm?: number };
+    const x = mm(ox + (at.x_mm ?? 0));
+    const y = mm(oy + (at.y_mm ?? 0));
+    const w = mm(size.w_mm ?? 0);
+    const h = mm(size.h_mm ?? 0);
+    switch (el["type"]) {
+      case "text": {
+        const style = (el["style"] ?? {}) as {
+          size_mm?: number;
+          align?: string;
+        };
+        drawText(
+          ctx!,
+          substitute(String(el["content"] ?? ""), record),
+          x,
+          y,
+          Math.max(7, mm(style.size_mm ?? 4)),
+          w,
+          style.align ?? "left",
+        );
+        break;
+      }
+      case "line": {
+        const length = mm(Number(el["length_mm"] ?? 0));
+        const thick = Math.max(1, mm(Number(el["thickness_mm"] ?? 0.3)));
+        if (el["vertical"]) ctx!.fillRect(x, y, thick, length);
+        else ctx!.fillRect(x, y, length, thick);
+        break;
+      }
+      case "rect": {
+        if (el["fill"]) ctx!.fillRect(x, y, w, h);
+        else {
+          ctx!.lineWidth = Math.max(1, mm(0.3));
+          ctx!.strokeRect(x, y, w, h);
+        }
+        break;
+      }
+      case "frame": {
+        ctx!.lineWidth = Math.max(1, mm(Number(el["border_mm"] ?? 0.3)));
+        ctx!.strokeRect(x, y, w, h);
+        for (const child of Array.isArray(el["children"])
+          ? el["children"]
+          : []) {
+          draw(
+            child as Record<string, unknown>,
+            ox + (at.x_mm ?? 0),
+            oy + (at.y_mm ?? 0),
+          );
+        }
+        break;
+      }
+      case "barcode": {
+        const value = substitute(String(el["value"] ?? ""), record);
+        let seed = 2166136261;
+        for (const ch of value)
+          seed = ((seed ^ ch.charCodeAt(0)) * 16777619) >>> 0;
+        let cx = x;
+        while (cx < x + w) {
+          seed = (seed * 1664525 + 1013904223) >>> 0;
+          const bar = Math.max(1, mm(0.3 + (seed % 3) * 0.2));
+          if (((seed >>> 8) & 1) === 0) ctx!.fillRect(cx, y, bar, h * 0.75);
+          cx += bar * 1.6;
+        }
+        if (el["show_text"]) {
+          drawText(
+            ctx!,
+            value,
+            x,
+            y + h * 0.8,
+            Math.max(7, mm(2.5)),
+            w,
+            "left",
+          );
+        }
+        break;
+      }
+      case "qr": {
+        const value = substitute(String(el["value"] ?? ""), record);
+        const side = mm(Number(el["h_mm"] ?? 20));
+        const modules = 21;
+        const cell = side / modules;
+        let seed = 2166136261;
+        for (const ch of value)
+          seed = ((seed ^ ch.charCodeAt(0)) * 16777619) >>> 0;
+        for (let r = 0; r < modules; r++) {
+          for (let c = 0; c < modules; c++) {
+            seed = (seed * 1664525 + 1013904223) >>> 0;
+            if ((seed & 1) === 1)
+              ctx!.fillRect(x + c * cell, y + r * cell, cell, cell);
+          }
+        }
+        break;
+      }
+      // Images cannot be fetched and groups cannot be flowed in the fake.
+    }
+  };
+  for (const el of Array.isArray(scene.elements) ? scene.elements : []) {
+    draw(el as Record<string, unknown>, 0, 0);
+  }
+
+  const pixels = ctx.getImageData(0, 0, width, height).data;
+  const rowBytes = Math.ceil(width / 8);
+  const packed = new Array<number>(rowBytes * height).fill(0);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const lightness = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+      if (pixels[i + 3] > 0 && lightness < 160) {
+        packed[y * rowBytes + (x >> 3)] |= 1 << (7 - (x & 7));
       }
     }
   }
@@ -503,6 +766,7 @@ function buildReport(
   profile: EffectiveProfile,
   records: number,
   copies: number,
+  recordValues: Array<Record<string, unknown>>,
 ): Report {
   const widthMm = scene.media.width_mm;
   const heightMm = mediaHeight(scene.media);
@@ -535,8 +799,8 @@ function buildReport(
     pages,
     units,
     bytes: units * unitBytes,
-    preview: Array.from({ length: pages }, () =>
-      bitmapFor(widthMm, heightMm, profile.dpi),
+    preview: Array.from({ length: pages }, (_, i) =>
+      bitmapFor(widthMm, heightMm, profile.dpi, scene, recordValues[i] ?? {}),
     ),
   };
 }
@@ -587,7 +851,7 @@ function prepareFromInputs(
   const scene = parseScene(sceneRaw);
   const records = parseRecords(recordsRaw);
   const n = Math.max(1, copies ?? 1);
-  if (records === 0) {
+  if (records.length === 0) {
     throw new Error(
       `the data is not records: 0 records — a label job prints at least one`,
     );
@@ -596,7 +860,7 @@ function prepareFromInputs(
     scene.format === "html"
       ? { path: "browser", fallback: null }
       : plan(scene.media.kind, profile);
-  const report = buildReport(p, scene, profile, records, n);
+  const report = buildReport(p, scene, profile, records.length, n, records);
   return {
     profile: profile.model,
     profile_source: profile.user_chosen ? "user" : "default",

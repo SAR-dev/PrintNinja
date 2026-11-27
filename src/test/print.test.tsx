@@ -955,8 +955,8 @@ describe("Label (scene) track", () => {
     printer_type: "ipp",
     language: "pdf",
   };
-  // One 4×2 sheet, two ink dots on each row. packed is one byte per
-  // eight pixels, so a single 0b11001100 draws both rows.
+  // One 4×2 sheet, two ink dots on each row. Rows are byte-aligned,
+  // so each row carries its own 0b11001100 byte.
   const prepared = {
     path: "native",
     fallback: null,
@@ -969,7 +969,7 @@ describe("Label (scene) track", () => {
         kind: "bitmap",
         width: 4,
         height: 2,
-        packed: [0b11001100],
+        packed: [0b11001100, 0b11001100],
         width_mm: 50,
         height_mm: 30,
       },
