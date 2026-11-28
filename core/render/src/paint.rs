@@ -127,6 +127,8 @@ mod tests {
                             bold: true,
                             italic: false,
                             align: Align::Center,
+
+                            ..Default::default()
                         },
                     },
                 },

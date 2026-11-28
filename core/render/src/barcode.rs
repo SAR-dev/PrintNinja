@@ -190,6 +190,7 @@ impl Renderer {
                 bold: false,
                 italic: false,
                 align: Align::Center,
+                ..Default::default()
             };
             self.draw_text(x_mm, y_mm + bar_h_mm, w_mm, text_mm, value, &style);
         }

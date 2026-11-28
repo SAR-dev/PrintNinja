@@ -424,29 +424,31 @@ function glyph(el: Element, { scale, record, showSample, dpi }: GlyphArgs) {
       const content = showSample
         ? substituteBindings(el.content, record)
         : el.content;
-      const lines = wrapText(
-        content,
-        w * scale,
-        el.style.size_mm * scale,
-        family,
-      );
+      const fontPx = el.style.size_mm * scale;
+      const linePx = fontPx * (el.style.line_height ?? 1.1);
+      const spacingPx = (el.style.letter_spacing_mm ?? 0) * scale;
+      const lines = wrapText(content, w * scale, fontPx, family);
+      const usedPx = lines.length * linePx;
+      const offsetPx =
+        el.style.vertical_align === "middle"
+          ? (h * scale - usedPx) / 2
+          : el.style.vertical_align === "bottom"
+            ? h * scale - usedPx
+            : 0;
       return (
         <text
           x={tx * scale}
-          y={(el.at.y_mm + el.style.size_mm) * scale}
+          y={el.at.y_mm * scale + offsetPx + fontPx}
           textAnchor={anchor}
-          fontSize={el.style.size_mm * scale}
+          fontSize={fontPx}
+          letterSpacing={spacingPx || undefined}
           fontFamily={family}
           fontWeight={el.style.bold ? 700 : 400}
           fontStyle={el.style.italic ? "italic" : undefined}
           fill={INK}
         >
           {lines.map((line, i) => (
-            <tspan
-              key={i}
-              x={tx * scale}
-              dy={i === 0 ? 0 : el.style.size_mm * scale * 1.1}
-            >
+            <tspan key={i} x={tx * scale} dy={i === 0 ? 0 : linePx}>
               {line}
             </tspan>
           ))}
@@ -593,24 +595,28 @@ function FrameGlyph({
           strokeWidth={Math.max(0.5, el.border_mm * scale)}
         />
       )}
-      {el.children.map((child, i) =>
-        interactive ? (
-          <ElementNode
-            key={i}
-            el={child}
-            path={[...path, i]}
-            scale={scale}
-            record={record}
-            showSample={showSample}
-            dpi={dpi}
-            isSelected={isSelected}
-            beginDrag={beginDrag}
-            beginResize={beginResize}
-          />
-        ) : (
-          <g key={i}>{glyph(child, { scale, record, showSample, dpi })}</g>
-        ),
-      )}
+      <g
+        transform={`translate(${(el.padding_mm ?? 0) * scale},${(el.padding_mm ?? 0) * scale})`}
+      >
+        {el.children.map((child, i) =>
+          interactive ? (
+            <ElementNode
+              key={i}
+              el={child}
+              path={[...path, i]}
+              scale={scale}
+              record={record}
+              showSample={showSample}
+              dpi={dpi}
+              isSelected={isSelected}
+              beginDrag={beginDrag}
+              beginResize={beginResize}
+            />
+          ) : (
+            <g key={i}>{glyph(child, { scale, record, showSample, dpi })}</g>
+          ),
+        )}
+      </g>
     </g>
   );
 }

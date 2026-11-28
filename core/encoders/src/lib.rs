@@ -496,6 +496,8 @@ mod tests {
                     bold: true,
                     italic: false,
                     align: pn_scene::Align::Center,
+
+                    ..Default::default()
                 },
             );
             r.draw_line(3.0, 12.0, 52.0, 0.3, false);
@@ -511,6 +513,8 @@ mod tests {
                     bold: false,
                     italic: false,
                     align: pn_scene::Align::Right,
+
+                    ..Default::default()
                 },
             );
         });
@@ -546,6 +550,8 @@ mod tests {
                     bold: false,
                     italic: false,
                     align: pn_scene::Align::Left,
+
+                    ..Default::default()
                 },
             );
         });
@@ -573,6 +579,8 @@ mod tests {
                     bold: true,
                     italic: false,
                     align: pn_scene::Align::Center,
+
+                    ..Default::default()
                 },
             );
             r.draw_rect(3.0, 3.0, 52.0, 34.0, 0.5, false);
@@ -634,6 +642,8 @@ mod tests {
                 bold,
                 italic: false,
                 align: Align::Left,
+
+                ..Default::default()
             },
             page: Placement::Every,
         }

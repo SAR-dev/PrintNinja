@@ -52,6 +52,12 @@ export interface TextStyle {
   bold?: boolean;
   italic?: boolean;
   align?: Align;
+  /** Line height as a multiple of the font size. */
+  line_height?: number;
+  /** Extra space between glyphs, in millimetres. */
+  letter_spacing_mm?: number;
+  /** Where lines sit inside the box. */
+  vertical_align?: "top" | "middle" | "bottom";
 }
 
 /** A 1-D barcode kind. */
@@ -135,6 +141,8 @@ export type Element =
       size: Size;
       /** The outline's thickness in mm; 0 = no border. */
       border_mm: number;
+      /** Space between the border and children, in mm. Defaults to 0. */
+      padding_mm?: number;
       /** Relative to the frame's top-left, like group items. */
       children: Element[];
       /** The frame's children take this page. */

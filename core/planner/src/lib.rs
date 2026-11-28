@@ -220,6 +220,8 @@ mod tests {
                 bold,
                 italic: false,
                 align: Align::Left,
+
+                ..Default::default()
             },
             page: Placement::Every,
         }

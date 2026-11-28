@@ -101,6 +101,8 @@ fn label_template() -> Template {
                     bold: true,
                     italic: false,
                     align: pn_scene::Align::Left,
+
+                    ..Default::default()
                 },
                 page: Placement::Every,
             },

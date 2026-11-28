@@ -291,6 +291,8 @@ native = ["CODE128", "EAN13", "QR"]
                         bold: false,
                         italic: false,
                         align: Align::Left,
+
+                        ..Default::default()
                     },
                     page: Placement::Every,
                 },

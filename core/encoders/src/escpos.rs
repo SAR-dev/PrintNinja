@@ -385,6 +385,8 @@ native = ["CODE128"]
                         bold: false,
                         italic: false,
                         align: Align::Left,
+
+                        ..Default::default()
                     },
                     page: Placement::Every,
                 },
@@ -404,6 +406,8 @@ native = ["CODE128"]
                         bold: false,
                         italic: false,
                         align: Align::Right,
+
+                        ..Default::default()
                     },
                     page: Placement::Every,
                 },

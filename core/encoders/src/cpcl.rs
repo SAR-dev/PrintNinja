@@ -201,6 +201,8 @@ native = ["4"]
                         bold: false,
                         italic: false,
                         align: pn_scene::Align::Left,
+
+                        ..Default::default()
                     },
                     page: Placement::Every,
                 },

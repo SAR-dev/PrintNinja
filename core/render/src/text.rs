@@ -24,7 +24,7 @@
 //! onto the page, where the box edges and the page edges clip.
 
 use ab_glyph::{point, Font as _, GlyphId as AbGlyphId, OutlinedGlyph, PxScale, PxScaleFactor};
-use pn_scene::TextStyle;
+use pn_scene::{TextStyle, VerticalAlign};
 use swash::shape::cluster::GlyphCluster;
 use swash::shape::ShapeContext;
 
@@ -80,13 +80,16 @@ impl Renderer {
         let scale = size_dots / upem; // dots per font unit
                                       // ab_glyph metrics are font units; the em is size_dots.
         let ascent_row = (primary.raster.ascent_unscaled() as f64 * scale).round() as i64;
-        let line_rows = ((primary.raster.height_unscaled() + primary.raster.line_gap_unscaled())
+        let natural_rows = ((primary.raster.height_unscaled() + primary.raster.line_gap_unscaled())
             as f64
             * scale)
             .round() as i64;
+        let line_rows =
+            (natural_rows as f64 * style.line_height.unwrap_or(1.0).max(0.5) as f64).round() as i64;
         if line_rows <= 0 {
             return;
         }
+        let spacing_dots = dots_for_mm(style.letter_spacing_mm.unwrap_or(0.0), self.dpi) as f64;
         let bold_dx = if style.bold {
             (size_dots * BOLD_FRACTION).max(1.0)
         } else {
@@ -97,10 +100,25 @@ impl Renderer {
         // new line; a line too wide for the box folds into several.
         let lines: Vec<String> = content
             .split('\n')
-            .flat_map(|logical| Self::wrap_line(logical, primary, &fallbacks, scale, box_w as f64))
+            .flat_map(|logical| {
+                Self::wrap_line(
+                    logical,
+                    primary,
+                    &fallbacks,
+                    scale,
+                    box_w as f64,
+                    spacing_dots,
+                )
+            })
             .collect();
+        let used_rows = line_rows * lines.len() as i64;
+        let v_offset = match style.vertical_align.unwrap_or_default() {
+            VerticalAlign::Top => 0,
+            VerticalAlign::Middle => (box_h - used_rows) / 2,
+            VerticalAlign::Bottom => box_h - used_rows,
+        };
         for (line_i, logical) in lines.iter().enumerate() {
-            let line_y = box_y + line_rows * line_i as i64;
+            let line_y = box_y + v_offset + line_rows * line_i as i64;
             if line_y >= box_y + box_h {
                 break; // the box is full
             }
@@ -135,7 +153,7 @@ impl Renderer {
                         scale,
                     );
                 }
-                x += g.advance;
+                x += g.advance + spacing_dots;
             }
 
             // Threshold the line onto the page. The box bottom clips;
@@ -173,6 +191,7 @@ impl Renderer {
         fallbacks: &[&'f Font],
         scale: f64,
         max_width: f64,
+        spacing: f64,
     ) -> Vec<String> {
         if line.is_empty() {
             return vec![String::new()];
@@ -181,7 +200,8 @@ impl Renderer {
             Self::shape_line(text, primary, fallbacks, scale)
                 .iter()
                 .map(|g| g.x + g.advance)
-                .sum()
+                .sum::<f64>()
+                + spacing * text.chars().count() as f64
         };
         let mut out = Vec::new();
         let mut current = String::new();
@@ -356,6 +376,8 @@ mod tests {
             bold: false,
             italic: false,
             align,
+
+            ..Default::default()
         }
     }
 

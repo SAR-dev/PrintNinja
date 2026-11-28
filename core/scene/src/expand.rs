@@ -336,6 +336,7 @@ fn place_frame(el: &Element, at: At, record: &Record, pg: &mut Page) {
     let Element::Frame {
         size,
         border_mm,
+        padding_mm,
         children,
         ..
     } = el
@@ -356,8 +357,8 @@ fn place_frame(el: &Element, at: At, record: &Record, pg: &mut Page) {
     }
     for child in children {
         let child_at = At {
-            x_mm: at.x_mm + other_at(child).x_mm,
-            y_mm: at.y_mm + other_at(child).y_mm,
+            x_mm: at.x_mm + *padding_mm + other_at(child).x_mm,
+            y_mm: at.y_mm + *padding_mm + other_at(child).y_mm,
         };
         match child {
             Element::Frame { .. } => place_frame(child, child_at, record, pg),
@@ -569,6 +570,7 @@ mod tests {
                 bold: false,
                 italic: false,
                 align: Align::Left,
+                ..Default::default()
             },
             page,
         }
@@ -594,6 +596,7 @@ mod tests {
             at,
             size: Size { w_mm: w, h_mm: h },
             border_mm: border,
+            padding_mm: 0.0,
             children,
             page: Placement::default(),
         }
@@ -812,6 +815,36 @@ mod tests {
         }
         // The child sits at the frame's origin plus its own offset.
         assert_eq!(text_at(page, 12.0, 23.0), Some("inside"));
+    }
+
+    #[test]
+    fn frame_padding_offsets_children_inside_the_border() {
+        let padded = Element::Frame {
+            at: At {
+                x_mm: 10.0,
+                y_mm: 20.0,
+            },
+            size: Size {
+                w_mm: 30.0,
+                h_mm: 20.0,
+            },
+            border_mm: 0.5,
+            padding_mm: 2.0,
+            children: vec![text(2.0, 3.0, 10.0, 4.0, "inside")],
+            page: Placement::default(),
+        };
+        let t = Template {
+            format: Format::Scene,
+            html: None,
+            media: label(58.0, 40.0),
+            fields: vec![],
+            elements: vec![padded],
+            fonts: vec![],
+        };
+        let job = expand(&t, &json(r#"[ {} ]"#)).unwrap();
+        let page = &job.outputs[0].pages[0];
+        assert_eq!(text_at(page, 14.0, 25.0), Some("inside"));
+        assert!(text_at(page, 12.0, 23.0).is_none());
     }
 
     #[test]

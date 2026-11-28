@@ -60,6 +60,8 @@ mod tests {
                 bold: true,
                 italic: false,
                 align: Align::Left,
+
+                ..Default::default()
             },
         );
         r.draw_text(
@@ -74,6 +76,8 @@ mod tests {
                 bold: false,
                 italic: false,
                 align: Align::Right,
+
+                ..Default::default()
             },
         );
         r.draw_text(
@@ -88,6 +92,8 @@ mod tests {
                 bold: false,
                 italic: false,
                 align: Align::Center,
+
+                ..Default::default()
             },
         );
         golden_harness::assert_matches_golden("render/label-text.bin", r.page().to_bytes());
@@ -111,6 +117,8 @@ mod tests {
                 bold: false,
                 italic: false,
                 align: Align::Left,
+
+                ..Default::default()
             },
         );
         golden_harness::assert_matches_golden("render/text-japanese.bin", r.page().to_bytes());
@@ -200,6 +208,8 @@ mod tests {
                 bold: true,
                 italic: false,
                 align: Align::Left,
+
+                ..Default::default()
             },
         );
         first.draw_line(20.0, 38.0, 170.0, 0.5, false);
@@ -217,6 +227,8 @@ mod tests {
                 bold: false,
                 italic: false,
                 align: Align::Left,
+
+                ..Default::default()
             },
         );
         second.draw_qr(20.0, 40.0, 30.0, "https://example.com/o/1042");

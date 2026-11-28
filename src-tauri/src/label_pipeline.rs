@@ -1042,6 +1042,8 @@ media = ["page"]
                     bold,
                     italic: false,
                     align: Align::Left,
+
+                    ..Default::default()
                 },
                 page: Placement::Every,
             }],
@@ -1384,6 +1386,8 @@ media = ["page"]
                     bold: false,
                     italic: false,
                     align: Align::Left,
+
+                    ..Default::default()
                 },
                 page: Placement::Every,
             }],

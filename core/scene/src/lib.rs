@@ -140,8 +140,12 @@ pub struct Size {
     pub h_mm: f32,
 }
 
+fn zero_f32(v: &f32) -> bool {
+    *v == 0.0
+}
+
 /// Text appearance. Sizes are in millimetres.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct TextStyle {
     /// Character height, in mm.
     pub size_mm: f32,
@@ -154,6 +158,26 @@ pub struct TextStyle {
     pub italic: bool,
     #[serde(default)]
     pub align: Align,
+    /// Line height as a multiple of the font size; `None` keeps the
+    /// renderer's natural leading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_height: Option<f32>,
+    /// Extra space between glyphs, in millimetres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub letter_spacing_mm: Option<f32>,
+    /// Where the lines sit inside the element's box.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vertical_align: Option<VerticalAlign>,
+}
+
+/// Vertical placement of text inside its box.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum VerticalAlign {
+    #[default]
+    Top,
+    Middle,
+    Bottom,
 }
 
 /// Horizontal text alignment inside the element's box.
@@ -259,6 +283,9 @@ pub enum Element {
         size: Size,
         /// The outline's thickness in mm; 0 = no border.
         border_mm: f32,
+        /// Space between the border and children, in mm.
+        #[serde(default, skip_serializing_if = "zero_f32")]
+        padding_mm: f32,
         /// Placed relative to the frame's top-left, like group items.
         /// Fixed elements and other frames — not groups (v1).
         children: Vec<Element>,
@@ -812,6 +839,26 @@ fn binding(expr: &str, record: &Record) -> String {
     }
 }
 
+/// Only these shapes count as a scene binding. Anything else between
+/// braces is left exactly as written, as it was before helpers existed.
+fn recognized_binding(expr: &str) -> bool {
+    if expr.is_empty() || expr.starts_with('#') || expr.starts_with('/') {
+        return false;
+    }
+    const HELPERS: &[&str] = &[
+        "currency", "date", "upper", "lower", "number", "padLeft", "barcode", "qrcode",
+    ];
+    let first = expr.split_whitespace().next().unwrap_or("");
+    if HELPERS.contains(&first) {
+        return true;
+    }
+    let mut chars = expr.chars();
+    matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
+        && expr
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+}
+
 /// Replace `{{…}}` expressions without touching unknown syntax.
 fn render_bindings(text: &str, record: &Record) -> String {
     let mut out = String::with_capacity(text.len());
@@ -824,7 +871,9 @@ fn render_bindings(text: &str, record: &Record) -> String {
             return out;
         };
         let expr = &after[..end];
-        if expr.starts_with('#') || expr.starts_with('/') {
+        if !recognized_binding(expr) {
+            // Keep the opening braces and re-scan from after them: the
+            // inner `{{title}}` of `{{{{title}}}}` is still a binding.
             out.push_str("{{");
             rest = after;
             continue;
@@ -1081,6 +1130,7 @@ mod tests {
                 bold: false,
                 italic: false,
                 align: Align::Left,
+                ..Default::default()
             },
             page,
         }
@@ -1350,6 +1400,7 @@ mod tests {
                 h_mm: 2.0,
             },
             border_mm: 0.0,
+            padding_mm: 0.0,
             children: vec![],
             page: Placement::default(),
         };
@@ -1364,6 +1415,7 @@ mod tests {
                     h_mm: 4.0,
                 },
                 border_mm: 0.0,
+                padding_mm: 0.0,
                 children: vec![el],
                 page: Placement::default(),
             };
@@ -1409,6 +1461,7 @@ mod tests {
                     h_mm: 20.0,
                 },
                 border_mm: border,
+                padding_mm: 0.0,
                 children: vec![],
                 page: Placement::default(),
             })
@@ -1436,6 +1489,7 @@ mod tests {
                 h_mm: 30.0,
             },
             border_mm: 0.5,
+            padding_mm: 0.0,
             children: vec![Element::Group {
                 at: At {
                     x_mm: 0.0,
@@ -1464,6 +1518,7 @@ mod tests {
                 h_mm: 12.0,
             },
             border_mm: 0.5,
+            padding_mm: 0.0,
             children: vec![text_xy(2.0, 2.0, "stamped", Placement::First)],
             page: Placement::default(),
         });
@@ -1494,6 +1549,7 @@ mod tests {
                 h_mm: 20.0,
             },
             border_mm: 0.5,
+            padding_mm: 0.0,
             // The helper text is 50 mm wide: 10 + 50 = 60, past the
             // frame's 30 mm.
             children: vec![text_xy(10.0, 2.0, "too wide", Placement::default())],
@@ -1517,6 +1573,7 @@ mod tests {
                 h_mm: 12.0,
             },
             border_mm: 0.3,
+            padding_mm: 0.0,
             children: vec![Element::Frame {
                 at: At {
                     x_mm: 2.0,
@@ -1527,6 +1584,7 @@ mod tests {
                     h_mm: 8.0,
                 },
                 border_mm: 0.15,
+                padding_mm: 0.0,
                 children: vec![Element::Text {
                     at: At {
                         x_mm: 2.0,
@@ -1543,6 +1601,7 @@ mod tests {
                         bold: false,
                         italic: false,
                         align: Align::Left,
+                        ..Default::default()
                     },
                     page: Placement::default(),
                 }],
@@ -1624,6 +1683,7 @@ mod tests {
                         h_mm: 12.0,
                     },
                     border_mm: 0.3,
+                    padding_mm: 0.0,
                     children: vec![Element::Text {
                         at: At {
                             x_mm: 2.0,
@@ -1640,6 +1700,7 @@ mod tests {
                             bold: false,
                             italic: false,
                             align: Align::Left,
+                            ..Default::default()
                         },
                         page: Placement::default(),
                     }],

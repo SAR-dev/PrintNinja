@@ -331,6 +331,8 @@ native = ["2"]
                         bold: false,
                         italic: false,
                         align: Align::Left,
+
+                        ..Default::default()
                     },
                     page: Placement::Every,
                 },

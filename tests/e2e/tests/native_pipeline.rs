@@ -99,6 +99,8 @@ fn label_template() -> Template {
                     bold: false,
                     italic: false,
                     align: pn_scene::Align::Left,
+
+                    ..Default::default()
                 },
                 page: Placement::Every,
             },

@@ -260,6 +260,69 @@ export function SelectedElementPanel({
                 </Select>
               </div>
             </div>
+            <div className="grid grid-cols-3 gap-3">
+              <NumField
+                id="t-line-height"
+                label={t("scene.line_height")}
+                value={selected.style.line_height ?? 1}
+                step={0.1}
+                onChange={(v) =>
+                  scene.updateSelected((el) =>
+                    el.type === "text"
+                      ? { ...el, style: { ...el.style, line_height: v } }
+                      : el,
+                  )
+                }
+              />
+              <NumField
+                id="t-letter-spacing"
+                label={t("scene.letter_spacing")}
+                value={selected.style.letter_spacing_mm ?? 0}
+                step={0.1}
+                onChange={(v) =>
+                  scene.updateSelected((el) =>
+                    el.type === "text"
+                      ? {
+                          ...el,
+                          style: { ...el.style, letter_spacing_mm: v },
+                        }
+                      : el,
+                  )
+                }
+              />
+              <div className="flex flex-col gap-1">
+                <Label>{t("scene.vertical_align")}</Label>
+                <Select
+                  value={selected.style.vertical_align ?? "top"}
+                  onValueChange={(v) =>
+                    scene.updateSelected((el) =>
+                      el.type === "text"
+                        ? {
+                            ...el,
+                            style: {
+                              ...el.style,
+                              vertical_align: v as "top" | "middle" | "bottom",
+                            },
+                          }
+                        : el,
+                    )
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="top">{t("scene.valign_top")}</SelectItem>
+                    <SelectItem value="middle">
+                      {t("scene.valign_middle")}
+                    </SelectItem>
+                    <SelectItem value="bottom">
+                      {t("scene.valign_bottom")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="flex gap-5">
               <SwitchRow
                 label={t("scene.bold")}
@@ -602,6 +665,17 @@ export function SelectedElementPanel({
                 onChange={(v) =>
                   scene.updateSelected((el) =>
                     el.type === "frame" ? { ...el, border_mm: v } : el,
+                  )
+                }
+              />
+              <NumField
+                id="f-padding"
+                label={t("scene.padding_mm")}
+                step={0.05}
+                value={selected.padding_mm ?? 0}
+                onChange={(v) =>
+                  scene.updateSelected((el) =>
+                    el.type === "frame" ? { ...el, padding_mm: v } : el,
                   )
                 }
               />

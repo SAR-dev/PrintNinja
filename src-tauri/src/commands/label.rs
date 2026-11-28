@@ -782,6 +782,11 @@ mod tests {
             data_url: None,
             http_method: None,
             data: None,
+            orientation: None,
+            margin_top: None,
+            margin_right: None,
+            margin_bottom: None,
+            margin_left: None,
         }
     }
 
