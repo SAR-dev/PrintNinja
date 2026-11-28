@@ -22,7 +22,7 @@ Choose a printer and template, supply records, check the preview and press Print
 
 ![Templates page on Windows](./screenshots/windows/en-light-comfortable/templates.png)
 
-Label and document templates in one list; the **New** menu picks the track to create.
+Label and document templates in one list; the **New** menu picks the track to create. **Import label** reads a portable `.pn-label.json` file, and a label row's menu can export one.
 
 ### Designer
 
