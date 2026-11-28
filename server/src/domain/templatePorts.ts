@@ -13,6 +13,10 @@ export interface TemplateRecord {
   pageWMm: number;
   pageHMm: number;
   language: string;
+  /** `html` (documents) or `scene` (labels). */
+  track: string;
+  /** Serialized scene template; empty for document rows. */
+  sceneJson: string;
   body: string;
   css: string;
   readme: string;
@@ -35,6 +39,8 @@ export type VersionCreatedBy = "manual" | "autosave" | "restore";
 export interface VersionView {
   templateId: string;
   versionNo: number;
+  track: string;
+  sceneJson: string;
   body: string;
   css: string;
   createdBy: VersionCreatedBy;
@@ -60,6 +66,7 @@ export interface TemplateSummaryView {
   pageWMm: number;
   pageHMm: number;
   language: string;
+  track: string;
   useCount: number;
   revision: number;
   versionCount: number;
@@ -75,6 +82,9 @@ export interface TemplateWrite {
   pageWMm: number;
   pageHMm: number;
   language: string;
+  /** Defaults to `html` when a caller omits it. */
+  track?: string;
+  sceneJson?: string;
   body: string;
   css: string;
   readme: string;
@@ -85,6 +95,9 @@ export interface TemplateWrite {
 
 export interface VersionWrite {
   createdBy: "manual" | "autosave" | "restore";
+  /** Inherited from the template when absent. */
+  track?: string;
+  sceneJson?: string;
   label?: string;
   note?: string;
 }

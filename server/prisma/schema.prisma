@@ -160,6 +160,10 @@ model Template {
   pageWMm     Float           @map("page_w_mm")
   pageHMm     Float           @map("page_h_mm")
   language    String          @default("html")
+  /// `html` for document templates, `scene` for label templates.
+  track       String          @default("html")
+  /// Serialized pn_scene template for `scene` rows; empty for documents.
+  sceneJson   String          @default("") @map("scene_json")
   body        String // HTML; 512 KiB cap checked in the domain
   css         String          @default("") // 256 KiB cap
   readme      String          @default("") // 64 KiB cap
@@ -225,6 +229,8 @@ model TemplateVersion {
   id         String        @id @default(uuid())
   templateId String        @map("template_id")
   versionNo  Int           @map("version_no")
+  track      String        @default("html")
+  sceneJson  String        @default("") @map("scene_json")
   body       String
   css        String        @default("")
   label      String?

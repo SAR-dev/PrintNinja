@@ -105,7 +105,10 @@ export async function saveTemplateToServer(
     page_w_mm: content.page_w_mm,
     page_h_mm: content.page_h_mm,
     language: "html" as const,
-    body: content.html,
+    track: template.track === "scene" ? ("scene" as const) : ("html" as const),
+    ...(template.track === "scene"
+      ? { scene_json: template.scene_json ?? "", body: "" }
+      : { body: content.html }),
     css: content.css,
     readme: content.readme,
   };
@@ -328,6 +331,8 @@ export async function overwriteWithMine(
 export interface RemoteCopy {
   html: string;
   css: string;
+  /** The scene payload when the restored copy is a label template. */
+  scene_json?: string | null;
   name: string;
   summary: string;
   readme: string;
@@ -350,20 +355,29 @@ async function writeRemoteCopy(
   remote: RemoteTemplate,
 ): Promise<RemoteCopy> {
   const html = remote.body ?? "";
-  const compiled = await compiledFields(html);
-  await agent("update_template_meta", {
-    req: {
-      id: template.id,
-      name: remote.name,
-      page_w_mm: Math.round(remote.page_w_mm),
-      page_h_mm: Math.round(remote.page_h_mm),
-      summary: remote.summary ?? "",
-      html,
-      css: remote.css ?? "",
-      compiled_css: compiled.compiled_css ?? "",
-      compiled_key: compiled.compiled_key ?? "",
-    },
-  });
+  const scene = remote.track === "scene" ? (remote.scene_json ?? "") : null;
+  if (scene !== null) {
+    // A label template's payload is the scene JSON, not HTML; writing
+    // both would leave stale document markup in the local cache.
+    await agent("label_save_template", {
+      req: { id: template.id, name: remote.name, scene },
+    });
+  } else {
+    const compiled = await compiledFields(html);
+    await agent("update_template_meta", {
+      req: {
+        id: template.id,
+        name: remote.name,
+        page_w_mm: Math.round(remote.page_w_mm),
+        page_h_mm: Math.round(remote.page_h_mm),
+        summary: remote.summary ?? "",
+        html,
+        css: remote.css ?? "",
+        compiled_css: compiled.compiled_css ?? "",
+        compiled_key: compiled.compiled_key ?? "",
+      },
+    });
+  }
   await agent("update_readme", {
     req: { id: template.id, readme: remote.readme ?? "" },
   });
@@ -381,6 +395,7 @@ async function writeRemoteCopy(
   return {
     html,
     css: remote.css ?? "",
+    scene_json: scene,
     name: remote.name,
     summary: remote.summary ?? "",
     readme: remote.readme ?? "",

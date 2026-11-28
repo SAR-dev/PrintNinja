@@ -12,6 +12,7 @@ export interface FakeVersion {
   version_no: number;
   html: string;
   css: string;
+  scene_json?: string | null;
   created_by: string;
   label?: string | null;
   note?: string | null;
@@ -332,7 +333,9 @@ export function createFakeCache() {
       const head = existing.versions[existing.versions.length - 1];
       if (
         (head?.html ?? "") === String(data["body"] ?? "") &&
-        (head?.css ?? "") === String(data["css"] ?? "")
+        (head?.css ?? "") === String(data["css"] ?? "") &&
+        (head?.scene_json ?? null) ===
+          ((data["scene_json"] as string | null) ?? null)
       ) {
         existing.server_revision = Number(
           data["revision"] ?? existing.server_revision,
@@ -351,6 +354,9 @@ export function createFakeCache() {
     const orientation = pageW > pageH ? "landscape" : "portrait";
     const html = String(data["body"] ?? "");
     const css = String(data["css"] ?? "");
+    const track = data["track"] === "scene" ? "scene" : "html";
+    const sceneJson =
+      track === "scene" ? ((data["scene_json"] as string | null) ?? "") : null;
     if (!existing) {
       const row: FakeTemplateRow = {
         id: nextId++,
@@ -370,8 +376,8 @@ export function createFakeCache() {
         owner_handle: null,
         synced_at: nowIso(),
         versions: [{ version_no: 1, html, css, created_by: "sync" }],
-        track: "html",
-        scene_json: null,
+        track,
+        scene_json: sceneJson,
       };
       templates.set(row.id, row);
       report.applied_upserts += 1;
@@ -391,6 +397,8 @@ export function createFakeCache() {
       data["revision"] ?? existing.server_revision,
     );
     existing.base_revision = existing.server_revision;
+    existing.track = track;
+    existing.scene_json = sceneJson;
     existing.sync_state = "synced";
     existing.synced_at = nowIso();
     const maxNo = existing.versions.reduce(
@@ -401,6 +409,7 @@ export function createFakeCache() {
       version_no: maxNo + 1,
       html,
       css,
+      scene_json: sceneJson,
       created_by: "sync",
     });
     pruneVersions(existing);

@@ -3046,6 +3046,17 @@
                       "html"
                     ]
                   },
+                  "track": {
+                    "default": "html",
+                    "type": "string",
+                    "enum": [
+                      "html",
+                      "scene"
+                    ]
+                  },
+                  "scene_json": {
+                    "type": "string"
+                  },
                   "body": {
                     "type": "string",
                     "examples": [
@@ -3145,6 +3156,9 @@
                     "language": {
                       "type": "string"
                     },
+                    "track": {
+                      "type": "string"
+                    },
                     "use_count": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -3180,6 +3194,9 @@
                     "body": {
                       "type": "string"
                     },
+                    "scene_json": {
+                      "type": "string"
+                    },
                     "css": {
                       "type": "string"
                     },
@@ -3196,12 +3213,14 @@
                     "page_w_mm",
                     "page_h_mm",
                     "language",
+                    "track",
                     "use_count",
                     "revision",
                     "version_count",
                     "published_at",
                     "updated_at",
                     "body",
+                    "scene_json",
                     "css",
                     "readme"
                   ],
@@ -3245,6 +3264,9 @@
                     "language": {
                       "type": "string"
                     },
+                    "track": {
+                      "type": "string"
+                    },
                     "use_count": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -3280,6 +3302,9 @@
                     "body": {
                       "type": "string"
                     },
+                    "scene_json": {
+                      "type": "string"
+                    },
                     "css": {
                       "type": "string"
                     },
@@ -3296,12 +3321,14 @@
                     "page_w_mm",
                     "page_h_mm",
                     "language",
+                    "track",
                     "use_count",
                     "revision",
                     "version_count",
                     "published_at",
                     "updated_at",
                     "body",
+                    "scene_json",
                     "css",
                     "readme"
                   ],
@@ -3800,6 +3827,9 @@
                     "language": {
                       "type": "string"
                     },
+                    "track": {
+                      "type": "string"
+                    },
                     "use_count": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -3835,6 +3865,9 @@
                     "body": {
                       "type": "string"
                     },
+                    "scene_json": {
+                      "type": "string"
+                    },
                     "css": {
                       "type": "string"
                     },
@@ -3851,12 +3884,14 @@
                     "page_w_mm",
                     "page_h_mm",
                     "language",
+                    "track",
                     "use_count",
                     "revision",
                     "version_count",
                     "published_at",
                     "updated_at",
                     "body",
+                    "scene_json",
                     "css",
                     "readme"
                   ],
@@ -4312,6 +4347,9 @@
                     "language": {
                       "type": "string"
                     },
+                    "track": {
+                      "type": "string"
+                    },
                     "use_count": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -4347,6 +4385,9 @@
                     "body": {
                       "type": "string"
                     },
+                    "scene_json": {
+                      "type": "string"
+                    },
                     "css": {
                       "type": "string"
                     },
@@ -4363,12 +4404,14 @@
                     "page_w_mm",
                     "page_h_mm",
                     "language",
+                    "track",
                     "use_count",
                     "revision",
                     "version_count",
                     "published_at",
                     "updated_at",
                     "body",
+                    "scene_json",
                     "css",
                     "readme"
                   ],
@@ -4650,6 +4693,9 @@
                     "language": {
                       "type": "string"
                     },
+                    "track": {
+                      "type": "string"
+                    },
                     "use_count": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -4685,6 +4731,9 @@
                     "body": {
                       "type": "string"
                     },
+                    "scene_json": {
+                      "type": "string"
+                    },
                     "css": {
                       "type": "string"
                     },
@@ -4701,12 +4750,14 @@
                     "page_w_mm",
                     "page_h_mm",
                     "language",
+                    "track",
                     "use_count",
                     "revision",
                     "version_count",
                     "published_at",
                     "updated_at",
                     "body",
+                    "scene_json",
                     "css",
                     "readme"
                   ],
@@ -5028,6 +5079,9 @@
                           "language": {
                             "type": "string"
                           },
+                          "track": {
+                            "type": "string"
+                          },
                           "use_count": {
                             "type": "integer",
                             "minimum": -9007199254740991,
@@ -5070,6 +5124,7 @@
                           "page_w_mm",
                           "page_h_mm",
                           "language",
+                          "track",
                           "use_count",
                           "revision",
                           "version_count",
@@ -5762,6 +5817,9 @@
                           "language": {
                             "type": "string"
                           },
+                          "track": {
+                            "type": "string"
+                          },
                           "use_count": {
                             "type": "integer",
                             "minimum": -9007199254740991,
@@ -5804,6 +5862,7 @@
                           "page_w_mm",
                           "page_h_mm",
                           "language",
+                          "track",
                           "use_count",
                           "revision",
                           "version_count",
@@ -12076,6 +12135,9 @@
                           "language": {
                             "type": "string"
                           },
+                          "track": {
+                            "type": "string"
+                          },
                           "use_count": {
                             "type": "integer",
                             "minimum": -9007199254740991,
@@ -12118,6 +12180,7 @@
                           "page_w_mm",
                           "page_h_mm",
                           "language",
+                          "track",
                           "use_count",
                           "revision",
                           "version_count",
@@ -13597,6 +13660,12 @@
                       "format": "date-time",
                       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
+                    "track": {
+                      "type": "string"
+                    },
+                    "scene_json": {
+                      "type": "string"
+                    },
                     "body": {
                       "type": "string"
                     },
@@ -13610,6 +13679,8 @@
                     "label",
                     "note",
                     "created_at",
+                    "track",
+                    "scene_json",
                     "body",
                     "css"
                   ],
@@ -14320,6 +14391,9 @@
                     "language": {
                       "type": "string"
                     },
+                    "track": {
+                      "type": "string"
+                    },
                     "use_count": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -14355,6 +14429,9 @@
                     "body": {
                       "type": "string"
                     },
+                    "scene_json": {
+                      "type": "string"
+                    },
                     "css": {
                       "type": "string"
                     },
@@ -14371,12 +14448,14 @@
                     "page_w_mm",
                     "page_h_mm",
                     "language",
+                    "track",
                     "use_count",
                     "revision",
                     "version_count",
                     "published_at",
                     "updated_at",
                     "body",
+                    "scene_json",
                     "css",
                     "readme"
                   ],
@@ -14919,6 +14998,9 @@
                                   "language": {
                                     "type": "string"
                                   },
+                                  "track": {
+                                    "type": "string"
+                                  },
                                   "use_count": {
                                     "type": "integer",
                                     "minimum": -9007199254740991,
@@ -14954,6 +15036,9 @@
                                   "body": {
                                     "type": "string"
                                   },
+                                  "scene_json": {
+                                    "type": "string"
+                                  },
                                   "css": {
                                     "type": "string"
                                   },
@@ -14982,12 +15067,14 @@
                                   "page_w_mm",
                                   "page_h_mm",
                                   "language",
+                                  "track",
                                   "use_count",
                                   "revision",
                                   "version_count",
                                   "published_at",
                                   "updated_at",
                                   "body",
+                                  "scene_json",
                                   "css",
                                   "readme",
                                   "head_version_no",

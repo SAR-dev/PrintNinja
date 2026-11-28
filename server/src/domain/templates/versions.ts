@@ -86,7 +86,12 @@ export async function restoreVersion(
     throw new RevisionRequiredError();
   }
   if (ifRevision !== template.revision) {
-    if (template.body === version.body && template.css === version.css) {
+    if (
+      template.body === version.body &&
+      template.css === version.css &&
+      template.track === version.track &&
+      template.sceneJson === version.sceneJson
+    ) {
       return { template, replayed: true };
     }
     throw new RevisionConflictError(template.revision);
@@ -100,12 +105,18 @@ export async function restoreVersion(
       pageWMm: template.pageWMm,
       pageHMm: template.pageHMm,
       language: template.language,
+      track: version.track,
+      sceneJson: version.sceneJson,
       body: version.body,
       css: version.css,
       readme: template.readme,
     },
     ifRevision,
-    { createdBy: "restore" },
+    {
+      createdBy: "restore",
+      track: version.track,
+      sceneJson: version.sceneJson,
+    },
   );
   return { template: restored, replayed: false };
 }

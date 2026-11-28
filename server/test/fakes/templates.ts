@@ -26,6 +26,8 @@ import type {
 
 interface StoredVersion {
   versionNo: number;
+  track: string;
+  sceneJson: string;
   body: string;
   css: string;
   createdBy: string;
@@ -162,6 +164,7 @@ export function createFakeTemplateRepos(users: {
     pageWMm: stored.pageWMm,
     pageHMm: stored.pageHMm,
     language: stored.language,
+    track: stored.track,
     useCount: stored.useCount,
     revision: stored.revision,
     versionCount: stored.versions.length,
@@ -244,6 +247,8 @@ export function createFakeTemplateRepos(users: {
       const timestamp = now();
       const stored: StoredTemplate = {
         ...input,
+        track: input.track ?? "html",
+        sceneJson: input.sceneJson ?? "",
         ownerHandle: handleOf(input.ownerId),
         useCount: 0,
         revision: 1,
@@ -255,6 +260,8 @@ export function createFakeTemplateRepos(users: {
         versions: [
           {
             versionNo: 1,
+            track: input.track ?? "html",
+            sceneJson: input.sceneJson ?? "",
             body: input.body,
             css: input.css,
             createdBy: version.createdBy,
@@ -294,6 +301,8 @@ export function createFakeTemplateRepos(users: {
         );
         stored.versions.push({
           versionNo: maxNo + 1,
+          track: stored.track,
+          sceneJson: stored.sceneJson,
           body: input.body,
           css: input.css,
           createdBy: version.createdBy,
@@ -373,6 +382,8 @@ export function createFakeTemplateRepos(users: {
         v && {
           templateId,
           versionNo: v.versionNo,
+          track: v.track,
+          sceneJson: v.sceneJson,
           body: v.body,
           css: v.css,
           createdBy: v.createdBy as "manual" | "autosave" | "restore",
@@ -699,6 +710,8 @@ function recordOf(stored: StoredTemplate): TemplateRecord {
     pageWMm: stored.pageWMm,
     pageHMm: stored.pageHMm,
     language: stored.language,
+    track: stored.track,
+    sceneJson: stored.sceneJson,
     body: stored.body,
     css: stored.css,
     readme: stored.readme,

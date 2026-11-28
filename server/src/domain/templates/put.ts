@@ -4,6 +4,7 @@ import {
   RemoteReferenceError,
   RevisionConflictError,
   RevisionRequiredError,
+  ValidationError,
 } from "../errors.js";
 import type {
   TemplateRepository,
@@ -12,6 +13,7 @@ import type {
 } from "../templatePorts.js";
 import {
   assertNameCaps,
+  assertSceneJsonCaps,
   assertSizeCaps,
   assertVersionCaps,
   findRemoteRefs,
@@ -30,6 +32,9 @@ export interface PutTemplateInput {
   pageWMm: number;
   pageHMm: number;
   language?: string;
+  /** Defaults to `html`; `scene` rows carry their payload in sceneJson. */
+  track?: string;
+  sceneJson?: string;
   body: string;
   css?: string;
   readme?: string;
@@ -66,9 +71,17 @@ export async function putTemplate(
   const summary = (input.summary ?? "").trim();
   const css = input.css ?? null;
   const readme = input.readme ?? null;
+  const track = input.track ?? "html";
+  if (track !== "html" && track !== "scene") {
+    throw new ValidationError("Unknown template track", [
+      { path: "track", message: track },
+    ]);
+  }
+  const sceneJson = track === "scene" ? (input.sceneJson ?? "") : "";
   assertNameCaps(input.name.trim(), summary);
   assertVersionCaps(input.version?.label, input.version?.note);
   assertSizeCaps(input.body, css ?? "", readme ?? "");
+  assertSceneJsonCaps(sceneJson);
 
   const refs: RemoteRefIssue[] = findRemoteRefs(input.body, css ?? "");
   if (refs.length > 0) {
@@ -94,11 +107,13 @@ export async function putTemplate(
         pageWMm: input.pageWMm,
         pageHMm: input.pageHMm,
         language: input.language ?? "html",
+        track,
+        sceneJson,
         body: input.body,
         css: css ?? "",
         readme: readme ?? "",
       },
-      toVersionWrite(input.version),
+      toVersionWrite(input.version, track, sceneJson),
     );
     return { template, status: 201, replayed: false };
   }
@@ -112,7 +127,10 @@ export async function putTemplate(
 
   const effectiveCss = css ?? existing.css;
   const contentSame =
-    input.body === existing.body && effectiveCss === existing.css;
+    input.body === existing.body &&
+    effectiveCss === existing.css &&
+    track === existing.track &&
+    sceneJson === existing.sceneJson;
   if (input.ifRevision !== existing.revision) {
     if (contentSame) {
       return { template: existing, status: 200, replayed: true };
@@ -129,19 +147,27 @@ export async function putTemplate(
       pageWMm: input.pageWMm,
       pageHMm: input.pageHMm,
       language: input.language ?? existing.language,
+      track,
+      sceneJson,
       body: input.body,
       css: input.css === undefined ? existing.css : effectiveCss,
       readme: input.readme === undefined ? existing.readme : (readme ?? ""),
     },
     input.ifRevision,
-    contentSame ? null : toVersionWrite(input.version),
+    contentSame ? null : toVersionWrite(input.version, track, sceneJson),
   );
   return { template, status: 200, replayed: false };
 }
 
-function toVersionWrite(version: PutTemplateInput["version"]): VersionWrite {
+function toVersionWrite(
+  version: PutTemplateInput["version"],
+  track: string,
+  sceneJson: string,
+): VersionWrite {
   return {
     createdBy: version?.createdBy ?? "manual",
+    track,
+    sceneJson,
     ...(version?.label !== undefined ? { label: version.label } : {}),
     ...(version?.note !== undefined ? { note: version.note } : {}),
   };

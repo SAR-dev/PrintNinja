@@ -74,6 +74,7 @@ export function toTemplateSummary(
     page_w_mm: view.pageWMm,
     page_h_mm: view.pageHMm,
     language: view.language,
+    track: view.track,
     use_count: view.useCount,
     revision: view.revision,
     version_count: view.versionCount,
@@ -87,6 +88,7 @@ export function toTemplate(view: TemplateView): TemplateResponse {
     ...toTemplateSummary(view),
     body: view.body,
     css: view.css,
+    scene_json: view.sceneJson,
     readme: view.readme,
   };
 }
@@ -106,6 +108,8 @@ export function toVersionSummary(
 export function toVersion(view: VersionView): VersionResponse {
   return {
     ...toVersionSummary(view),
+    track: view.track,
+    scene_json: view.sceneJson,
     body: view.body,
     css: view.css,
   };

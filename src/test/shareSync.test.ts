@@ -547,3 +547,47 @@ describe("deleteTemplateEverywhere", () => {
     expect(invoke).toHaveBeenCalledWith("delete_template", { id: 7 });
   });
 });
+
+describe("scene template sharing", () => {
+  it("puts the scene payload instead of HTML for a label row", async () => {
+    client.putRemoteTemplate.mockResolvedValue({
+      ...REMOTE,
+      track: "scene",
+      scene_json: '{"format":"scene","elements":[]}',
+      body: "",
+    });
+    await saveTemplateToServer(
+      local({
+        track: "scene",
+        scene_json: '{"format":"scene","elements":[]}',
+        html: "",
+      }),
+      { ...CONTENT, html: "" },
+    );
+    const put = client.putRemoteTemplate.mock.calls[0][0];
+    expect(put).toMatchObject({
+      track: "scene",
+      scene_json: '{"format":"scene","elements":[]}',
+      body: "",
+    });
+  });
+
+  it("writes a restored scene through the label save command", async () => {
+    const scene = '{"format":"scene","elements":[]}';
+    client.fetchRemoteTemplate.mockResolvedValue({
+      ...REMOTE,
+      track: "scene",
+      scene_json: scene,
+      body: "",
+      revision: 9,
+    });
+    const copy = await takeServerCopy(
+      local({ track: "scene", scene_json: "old" }),
+    );
+    expect(calls("label_save_template")[0][1]).toMatchObject({
+      req: { id: 7, name: "Invoice", scene },
+    });
+    expect(calls("update_template_meta")).toHaveLength(0);
+    expect(copy.scene_json).toBe(scene);
+  });
+});

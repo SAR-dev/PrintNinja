@@ -597,6 +597,8 @@ fn conflict_marks_and_resolves_both_ways() {
         body: "<p>server</p>".to_string(),
         css: String::new(),
         readme: String::new(),
+        track: "html".to_string(),
+        scene_json: String::new(),
         revision: 6,
         published_at: None,
         updated_at: "2026-10-20T00:00:00Z".to_string(),
@@ -1065,4 +1067,36 @@ fn sync_change_seq_accepts_string_and_number() {
         r#"{"seq":"abc","entity":"template","op":"delete","id":"x"}"#,
     );
     assert!(bad.is_err(), "a non-numeric seq must still be rejected");
+}
+
+/// Scene templates cross the same sync feed as documents: the track and
+/// scene payload land in the cache so the designer can open a shared
+/// label template without losing its elements.
+#[test]
+fn scene_template_upsert_keeps_the_scene_payload() {
+    let conn = Connection::open_in_memory().unwrap();
+    printninja_lib::db::init(&conn).unwrap();
+    let fonts_dir = std::env::temp_dir().join(format!("pn-cache-fonts-{}", uuid::Uuid::new_v4()));
+    let scene = r#"{"format":"scene","elements":[]}"#;
+    let changes: Vec<SyncChangeIn> = serde_json::from_value(serde_json::json!([{
+        "seq": 1, "entity": "template", "op": "upsert",
+        "data": {
+            "id": "srv-scene", "name": "Shared label", "summary": "", "page_w_mm": 101.6,
+            "page_h_mm": 152.4, "body": "", "css": "", "readme": "",
+            "track": "scene", "scene_json": scene, "revision": 1,
+            "published_at": null, "updated_at": "2026-11-28T00:00:00Z"
+        }
+    }]))
+    .unwrap();
+    let report = apply_changes(&conn, &fonts_dir, &changes, "MQ==").unwrap();
+    assert_eq!(report.applied_upserts, 1);
+    let (track, payload): (String, String) = conn
+        .query_row(
+            "SELECT track, COALESCE(scene_json, '') FROM templates WHERE server_id = 'srv-scene'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(track, "scene");
+    assert_eq!(payload, scene);
 }

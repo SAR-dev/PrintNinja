@@ -1246,6 +1246,7 @@ export interface paths {
                             page_w_mm: number;
                             page_h_mm: number;
                             language: string;
+                            track: string;
                             use_count: number;
                             revision: number;
                             version_count: number;
@@ -1253,6 +1254,7 @@ export interface paths {
                             /** Format: date-time */
                             updated_at: string;
                             body: string;
+                            scene_json: string;
                             css: string;
                             readme: string;
                         };
@@ -1331,6 +1333,12 @@ export interface paths {
                         page_h_mm: number;
                         /** @enum {string} */
                         language?: "html";
+                        /**
+                         * @default html
+                         * @enum {string}
+                         */
+                        track?: "html" | "scene";
+                        scene_json?: string;
                         /** @example <div>{{order.id}}</div> */
                         body: string;
                         css?: string;
@@ -1364,6 +1372,7 @@ export interface paths {
                             page_w_mm: number;
                             page_h_mm: number;
                             language: string;
+                            track: string;
                             use_count: number;
                             revision: number;
                             version_count: number;
@@ -1371,6 +1380,7 @@ export interface paths {
                             /** Format: date-time */
                             updated_at: string;
                             body: string;
+                            scene_json: string;
                             css: string;
                             readme: string;
                         };
@@ -1393,6 +1403,7 @@ export interface paths {
                             page_w_mm: number;
                             page_h_mm: number;
                             language: string;
+                            track: string;
                             use_count: number;
                             revision: number;
                             version_count: number;
@@ -1400,6 +1411,7 @@ export interface paths {
                             /** Format: date-time */
                             updated_at: string;
                             body: string;
+                            scene_json: string;
                             css: string;
                             readme: string;
                         };
@@ -1652,6 +1664,7 @@ export interface paths {
                             page_w_mm: number;
                             page_h_mm: number;
                             language: string;
+                            track: string;
                             use_count: number;
                             revision: number;
                             version_count: number;
@@ -1659,6 +1672,7 @@ export interface paths {
                             /** Format: date-time */
                             updated_at: string;
                             body: string;
+                            scene_json: string;
                             css: string;
                             readme: string;
                         };
@@ -1770,6 +1784,7 @@ export interface paths {
                             page_w_mm: number;
                             page_h_mm: number;
                             language: string;
+                            track: string;
                             use_count: number;
                             revision: number;
                             version_count: number;
@@ -1777,6 +1792,7 @@ export interface paths {
                             /** Format: date-time */
                             updated_at: string;
                             body: string;
+                            scene_json: string;
                             css: string;
                             readme: string;
                         };
@@ -1890,6 +1906,7 @@ export interface paths {
                                 page_w_mm: number;
                                 page_h_mm: number;
                                 language: string;
+                                track: string;
                                 use_count: number;
                                 revision: number;
                                 version_count: number;
@@ -2137,6 +2154,7 @@ export interface paths {
                                 page_w_mm: number;
                                 page_h_mm: number;
                                 language: string;
+                                track: string;
                                 use_count: number;
                                 revision: number;
                                 version_count: number;
@@ -4295,6 +4313,7 @@ export interface paths {
                                 page_w_mm: number;
                                 page_h_mm: number;
                                 language: string;
+                                track: string;
                                 use_count: number;
                                 revision: number;
                                 version_count: number;
@@ -4818,6 +4837,8 @@ export interface paths {
                             note: string | null;
                             /** Format: date-time */
                             created_at: string;
+                            track: string;
+                            scene_json: string;
                             body: string;
                             css: string;
                         };
@@ -5059,6 +5080,7 @@ export interface paths {
                             page_w_mm: number;
                             page_h_mm: number;
                             language: string;
+                            track: string;
                             use_count: number;
                             revision: number;
                             version_count: number;
@@ -5066,6 +5088,7 @@ export interface paths {
                             /** Format: date-time */
                             updated_at: string;
                             body: string;
+                            scene_json: string;
                             css: string;
                             readme: string;
                         };
@@ -5244,6 +5267,7 @@ export interface paths {
                                     page_w_mm: number;
                                     page_h_mm: number;
                                     language: string;
+                                    track: string;
                                     use_count: number;
                                     revision: number;
                                     version_count: number;
@@ -5251,6 +5275,7 @@ export interface paths {
                                     /** Format: date-time */
                                     updated_at: string;
                                     body: string;
+                                    scene_json: string;
                                     css: string;
                                     readme: string;
                                     head_version_no: number;

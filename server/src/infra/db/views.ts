@@ -16,6 +16,8 @@ export type PrismaTemplate = {
   pageWMm: number;
   pageHMm: number;
   language: string;
+  track: string;
+  sceneJson: string;
   body: string;
   css: string;
   readme: string;
@@ -50,6 +52,7 @@ export function toTemplateSummaryView(
     pageWMm: template.pageWMm,
     pageHMm: template.pageHMm,
     language: template.language,
+    track: template.track,
     useCount: template.useCount,
     revision: template.revision,
     versionCount: template._count.versions,
@@ -61,6 +64,8 @@ export function toTemplateSummaryView(
 export type PrismaVersion = {
   templateId: string;
   versionNo: number;
+  track: string;
+  sceneJson: string;
   body: string;
   css: string;
   createdBy: "manual" | "autosave" | "restore";
@@ -73,6 +78,8 @@ export function toVersionView(row: PrismaVersion): VersionView {
   return {
     templateId: row.templateId,
     versionNo: row.versionNo,
+    track: row.track,
+    sceneJson: row.sceneJson,
     body: row.body,
     css: row.css,
     createdBy: row.createdBy,
@@ -101,6 +108,8 @@ function recordTemplateFields(template: PrismaTemplate) {
     pageWMm: template.pageWMm,
     pageHMm: template.pageHMm,
     language: template.language,
+    track: template.track,
+    sceneJson: template.sceneJson,
     body: template.body,
     css: template.css,
     readme: template.readme,

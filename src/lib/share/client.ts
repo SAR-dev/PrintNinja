@@ -461,6 +461,9 @@ export interface PutTemplateInput {
   page_w_mm: number;
   page_h_mm: number;
   language?: "html";
+  /** `scene` templates carry their payload in `scene_json`. */
+  track?: "html" | "scene";
+  scene_json?: string;
   body: string;
   css?: string;
   readme?: string;

@@ -70,6 +70,12 @@ pub struct TemplateDataIn {
     pub css: String,
     #[serde(default)]
     pub readme: String,
+    /// `html` (documents) or `scene` (labels). Old feed rows omit it.
+    #[serde(default = "default_track")]
+    pub track: String,
+    /// Serialized scene template; empty for document rows.
+    #[serde(default)]
+    pub scene_json: String,
     pub revision: i64,
     pub published_at: Option<String>,
     pub updated_at: String,
@@ -79,6 +85,10 @@ pub struct TemplateDataIn {
     /// The author's handle for saved mirrors (the wire's owner_handle).
     #[serde(default)]
     pub owner_handle: Option<String>,
+}
+
+fn default_track() -> String {
+    "html".into()
 }
 
 /// What `cache_apply_changes` did. Counts drive the sync engine's logging,
@@ -261,13 +271,15 @@ fn adopt_or_conflict(
     data: &TemplateDataIn,
     report: &mut ApplyReport,
 ) -> AppResult<()> {
-    let local: Option<(String, String)> = tx
-        .query_row("SELECT html, css FROM templates WHERE id = ?1", [id], |r| {
-            Ok((r.get(0)?, r.get(1)?))
-        })
+    let local: Option<(String, String, String)> = tx
+        .query_row(
+            "SELECT html, css, COALESCE(scene_json, '') FROM templates WHERE id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
         .ok();
-    let (html, css) = local.unwrap_or_default();
-    if html == data.body && css == data.css {
+    let (html, css, scene_json) = local.unwrap_or_default();
+    if html == data.body && css == data.css && scene_json == data.scene_json {
         tx.execute(
             "UPDATE templates SET server_revision = ?1, base_revision = ?1, synced_at = datetime('now') WHERE id = ?2",
             rusqlite::params![data.revision, id],
@@ -320,10 +332,10 @@ fn apply_upsert_synced(
     tx.execute(
         "UPDATE templates SET name = ?1, summary = ?2, page_w_mm = ?3, page_h_mm = ?4,
                         orientation = ?5, readme = ?6, published_at = ?7,
-                        html = ?8, css = ?9,
-                        server_revision = ?10, base_revision = ?10, synced_at = datetime('now'),
-                        sync_state = 'synced', updated_at = ?11
-                 WHERE id = ?12",
+                        html = ?8, css = ?9, track = ?10, scene_json = ?11,
+                        server_revision = ?12, base_revision = ?12, synced_at = datetime('now'),
+                        sync_state = 'synced', updated_at = ?13
+                 WHERE id = ?14",
         rusqlite::params![
             data.name,
             data.summary,
@@ -334,6 +346,8 @@ fn apply_upsert_synced(
             data.published_at,
             data.body,
             data.css,
+            data.track,
+            data.scene_json,
             data.revision,
             data.updated_at,
             id
@@ -372,9 +386,10 @@ fn apply_upsert_new(
         };
     tx.execute(
                 "INSERT INTO templates (name, page_w_mm, page_h_mm, orientation, readme, summary,
-                        html, css, published_at, updated_at, server_id, server_revision, base_revision,
+                        html, css, track, scene_json, published_at, updated_at, server_id,
+                        server_revision, base_revision,
                         sync_state, kind, owner_handle, origin, origin_owner, synced_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12, 'synced', ?13, ?14, ?15, ?16, datetime('now'))",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14, 'synced', ?15, ?16, ?17, ?18, datetime('now'))",
                 rusqlite::params![
                     data.name,
                     page_w,
@@ -384,6 +399,8 @@ fn apply_upsert_new(
                     data.summary,
                     data.body,
                     data.css,
+                    data.track,
+                    data.scene_json,
                     data.published_at,
                     data.updated_at,
                     data.id,

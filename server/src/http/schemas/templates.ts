@@ -31,6 +31,8 @@ export const putTemplateRequest = z.object({
     .max(PAGE_MM_MAX)
     .meta({ examples: [152.4] }),
   language: z.literal("html").optional(),
+  track: z.enum(["html", "scene"]).default("html"),
+  scene_json: z.string().optional(),
   body: z.string().meta({ examples: ["<div>{{order.id}}</div>"] }),
   css: z.string().optional(),
   readme: z.string().optional(),
@@ -72,6 +74,7 @@ const templateBase = z.object({
   page_w_mm: z.number(),
   page_h_mm: z.number(),
   language: z.string(),
+  track: z.string(),
   use_count: z.number().int(),
   revision: z.number().int(),
   version_count: z.number().int(),
@@ -83,6 +86,7 @@ export const templateSummarySchema = templateBase;
 
 export const templateSchema = templateBase.extend({
   body: z.string(),
+  scene_json: z.string(),
   css: z.string(),
   readme: z.string(),
 });
@@ -108,6 +112,8 @@ export const versionSummarySchema = z.object({
 });
 
 export const versionSchema = versionSummarySchema.extend({
+  track: z.string(),
+  scene_json: z.string(),
   body: z.string(),
   css: z.string(),
 });

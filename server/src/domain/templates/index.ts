@@ -25,6 +25,7 @@ export {
 export type { ManifestItem, ManifestState } from "./saved.js";
 export { MAX_SAVED_PER_USER } from "./saved.js";
 export {
+  assertSceneJsonCaps,
   BODY_MAX_BYTES,
   CSS_MAX_BYTES,
   PAGE_MM_MAX,

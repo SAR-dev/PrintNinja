@@ -14,6 +14,7 @@ export const CSS_MAX_BYTES = 256 * 1024;
 export const README_MAX_BYTES = 64 * 1024;
 export const VERSION_LABEL_MAX_BYTES = 200;
 export const VERSION_NOTE_MAX_BYTES = 2000;
+export const SCENE_JSON_MAX_BYTES = 512 * 1024;
 export const REVISION_MIN = 1;
 
 export function byteLength(value: string): number {
@@ -87,6 +88,20 @@ export function assertSizeCaps(
       {
         path: over.path,
         message: `${over.path} is ${over.bytes} bytes, limit ${over.cap}`,
+      },
+    ]);
+  }
+}
+
+/** Scene templates carry a pn_scene JSON payload in the same row. The
+ * app validates its shape; the service only caps its size. */
+export function assertSceneJsonCaps(sceneJson: string): void {
+  const bytes = byteLength(sceneJson);
+  if (bytes > SCENE_JSON_MAX_BYTES) {
+    throw new PayloadTooLargeError([
+      {
+        path: "scene_json",
+        message: `scene_json is ${bytes} bytes, limit ${SCENE_JSON_MAX_BYTES}`,
       },
     ]);
   }

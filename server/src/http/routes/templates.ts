@@ -92,6 +92,8 @@ export async function templateRoutes(
           pageWMm: request.body.page_w_mm,
           pageHMm: request.body.page_h_mm,
           language: request.body.language,
+          track: request.body.track,
+          sceneJson: request.body.scene_json,
           body: request.body.body,
           css: request.body.css,
           readme: request.body.readme,

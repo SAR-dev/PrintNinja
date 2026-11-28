@@ -121,6 +121,64 @@ describe("ported B4/P1 characterization", () => {
     expect(updated.json["body"]).toBe("<div>y</div>");
   });
 
+  it("shares and versions scene templates like documents", async () => {
+    const { token } = await register("scene-owner");
+    const id = randomUUID();
+    const v1 = '{"format":"scene","elements":[]}';
+    const v2 = '{"format":"scene","elements":[{"type":"line"}]}';
+
+    const created = await put(
+      id,
+      token,
+      tpl({
+        name: "Shipping label",
+        track: "scene",
+        scene_json: v1,
+        body: "",
+      }),
+    );
+    expect(created.status).toBe(201);
+    expect(created.json).toMatchObject({ track: "scene", scene_json: v1 });
+
+    const updated = await put(
+      id,
+      token,
+      tpl({
+        name: "Shipping label",
+        track: "scene",
+        scene_json: v2,
+        body: "",
+        if_revision: 1,
+      }),
+    );
+    expect(updated.status).toBe(200);
+    expect(updated.json).toMatchObject({ revision: 2, scene_json: v2 });
+
+    const version = await app.inject({
+      method: "GET",
+      url: `/v2/templates/${id}/versions/1`,
+      headers: headers(token),
+    });
+    expect(version.statusCode).toBe(200);
+    expect(version.json()).toMatchObject({
+      track: "scene",
+      scene_json: v1,
+    });
+
+    const restored = await app.inject({
+      method: "POST",
+      url: `/v2/templates/${id}/versions/1/restore`,
+      headers: headers(token),
+      payload: { if_revision: 2 },
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json()).toMatchObject({
+      revision: 3,
+      track: "scene",
+      scene_json: v1,
+    });
+  });
+
   it("refuses other owners and the anonymous", async () => {
     const a = await register("owner1");
     const b = await register("owner2");
