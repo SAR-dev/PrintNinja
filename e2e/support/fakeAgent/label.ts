@@ -964,8 +964,13 @@ export function encodeSymbol(
 ): { quiet: number; modules: number[]; side?: number } | null {
   const v = value.trim();
   if (v === "") return null;
-  if (kind === "qr") {
-    const side = 21;
+  if (
+    kind === "qr" ||
+    kind === "datamatrix" ||
+    kind === "pdf417" ||
+    kind === "aztec"
+  ) {
+    const side = kind === "datamatrix" ? 18 : kind === "pdf417" ? 27 : 21;
     const modules: number[] = [];
     for (let y = 0; y < side; y++) {
       for (let x = 0; x < side; x++) {
@@ -996,6 +1001,8 @@ export function encodeSymbol(
     kind === "ean13" ||
     kind === "upca" ||
     kind === "itf" ||
+    kind === "upce" ||
+    kind === "itf14" ||
     kind === "_" ||
     kind === "code128";
   if (!linear) return null;

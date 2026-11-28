@@ -11,10 +11,11 @@ barcoders = { workspace = true }
 flate2 = { workspace = true }
 pn-scene = { path = "../scene" }
 qrcode = { workspace = true }
+rxing = { version = "0.9", default-features = false, features = ["encoders", "encoding_rs", "oned", "aztec", "datamatrix", "pdf417"] }
 swash = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
 golden-harness = { path = "../../tests/golden" }
 # decode side of the round-trip tests only; never in the renderer
-rxing = { version = "0.9", default-features = false, features = ["decoders", "encoding_rs", "oned", "qrcode"] }
+rxing = { version = "0.9", default-features = false, features = ["decoders", "encoders", "encoding_rs", "oned", "qrcode", "aztec", "datamatrix", "pdf417"] }

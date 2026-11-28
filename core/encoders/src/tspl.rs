@@ -137,6 +137,12 @@ fn emit(el: &Placed, font: &str, ctx: &NativeCtx, out: &mut String) {
                 BarcodeKind::Upca => "UPCA",
                 BarcodeKind::Itf => "ITF",
                 BarcodeKind::Codabar => "CODABAR",
+                // Refused by the shared native check; raster prints these.
+                BarcodeKind::Upce
+                | BarcodeKind::Itf14
+                | BarcodeKind::DataMatrix
+                | BarcodeKind::Pdf417
+                | BarcodeKind::Aztec => return,
             };
             out.push_str(&format!(
                 "BARCODE {x},{y},\"{ty}\",{h},{yn},1,0,0,\"{value}\"\r\n"

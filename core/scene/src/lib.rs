@@ -179,6 +179,11 @@ pub enum BarcodeKind {
     Upca,
     Itf,
     Codabar,
+    Upce,
+    Itf14,
+    DataMatrix,
+    Pdf417,
+    Aztec,
 }
 
 /// One element of a scene.

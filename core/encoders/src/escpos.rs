@@ -112,6 +112,12 @@ fn gs_k_code(kind: &BarcodeKind) -> u8 {
         BarcodeKind::Itf => b'H',
         // No shipped profile lists ESC/POS Codabar natively; it rasterizes.
         BarcodeKind::Codabar => b'I',
+        // Refused by the shared native check; raster prints these.
+        BarcodeKind::Upce
+        | BarcodeKind::Itf14
+        | BarcodeKind::DataMatrix
+        | BarcodeKind::Pdf417
+        | BarcodeKind::Aztec => b'G',
     }
 }
 

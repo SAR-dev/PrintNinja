@@ -428,6 +428,11 @@ export function SelectedElementPanel({
                       <SelectItem value="upca">UPC-A</SelectItem>
                       <SelectItem value="itf">ITF</SelectItem>
                       <SelectItem value="codabar">Codabar</SelectItem>
+                      <SelectItem value="upce">UPC-E</SelectItem>
+                      <SelectItem value="itf14">ITF-14</SelectItem>
+                      <SelectItem value="datamatrix">Data Matrix</SelectItem>
+                      <SelectItem value="pdf417">PDF417</SelectItem>
+                      <SelectItem value="aztec">Aztec</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -63,7 +63,12 @@ export type BarcodeKind =
   | "ean8"
   | "upca"
   | "itf"
-  | "codabar";
+  | "codabar"
+  | "upce"
+  | "itf14"
+  | "datamatrix"
+  | "pdf417"
+  | "aztec";
 
 /**
  * One element of a scene. Top-level elements are placed absolutely on

@@ -128,6 +128,10 @@ function symbolReason(kind: string, value: string): string {
   if (kind === "ean13") return t("scene.sym_ean13");
   if (kind === "ean8") return t("scene.sym_ean8");
   if (kind === "codabar") return t("scene.sym_codabar");
+  if (kind === "upce") return t("scene.sym_upce");
+  if (kind === "itf14") return t("scene.sym_itf14");
+  if (["datamatrix", "pdf417", "aztec"].includes(kind))
+    return t("scene.sym_2d");
   if (kind === "upca") return t("scene.sym_upca");
   if (kind === "itf") return t("scene.sym_itf");
   if (kind === "code128") return t("scene.sym_code128");

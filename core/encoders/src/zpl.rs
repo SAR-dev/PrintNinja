@@ -115,6 +115,12 @@ fn emit(el: &Placed, font: &str, ctx: &NativeCtx, out: &mut String) {
                 BarcodeKind::Upca => format!("^BU{hri},Y,N"),
                 BarcodeKind::Itf => format!("^BII,{h},{hri},N,N"),
                 BarcodeKind::Codabar => format!("^BK{hri},Y,N"),
+                // Refused by the shared native check; raster prints these.
+                BarcodeKind::Upce
+                | BarcodeKind::Itf14
+                | BarcodeKind::DataMatrix
+                | BarcodeKind::Pdf417
+                | BarcodeKind::Aztec => return,
             };
             out.push_str(&format!("^FO{x},{y}^BY{bw}{cmd}^FD{value}^FS\n"));
         }

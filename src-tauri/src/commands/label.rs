@@ -112,6 +112,18 @@ pub fn label_encode_symbol(kind: String, value: String) -> Option<SymbolEncoding
             side: Some(m.side),
         });
     }
+    if ["datamatrix", "pdf417", "aztec"].contains(&kind.as_str()) {
+        let parsed = match kind.as_str() {
+            "datamatrix" => BarcodeKind::DataMatrix,
+            "pdf417" => BarcodeKind::Pdf417,
+            _ => BarcodeKind::Aztec,
+        };
+        return pn_render::matrix_encoding(&parsed, value).map(|m| SymbolEncoding {
+            quiet: pn_render::MATRIX_QUIET_MODULES,
+            modules: m.modules,
+            side: Some(m.side),
+        });
+    }
     let kind = match kind.as_str() {
         "code39" => BarcodeKind::Code39,
         "code93" => BarcodeKind::Code93,
@@ -120,6 +132,8 @@ pub fn label_encode_symbol(kind: String, value: String) -> Option<SymbolEncoding
         "upca" => BarcodeKind::Upca,
         "itf" => BarcodeKind::Itf,
         "codabar" => BarcodeKind::Codabar,
+        "upce" => BarcodeKind::Upce,
+        "itf14" => BarcodeKind::Itf14,
         _ => BarcodeKind::Code128,
     };
     barcode_modules(&kind, value).map(|modules| SymbolEncoding {

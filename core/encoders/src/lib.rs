@@ -161,6 +161,11 @@ fn barcode_machine_name(kind: &BarcodeKind) -> &'static str {
         BarcodeKind::Upca => "UPCA",
         BarcodeKind::Itf => "ITF",
         BarcodeKind::Codabar => "CODABAR",
+        BarcodeKind::Upce => "UPCE",
+        BarcodeKind::Itf14 => "ITF14",
+        BarcodeKind::DataMatrix => "DATAMATRIX",
+        BarcodeKind::Pdf417 => "PDF417",
+        BarcodeKind::Aztec => "AZTEC",
     }
 }
 
@@ -255,6 +260,18 @@ fn check_element(p: &Placed, ctx: &NativeCtx) -> Result<(), String> {
             ..
         } => {
             let machine = barcode_machine_name(kind);
+            if matches!(
+                kind,
+                BarcodeKind::Upce
+                    | BarcodeKind::Itf14
+                    | BarcodeKind::DataMatrix
+                    | BarcodeKind::Pdf417
+                    | BarcodeKind::Aztec
+            ) {
+                return Err(format!(
+                    "the barcode {pos}: {machine} prints as raster — no native command is available"
+                ));
+            }
             if !has_native_barcode(ctx.profile, machine) {
                 return Err(format!(
                     "the barcode {pos}: this profile does not list {machine} among its native barcodes"
