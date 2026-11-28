@@ -30,7 +30,7 @@ import {
 	platformVersionProblems,
 	withVersion,
 } from "./lib/version.mjs";
-import { bumpChangelog } from "./lib/changelog.mjs";
+import { bumpChangelog, trimChangelog } from "./lib/changelog.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FILES = {
@@ -271,7 +271,8 @@ try {
 }
 
 const dateStr = new Date().toISOString().slice(0, 10);
-const changelogNext = bumpChangelog(read(FILES.changelog), version, dateStr);
+const frozenChangelog = bumpChangelog(read(FILES.changelog), version, dateStr);
+const changelogNext = frozenChangelog && trimChangelog(frozenChangelog);
 
 console.log(`=== Release ${crate} ${current} -> ${version} (${tag})${labelSuffix} ===`);
 console.log(Object.values(FILES).map((f) => `  ${f}`).join("\n"));
@@ -279,7 +280,7 @@ if (isDateVersion(version)) {
 	console.log(`  (Windows MSI version ${msiVersion(version)}, Android versionCode ${androidVersionCode(version)}, both in ${FILES.tauri})`);
 }
 if (changelogNext) {
-	console.log(`  (${FILES.changelog}: "## Unreleased" becomes "## [${version}] - ${dateStr}", the rest of the section is frozen)`);
+	console.log(`  (${FILES.changelog}: "## Unreleased" becomes "## [${version}] - ${dateStr}", the section is frozen and only the newest 5 releases are kept)`);
 }
 
 if (dryRun) {

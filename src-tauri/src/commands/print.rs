@@ -14,6 +14,11 @@ use tauri::{AppHandle, Manager, State};
 /// than this many times is rejected instead of building a giant PDF.
 pub const MAX_RECORDS: u32 = 500;
 
+/// The most uploaded-font data a print may add to its document across
+/// all pages (each page embeds its own copy). Kept under the shared
+/// renderer's 10 MB document cap, leaving room for the template itself.
+const FONT_EMBED_BUDGET_BYTES: usize = 8 * 1024 * 1024;
+
 /// Upper bound for copies in one print: the send stage duplicates the
 /// payload bytes per copy for transports without a hardware copies count
 /// (A11 batching), so an unbounded count allocates without bound and can
@@ -490,12 +495,25 @@ fn preview_document(body: &str, css: &str, compiled_css: &str) -> String {
 /// of being hidden; the caller falls back to the raw source locally.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn render_template_preview(
+    db: State<'_, DbState>,
     html: String,
     css: String,
     compiled_css: String,
     records: Vec<serde_json::Value>,
 ) -> Result<Vec<String>, String> {
     let engine = TemplateEngine::new();
+    // Uploaded fonts the template names ride inside the preview document
+    // as data URIs (the preview CSP allows `font-src data:`), so the
+    // Designer and Print previews show the font the print will use.
+    let css = {
+        let named = format!("{html}\n{css}\n{compiled_css}");
+        let faces = db
+            .lock()
+            .ok()
+            .map(|guard| crate::api::peer_consume::font_face_css_for(guard.connection(), &named))
+            .unwrap_or_default();
+        format!("{faces}{css}")
+    };
     let mut pages = Vec::with_capacity(records.len());
     for (idx, record) in records.iter().enumerate() {
         let rendered = engine.render(&html, record).map_err(|e| {
@@ -1439,6 +1457,33 @@ async fn run_stages(
 
     // ── 3. Layout ───────────────────────────────────────────────────
     let t_layout = Instant::now();
+    // Uploaded fonts the template names travel inside every design page
+    // as data URIs, so each renderer (this device's browser, a paired
+    // peer's, the raster path) draws the font the template means rather
+    // than a substitute. They go in the page stylesheet, not the outer
+    // document: the layout nests each design page in its own `srcdoc`
+    // iframe, and an `@font-face` outside it would never reach the text.
+    let css = match db.lock() {
+        Ok(guard) => {
+            let named = format!("{html}\n{css}");
+            let faces = crate::api::peer_consume::font_face_css_for(guard.connection(), &named);
+            // Every design page is its own document, so the faces repeat
+            // once per page. A job whose copies would crowd the shared
+            // renderer's document cap prints in the fallback font instead
+            // of failing after a slow upload — and says so.
+            let pages = html.matches(PAGE_SEPARATOR).count() + 1;
+            if faces.len().saturating_mul(pages) > FONT_EMBED_BUDGET_BYTES {
+                warnings.push(format!(
+                    "The template's custom font was not embedded: {pages} pages would repeat it past the {} MB document limit, so the fallback font is used. Print fewer pages at once to keep the font.",
+                    FONT_EMBED_BUDGET_BYTES / (1024 * 1024)
+                ));
+                css
+            } else {
+                format!("{faces}{css}")
+            }
+        }
+        Err(_) => css,
+    };
     let final_html = apply_layout(
         &html,
         &css,
@@ -1629,17 +1674,6 @@ async fn run_stages(
                     );
                 }
                 let attempted = peer_had_pairs;
-                // A peer may lack this device's uploaded fonts: inline them as data
-                // URIs so B renders what the template means — but only when a peer
-                // will actually render. The local fallback below then sees
-                // byte-identical HTML either way.
-                let peer_html = if candidates.is_empty() {
-                    None
-                } else {
-                    db.lock().ok().map(|guard| {
-                        crate::api::peer_consume::inline_fonts(guard.connection(), &final_html)
-                    })
-                };
                 // PDF-language jobs on Android are still bought from the paired PC,
                 // which is mandatory there (the app opens on the pairing screen until
                 // one is paired): a local attempt could only report "no renderer",
@@ -1665,7 +1699,7 @@ async fn run_stages(
             (false, false) => Ok(None),
             (true, true) => {
                 let job = crate::api::peer_consume::PeerRenderJob {
-                    html: peer_html.as_deref().unwrap_or(&final_html).to_string(),
+                    html: final_html.clone(),
                     paper_w_mm,
                     paper_h_mm,
                     orientation: orientation.clone(),
@@ -1685,7 +1719,7 @@ async fn run_stages(
                     Ok(None)
                 } else {
                     let job = crate::api::peer_consume::PeerRenderJob {
-                        html: peer_html.as_deref().unwrap_or(&final_html).to_string(),
+                        html: final_html.clone(),
                         paper_w_mm,
                         paper_h_mm,
                         orientation: orientation.clone(),

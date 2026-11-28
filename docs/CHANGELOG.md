@@ -39,11 +39,22 @@ Only use the headings you actually have entries for.
 - Add new entries under **Unreleased** below as the work lands.
 - When we release, that section becomes a dated `## [version] - date` heading and a fresh empty **Unreleased** opens on top. `pnpm release` does this for you.
 - Keep the version in sync in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json` (`pnpm version:set`).
-- Once a section is released it is the release notes. Don't go back and rewrite it.
+- Once a section is released it is the release notes. Don't go back and rewrite it; at a release `pnpm release` keeps only the five newest dated sections and removes older ones.
 
 ---
 
 ## Unreleased
+
+### Added
+
+- **Custom fonts on labels.** Pick any font you uploaded in Settings → General for a label's text, and it prints and previews in that font. Use TrueType or OpenType files.
+- **More barcodes on labels.** EAN-8 and Codabar join Code 128/39/93, EAN-13, UPC-A, ITF and QR in the label designer.
+- **Label text wraps.** Long text folds into the next line inside its box instead of being cut off; the preview shows what the printer will draw.
+- **Take your labels with you.** Export a label to a file and import it on another computer, complete with its sample data and notes.
+
+### Fixed
+
+- **Uploaded fonts now show up when you print documents on this PC.** Before, they only appeared when another PC did the printing. Previews show them too.
 
 ## [2026.1127.2] - 2026-11-27
 

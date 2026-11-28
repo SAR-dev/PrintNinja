@@ -5,7 +5,7 @@
 
 These are not bugs. They are things we looked at and decided not to build — or not build yet. If something you expected is missing from this list, [tell us](https://github.com/SAR-dev/PrintNinja/issues).
 
-**Jump to:** [🖨️ Printers](#printers) · [📱 Phone and PC](#phone-and-pc) · [💻 Platforms](#platforms) · [🧪 Real printers](#real-printers)
+**Jump to:** [🖨️ Printers](#printers) · [🏷️ Labels](#labels) · [📱 Phone and PC](#phone-and-pc) · [💻 Platforms](#platforms) · [🧪 Real printers](#real-printers)
 
 <a id="printers"></a>
 
@@ -22,6 +22,14 @@ These are not bugs. They are things we looked at and decided not to build — or
 **🔓 Raw TCP printers talk in the clear.** There is no encryption and no sign-in for these, and the app shows a visible "not encrypted" note for them. Use them only on a network you trust.
 
 **🐌 Bluetooth printing is slow on Windows.** Check the stage timings in **History** first: a large `send_ms` points at the Windows spooler. Things worth trying: turn off "Enable bidirectional support" on the queue's Ports tab, or turn on "Print directly to the printer" on its Advanced tab. Even better, set the printer's COM port as the address — the direct path skips the spooler entirely. (These are standard Windows fixes; we have not tested them with PrintNinja.)
+
+<a id="labels"></a>
+
+## 🏷️ Labels
+
+**🖼️ Some label features print as an image, not as printer commands.** Images, custom fonts, non-ASCII text, italic text, bold text outside ESC/POS, and barcodes or QR codes the printer's profile does not list cannot be expressed in the printer's own language. The app prints them as a raster at the printer's DPI instead — the preview and History say why. Text that is too wide now wraps into its box in that raster path; native text is still one line per element.
+
+**📄 Labels are local, but portable.** They are not published to the community. You can export one to a `.pn-label.json` file (name, scene and notes) and import it on another computer.
 
 <a id="phone-and-pc"></a>
 

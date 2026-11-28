@@ -24,7 +24,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use pn_job::{run, JobResult, JobSpec, TransportFactory};
 use pn_planner::{plan, OutputPath};
 use pn_profiles::{load_dir, merge, parse, Media, Profile, ProfileSet};
-use pn_render::{dots_for_mm, fit_to_head, paint_page, render_pdf, RasterPage, Renderer};
+use pn_render::{
+    dots_for_mm, fit_to_head, paint_page, render_pdf, CustomFont, RasterPage, Renderer,
+};
 use pn_scene::{expand, substitute, ExpandedJob, Page, Records, Template};
 use pn_transport::{SendError, SendPlan, Transport};
 use serde::{Deserialize, Serialize};
@@ -264,14 +266,32 @@ pub fn page_mm(template: &Template) -> (f32, f32) {
     }
 }
 
+/// The fonts a scene template carries, loaded for the renderer. Only
+/// the scene track draws text itself, so a document template's `fonts`
+/// (web formats included) are left to the browser. A font that cannot be
+/// read fails the job by name instead of silently printing in another
+/// face.
+fn scene_fonts(template: &Template) -> Result<Vec<CustomFont>, PipelineError> {
+    if template.format != pn_scene::Format::Scene {
+        return Ok(Vec::new());
+    }
+    CustomFont::from_template(&template.fonts).map_err(|e| PipelineError::Template(e.to_string()))
+}
+
 /// Paint one expanded page at the printer's dpi — the same dots the
 /// raster path ships. A profile without a dpi (page printers) renders
 /// at 300, the document-resolution the spooler and CUPS expect.
-fn render_scene_page(page: &Page, profile: &Profile, w_mm: f32, h_mm: f32) -> RasterPage {
+fn render_scene_page(
+    page: &Page,
+    profile: &Profile,
+    w_mm: f32,
+    h_mm: f32,
+    fonts: &[CustomFont],
+) -> RasterPage {
     let dpi = profile.profile.dpi.map_or(300, u16::into);
     let w = fit_to_head(dots_for_mm(w_mm, dpi), profile.profile.head_width_dots);
     let h = dots_for_mm(h_mm, dpi);
-    let mut renderer = Renderer::new(dpi, w, h);
+    let mut renderer = Renderer::new(dpi, w, h).with_custom_fonts(fonts.to_vec());
     paint_page(page, &mut renderer);
     RasterPage::new(renderer.into_page(), w_mm, h_mm)
 }
@@ -303,6 +323,7 @@ pub fn prepare_units_with_browser(
     let chosen = plan(&job, template, profile).map_err(|e| PipelineError::Media(e.to_string()))?;
     let (w_mm, h_mm) = page_mm(template);
     let copies = copies.max(1);
+    let fonts = scene_fonts(template)?;
 
     // The units for one copy, and how the bytes are declared.
     let once = match chosen.path {
@@ -313,7 +334,7 @@ pub fn prepare_units_with_browser(
             let mut units = Vec::new();
             for output in &job.outputs {
                 for page in &output.pages {
-                    let rendered = render_scene_page(page, profile, w_mm, h_mm);
+                    let rendered = render_scene_page(page, profile, w_mm, h_mm, &fonts);
                     units.push(
                         pn_encoders::raster(std::slice::from_ref(&rendered), profile)
                             .map_err(|e| PipelineError::Encode(e.to_string()))?,
@@ -327,7 +348,7 @@ pub fn prepare_units_with_browser(
                 .outputs
                 .iter()
                 .flat_map(|o| o.pages.iter())
-                .map(|p| render_scene_page(p, profile, w_mm, h_mm))
+                .map(|p| render_scene_page(p, profile, w_mm, h_mm, &fonts))
                 .collect();
             vec![render_pdf(&pages)]
         }
@@ -366,7 +387,7 @@ pub fn prepare_units_with_browser(
             .iter()
             .flat_map(|o| o.pages.iter())
             .map(|p| {
-                let rendered = render_scene_page(p, profile, w_mm, h_mm);
+                let rendered = render_scene_page(p, profile, w_mm, h_mm, &fonts);
                 Preview::Bitmap {
                     width: rendered.bitmap.width(),
                     height: rendered.bitmap.height(),
@@ -1127,6 +1148,76 @@ media = ["page"]
     }
 
     /// Copies repeat the units.
+    /// A label template whose text names `font`, with `fonts` embedded.
+    fn font_template(font: &str, fonts: Vec<pn_scene::TemplateFont>) -> Template {
+        let mut t = label_template(false);
+        if let Element::Text { style, .. } = &mut t.elements[0] {
+            style.font = Some(font.into());
+        }
+        t.fonts = fonts;
+        t
+    }
+
+    fn brand_font_embed() -> pn_scene::TemplateFont {
+        use base64::Engine as _;
+        let bytes = include_bytes!("../../core/render/assets/fonts/NotoSansJP.ttf");
+        pn_scene::TemplateFont {
+            family: "Brand Sans".into(),
+            format: "truetype".into(),
+            data: base64::engine::general_purpose::STANDARD.encode(bytes),
+        }
+    }
+
+    /// A text element naming an embedded font goes down the raster path
+    /// (native text has only the printer's fonts) and prints in that
+    /// font: the bytes differ from the same label with the font missing.
+    #[test]
+    fn an_embedded_font_changes_what_the_label_prints() {
+        let with = prepare_units(
+            &font_template("Brand Sans", vec![brand_font_embed()]),
+            &zpl_profile(),
+            &two_records(),
+            1,
+        )
+        .expect("the font loads");
+        assert_eq!(with.report.path, "raster");
+        assert!(with
+            .report
+            .fallback
+            .as_deref()
+            .unwrap()
+            .contains("Brand Sans"));
+
+        let without = prepare_units(
+            &font_template("Brand Sans", vec![]),
+            &zpl_profile(),
+            &two_records(),
+            1,
+        )
+        .expect("an unloaded family falls back to the default font");
+        assert_ne!(
+            with.spec.units, without.spec.units,
+            "the custom font drew different dots"
+        );
+    }
+
+    /// An embedded font the renderer cannot read fails the job by name
+    /// instead of quietly printing in another face.
+    #[test]
+    fn an_unreadable_embedded_font_fails_the_job_by_name() {
+        let mut junk = brand_font_embed();
+        junk.data = "bm90IGEgZm9udA==".into(); // "not a font"
+        let Err(err) = prepare_units(
+            &font_template("Brand Sans", vec![junk]),
+            &zpl_profile(),
+            &two_records(),
+            1,
+        ) else {
+            panic!("junk font bytes must be refused");
+        };
+        assert!(err.to_string().contains("Brand Sans"), "{err}");
+    }
+
     #[test]
     fn copies_repeat_the_units() {
         let units = prepare_units(&label_template(false), &zpl_profile(), &two_records(), 3)

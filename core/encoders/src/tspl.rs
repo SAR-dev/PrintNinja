@@ -133,8 +133,10 @@ fn emit(el: &Placed, font: &str, ctx: &NativeCtx, out: &mut String) {
                 BarcodeKind::Code39 => "39",
                 BarcodeKind::Code93 => "93",
                 BarcodeKind::Ean13 => "EAN13",
+                BarcodeKind::Ean8 => "EAN8",
                 BarcodeKind::Upca => "UPCA",
                 BarcodeKind::Itf => "ITF",
+                BarcodeKind::Codabar => "CODABAR",
             };
             out.push_str(&format!(
                 "BARCODE {x},{y},\"{ty}\",{h},{yn},1,0,0,\"{value}\"\r\n"

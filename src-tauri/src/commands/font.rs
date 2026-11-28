@@ -190,6 +190,61 @@ pub fn fonts_dir_from_settings(conn: &Connection) -> Option<PathBuf> {
     .map(PathBuf::from)
 }
 
+/// The uploaded fonts a scene template can draw with, as the
+/// [`pn_scene::TemplateFont`]s its renderer loads: for each family in
+/// `families` (case-insensitive) that is uploaded here as TrueType or
+/// OpenType and whose file is on disk, one entry carrying the bytes.
+/// WOFF/WOFF2 uploads are web-only and are skipped — the renderer cannot
+/// read them, so that text keeps drawing in the default font. A family
+/// the template already embeds itself is the caller's to skip. The
+/// first upload of a family wins when two share a name.
+pub fn scene_fonts_for(conn: &Connection, families: &[String]) -> Vec<pn_scene::TemplateFont> {
+    use base64::Engine as _;
+    if families.is_empty() {
+        return Vec::new();
+    }
+    let Some(fonts_dir) = fonts_dir_from_settings(conn) else {
+        return Vec::new();
+    };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT family, file_path, format FROM fonts
+          WHERE sync_state <> 'deleted_pending' AND file_path <> ''
+          ORDER BY id",
+    ) else {
+        return Vec::new();
+    };
+    let rows: Vec<(String, String, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map(|rows| rows.filter_map(Result::ok).collect())
+        .unwrap_or_default();
+
+    let mut out: Vec<pn_scene::TemplateFont> = Vec::new();
+    for wanted in families {
+        let Some((family, file, format)) = rows.iter().find(|(f, _, fmt)| {
+            f.trim().eq_ignore_ascii_case(wanted.trim())
+                && matches!(fmt.to_ascii_lowercase().as_str(), "ttf" | "otf")
+        }) else {
+            continue;
+        };
+        let path = resolve_font_path(&fonts_dir, file);
+        match std::fs::read(&path) {
+            Ok(bytes) => out.push(pn_scene::TemplateFont {
+                family: family.trim().to_string(),
+                format: if format.eq_ignore_ascii_case("otf") {
+                    "opentype".into()
+                } else {
+                    "truetype".into()
+                },
+                data: base64::engine::general_purpose::STANDARD.encode(bytes),
+            }),
+            Err(e) => {
+                tracing::warn!(family = %family, error = %e, "uploaded font unreadable; label text uses the default font")
+            }
+        }
+    }
+    out
+}
+
 /// The device-local download state key for one font.
 pub fn font_state_key(server_id: &str) -> String {
     format!("font-state-{server_id}")
@@ -841,4 +896,82 @@ pub async fn cache_download_pending_fonts(
 /// Test seam: deterministic file storage without Tauri state.
 pub fn fonts_dir_for_tests() -> PathBuf {
     std::env::temp_dir().join(format!("pn-fonts-{}", Uuid::new_v4()))
+}
+
+#[cfg(test)]
+mod scene_font_tests {
+    use super::*;
+    use base64::Engine as _;
+
+    fn db_with_fonts(rows: &[(&str, &str, &str, &str)]) -> (Connection, PathBuf) {
+        let conn = Connection::open_in_memory().expect("mem db");
+        conn.execute_batch(
+            "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT);
+             CREATE TABLE fonts (id INTEGER PRIMARY KEY, family TEXT, style TEXT,
+                 weight TEXT, file_path TEXT, format TEXT,
+                 sync_state TEXT DEFAULT 'synced');",
+        )
+        .expect("tables");
+        let dir = fonts_dir_for_tests();
+        std::fs::create_dir_all(&dir).expect("fonts dir");
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('fonts_dir', ?1)",
+            [dir.to_string_lossy().to_string()],
+        )
+        .expect("fonts_dir row");
+        for (family, file, format, state) in rows {
+            if *file != "missing.ttf" {
+                std::fs::write(dir.join(file), format!("BYTES-OF-{file}")).expect("font file");
+            }
+            conn.execute(
+                "INSERT INTO fonts (family, style, weight, file_path, format, sync_state)
+                 VALUES (?1, 'normal', '400', ?2, ?3, ?4)",
+                [family, file, format, state],
+            )
+            .expect("font row");
+        }
+        (conn, dir)
+    }
+
+    fn wanted(names: &[&str]) -> Vec<String> {
+        names.iter().map(|n| n.to_string()).collect()
+    }
+
+    /// Only the named families that are uploaded as TrueType/OpenType and
+    /// on disk come back, matched without regard to case, carrying the
+    /// file's bytes.
+    #[test]
+    fn scene_fonts_cover_named_ttf_and_otf_families_only() {
+        let (conn, dir) = db_with_fonts(&[
+            ("Brand Sans", "brand.ttf", "ttf", "synced"),
+            ("Display", "display.otf", "otf", "synced"),
+            ("Webby", "webby.woff2", "woff2", "synced"),
+            ("Gone", "missing.ttf", "ttf", "synced"),
+            ("Deleted", "deleted.ttf", "ttf", "deleted_pending"),
+            ("Unnamed", "unnamed.ttf", "ttf", "synced"),
+        ]);
+        let got = scene_fonts_for(
+            &conn,
+            &wanted(&["brand sans", "DISPLAY", "webby", "gone", "deleted", "nope"]),
+        );
+        let families: Vec<&str> = got.iter().map(|f| f.family.as_str()).collect();
+        assert_eq!(families, ["Brand Sans", "Display"]);
+        assert_eq!(got[0].format, "truetype");
+        assert_eq!(got[1].format, "opentype");
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&got[0].data)
+            .expect("base64");
+        assert_eq!(bytes, b"BYTES-OF-brand.ttf");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Nothing named, or no fonts dir recorded: nothing attached.
+    #[test]
+    fn scene_fonts_are_empty_without_names_or_a_fonts_dir() {
+        let (conn, dir) = db_with_fonts(&[("Brand Sans", "brand.ttf", "ttf", "synced")]);
+        assert!(scene_fonts_for(&conn, &[]).is_empty());
+        conn.execute("DELETE FROM settings", []).expect("clear");
+        assert!(scene_fonts_for(&conn, &wanted(&["Brand Sans"])).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -111,8 +111,10 @@ fn emit(el: &Placed, font: &str, ctx: &NativeCtx, out: &mut String) {
                 BarcodeKind::Code39 => format!("^B3N,{h},N,N"),
                 BarcodeKind::Code93 => format!("^B39N,{h},N,N"),
                 BarcodeKind::Ean13 => format!("^BE{hri},Y,N"),
+                BarcodeKind::Ean8 => format!("^B8{hri},Y,N"),
                 BarcodeKind::Upca => format!("^BU{hri},Y,N"),
                 BarcodeKind::Itf => format!("^BII,{h},{hri},N,N"),
+                BarcodeKind::Codabar => format!("^BK{hri},Y,N"),
             };
             out.push_str(&format!("^FO{x},{y}^BY{bw}{cmd}^FD{value}^FS\n"));
         }

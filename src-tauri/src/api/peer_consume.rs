@@ -354,23 +354,22 @@ fn family_face_css(
     map
 }
 
-/// Inline uploaded fonts as `@font-face` data URIs so a peer renders
-/// what the template means. A provider may lack this device's fonts
-/// entirely (different OS, nothing installed) — without inlining it
-/// would silently substitute and reflow the label. Only families named
-/// in the document are embedded; unreadable or oversize files are
-/// skipped with a warning, never fatal. Peer-only: the local path
-/// keeps resolving fonts exactly as before.
-pub fn inline_fonts(conn: &rusqlite::Connection, html: &str) -> String {
+/// The `@font-face` rules for every uploaded family a document names:
+/// base64 data URIs, so whatever renders the document carries its own
+/// fonts and nothing has to be installed on the machine. Only families
+/// whose name appears in `text` (any case) are embedded; unreadable or
+/// oversize files are skipped with a warning, never fatal. Empty when
+/// there is no fonts dir, no upload, or no family is named.
+pub fn font_face_css_for(conn: &rusqlite::Connection, text: &str) -> String {
     let Some(fonts_dir) = crate::commands::font::fonts_dir_from_settings(conn) else {
-        return html.into();
+        return String::new();
     };
     let mut stmt = match conn.prepare(
         "SELECT family, style, weight, file_path, format FROM fonts
           WHERE sync_state <> 'deleted_pending'",
     ) {
         Ok(s) => s,
-        Err(_) => return html.into(),
+        Err(_) => return String::new(),
     };
     let rows: Vec<(String, String, String, String, String)> = stmt
         .query_map([], |r| {
@@ -385,13 +384,13 @@ pub fn inline_fonts(conn: &rusqlite::Connection, html: &str) -> String {
         .map(|rows| rows.filter_map(Result::ok).collect())
         .unwrap_or_default();
     if rows.is_empty() {
-        return html.into();
+        return String::new();
     }
     let faces = family_face_css(&fonts_dir, &rows);
     if faces.is_empty() {
-        return html.into();
+        return String::new();
     }
-    let haystack = html.to_lowercase();
+    let haystack = text.to_lowercase();
     let mut css = String::new();
     for (family, face) in &faces {
         if family.trim().is_empty() || !haystack.contains(family.as_str()) {
@@ -399,6 +398,16 @@ pub fn inline_fonts(conn: &rusqlite::Connection, html: &str) -> String {
         }
         css.push_str(face);
     }
+    css
+}
+
+/// Inline uploaded fonts into a document as `@font-face` data URIs, so
+/// the browser that renders it (this device's, a peer's, the preview's)
+/// draws what the template means instead of silently substituting and
+/// reflowing the label. See [`font_face_css_for`]. Call it once per
+/// document: a second call would embed the same faces again.
+pub fn inline_fonts(conn: &rusqlite::Connection, html: &str) -> String {
+    let css = font_face_css_for(conn, html);
     if css.is_empty() {
         return html.into();
     }

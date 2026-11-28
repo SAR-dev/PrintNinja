@@ -27,7 +27,7 @@ pub use barcode::{
 };
 pub use bitmap::Bitmap;
 pub use draw::Renderer;
-pub use fonts::FontSet;
+pub use fonts::{CustomFont, FontError, FontSet};
 pub use geometry::{dots_for_mm, fit_to_head};
 pub use paint::paint_page;
 pub use pdf::{render_pdf, RasterPage};

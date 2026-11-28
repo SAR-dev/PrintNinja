@@ -8,6 +8,7 @@
 //! keeps its scene-specified size.
 
 use crate::bitmap::Bitmap;
+use crate::fonts::CustomFont;
 use crate::geometry::signed_dots;
 
 /// Draws onto a fixed-size page of 1-bit dots.
@@ -16,6 +17,9 @@ pub struct Renderer {
     // crate-visible: the text module stamps the page the same way.
     pub(crate) dpi: u32,
     pub(crate) page: Bitmap,
+    /// Fonts the template brought along; text asking for one of their
+    /// families draws with it (see [`CustomFont`]).
+    pub(crate) custom_fonts: Vec<CustomFont>,
 }
 
 impl Renderer {
@@ -27,7 +31,16 @@ impl Renderer {
         Self {
             dpi,
             page: Bitmap::new(width_dots, height_dots),
+            custom_fonts: Vec::new(),
         }
+    }
+
+    /// The same renderer, drawing text with `fonts` as well as the
+    /// embedded ones. A family not among them still falls back to the
+    /// embedded default.
+    pub fn with_custom_fonts(mut self, fonts: Vec<CustomFont>) -> Self {
+        self.custom_fonts = fonts;
+        self
     }
 
     pub fn dpi(&self) -> u32 {
