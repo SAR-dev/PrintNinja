@@ -116,8 +116,10 @@ pub fn label_encode_symbol(kind: String, value: String) -> Option<SymbolEncoding
         "code39" => BarcodeKind::Code39,
         "code93" => BarcodeKind::Code93,
         "ean13" => BarcodeKind::Ean13,
+        "ean8" => BarcodeKind::Ean8,
         "upca" => BarcodeKind::Upca,
         "itf" => BarcodeKind::Itf,
+        "codabar" => BarcodeKind::Codabar,
         _ => BarcodeKind::Code128,
     };
     barcode_modules(&kind, value).map(|modules| SymbolEncoding {

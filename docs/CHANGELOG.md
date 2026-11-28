@@ -48,6 +48,9 @@ Only use the headings you actually have entries for.
 ### Added
 
 - **Custom fonts on labels.** Pick any font you uploaded in Settings → General for a label's text, and it prints and previews in that font. Use TrueType or OpenType files.
+- **More barcodes on labels.** EAN-8 and Codabar join Code 128/39/93, EAN-13, UPC-A, ITF and QR in the label designer.
+- **Label text wraps.** Long text folds into the next line inside its box instead of being cut off; the preview shows what the printer will draw.
+- **Take your labels with you.** Export a label to a file and import it on another computer, complete with its sample data and notes.
 
 ### Fixed
 

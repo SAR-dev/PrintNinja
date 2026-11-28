@@ -157,8 +157,10 @@ fn barcode_machine_name(kind: &BarcodeKind) -> &'static str {
         BarcodeKind::Code39 => "CODE39",
         BarcodeKind::Code93 => "CODE93",
         BarcodeKind::Ean13 => "EAN13",
+        BarcodeKind::Ean8 => "EAN8",
         BarcodeKind::Upca => "UPCA",
         BarcodeKind::Itf => "ITF",
+        BarcodeKind::Codabar => "CODABAR",
     }
 }
 

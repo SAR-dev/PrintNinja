@@ -60,8 +60,10 @@ export type BarcodeKind =
   | "code39"
   | "code93"
   | "ean13"
+  | "ean8"
   | "upca"
-  | "itf";
+  | "itf"
+  | "codabar";
 
 /**
  * One element of a scene. Top-level elements are placed absolutely on

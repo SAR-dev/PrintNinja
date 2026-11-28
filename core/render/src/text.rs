@@ -93,7 +93,13 @@ impl Renderer {
             0.0
         };
 
-        for (line_i, logical) in content.split('\n').enumerate() {
+        // Greedy wrap to the box width. Explicit newlines still start a
+        // new line; a line too wide for the box folds into several.
+        let lines: Vec<String> = content
+            .split('\n')
+            .flat_map(|logical| Self::wrap_line(logical, primary, &fallbacks, scale, box_w as f64))
+            .collect();
+        for (line_i, logical) in lines.iter().enumerate() {
             let line_y = box_y + line_rows * line_i as i64;
             if line_y >= box_y + box_h {
                 break; // the box is full
@@ -156,6 +162,59 @@ impl Renderer {
                 }
             }
         }
+    }
+
+    /// Fold one logical line into lines that fit `max_width` dots.
+    /// Words are kept whole where possible; a single word longer than
+    /// the box is split by character so nothing is silently clipped.
+    fn wrap_line<'f>(
+        line: &str,
+        primary: &'f Font,
+        fallbacks: &[&'f Font],
+        scale: f64,
+        max_width: f64,
+    ) -> Vec<String> {
+        if line.is_empty() {
+            return vec![String::new()];
+        }
+        let width = |text: &str| -> f64 {
+            Self::shape_line(text, primary, fallbacks, scale)
+                .iter()
+                .map(|g| g.x + g.advance)
+                .sum()
+        };
+        let mut out = Vec::new();
+        let mut current = String::new();
+        for word in line.split_inclusive(|c: char| c.is_whitespace()) {
+            let candidate = format!("{current}{word}");
+            if current.is_empty() || width(&candidate) <= max_width {
+                current = candidate;
+                continue;
+            }
+            out.push(current.trim_end().to_string());
+            current = word.trim_start().to_string();
+            // A single word wider than the box: break it by character.
+            if width(&current) > max_width {
+                let mut piece = String::new();
+                for ch in current.chars() {
+                    let next = format!("{piece}{ch}");
+                    if !piece.is_empty() && width(&next) > max_width {
+                        out.push(piece);
+                        piece = ch.to_string();
+                    } else {
+                        piece = next;
+                    }
+                }
+                current = piece;
+            }
+        }
+        if !current.trim().is_empty() {
+            out.push(current.trim_end().to_string());
+        }
+        if out.is_empty() {
+            out.push(String::new());
+        }
+        out
     }
 
     /// Shape one line: the primary font lays it out (advances,
@@ -567,5 +626,27 @@ mod tests {
         r.draw_text(10.0, 10.0, 10.0, 0.0, "x", &style(3.0, Align::Left));
         r.draw_text(10.0, 10.0, 10.0, 5.0, "", &style(3.0, Align::Left));
         assert_eq!(r.page().to_bytes(), &[0; 100 * 13]);
+    }
+
+    /// A line wider than its box folds instead of being clipped.
+    #[test]
+    fn long_text_wraps_into_several_rows() {
+        let mut r = Renderer::new(203, 200, 150);
+        r.draw_text(
+            5.0,
+            5.0,
+            20.0,
+            12.0,
+            "AAAA AAAA AAAA AAAA",
+            &style(3.0, Align::Left),
+        );
+        let p = r.page();
+        let rows = (0..p.height())
+            .filter(|y| (0..p.width()).any(|x| p.get(x, *y)))
+            .count();
+        assert!(
+            rows > 30,
+            "wrapped text used {rows} rows, expected several lines"
+        );
     }
 }

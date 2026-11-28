@@ -424,8 +424,10 @@ export function SelectedElementPanel({
                       <SelectItem value="code39">Code 39</SelectItem>
                       <SelectItem value="code93">Code 93</SelectItem>
                       <SelectItem value="ean13">EAN-13</SelectItem>
+                      <SelectItem value="ean8">EAN-8</SelectItem>
                       <SelectItem value="upca">UPC-A</SelectItem>
                       <SelectItem value="itf">ITF</SelectItem>
+                      <SelectItem value="codabar">Codabar</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

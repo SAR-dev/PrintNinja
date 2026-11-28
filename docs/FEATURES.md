@@ -18,7 +18,8 @@ For thermal receipt and label printers:
 - Undo, redo, nudge with the arrow keys, and copy and paste
 - A model picker for your printer, with eleven models to start (Zebra, Brother, Citizen, Epson, TSC, Toshiba and friends), each with its own paper size and resolution
 - The preview goes through the same print path the printer uses, at the printer's own resolution, so the preview and the paper match
-- Labels live on this device and are not shared to the community
+- Labels live on this device and are not shared to the community, but you can export one to a file and import it on another computer
+- Label barcodes include Code 128/39/93, EAN-13, EAN-8, UPC-A, ITF, Codabar and QR; long text wraps inside its box
 
 ## 🖨️ Print
 

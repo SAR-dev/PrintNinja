@@ -105,10 +105,13 @@ fn gs_k_code(kind: &BarcodeKind) -> u8 {
     match kind {
         BarcodeKind::Upca => b'A',  // UPC-A
         BarcodeKind::Ean13 => b'C', // EAN-13
+        BarcodeKind::Ean8 => b'D',  // EAN-8
         BarcodeKind::Code39 => b'E',
         BarcodeKind::Code93 => b'F',
         BarcodeKind::Code128 => b'G',
         BarcodeKind::Itf => b'H',
+        // No shipped profile lists ESC/POS Codabar natively; it rasterizes.
+        BarcodeKind::Codabar => b'I',
     }
 }
 

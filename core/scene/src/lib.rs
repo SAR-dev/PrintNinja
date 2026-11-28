@@ -175,8 +175,10 @@ pub enum BarcodeKind {
     Code39,
     Code93,
     Ean13,
+    Ean8,
     Upca,
     Itf,
+    Codabar,
 }
 
 /// One element of a scene.

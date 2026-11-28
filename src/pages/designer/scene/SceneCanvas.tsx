@@ -126,6 +126,8 @@ function symbolReason(kind: string, value: string): string {
   const { t } = useTranslation();
   if (value.trim() === "") return t("scene.sym_empty");
   if (kind === "ean13") return t("scene.sym_ean13");
+  if (kind === "ean8") return t("scene.sym_ean8");
+  if (kind === "codabar") return t("scene.sym_codabar");
   if (kind === "upca") return t("scene.sym_upca");
   if (kind === "itf") return t("scene.sym_itf");
   if (kind === "code128") return t("scene.sym_code128");
@@ -368,6 +370,40 @@ interface GlyphArgs {
   dpi: number | null;
 }
 
+/** Offscreen measurer for canvas-side text wrapping. */
+let measureContext: CanvasRenderingContext2D | null | undefined;
+
+/** Fold a label text element into lines that fit its box, as the Rust raster renderer does. */
+function wrapText(
+  text: string,
+  boxPx: number,
+  fontPx: number,
+  family: string,
+): string[] {
+  if (typeof document === "undefined") return text.split("\n");
+  if (measureContext === undefined) {
+    measureContext = document.createElement("canvas").getContext("2d");
+  }
+  const ctx = measureContext;
+  if (!ctx || boxPx <= 0) return text.split("\n");
+  ctx.font = `${fontPx}px ${family || "sans-serif"}`;
+  const lines: string[] = [];
+  for (const paragraph of text.split("\n")) {
+    let line = "";
+    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (line && ctx.measureText(candidate).width > boxPx) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = candidate;
+      }
+    }
+    lines.push(line);
+  }
+  return lines.length > 0 ? lines : [""];
+}
+
 /** The static drawing of one element (no selection chrome). */
 function glyph(el: Element, { scale, record, showSample, dpi }: GlyphArgs) {
   const { t } = useTranslation();
@@ -378,22 +414,38 @@ function glyph(el: Element, { scale, record, showSample, dpi }: GlyphArgs) {
       const anchor =
         align === "center" ? "middle" : align === "right" ? "end" : "start";
       const tx = x + (align === "center" ? w / 2 : align === "right" ? w : 0);
+      const family = el.style.font?.trim()
+        ? cssFontFamily(el.style.font.trim())
+        : "sans-serif";
+      const content = showSample
+        ? substituteBindings(el.content, record)
+        : el.content;
+      const lines = wrapText(
+        content,
+        w * scale,
+        el.style.size_mm * scale,
+        family,
+      );
       return (
         <text
           x={tx * scale}
           y={(el.at.y_mm + el.style.size_mm) * scale}
           textAnchor={anchor}
           fontSize={el.style.size_mm * scale}
-          fontFamily={
-            el.style.font?.trim()
-              ? cssFontFamily(el.style.font.trim())
-              : undefined
-          }
+          fontFamily={family}
           fontWeight={el.style.bold ? 700 : 400}
           fontStyle={el.style.italic ? "italic" : undefined}
           fill={INK}
         >
-          {showSample ? substituteBindings(el.content, record) : el.content}
+          {lines.map((line, i) => (
+            <tspan
+              key={i}
+              x={tx * scale}
+              dy={i === 0 ? 0 : el.style.size_mm * scale * 1.1}
+            >
+              {line}
+            </tspan>
+          ))}
         </text>
       );
     }

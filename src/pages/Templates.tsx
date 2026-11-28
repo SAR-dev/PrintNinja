@@ -1,5 +1,5 @@
 import { describeError } from "@/lib/errors";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
@@ -8,6 +8,7 @@ import {
   ChevronDown,
   CloudUpload,
   CopyPlus,
+  Download,
   Eye,
   FileText,
   MoreHorizontal,
@@ -17,6 +18,7 @@ import {
   RefreshCw,
   Sticker,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { InfoNotice } from "@/components/InfoNotice";
@@ -234,6 +236,72 @@ export function TemplatesPage() {
       setConflicts([]);
     }
   }, []);
+
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
+  /** Download a label template as a portable JSON file. */
+  const exportLabel = (tpl: TemplateRow) => {
+    if (!tpl.scene_json) return;
+    const payload = {
+      kind: "printninja-label",
+      version: 1,
+      name: tpl.name,
+      scene: tpl.scene_json,
+      readme: tpl.readme ?? "",
+    };
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${tpl.name.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-|-$/g, "") || "label"}.pn-label.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /** Create a local label template from a portable JSON file. */
+  const importLabel = async (file: File) => {
+    setImporting(true);
+    try {
+      const data = JSON.parse(await file.text()) as {
+        kind?: unknown;
+        name?: unknown;
+        scene?: unknown;
+        readme?: unknown;
+      };
+      if (
+        data.kind !== "printninja-label" ||
+        typeof data.name !== "string" ||
+        typeof data.scene !== "string"
+      ) {
+        throw new Error(t("templates.label_file_invalid"));
+      }
+      const scene = JSON.parse(data.scene) as {
+        media?: unknown;
+        elements?: unknown;
+      };
+      if (!scene.media || !Array.isArray(scene.elements)) {
+        throw new Error(t("templates.label_file_invalid"));
+      }
+      const created = await agent("label_save_template", {
+        req: { name: data.name, scene: data.scene, id: null },
+      });
+      if (typeof data.readme === "string" && data.readme) {
+        await agent("update_readme", {
+          req: { id: created.id, readme: data.readme },
+        });
+      }
+      notifySuccess(t("templates.toast_label_imported", { name: data.name }));
+      await loadMine();
+    } catch (e) {
+      notifyError(describeError(e));
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const loadCommunity = useCallback(async () => {
     const url = await share.getServiceUrl();
@@ -628,6 +696,12 @@ export function TemplatesPage() {
                 <Printer className="h-4 w-4" aria-hidden="true" />
                 {t("templates.action_print")}
               </DropdownMenuItem>
+              {tpl.track === "scene" && (
+                <DropdownMenuItem onSelect={() => exportLabel(tpl)}>
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                  {t("templates.action_export_label", { name: tpl.name })}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 disabled={syncing != null}
                 onSelect={() => setDeleteTarget(tpl)}
@@ -833,6 +907,12 @@ export function TemplatesPage() {
                       </DropdownMenuItem>
                     </>
                   )}
+                  {tpl.track === "scene" && (
+                    <DropdownMenuItem onSelect={() => exportLabel(tpl)}>
+                      <Download className="h-4 w-4" aria-hidden="true" />
+                      {t("templates.action_export_label", { name: tpl.name })}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     disabled={syncing != null}
                     onSelect={() => setDeleteTarget(tpl)}
@@ -945,6 +1025,26 @@ export function TemplatesPage() {
   return (
     <div className="space-y-4">
       <PageHeader title={t("nav.templates")} description={t("pages.templates")}>
+        <input
+          ref={importFileRef}
+          type="file"
+          accept=".json,application/json"
+          aria-label={t("templates.import_label")}
+          className="hidden"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) await importLabel(file);
+          }}
+        />
+        <Button
+          variant="outline"
+          disabled={importing}
+          onClick={() => importFileRef.current?.click()}
+        >
+          <Upload className="h-4 w-4" aria-hidden="true" />
+          {t("templates.import_label")}
+        </Button>
         {/* New templates are created in the Designer (PLAN §6, D4); the
             dropdown picks the track and deep-links to its create dialog. */}
         {!isPhone && (

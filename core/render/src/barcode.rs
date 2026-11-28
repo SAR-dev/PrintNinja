@@ -7,7 +7,10 @@
 //! match, an odd ITF length, non-ASCII Code 128 — draws nothing, the
 //! same as an empty value: an unprintable field must not fail the job.
 
-use barcoders::sym::{code128::Code128, code39::Code39, code93::Code93, ean13::EAN13, tf::TF};
+use barcoders::sym::{
+    codabar::Codabar, code128::Code128, code39::Code39, code93::Code93, ean13::EAN13, ean8::EAN8,
+    tf::TF,
+};
 use pn_scene::{Align, BarcodeKind, TextStyle};
 use qrcode::{Color, EcLevel, QrCode};
 
@@ -198,6 +201,9 @@ pub fn barcode_modules(kind: &BarcodeKind, value: &str) -> Option<Vec<u8>> {
         BarcodeKind::Ean13 if all_digits && value.len() == 13 => {
             EAN13::new(value).ok().map(|b| b.encode())
         }
+        BarcodeKind::Ean8 if all_digits && (value.len() == 7 || value.len() == 8) => {
+            EAN8::new(value).ok().map(|b| b.encode())
+        }
         // UPC-A is EAN-13 with a leading zero.
         BarcodeKind::Upca if all_digits && value.len() == 12 => {
             EAN13::new(format!("0{value}")).ok().map(|b| b.encode())
@@ -205,6 +211,7 @@ pub fn barcode_modules(kind: &BarcodeKind, value: &str) -> Option<Vec<u8>> {
         BarcodeKind::Itf if all_digits && value.len().is_multiple_of(2) => {
             TF::interleaved(value).ok().map(|b| b.encode())
         }
+        BarcodeKind::Codabar => Codabar::new(value.to_uppercase()).ok().map(|b| b.encode()),
         _ => None,
     }
 }
@@ -225,8 +232,10 @@ mod tests {
             "code39" => BarcodeKind::Code39,
             "code93" => BarcodeKind::Code93,
             "ean13" => BarcodeKind::Ean13,
+            "ean8" => BarcodeKind::Ean8,
             "upca" => BarcodeKind::Upca,
             "itf" => BarcodeKind::Itf,
+            "codabar" => BarcodeKind::Codabar,
             other => panic!("no such kind: {other}"),
         }
     }
@@ -350,6 +359,10 @@ mod tests {
         assert!(!inks("upca", "03600029145")); // 11 digits
         assert!(inks("itf", "1234567890"));
         assert!(!inks("itf", "123456789")); // odd count
+        assert!(inks("ean8", "96385074"));
+        assert!(!inks("ean8", "96385075")); // check digit off by one
+        assert!(inks("codabar", "A1234B"));
+        assert!(!inks("codabar", "E1234A")); // invalid start character
     }
 
     /// The module-count helpers agree with the renderer's rules: a
