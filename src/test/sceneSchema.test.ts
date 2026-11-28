@@ -39,6 +39,13 @@ describe("bindingNames", () => {
     expect(bindingNames("{{b}} then {{a}} then {{b}}")).toEqual(["b", "a"]);
   });
 
+  it("returns the data field of a helper call, not the helper name", () => {
+    expect(bindingNames('{{upper name}} {{padLeft n 5 "0"}}')).toEqual([
+      "name",
+      "n",
+    ]);
+  });
+
   it("is empty for a string without bindings", () => {
     expect(bindingNames("plain text")).toEqual([]);
   });

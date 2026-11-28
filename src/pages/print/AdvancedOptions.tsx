@@ -73,32 +73,28 @@ export function AdvancedOptions({
             </SelectContent>
           </Select>
         </div>
-        {!labelOnly && (
-          <div className={field}>
-            <Label htmlFor="print-fit">{t("print.fit_mode")}</Label>
-            <Select
-              value={store.fitMode}
-              onValueChange={(v) =>
-                store.setFitMode(
-                  v as "actual" | "fit-width" | "fit-page" | "shrink" | "fill",
-                )
-              }
-            >
-              <SelectTrigger id="print-fit" aria-label={t("print.fit_mode")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="actual">{t("print.fit_actual")}</SelectItem>
-                <SelectItem value="fit-width">
-                  {t("print.fit_width")}
-                </SelectItem>
-                <SelectItem value="fit-page">{t("print.fit_page")}</SelectItem>
-                <SelectItem value="shrink">{t("print.fit_shrink")}</SelectItem>
-                <SelectItem value="fill">{t("print.fit_fill")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        <div className={field}>
+          <Label htmlFor="print-fit">{t("print.fit_mode")}</Label>
+          <Select
+            value={store.fitMode}
+            onValueChange={(v) =>
+              store.setFitMode(
+                v as "actual" | "fit-width" | "fit-page" | "shrink" | "fill",
+              )
+            }
+          >
+            <SelectTrigger id="print-fit" aria-label={t("print.fit_mode")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="actual">{t("print.fit_actual")}</SelectItem>
+              <SelectItem value="fit-width">{t("print.fit_width")}</SelectItem>
+              <SelectItem value="fit-page">{t("print.fit_page")}</SelectItem>
+              <SelectItem value="shrink">{t("print.fit_shrink")}</SelectItem>
+              <SelectItem value="fill">{t("print.fit_fill")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       {!labelOnly && (
         <>
@@ -170,18 +166,16 @@ export function AdvancedOptions({
           ))}
         </div>
       </fieldset>
-      {!labelOnly && (
-        <div className="flex items-center gap-2">
-          <Switch
-            id="grayscale"
-            checked={store.grayscale}
-            onCheckedChange={store.setGrayscale}
-          />
-          <Label htmlFor="grayscale" className="font-normal">
-            {t("print.grayscale")}
-          </Label>
-        </div>
-      )}
+      <div className="flex items-center gap-2">
+        <Switch
+          id="grayscale"
+          checked={store.grayscale}
+          onCheckedChange={store.setGrayscale}
+        />
+        <Label htmlFor="grayscale" className="font-normal">
+          {t("print.grayscale")}
+        </Label>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div className={field}>
           <Label htmlFor="http-method">{t("print.method_aria")}</Label>

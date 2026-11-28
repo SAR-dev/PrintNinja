@@ -244,13 +244,34 @@ export function fontFamilies(elements: Element[]): string[] {
   return out;
 }
 
-/** The data bindings `{{name}}` in a string, in order of first use. */
+const BINDING_HELPERS = new Set([
+  "currency",
+  "date",
+  "upper",
+  "lower",
+  "number",
+  "padLeft",
+  "barcode",
+  "qrcode",
+]);
+
+/** The data fields a string binds, in order of first use. Helper names
+ * are not fields: `{{upper name}}` binds `name`, not `upper`. */
 export function bindingNames(s: string): string[] {
   const names: string[] = [];
-  const re = /\{\{([#/]?)\s*([A-Za-z_][\w.]*)(?:\s+[^}]*)?\}\}/g;
+  const re = /\{\{([#/]?)\s*([A-Za-z_][\w.]*)((?:\s+[^}]*)?)\}\}/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(s)) !== null) {
-    if (m[2] && !names.includes(m[2])) names.push(m[2]);
+    if (m[1] === "/") continue;
+    let name = m[2];
+    if (!m[1] && BINDING_HELPERS.has(name)) {
+      name =
+        m[3]
+          .trim()
+          .split(/\s+/)
+          .find((arg) => /^[A-Za-z_][\w.]*$/.test(arg)) ?? "";
+    }
+    if (name && !names.includes(name)) names.push(name);
   }
   return names;
 }

@@ -913,10 +913,12 @@ export interface LabelPreviewReq {
 export interface SymbolEncoding {
   /** Quiet-zone modules on every side, at the symbol's own scale. */
   quiet: number;
-  /** 1 dark, 0 light; a QR matrix is `side × side`, read row-major. */
+  /** 1 dark, 0 light; a 2-D matrix is `side × rows`, read row-major. */
   modules: number[];
-  /** The QR matrix's side in modules; absent for linear barcodes. */
+  /** The matrix's column count; absent for linear barcodes. */
   side?: number;
+  /** The matrix's row count; absent for linear barcodes. */
+  rows?: number;
 }
 
 /** The argument of `label_prepare` and `label_print`. */
@@ -937,6 +939,9 @@ export interface LabelJobReq {
   data?: unknown;
   /** Rotation for the sheet: portrait | landscape | reverse-portrait | reverse-landscape. */
   orientation?: string | null;
+  /** Accepted for parity with document jobs (no effect on a label). */
+  fit_mode?: string | null;
+  grayscale?: boolean | null;
   /** Extra space inside the sheet, in millimetres. Forces raster output. */
   margin_top?: number | null;
   margin_right?: number | null;

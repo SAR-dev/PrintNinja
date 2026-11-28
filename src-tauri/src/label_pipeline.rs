@@ -332,8 +332,8 @@ fn apply_label_options(page: RasterPage, options: &LabelPrintOptions, dpi: u32) 
         }
         bitmap = out;
     }
-    let left = pn_render::dots_for_mm(options.margin_left.unwrap_or(0.0), dpi) as i64;
-    let top = pn_render::dots_for_mm(options.margin_top.unwrap_or(0.0), dpi) as i64;
+    let left = pn_render::dots_for_mm(options.margin_left.unwrap_or(0.0).max(0.0), dpi) as i64;
+    let top = pn_render::dots_for_mm(options.margin_top.unwrap_or(0.0).max(0.0), dpi) as i64;
     if left != 0 || top != 0 {
         let w = bitmap.width();
         let h = bitmap.height();
@@ -349,16 +349,30 @@ fn apply_label_options(page: RasterPage, options: &LabelPrintOptions, dpi: u32) 
         }
         bitmap = out;
     }
-    let extra_w = options.margin_left.unwrap_or(0.0) + options.margin_right.unwrap_or(0.0);
-    let extra_h = options.margin_top.unwrap_or(0.0) + options.margin_bottom.unwrap_or(0.0);
-    RasterPage::new(bitmap, page.width_mm + extra_w, page.height_mm + extra_h)
+    let extra_w =
+        options.margin_left.unwrap_or(0.0).max(0.0) + options.margin_right.unwrap_or(0.0).max(0.0);
+    let extra_h =
+        options.margin_top.unwrap_or(0.0).max(0.0) + options.margin_bottom.unwrap_or(0.0).max(0.0);
+    // A quarter turn swaps the physical page edges too: the PDF must
+    // not describe a portrait sheet holding a landscape bitmap.
+    let (page_w, page_h) = if turn == 1 || turn == 3 {
+        (page.height_mm, page.width_mm)
+    } else {
+        (page.width_mm, page.height_mm)
+    };
+    RasterPage::new(bitmap, page_w + extra_w, page_h + extra_h)
 }
 
-/// Print-time sheet options. Non-default values force the raster path,
-/// where rotation and margins can be applied to the actual dots.
+/// Print-time sheet options. Rotation and margins force the raster path,
+/// where they can be applied to the actual dots. Fit mode and grayscale
+/// are accepted for parity with the document track: a scene page is
+/// already the label stock size and its renderer only emits 1-bit ink,
+/// so neither has anything to change.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct LabelPrintOptions {
     pub orientation: Option<String>,
+    pub fit_mode: Option<String>,
+    pub grayscale: Option<bool>,
     pub margin_top: Option<f32>,
     pub margin_right: Option<f32>,
     pub margin_bottom: Option<f32>,
@@ -368,10 +382,10 @@ pub struct LabelPrintOptions {
 impl LabelPrintOptions {
     pub fn is_default(&self) -> bool {
         self.orientation.is_none()
-            && self.margin_top.unwrap_or(0.0) == 0.0
-            && self.margin_right.unwrap_or(0.0) == 0.0
-            && self.margin_bottom.unwrap_or(0.0) == 0.0
-            && self.margin_left.unwrap_or(0.0) == 0.0
+            && self.margin_top.unwrap_or(0.0).max(0.0) == 0.0
+            && self.margin_right.unwrap_or(0.0).max(0.0) == 0.0
+            && self.margin_bottom.unwrap_or(0.0).max(0.0) == 0.0
+            && self.margin_left.unwrap_or(0.0).max(0.0) == 0.0
     }
 }
 
@@ -1837,6 +1851,39 @@ expected_prefix = "\u0002"
 
     /// A pick must name a bundled profile and speak the row's
     /// language family — a raster row takes the ESC/POS family.
+    #[test]
+    fn rotated_sheets_swap_their_page_dimensions() {
+        let mut page = Bitmap::new(40, 20);
+        page.set(3, 5, true);
+        let page = RasterPage::new(page, 40.0, 20.0);
+        let turned = apply_label_options(
+            page,
+            &LabelPrintOptions {
+                orientation: Some("landscape".into()),
+                ..Default::default()
+            },
+            203,
+        );
+        assert_eq!(turned.bitmap.width(), 20);
+        assert_eq!(turned.bitmap.height(), 40);
+        assert_eq!((turned.width_mm, turned.height_mm), (20.0, 40.0));
+    }
+
+    #[test]
+    fn negative_margins_are_treated_as_zero() {
+        let page = RasterPage::new(Bitmap::new(40, 20), 40.0, 20.0);
+        let out = apply_label_options(
+            page,
+            &LabelPrintOptions {
+                margin_left: Some(-5.0),
+                margin_right: Some(-5.0),
+                ..Default::default()
+            },
+            203,
+        );
+        assert_eq!((out.width_mm, out.height_mm), (40.0, 20.0));
+    }
+
     #[test]
     fn a_pick_outside_the_row_language_family_is_refused() {
         let mut row = stored_row("zpl", None, None);

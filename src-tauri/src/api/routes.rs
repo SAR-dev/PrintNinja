@@ -770,7 +770,18 @@ async fn print_job(
             source: "api",
             is_test: req.test.unwrap_or(false),
             requested_by_device_id: authed.device_id,
-            options: crate::label_pipeline::LabelPrintOptions::default(),
+            options: crate::label_pipeline::LabelPrintOptions {
+                orientation: settings
+                    .get("orientation")
+                    .and_then(|o| o.as_str())
+                    .map(str::to_string),
+                fit_mode: settings
+                    .get("fit")
+                    .and_then(|f| f.as_str())
+                    .map(str::to_string),
+                grayscale: settings.get("grayscale").and_then(|v| v.as_bool()),
+                ..Default::default()
+            },
         };
         let outcome =
             crate::commands::label::run_label_job(&state.db, &state.queue, None, &run).await;

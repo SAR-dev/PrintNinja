@@ -3551,6 +3551,7 @@ dependencies = [
 name = "pn-scene"
 version = "2026.1124.0"
 dependencies = [
+ "chrono",
  "golden-harness",
  "serde",
  "serde_json",

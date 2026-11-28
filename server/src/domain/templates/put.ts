@@ -78,6 +78,26 @@ export async function putTemplate(
     ]);
   }
   const sceneJson = track === "scene" ? (input.sceneJson ?? "") : "";
+  if (track === "scene") {
+    // The app owns the scene schema, but the service can refuse an empty
+    // or non-object payload before it reaches the sync feed and every
+    // client that has to render it.
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(sceneJson);
+    } catch {
+      parsed = null;
+    }
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
+      throw new ValidationError("A scene template needs a scene JSON object", [
+        { path: "scene_json", message: "a JSON object is required" },
+      ]);
+    }
+  }
   assertNameCaps(input.name.trim(), summary);
   assertVersionCaps(input.version?.label, input.version?.note);
   assertSizeCaps(input.body, css ?? "", readme ?? "");

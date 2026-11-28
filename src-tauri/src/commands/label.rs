@@ -83,17 +83,22 @@ pub fn label_save_template(
 }
 
 /// What one encoded symbol looks like on the designer's canvas: a row
-/// of modules (1 dark, 0 light — a QR matrix is `side × side`, read
-/// row-major) plus the quiet zone the symbol needs around it.
+/// of modules (1 dark, 0 light — read row-major) plus the quiet zone
+/// the symbol needs around it. 2-D symbols carry `side` (columns) and
+/// `rows`; PDF417 is rectangular, so the two differ.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SymbolEncoding {
     /// Quiet-zone modules on every side, at the symbol's own scale.
     pub quiet: usize,
     pub modules: Vec<u8>,
-    /// The QR matrix's side in modules; absent for linear barcodes.
+    /// The matrix's column count; absent for linear barcodes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub side: Option<usize>,
+    /// The matrix's row count; absent for linear barcodes and square
+    /// symbols (where it equals `side`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rows: Option<usize>,
 }
 
 /// Encode a barcode or QR value the way the renderer will draw it, so
@@ -110,6 +115,7 @@ pub fn label_encode_symbol(kind: String, value: String) -> Option<SymbolEncoding
             quiet: QR_QUIET_MODULES,
             modules: m.modules,
             side: Some(m.side),
+            rows: Some(m.side),
         });
     }
     if ["datamatrix", "pdf417", "aztec"].contains(&kind.as_str()) {
@@ -121,7 +127,8 @@ pub fn label_encode_symbol(kind: String, value: String) -> Option<SymbolEncoding
         return pn_render::matrix_encoding(&parsed, value).map(|m| SymbolEncoding {
             quiet: pn_render::MATRIX_QUIET_MODULES,
             modules: m.modules,
-            side: Some(m.side),
+            side: Some(m.cols),
+            rows: Some(m.rows),
         });
     }
     let kind = match kind.as_str() {
@@ -140,6 +147,7 @@ pub fn label_encode_symbol(kind: String, value: String) -> Option<SymbolEncoding
         quiet: QUIET_MODULES,
         modules,
         side: None,
+        rows: None,
     })
 }
 
@@ -232,6 +240,12 @@ pub struct LabelJobRequest {
     pub margin_bottom: Option<f32>,
     #[serde(default)]
     pub margin_left: Option<f32>,
+    /// Accepted for parity with the document track (no effect on a
+    /// label whose design page is the stock).
+    #[serde(default)]
+    pub fit_mode: Option<String>,
+    #[serde(default)]
+    pub grayscale: Option<bool>,
 }
 
 /// Give a scene template the uploaded fonts its text names. The bytes
@@ -690,6 +704,8 @@ pub async fn label_print(
         requested_by_device_id: None,
         options: LabelPrintOptions {
             orientation: req.orientation,
+            fit_mode: req.fit_mode,
+            grayscale: req.grayscale,
             margin_top: req.margin_top,
             margin_right: req.margin_right,
             margin_bottom: req.margin_bottom,
@@ -787,6 +803,8 @@ mod tests {
             margin_right: None,
             margin_bottom: None,
             margin_left: None,
+            fit_mode: None,
+            grayscale: None,
         }
     }
 

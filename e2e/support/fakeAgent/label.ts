@@ -961,7 +961,7 @@ function upcaDigits(value: string): boolean {
 export function encodeSymbol(
   kind: string,
   value: string,
-): { quiet: number; modules: number[]; side?: number } | null {
+): { quiet: number; modules: number[]; side?: number; rows?: number } | null {
   const v = value.trim();
   if (v === "") return null;
   if (
@@ -970,19 +970,20 @@ export function encodeSymbol(
     kind === "pdf417" ||
     kind === "aztec"
   ) {
-    const side = kind === "datamatrix" ? 18 : kind === "pdf417" ? 27 : 21;
+    const cols = kind === "pdf417" ? 27 : 21;
+    const rows = kind === "pdf417" ? 12 : cols;
     const modules: number[] = [];
-    for (let y = 0; y < side; y++) {
-      for (let x = 0; x < side; x++) {
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
         // Finder-corner pattern plus a deterministic body.
         const corner =
           (x < 7 && y < 7) ||
-          (x >= side - 7 && y < 7) ||
-          (x < 7 && y >= side - 7);
+          (x >= cols - 7 && y < 7) ||
+          (x < 7 && y >= rows - 7);
         let on: boolean;
         if (corner) {
-          const lx = x < 7 ? x : x - (side - 7);
-          const ly = y < 7 ? y : y - (side - 7);
+          const lx = x < 7 ? x : x - (cols - 7);
+          const ly = y < 7 ? y : y - (rows - 7);
           const ring = Math.max(Math.abs(lx - 3), Math.abs(ly - 3));
           on = ring <= 3 && ring !== 1;
         } else {
@@ -991,7 +992,7 @@ export function encodeSymbol(
         modules.push(on ? 1 : 0);
       }
     }
-    return { quiet: 4, modules, side };
+    return { quiet: 4, modules, side: cols, rows };
   }
   // Linear barcodes: code39, code93, ean13, upca, itf, and the default
   // (Code128 for "_").

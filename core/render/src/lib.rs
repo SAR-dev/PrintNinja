@@ -22,8 +22,8 @@ mod pdf;
 mod text;
 
 pub use barcode::{
-    barcode_module_count, barcode_modules, matrix_encoding, qr_matrix, qr_module_side, QrMatrix,
-    MATRIX_QUIET_MODULES, QR_QUIET_MODULES, QUIET_MODULES,
+    barcode_module_count, barcode_modules, matrix_encoding, qr_matrix, qr_module_side,
+    MatrixEncoding, QrMatrix, MATRIX_QUIET_MODULES, QR_QUIET_MODULES, QUIET_MODULES,
 };
 pub use bitmap::Bitmap;
 pub use draw::Renderer;

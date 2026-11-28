@@ -26,9 +26,11 @@ pub const QR_QUIET_MODULES: usize = 4;
 pub const MATRIX_QUIET_MODULES: usize = 4;
 
 /// A module matrix from the `rxing` writer, cropped to the symbol and
-/// downsampled to one dot per module.
+/// downsampled to one dot per module. PDF417 is rectangular, so the two
+/// dimensions are kept separately.
 struct Matrix {
-    side: usize,
+    cols: usize,
+    rows: usize,
     modules: Vec<u8>,
 }
 
@@ -70,15 +72,19 @@ fn encode_matrix(kind: &BarcodeKind, value: &str) -> Option<Matrix> {
     if scale == 0 {
         return None;
     }
-    let side = bw / scale;
+    let cols = bw / scale;
     let rows = bh / scale;
-    let mut modules = Vec::with_capacity(side * rows);
+    let mut modules = Vec::with_capacity(cols * rows);
     for y in 0..rows {
-        for x in 0..side {
+        for x in 0..cols {
             modules.push(m.get((x0 + x * scale) as u32, (y0 + y * scale) as u32) as u8);
         }
     }
-    Some(Matrix { side, modules })
+    Some(Matrix {
+        cols,
+        rows,
+        modules,
+    })
 }
 
 /// A GTIN-14 number with a valid check digit, for ITF-14.
@@ -110,10 +116,19 @@ fn itf14_digits(value: &str) -> Option<String> {
     Some(format!("{body}{check}"))
 }
 
+/// A 2-D symbol's module grid, for the editor's symbol probe. `rows`
+/// differs from `cols` for PDF417, which is rectangular.
+pub struct MatrixEncoding {
+    pub cols: usize,
+    pub rows: usize,
+    pub modules: Vec<u8>,
+}
+
 /// The module matrix of a 2-D symbology, for the editor's symbol probe.
-pub fn matrix_encoding(kind: &BarcodeKind, value: &str) -> Option<QrMatrix> {
-    encode_matrix(kind, value).map(|m| QrMatrix {
-        side: m.side,
+pub fn matrix_encoding(kind: &BarcodeKind, value: &str) -> Option<MatrixEncoding> {
+    encode_matrix(kind, value).map(|m| MatrixEncoding {
+        cols: m.cols,
+        rows: m.rows,
         modules: m.modules,
     })
 }
@@ -143,7 +158,7 @@ impl Renderer {
             kind,
             BarcodeKind::DataMatrix | BarcodeKind::Pdf417 | BarcodeKind::Aztec
         ) {
-            self.draw_matrix_barcode(x_mm, y_mm, h_mm, kind, value);
+            self.draw_matrix_barcode(x_mm, y_mm, w_mm, h_mm, kind, value);
             return;
         }
         let Some(modules) = barcode_modules(kind, value) else {
@@ -196,11 +211,16 @@ impl Renderer {
         }
     }
 
-    /// A Data Matrix / PDF417 / Aztec symbol, `h_mm` square.
+    /// A Data Matrix / PDF417 / Aztec symbol inside the box at
+    /// `(x_mm, y_mm)` of `w_mm` × `h_mm`. Modules stay square and the
+    /// symbol is centred in the box, so a rectangular PDF417 neither
+    /// overflows its element nor gets stretched.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_matrix_barcode(
         &mut self,
         x_mm: f32,
         y_mm: f32,
+        w_mm: f32,
         h_mm: f32,
         kind: &BarcodeKind,
         value: &str,
@@ -212,27 +232,34 @@ impl Renderer {
         let Some(matrix) = encode_matrix(kind, value) else {
             return;
         };
-        let box_dots = dots_for_mm(h_mm, self.dpi) as i64;
-        if box_dots <= 0 || matrix.side == 0 {
+        let box_w = dots_for_mm(w_mm, self.dpi) as i64;
+        let box_h = dots_for_mm(h_mm, self.dpi) as i64;
+        if box_w <= 0 || box_h <= 0 || matrix.cols == 0 || matrix.rows == 0 {
             return;
         }
-        let total = (matrix.side + 2 * MATRIX_QUIET_MODULES) as f64;
-        let cell = box_dots as f64 / total;
+        let cols = matrix.cols + 2 * MATRIX_QUIET_MODULES;
+        let rows = matrix.rows + 2 * MATRIX_QUIET_MODULES;
+        let cell = (box_w as f64 / cols as f64).min(box_h as f64 / rows as f64);
+        if cell <= 0.0 {
+            return;
+        }
+        let symbol_w = cell * matrix.cols as f64;
+        let symbol_h = cell * matrix.rows as f64;
+        let left = (box_w as f64 - symbol_w) / 2.0;
+        let top = (box_h as f64 - symbol_h) / 2.0;
         let x0 = crate::geometry::signed_dots(x_mm, self.dpi);
         let y0 = crate::geometry::signed_dots(y_mm, self.dpi);
         for (i, &on) in matrix.modules.iter().enumerate() {
             if on == 0 {
                 continue;
             }
-            let col = i % matrix.side;
-            let row = i / matrix.side;
-            let cx = col + MATRIX_QUIET_MODULES;
-            let cy = row + MATRIX_QUIET_MODULES;
-            let x = x0 + (cx as f64 * cell).round() as i64;
-            let y = y0 + (cy as f64 * cell).round() as i64;
-            let x1 = x0 + ((cx + 1) as f64 * cell).round() as i64;
-            let y1 = y0 + ((cy + 1) as f64 * cell).round() as i64;
-            self.fill(x, y, x1, y1);
+            let col = i % matrix.cols;
+            let row = i / matrix.cols;
+            let px = x0 + (left + (col + MATRIX_QUIET_MODULES) as f64 * cell).round() as i64;
+            let py = y0 + (top + (row + MATRIX_QUIET_MODULES) as f64 * cell).round() as i64;
+            let px1 = x0 + (left + (col + MATRIX_QUIET_MODULES + 1) as f64 * cell).round() as i64;
+            let py1 = y0 + (top + (row + MATRIX_QUIET_MODULES + 1) as f64 * cell).round() as i64;
+            self.fill(px, py, px1, py1);
         }
     }
 
@@ -358,7 +385,7 @@ pub fn barcode_modules(kind: &BarcodeKind, value: &str) -> Option<Vec<u8>> {
         BarcodeKind::Codabar => Codabar::new(value.to_uppercase()).ok().map(|b| b.encode()),
         BarcodeKind::Upce => {
             let matrix = encode_matrix(kind, value)?;
-            Some(matrix.modules[..matrix.side].to_vec())
+            Some(matrix.modules[..matrix.cols].to_vec())
         }
         BarcodeKind::Itf14 => TF::interleaved(itf14_digits(value)?)
             .ok()
@@ -452,9 +479,14 @@ mod tests {
             ("ean13", "5901234123457"),
             ("upca", "036000291452"),
             ("itf", "1234567890"),
+            ("upce", "0123456"),
+            ("itf14", "10012345000017"),
         ] {
             let page = render_barcode(kind, value, false);
-            assert_eq!(decode(&page), value, "{kind} ({value})");
+            // A UPC-E symbol carries a computed check digit; scanners
+            // report the 8-digit form even when the author typed seven.
+            let expected = if kind == "upce" { "01234565" } else { value };
+            assert_eq!(decode(&page), expected, "{kind} ({value})");
         }
     }
 
@@ -521,6 +553,22 @@ mod tests {
         assert!(!inks("ean8", "96385075")); // check digit off by one
         assert!(inks("codabar", "A1234B"));
         assert!(!inks("codabar", "E1234A")); // invalid start character
+    }
+
+    /// The 2-D symbologies decode back to their value from the dots the
+    /// renderer stamps — including rectangular PDF417, whose module grid
+    /// is not square.
+    #[test]
+    fn two_d_symbols_round_trip_through_a_scanner() {
+        for (kind, value) in [
+            (BarcodeKind::DataMatrix, "HELLO"),
+            (BarcodeKind::Pdf417, "HELLO"),
+            (BarcodeKind::Aztec, "HELLO"),
+        ] {
+            let mut r = Renderer::new(203, dots_for_mm(44.0, 203), dots_for_mm(24.0, 203));
+            r.draw_barcode(2.0, 2.0, 40.0, 20.0, &kind, value, false);
+            assert_eq!(decode(&r.into_page()), value, "{kind:?}");
+        }
     }
 
     #[test]

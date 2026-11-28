@@ -539,6 +539,7 @@ impl Template {
             Element::Frame {
                 size,
                 border_mm,
+                padding_mm,
                 children,
                 ..
             } => {
@@ -549,6 +550,10 @@ impl Template {
                 if !border_mm.is_finite() || *border_mm < 0.0 {
                     return Err(TemplateError::BadBorder(*border_mm));
                 }
+                if !padding_mm.is_finite() || *padding_mm < 0.0 {
+                    return Err(TemplateError::BadBorder(*padding_mm));
+                }
+                let pad = padding_mm.max(0.0);
                 for child in children {
                     // A frame holds fixed elements; the repeating case
                     // is a group, and a group cannot sit in a frame
@@ -565,13 +570,14 @@ impl Template {
                     // A child must stay inside the frame's box — the
                     // frame's own size, not the page's.
                     let child_at = other_at(child);
-                    let over_x = child_at.x_mm + child.width_mm() > size.w_mm;
-                    let over_y = child_at.y_mm + child.height_mm() > size.h_mm;
+                    // Padding shrinks the usable box on both edges.
+                    let over_x = pad + child_at.x_mm + child.width_mm() > size.w_mm - pad;
+                    let over_y = pad + child_at.y_mm + child.height_mm() > size.h_mm - pad;
                     if over_x || over_y {
                         let (edge, limit) = if over_x {
-                            (child_at.x_mm + child.width_mm(), size.w_mm)
+                            (pad + child_at.x_mm + child.width_mm(), size.w_mm - pad)
                         } else {
-                            (child_at.y_mm + child.height_mm(), size.h_mm)
+                            (pad + child_at.y_mm + child.height_mm(), size.h_mm - pad)
                         };
                         return Err(TemplateError::FrameChildOutside {
                             element: element_name(child),
@@ -760,6 +766,28 @@ pub fn binding_names(s: &str) -> Vec<String> {
 /// becomes the empty string); anything else between braces is left
 /// exactly as written, so what the validator sees and what the browser
 /// prints are the same text.
+/// Position of the `{{/each}}` that closes the block at the start of
+/// `text`. Nested `{{#each}}` blocks are counted, so an inner close does
+/// not truncate its outer body.
+fn each_close(text: &str) -> Option<usize> {
+    let mut scan = 0;
+    let mut depth = 1usize;
+    while let Some(next) = text[scan..].find("{{") {
+        let pos = scan + next;
+        let after = &text[pos + 2..];
+        if after.starts_with("#each ") && after.contains("}}") {
+            depth += 1;
+        } else if after.starts_with("/each}}") {
+            depth -= 1;
+            if depth == 0 {
+                return Some(pos);
+            }
+        }
+        scan = pos + 2;
+    }
+    None
+}
+
 pub fn substitute(html: &str, record: &Record) -> String {
     let mut out = String::with_capacity(html.len());
     let mut rest = html;
@@ -773,7 +801,7 @@ pub fn substitute(html: &str, record: &Record) -> String {
         };
         let field = body_start[..field_end].trim();
         let after = &body_start[field_end + 2..];
-        let Some(close) = after.find("{{/each}}") else {
+        let Some(close) = each_close(after) else {
             out.push_str(&rest[open..]);
             return out;
         };
@@ -810,10 +838,16 @@ fn binding(expr: &str, record: &Record) -> String {
     match tokens[0] {
         "upper" => value(tokens.get(1).copied().unwrap_or("")).to_uppercase(),
         "lower" => value(tokens.get(1).copied().unwrap_or("")).to_lowercase(),
-        "number" => value(tokens.get(1).copied().unwrap_or(""))
-            .parse::<f64>()
-            .map(|n| format!("{n}"))
-            .unwrap_or_default(),
+        "number" => {
+            let n = value(tokens.get(1).copied().unwrap_or(""))
+                .parse::<f64>()
+                .unwrap_or(0.0);
+            let decimals = tokens
+                .get(2)
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(0);
+            format!("{n:.decimals$}")
+        }
         "padLeft" => {
             let text = value(tokens.get(1).copied().unwrap_or(""));
             let width = tokens
@@ -834,7 +868,28 @@ fn binding(expr: &str, record: &Record) -> String {
             let symbol = tokens.get(2).map(|s| s.trim_matches('"')).unwrap_or("$");
             format!("{symbol}{n:.2}")
         }
-        "date" | "barcode" | "qrcode" => value(tokens.get(1).copied().unwrap_or("")),
+        "date" => {
+            let raw = value(tokens.get(1).copied().unwrap_or(""));
+            match chrono::DateTime::parse_from_rfc3339(&raw) {
+                Ok(dt) => {
+                    let dt = dt.with_timezone(&chrono::Local);
+                    let format = tokens
+                        .get(2)
+                        .map(|s| s.trim_matches('"'))
+                        .unwrap_or("%Y-%m-%d");
+                    match format {
+                        "short" => dt.format("%d %b %Y").to_string(),
+                        "long" => dt.format("%d %B %Y, %H:%M").to_string(),
+                        "time" => dt.format("%H:%M").to_string(),
+                        "datetime" => dt.format("%Y-%m-%d %H:%M").to_string(),
+                        other => dt.format(other).to_string(),
+                    }
+                }
+                // A non-date value is echoed, never mangled.
+                Err(_) => raw,
+            }
+        }
+        "barcode" | "qrcode" => value(tokens.get(1).copied().unwrap_or("")),
         _ => value(expr),
     }
 }
@@ -1158,6 +1213,49 @@ mod tests {
             "serialization is deterministic"
         );
         t.validate().unwrap();
+    }
+
+    #[test]
+    fn frame_padding_counts_against_the_child_bounds() {
+        let t = Template {
+            format: Format::Scene,
+            html: None,
+            media: Media::Label {
+                width_mm: 50.0,
+                height_mm: 30.0,
+            },
+            fields: vec![],
+            elements: vec![Element::Frame {
+                at: At {
+                    x_mm: 0.0,
+                    y_mm: 0.0,
+                },
+                size: Size {
+                    w_mm: 30.0,
+                    h_mm: 20.0,
+                },
+                border_mm: 0.0,
+                padding_mm: 2.0,
+                children: vec![Element::Rect {
+                    at: At {
+                        x_mm: 27.0,
+                        y_mm: 0.0,
+                    },
+                    size: Size {
+                        w_mm: 4.0,
+                        h_mm: 4.0,
+                    },
+                    fill: false,
+                    page: Placement::default(),
+                }],
+                page: Placement::default(),
+            }],
+            fonts: vec![],
+        };
+        assert!(
+            t.validate().is_err(),
+            "2mm padding + 31mm child > 30mm frame"
+        );
     }
 
     #[test]
@@ -1874,10 +1972,30 @@ mod binding_tests {
         assert_eq!(substitute("{{customer.name}}", record), "Aiko");
         assert_eq!(substitute("{{upper customer.name}}", record), "AIKO");
         assert_eq!(substitute("{{currency price}}", record), "$18.50");
+        assert_eq!(substitute("{{number price 1}}", record), "18.5");
+        assert_eq!(
+            substitute(r#"{{date "2026-01-02T03:04:05Z" "time"}}"#, record),
+            chrono::DateTime::parse_from_rfc3339("2026-01-02T03:04:05Z")
+                .unwrap()
+                .with_timezone(&chrono::Local)
+                .format("%H:%M")
+                .to_string()
+        );
         assert_eq!(
             substitute("{{#each items}}{{name}};{{/each}}", record),
             "Bolt;Nut;"
         );
         assert_eq!(substitute("{{missing}}", record), "");
+        let nested = Records::from_json(
+            r#"{"rows":[{"items":[{"name":"Bolt"}]},{"items":[{"name":"Nut"}]}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            substitute(
+                "{{#each rows}}{{#each items}}{{name}}{{/each}};{{/each}}",
+                &nested.0[0],
+            ),
+            "Bolt;Nut;"
+        );
     }
 }

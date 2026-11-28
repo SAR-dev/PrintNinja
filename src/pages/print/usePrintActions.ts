@@ -288,6 +288,8 @@ export function usePrintActions({
           http_method: store.useTestData ? undefined : store.httpMethod,
           data: inline,
           orientation: store.orientation,
+          fit_mode: store.fitMode,
+          grayscale: store.grayscale,
           margin_top: store.marginTop,
           margin_right: store.marginRight,
           margin_bottom: store.marginBottom,

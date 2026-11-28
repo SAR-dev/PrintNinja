@@ -96,8 +96,10 @@ function symbolFits(
   dpi: number | null,
 ): boolean {
   if (dpi === null || box_mm <= 0) return true;
+  const cols = enc.side ?? 1;
+  const rows = enc.rows ?? cols;
   const total = enc.side
-    ? enc.side + 2 * enc.quiet
+    ? Math.max(cols, rows) + 2 * enc.quiet
     : enc.modules.length + 2 * enc.quiet;
   return (box_mm * dpi) / 25.4 / total >= 1;
 }
@@ -287,14 +289,19 @@ function QrGlyph({
         : symbolReason("qr", el.value);
     return <Placeholder x={x} y={y} w={h} h={h} label={label} scale={scale} />;
   }
-  const side = enc.side ?? 1;
-  const cell = h / (side + 2 * enc.quiet);
+  const cols = enc.side ?? 1;
+  const rows = enc.rows ?? cols;
+  const longest = Math.max(cols, rows);
+  const cell = h / (longest + 2 * enc.quiet);
+  // Centre a rectangular symbol the way the raster renderer does.
+  const offX = ((longest - cols) / 2) * cell;
+  const offY = ((longest - rows) / 2) * cell;
   let d = "";
-  for (let r = 0; r < side; r++) {
-    for (let c = 0; c < side; c++) {
-      if (enc.modules[r * side + c] === 0) continue;
-      const px = x + (c + enc.quiet) * cell;
-      const py = y + (r + enc.quiet) * cell;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (enc.modules[r * cols + c] === 0) continue;
+      const px = x + offX + (c + enc.quiet) * cell;
+      const py = y + offY + (r + enc.quiet) * cell;
       d += `M${px * scale} ${py * scale}h${cell * scale}v${cell * scale}h${-cell * scale}Z`;
     }
   }

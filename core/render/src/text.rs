@@ -84,8 +84,13 @@ impl Renderer {
             as f64
             * scale)
             .round() as i64;
-        let line_rows =
-            (natural_rows as f64 * style.line_height.unwrap_or(1.0).max(0.5) as f64).round() as i64;
+        // An explicit line height is a multiple of the em, the same unit
+        // the canvas preview uses; without one, keep the font's natural
+        // leading so existing templates render exactly as before.
+        let line_rows = match style.line_height {
+            Some(lh) => (size_dots as f64 * lh.max(0.5) as f64).round() as i64,
+            None => natural_rows,
+        };
         if line_rows <= 0 {
             return;
         }
