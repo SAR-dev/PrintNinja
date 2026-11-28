@@ -935,4 +935,11 @@ export interface LabelJobReq {
   http_method?: string | null;
   /** Inline records (a deep link's `data`), already parsed into JSON. */
   data?: unknown;
+  /** Rotation for the sheet: portrait | landscape | reverse-portrait | reverse-landscape. */
+  orientation?: string | null;
+  /** Extra space inside the sheet, in millimetres. Forces raster output. */
+  margin_top?: number | null;
+  margin_right?: number | null;
+  margin_bottom?: number | null;
+  margin_left?: number | null;
 }

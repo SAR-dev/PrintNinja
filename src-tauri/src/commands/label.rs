@@ -19,9 +19,9 @@ use crate::data::fetcher::{DataFetcher, FetchOptions};
 use crate::db::DbState;
 use crate::error::{AppError, AppResult};
 use crate::label_pipeline::{
-    default_model_for_language, embedded_profile_set, prepare_units, print_units, profile_infos,
-    report_of, resolve_profile_for_printer, validate_profile_pick, AppTransportFactory, JobReport,
-    PrepareReport, ProfileChoice, ProfileInfo,
+    default_model_for_language, embedded_profile_set, prepare_units, prepare_units_with_options,
+    print_units, profile_infos, report_of, resolve_profile_for_printer, validate_profile_pick,
+    AppTransportFactory, JobReport, LabelPrintOptions, PrepareReport, ProfileChoice, ProfileInfo,
 };
 use crate::queue::PrintQueue;
 use pn_profiles::Profile;
@@ -220,6 +220,18 @@ pub struct LabelJobRequest {
     /// Inline records (a deep link's `data`), as JSON.
     #[serde(default)]
     pub data: Option<serde_json::Value>,
+    /// Sheet rotation and extra margins. Any non-default value forces the
+    /// raster path, where they can be applied exactly.
+    #[serde(default)]
+    pub orientation: Option<String>,
+    #[serde(default)]
+    pub margin_top: Option<f32>,
+    #[serde(default)]
+    pub margin_right: Option<f32>,
+    #[serde(default)]
+    pub margin_bottom: Option<f32>,
+    #[serde(default)]
+    pub margin_left: Option<f32>,
 }
 
 /// Give a scene template the uploaded fonts its text names. The bytes
@@ -465,6 +477,7 @@ pub(crate) struct LabelJobRun {
     pub source: &'static str,
     pub is_test: bool,
     pub requested_by_device_id: Option<String>,
+    pub options: LabelPrintOptions,
 }
 
 /// A finished scene job: its row, the honest report, the terminal status
@@ -511,12 +524,15 @@ pub(crate) async fn run_label_job(
     let profile = scene_job.profile;
     let units = match tokio::task::spawn_blocking({
         let prepare_profile = profile.clone();
+        let options = run.options.clone();
         move || {
-            prepare_units(
+            prepare_units_with_options(
                 &scene_job.template,
                 &prepare_profile,
                 &scene_job.records,
                 copies,
+                None,
+                &options,
             )
         }
     })
@@ -672,6 +688,13 @@ pub async fn label_print(
         source: "ui",
         is_test,
         requested_by_device_id: None,
+        options: LabelPrintOptions {
+            orientation: req.orientation,
+            margin_top: req.margin_top,
+            margin_right: req.margin_right,
+            margin_bottom: req.margin_bottom,
+            margin_left: req.margin_left,
+        },
     };
     let outcome = run_label_job(&db, &queue, None, &run).await?;
     Ok(LabelPrintResponse {

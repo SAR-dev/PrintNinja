@@ -297,6 +297,7 @@ export function JobCard({
             previewPaperW={previewPaperW}
             previewPaperH={previewPaperH}
             handleSpikeTest={handleSpikeTest}
+            labelOnly={labelOnly}
           />
         </FoldSection>
 

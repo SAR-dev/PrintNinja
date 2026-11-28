@@ -287,6 +287,11 @@ export function usePrintActions({
           data_url: store.useTestData ? undefined : store.dataUrl || undefined,
           http_method: store.useTestData ? undefined : store.httpMethod,
           data: inline,
+          orientation: store.orientation,
+          margin_top: store.marginTop,
+          margin_right: store.marginRight,
+          margin_bottom: store.marginBottom,
+          margin_left: store.marginLeft,
         },
       });
       store.setDurationMs(result.duration_ms);

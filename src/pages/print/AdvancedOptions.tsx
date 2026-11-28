@@ -32,6 +32,7 @@ export function AdvancedOptions({
   previewPaperW,
   previewPaperH,
   handleSpikeTest,
+  labelOnly = false,
 }: {
   store: PrintState;
   field: string;
@@ -44,6 +45,7 @@ export function AdvancedOptions({
   previewPaperW: number;
   previewPaperH: number;
   handleSpikeTest: () => void;
+  labelOnly?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -71,50 +73,58 @@ export function AdvancedOptions({
             </SelectContent>
           </Select>
         </div>
-        <div className={field}>
-          <Label htmlFor="print-fit">{t("print.fit_mode")}</Label>
-          <Select
-            value={store.fitMode}
-            onValueChange={(v) =>
-              store.setFitMode(
-                v as "actual" | "fit-width" | "fit-page" | "shrink" | "fill",
-              )
-            }
-          >
-            <SelectTrigger id="print-fit" aria-label={t("print.fit_mode")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="actual">{t("print.fit_actual")}</SelectItem>
-              <SelectItem value="fit-width">{t("print.fit_width")}</SelectItem>
-              <SelectItem value="fit-page">{t("print.fit_page")}</SelectItem>
-              <SelectItem value="shrink">{t("print.fit_shrink")}</SelectItem>
-              <SelectItem value="fill">{t("print.fit_fill")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {!labelOnly && (
+          <div className={field}>
+            <Label htmlFor="print-fit">{t("print.fit_mode")}</Label>
+            <Select
+              value={store.fitMode}
+              onValueChange={(v) =>
+                store.setFitMode(
+                  v as "actual" | "fit-width" | "fit-page" | "shrink" | "fill",
+                )
+              }
+            >
+              <SelectTrigger id="print-fit" aria-label={t("print.fit_mode")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="actual">{t("print.fit_actual")}</SelectItem>
+                <SelectItem value="fit-width">
+                  {t("print.fit_width")}
+                </SelectItem>
+                <SelectItem value="fit-page">{t("print.fit_page")}</SelectItem>
+                <SelectItem value="shrink">{t("print.fit_shrink")}</SelectItem>
+                <SelectItem value="fill">{t("print.fit_fill")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
-      <PaperSizeFields
-        ids={{
-          select: "print-paper",
-          width: "paper-w",
-          height: "paper-h",
-        }}
-        layout="grid"
-        paperPreset={paperPreset}
-        seedW={effPaperW}
-        seedH={effPaperH}
-        designW={designW}
-        designH={designH}
-      />
-      <p className="-mt-2 text-xs text-muted-foreground">
-        {t("print.paper_note", {
-          dw: designW,
-          dh: designH,
-          pw: previewPaperW,
-          ph: previewPaperH,
-        })}
-      </p>
+      {!labelOnly && (
+        <>
+          <PaperSizeFields
+            ids={{
+              select: "print-paper",
+              width: "paper-w",
+              height: "paper-h",
+            }}
+            layout="grid"
+            paperPreset={paperPreset}
+            seedW={effPaperW}
+            seedH={effPaperH}
+            designW={designW}
+            designH={designH}
+          />
+          <p className="-mt-2 text-xs text-muted-foreground">
+            {t("print.paper_note", {
+              dw: designW,
+              dh: designH,
+              pw: previewPaperW,
+              ph: previewPaperH,
+            })}
+          </p>
+        </>
+      )}
       <fieldset className="space-y-1.5">
         <legend className="text-sm font-medium leading-none">
           {t("print.margins")} (mm)
@@ -160,16 +170,18 @@ export function AdvancedOptions({
           ))}
         </div>
       </fieldset>
-      <div className="flex items-center gap-2">
-        <Switch
-          id="grayscale"
-          checked={store.grayscale}
-          onCheckedChange={store.setGrayscale}
-        />
-        <Label htmlFor="grayscale" className="font-normal">
-          {t("print.grayscale")}
-        </Label>
-      </div>
+      {!labelOnly && (
+        <div className="flex items-center gap-2">
+          <Switch
+            id="grayscale"
+            checked={store.grayscale}
+            onCheckedChange={store.setGrayscale}
+          />
+          <Label htmlFor="grayscale" className="font-normal">
+            {t("print.grayscale")}
+          </Label>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div className={field}>
           <Label htmlFor="http-method">{t("print.method_aria")}</Label>
@@ -187,21 +199,25 @@ export function AdvancedOptions({
             </SelectContent>
           </Select>
         </div>
-        <div className={field}>
-          <Label htmlFor="pages">{t("print.pages")}</Label>
-          <Input
-            id="pages"
-            type="number"
-            min="1"
-            max="500"
-            value={store.records}
-            onChange={(e) => store.setRecords(Number(e.target.value))}
-          />
-        </div>
+        {!labelOnly && (
+          <div className={field}>
+            <Label htmlFor="pages">{t("print.pages")}</Label>
+            <Input
+              id="pages"
+              type="number"
+              min="1"
+              max="500"
+              value={store.records}
+              onChange={(e) => store.setRecords(Number(e.target.value))}
+            />
+          </div>
+        )}
       </div>
-      <p className="-mt-2 text-xs text-muted-foreground">
-        {t("print.pages_hint")}
-      </p>
+      {!labelOnly && (
+        <p className="-mt-2 text-xs text-muted-foreground">
+          {t("print.pages_hint")}
+        </p>
+      )}
       <div className="border-t pt-3">
         <p className="mb-2 text-xs text-muted-foreground">
           {t("print.test_hint")}

@@ -22,10 +22,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use pn_job::{run, JobResult, JobSpec, TransportFactory};
-use pn_planner::{plan, OutputPath};
+use pn_planner::{plan, OutputPath, Plan};
 use pn_profiles::{load_dir, merge, parse, Media, Profile, ProfileSet};
 use pn_render::{
-    dots_for_mm, fit_to_head, paint_page, render_pdf, CustomFont, RasterPage, Renderer,
+    dots_for_mm, fit_to_head, paint_page, render_pdf, Bitmap, CustomFont, RasterPage, Renderer,
 };
 use pn_scene::{expand, substitute, ExpandedJob, Page, Records, Template};
 use pn_transport::{SendError, SendPlan, Transport};
@@ -287,13 +287,92 @@ fn render_scene_page(
     w_mm: f32,
     h_mm: f32,
     fonts: &[CustomFont],
+    options: &LabelPrintOptions,
 ) -> RasterPage {
     let dpi = profile.profile.dpi.map_or(300, u16::into);
     let w = fit_to_head(dots_for_mm(w_mm, dpi), profile.profile.head_width_dots);
     let h = dots_for_mm(h_mm, dpi);
     let mut renderer = Renderer::new(dpi, w, h).with_custom_fonts(fonts.to_vec());
     paint_page(page, &mut renderer);
-    RasterPage::new(renderer.into_page(), w_mm, h_mm)
+    apply_label_options(
+        RasterPage::new(renderer.into_page(), w_mm, h_mm),
+        options,
+        profile.profile.dpi.map_or(300, u32::from),
+    )
+}
+
+/// Apply sheet rotation and margins to a rendered page.
+fn apply_label_options(page: RasterPage, options: &LabelPrintOptions, dpi: u32) -> RasterPage {
+    if options.is_default() {
+        return page;
+    }
+    let mut bitmap = page.bitmap;
+    let turn = match options.orientation.as_deref() {
+        Some("landscape") => 1,
+        Some("reverse-landscape") => 3,
+        Some("reverse-portrait") => 2,
+        _ => 0,
+    };
+    if turn > 0 {
+        let w = bitmap.width();
+        let h = bitmap.height();
+        let mut out = Bitmap::new(h, w);
+        for y in 0..h {
+            for x in 0..w {
+                let on = bitmap.get(x, y);
+                let (nx, ny) = match turn {
+                    1 => (y, w - 1 - x),
+                    2 => (w - 1 - x, h - 1 - y),
+                    _ => (h - 1 - y, x),
+                };
+                if on {
+                    out.set(nx, ny, true);
+                }
+            }
+        }
+        bitmap = out;
+    }
+    let left = pn_render::dots_for_mm(options.margin_left.unwrap_or(0.0), dpi) as i64;
+    let top = pn_render::dots_for_mm(options.margin_top.unwrap_or(0.0), dpi) as i64;
+    if left != 0 || top != 0 {
+        let w = bitmap.width();
+        let h = bitmap.height();
+        let mut out = Bitmap::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let nx = x as i64 + left;
+                let ny = y as i64 + top;
+                if bitmap.get(x, y) && nx >= 0 && ny >= 0 {
+                    out.set(nx as u32, ny as u32, true);
+                }
+            }
+        }
+        bitmap = out;
+    }
+    let extra_w = options.margin_left.unwrap_or(0.0) + options.margin_right.unwrap_or(0.0);
+    let extra_h = options.margin_top.unwrap_or(0.0) + options.margin_bottom.unwrap_or(0.0);
+    RasterPage::new(bitmap, page.width_mm + extra_w, page.height_mm + extra_h)
+}
+
+/// Print-time sheet options. Non-default values force the raster path,
+/// where rotation and margins can be applied to the actual dots.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct LabelPrintOptions {
+    pub orientation: Option<String>,
+    pub margin_top: Option<f32>,
+    pub margin_right: Option<f32>,
+    pub margin_bottom: Option<f32>,
+    pub margin_left: Option<f32>,
+}
+
+impl LabelPrintOptions {
+    pub fn is_default(&self) -> bool {
+        self.orientation.is_none()
+            && self.margin_top.unwrap_or(0.0) == 0.0
+            && self.margin_right.unwrap_or(0.0) == 0.0
+            && self.margin_bottom.unwrap_or(0.0) == 0.0
+            && self.margin_left.unwrap_or(0.0) == 0.0
+    }
 }
 
 /// Validate the template, expand the records, pick the path, encode the
@@ -316,11 +395,40 @@ pub fn prepare_units_with_browser(
     copies: u32,
     browser: Option<&std::path::Path>,
 ) -> Result<Units, PipelineError> {
+    prepare_units_with_options(
+        template,
+        profile,
+        records,
+        copies,
+        browser,
+        &LabelPrintOptions::default(),
+    )
+}
+
+/// As [`prepare_units_with_browser`], with sheet options applied.
+pub fn prepare_units_with_options(
+    template: &Template,
+    profile: &Profile,
+    records: &Records,
+    copies: u32,
+    browser: Option<&std::path::Path>,
+    options: &LabelPrintOptions,
+) -> Result<Units, PipelineError> {
     template
         .validate()
         .map_err(|e| PipelineError::Template(e.to_string()))?;
     let job = expand(template, records).map_err(|e| PipelineError::Data(e.to_string()))?;
-    let chosen = plan(&job, template, profile).map_err(|e| PipelineError::Media(e.to_string()))?;
+    let planned = plan(&job, template, profile).map_err(|e| PipelineError::Media(e.to_string()))?;
+    // Sheet options have no native command; print them as raster so the
+    // rotation and margins are exactly what the preview showed.
+    let chosen = if options.is_default() {
+        planned
+    } else {
+        Plan {
+            path: OutputPath::Raster,
+            fallback: Some("print options require a raster sheet".into()),
+        }
+    };
     let (w_mm, h_mm) = page_mm(template);
     let copies = copies.max(1);
     let fonts = scene_fonts(template)?;
@@ -334,7 +442,7 @@ pub fn prepare_units_with_browser(
             let mut units = Vec::new();
             for output in &job.outputs {
                 for page in &output.pages {
-                    let rendered = render_scene_page(page, profile, w_mm, h_mm, &fonts);
+                    let rendered = render_scene_page(page, profile, w_mm, h_mm, &fonts, options);
                     units.push(
                         pn_encoders::raster(std::slice::from_ref(&rendered), profile)
                             .map_err(|e| PipelineError::Encode(e.to_string()))?,
@@ -348,7 +456,7 @@ pub fn prepare_units_with_browser(
                 .outputs
                 .iter()
                 .flat_map(|o| o.pages.iter())
-                .map(|p| render_scene_page(p, profile, w_mm, h_mm, &fonts))
+                .map(|p| render_scene_page(p, profile, w_mm, h_mm, &fonts, options))
                 .collect();
             vec![render_pdf(&pages)]
         }
@@ -387,7 +495,7 @@ pub fn prepare_units_with_browser(
             .iter()
             .flat_map(|o| o.pages.iter())
             .map(|p| {
-                let rendered = render_scene_page(p, profile, w_mm, h_mm, &fonts);
+                let rendered = render_scene_page(p, profile, w_mm, h_mm, &fonts, options);
                 Preview::Bitmap {
                     width: rendered.bitmap.width(),
                     height: rendered.bitmap.height(),

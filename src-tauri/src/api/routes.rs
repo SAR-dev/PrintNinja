@@ -770,6 +770,7 @@ async fn print_job(
             source: "api",
             is_test: req.test.unwrap_or(false),
             requested_by_device_id: authed.device_id,
+            options: crate::label_pipeline::LabelPrintOptions::default(),
         };
         let outcome =
             crate::commands::label::run_label_job(&state.db, &state.queue, None, &run).await;

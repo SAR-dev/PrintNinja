@@ -975,6 +975,7 @@ pub async fn run_claimed_job(
                     source: "ui",
                     is_test: false,
                     requested_by_device_id: None,
+                    options: crate::label_pipeline::LabelPrintOptions::default(),
                 },
             )
             .await;
