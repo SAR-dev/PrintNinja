@@ -736,26 +736,101 @@ pub fn binding_names(s: &str) -> Vec<String> {
 pub fn substitute(html: &str, record: &Record) -> String {
     let mut out = String::with_capacity(html.len());
     let mut rest = html;
+    // `{{#each field}}…{{/each}}` repeats its body for every row.
+    while let Some(open) = rest.find("{{#each ") {
+        out.push_str(&rest[..open]);
+        let body_start = &rest[open + 8..];
+        let Some(field_end) = body_start.find("}}") else {
+            out.push_str(&rest[open..]);
+            return out;
+        };
+        let field = body_start[..field_end].trim();
+        let after = &body_start[field_end + 2..];
+        let Some(close) = after.find("{{/each}}") else {
+            out.push_str(&rest[open..]);
+            return out;
+        };
+        let inner = &after[..close];
+        if let Some(rows) = record.get(field).and_then(|v| v.as_rows()) {
+            for row in rows {
+                out.push_str(&substitute(inner, row));
+            }
+        }
+        rest = &after[close + 9..];
+    }
+    out.push_str(&render_bindings(rest, record));
+    out
+}
+
+/// Resolve one binding expression: a dotted field path or a helper call.
+fn binding(expr: &str, record: &Record) -> String {
+    let expr = expr.trim();
+    let tokens: Vec<&str> = expr.split_whitespace().collect();
+    if tokens.is_empty() {
+        return String::new();
+    }
+    let value = |arg: &str| -> String {
+        let arg = arg.trim_matches('"').trim_matches('\'');
+        if let Some(v) = record.get(arg) {
+            v.as_text().to_string()
+        } else if arg.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
+            // A field path that has no value reads as empty.
+            String::new()
+        } else {
+            arg.to_string()
+        }
+    };
+    match tokens[0] {
+        "upper" => value(tokens.get(1).copied().unwrap_or("")).to_uppercase(),
+        "lower" => value(tokens.get(1).copied().unwrap_or("")).to_lowercase(),
+        "number" => value(tokens.get(1).copied().unwrap_or(""))
+            .parse::<f64>()
+            .map(|n| format!("{n}"))
+            .unwrap_or_default(),
+        "padLeft" => {
+            let text = value(tokens.get(1).copied().unwrap_or(""));
+            let width = tokens
+                .get(2)
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(0);
+            let pad = tokens.get(3).map(|s| s.trim_matches('"')).unwrap_or(" ");
+            if text.len() >= width {
+                text
+            } else {
+                format!("{}{}", pad.repeat(width - text.len()), text)
+            }
+        }
+        "currency" => {
+            let n = value(tokens.get(1).copied().unwrap_or(""))
+                .parse::<f64>()
+                .unwrap_or(0.0);
+            let symbol = tokens.get(2).map(|s| s.trim_matches('"')).unwrap_or("$");
+            format!("{symbol}{n:.2}")
+        }
+        "date" | "barcode" | "qrcode" => value(tokens.get(1).copied().unwrap_or("")),
+        _ => value(expr),
+    }
+}
+
+/// Replace `{{…}}` expressions without touching unknown syntax.
+fn render_bindings(text: &str, record: &Record) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
     while let Some(open) = rest.find("{{") {
         out.push_str(&rest[..open]);
         let after = &rest[open + 2..];
-        let name: String = after
-            .chars()
-            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-            .collect();
-        let recognized = !name.is_empty()
-            && name
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-            && after.get(name.len()..name.len() + 2) == Some("}}");
-        if recognized {
-            out.push_str(record.get(&name).map(Value::as_text).unwrap_or(""));
-            rest = &after[name.len() + 2..];
-        } else {
+        let Some(end) = after.find("}}") else {
+            out.push_str(&rest[open..]);
+            return out;
+        };
+        let expr = &after[..end];
+        if expr.starts_with('#') || expr.starts_with('/') {
             out.push_str("{{");
             rest = after;
+            continue;
         }
+        out.push_str(&binding(expr, record));
+        rest = &after[end + 2..];
     }
     out.push_str(rest);
     out
@@ -1720,5 +1795,28 @@ mod tests {
         }"#;
         let t = Template::from_json(json).unwrap();
         assert_eq!(t.font_families(), ["Brand Sans", "Display", "Rows Font"]);
+    }
+}
+
+#[cfg(test)]
+mod binding_tests {
+    use super::*;
+    use crate::records::Records;
+
+    #[test]
+    fn nested_paths_helpers_and_each_blocks_render() {
+        let records = Records::from_json(
+            r#"{"customer":{"name":"Aiko"},"price":18.5,"items":[{"name":"Bolt"},{"name":"Nut"}]}"#,
+        )
+        .unwrap();
+        let record = &records.0[0];
+        assert_eq!(substitute("{{customer.name}}", record), "Aiko");
+        assert_eq!(substitute("{{upper customer.name}}", record), "AIKO");
+        assert_eq!(substitute("{{currency price}}", record), "$18.50");
+        assert_eq!(
+            substitute("{{#each items}}{{name}};{{/each}}", record),
+            "Bolt;Nut;"
+        );
+        assert_eq!(substitute("{{missing}}", record), "");
     }
 }

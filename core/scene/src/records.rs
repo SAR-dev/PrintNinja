@@ -186,15 +186,35 @@ impl Records {
     }
 }
 
-/// One object of a JSON record, with its values coerced.
+/// One object of a JSON record, with its values coerced. Nested objects
+/// become dotted field names so a scene can bind `{{customer.name}}`.
 fn record_from_object(
     obj: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<Record, RecordsError> {
     let mut rec = Record::new();
-    for (name, v) in obj {
-        rec.insert(name.clone(), coerce(name, v)?);
-    }
+    flatten_into(obj, "", &mut rec)?;
     Ok(rec)
+}
+
+fn flatten_into(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    prefix: &str,
+    rec: &mut Record,
+) -> Result<(), RecordsError> {
+    for (name, v) in obj {
+        let key = if prefix.is_empty() {
+            name.clone()
+        } else {
+            format!("{prefix}.{name}")
+        };
+        match v {
+            serde_json::Value::Object(nested) => flatten_into(nested, &key, rec)?,
+            _ => {
+                rec.insert(key.clone(), coerce(&key, v)?);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Coerce a JSON value to a [`Value`]: scalars become text, an array of
@@ -205,9 +225,9 @@ fn coerce(name: &str, v: &serde_json::Value) -> Result<Value, RecordsError> {
         serde_json::Value::Number(n) => Ok(Value::Text(n.to_string())),
         serde_json::Value::Bool(b) => Ok(Value::Text(b.to_string())),
         serde_json::Value::Null => Ok(Value::Text(String::new())),
-        serde_json::Value::Object(o) => {
-            Ok(Value::Text(o.keys().cloned().collect::<Vec<_>>().join(",")))
-        }
+        serde_json::Value::Object(_) => Err(RecordsError(
+            "nested objects are flattened by `record_from_object`".into(),
+        )),
         serde_json::Value::Array(items) => {
             let rows = items
                 .iter()

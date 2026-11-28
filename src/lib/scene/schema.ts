@@ -239,10 +239,10 @@ export function fontFamilies(elements: Element[]): string[] {
 /** The data bindings `{{name}}` in a string, in order of first use. */
 export function bindingNames(s: string): string[] {
   const names: string[] = [];
-  const re = /\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g;
+  const re = /\{\{([#/]?)\s*([A-Za-z_][\w.]*)(?:\s+[^}]*)?\}\}/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(s)) !== null) {
-    if (!names.includes(m[1])) names.push(m[1]);
+    if (m[2] && !names.includes(m[2])) names.push(m[2]);
   }
   return names;
 }
