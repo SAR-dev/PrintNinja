@@ -27,10 +27,14 @@ import {
   NESTED_ELEMENT_TYPES,
   type Path,
 } from "@/lib/scene/editor-model";
+import { useUploadedSceneFonts } from "@/lib/scene/fonts";
 import type { Align, BarcodeKind, Element } from "@/lib/scene/schema";
 import { AddElement } from "./ElementList";
 import { NumField, PlacementSelect, SwitchRow } from "./Fields";
 import type { useSceneTemplate } from "./useSceneTemplate";
+
+/** The select's value for "no font chosen" (an empty value is not allowed). */
+const DEFAULT_FONT_VALUE = "__default__";
 
 export function SelectedElementPanel({
   scene,
@@ -44,6 +48,7 @@ export function SelectedElementPanel({
   selectedPath: Path;
 }) {
   const t = useTranslation().t;
+  const uploadedFonts = useUploadedSceneFonts();
   return (
     <Card>
       <CardHeader className="max-md:pt-5">
@@ -172,6 +177,52 @@ export function SelectedElementPanel({
                   )
                 }
               />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>{t("scene.font")}</Label>
+              <Select
+                value={selected.style.font?.trim() || DEFAULT_FONT_VALUE}
+                onValueChange={(v) =>
+                  scene.updateSelected((el) => {
+                    if (el.type !== "text") return el;
+                    const { font: _drop, ...rest } = el.style;
+                    return {
+                      ...el,
+                      style:
+                        v === DEFAULT_FONT_VALUE ? rest : { ...rest, font: v },
+                    };
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={DEFAULT_FONT_VALUE}>
+                    {t("scene.font_default")}
+                  </SelectItem>
+                  {uploadedFonts.map((row) => (
+                    <SelectItem key={row.server_id} value={row.family.trim()}>
+                      {row.family.trim()}
+                    </SelectItem>
+                  ))}
+                  {selected.style.font?.trim() &&
+                    !uploadedFonts.some(
+                      (row) =>
+                        row.family.trim().toLowerCase() ===
+                        selected.style.font?.trim().toLowerCase(),
+                    ) && (
+                      <SelectItem value={selected.style.font.trim()}>
+                        {t("scene.font_missing", {
+                          name: selected.style.font.trim(),
+                        })}
+                      </SelectItem>
+                    )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {t("scene.font_note")}
+              </p>
             </div>
             <div className="flex items-end gap-3">
               <div className="flex flex-1 flex-col gap-1">

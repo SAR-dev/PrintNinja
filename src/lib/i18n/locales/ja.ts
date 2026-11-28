@@ -1858,6 +1858,11 @@ const ja: Translation = {
     path_pdf: "システムプリンタの PDF",
     path_browser: "ブラウザで描画したページ",
     filled: "塗りつぶし",
+    font: "フォント",
+    font_default: "既定 (Noto Sans)",
+    font_missing: "{{name}}（この端末にはアップロードされていません）",
+    font_note:
+      "カスタムフォントを使うラベルは画像として印刷されます。TrueType / OpenType フォントは 設定 → 一般 でアップロードできます。",
     gap_mm: "間隔 (mm)",
     group_row_per: "{{name}} ごとに 1 行",
     height_mm: "高さ (mm)",

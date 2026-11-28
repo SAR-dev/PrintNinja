@@ -1818,6 +1818,11 @@ const en = {
     path_pdf: "a PDF on the system printer",
     path_browser: "a browser-rendered page",
     filled: "Filled",
+    font: "Font",
+    font_default: "Default (Noto Sans)",
+    font_missing: "{{name}} (not uploaded on this device)",
+    font_note:
+      "A label that uses a custom font prints as an image. Upload TrueType or OpenType fonts in Settings → General.",
     gap_mm: "Gap (mm)",
     group_row_per: "one row per {{name}}",
     height_mm: "Height (mm)",

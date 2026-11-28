@@ -156,11 +156,12 @@ pub async fn label_preview(
         ))
     })?;
     let (profile, choice) = resolve_profile_for_printer(&stored).map_err(AppError::Validation)?;
-    let template = Template::from_json(&req.scene)
+    let mut template = Template::from_json(&req.scene)
         .map_err(|e| AppError::Validation(format!("the scene is not valid: {e}")))?;
     template
         .validate()
         .map_err(|e| AppError::Validation(format!("the scene is not valid: {e}")))?;
+    attach_uploaded_fonts(&db, &mut template);
     let records =
         Records::from_json(&req.records).map_err(|e| AppError::Validation(e.to_string()))?;
     let copies = req.copies.unwrap_or(1).max(1);
@@ -203,6 +204,33 @@ pub struct LabelJobRequest {
     /// Inline records (a deep link's `data`), as JSON.
     #[serde(default)]
     pub data: Option<serde_json::Value>,
+}
+
+/// Give a scene template the uploaded fonts its text names. The bytes
+/// ride in the in-memory template only (never saved back), so the
+/// renderer draws the same dots on every device and the stored scene
+/// stays small. A family the template embeds itself, or one that is not
+/// uploaded as TrueType/OpenType here, is left alone: that text draws in
+/// the default font.
+fn attach_uploaded_fonts(db: &DbState, template: &mut Template) {
+    let wanted: Vec<String> = template
+        .font_families()
+        .into_iter()
+        .filter(|f| {
+            !template
+                .fonts
+                .iter()
+                .any(|t| t.family.eq_ignore_ascii_case(f))
+        })
+        .collect();
+    if wanted.is_empty() {
+        return;
+    }
+    let Ok(guard) = db.lock() else {
+        return;
+    };
+    let fonts = crate::commands::font::scene_fonts_for(guard.connection(), &wanted);
+    template.fonts.extend(fonts);
 }
 
 /// What a scene job resolves to before anything is prepared.
@@ -273,8 +301,9 @@ fn resolve_scene_job(
             "Printer '{printer}' is not saved; add it in Settings"
         ))
     })?;
-    let template = Template::from_json(&scene)
+    let mut template = Template::from_json(&scene)
         .map_err(|e| AppError::Validation(format!("the template's scene is not valid: {e}")))?;
+    attach_uploaded_fonts(db, &mut template);
     let records =
         Records::from_json(records_json).map_err(|e| AppError::Validation(e.to_string()))?;
     let (profile, choice) = resolve_profile_for_printer(&stored).map_err(AppError::Validation)?;

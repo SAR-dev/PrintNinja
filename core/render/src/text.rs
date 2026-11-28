@@ -69,7 +69,7 @@ impl Renderer {
             return;
         }
 
-        let set = FontSet::embedded();
+        let set = FontSet::with_custom(&self.custom_fonts);
         let primary = set.primary(style.font.as_deref());
         let fallbacks: Vec<&Font> = set
             .chain(style.font.as_deref())
@@ -411,6 +411,121 @@ mod tests {
         let (i_top, i_bot) = extremes(&ital);
         assert!(i_top > i_bot); // slanted stem: top right of foot
         assert!(i_bot >= u_bot - 1); // the foot stays where it was
+    }
+
+    /// The Noto Sans JP file the renderer embeds, loaded as if a template
+    /// had brought it under another name — a font whose Latin outlines
+    /// differ from the default's, with no extra font file in the repo.
+    fn brand_font() -> crate::CustomFont {
+        let bytes = include_bytes!("../assets/fonts/NotoSansJP.ttf");
+        crate::CustomFont::load("Brand Sans", bytes).expect("a real font loads")
+    }
+
+    fn draw_with(font: Option<&str>, fonts: Vec<crate::CustomFont>) -> Renderer {
+        let mut st = style(4.0, Align::Left);
+        st.font = font.map(str::to_string);
+        let mut r = Renderer::new(203, 300, 60).with_custom_fonts(fonts);
+        r.draw_text(2.0, 2.0, 30.0, 6.0, "Hamburg 123", &st);
+        r
+    }
+
+    fn dots(r: &Renderer) -> Vec<bool> {
+        let p = r.page();
+        (0..p.height())
+            .flat_map(|y| (0..p.width()).map(move |x| p.get(x, y)))
+            .collect()
+    }
+
+    /// A text element naming a custom family draws with that font — the
+    /// same dots as the font under its own name, and not the default's.
+    #[test]
+    fn a_custom_font_is_drawn_when_its_family_is_named() {
+        let custom = draw_with(Some("Brand Sans"), vec![brand_font()]);
+        let default = draw_with(None, vec![brand_font()]);
+        let jp = draw_with(Some("noto-sans-jp"), vec![]);
+        assert!(black_dots(custom.page()) > 0);
+        assert_eq!(dots(&custom), dots(&jp), "same outlines as the font itself");
+        assert_ne!(dots(&custom), dots(&default), "not the default font");
+    }
+
+    /// Family names match without regard to case or stray spaces.
+    #[test]
+    fn a_custom_family_matches_case_insensitively() {
+        let a = draw_with(Some("brand sans"), vec![brand_font()]);
+        let b = draw_with(Some("  BRAND SANS "), vec![brand_font()]);
+        assert_eq!(dots(&a), dots(&b));
+    }
+
+    /// A family nobody loaded falls back to the default instead of
+    /// failing the print — also when the custom font is absent.
+    #[test]
+    fn an_unloaded_family_falls_back_to_the_default() {
+        let missing = draw_with(Some("Brand Sans"), vec![]);
+        let default = draw_with(None, vec![]);
+        assert_eq!(dots(&missing), dots(&default));
+    }
+
+    /// Custom fonts do not change text that does not name them.
+    #[test]
+    fn loading_a_custom_font_leaves_other_text_unchanged() {
+        let with = draw_with(None, vec![brand_font()]);
+        let without = draw_with(None, vec![]);
+        assert_eq!(dots(&with), dots(&without));
+    }
+
+    /// Bytes that are not a TrueType/OpenType font are refused with the
+    /// family named — web formats included.
+    #[test]
+    fn unreadable_font_bytes_are_refused() {
+        use crate::{CustomFont, FontError};
+        assert_eq!(
+            CustomFont::load("Junk", b"not a font at all").unwrap_err(),
+            FontError::Unreadable("Junk".into())
+        );
+        assert_eq!(
+            CustomFont::load("Web", b"wOFF\0\x01\0\0 woff is a web format").unwrap_err(),
+            FontError::Unreadable("Web".into())
+        );
+        assert_eq!(
+            CustomFont::load("  ", b"x").unwrap_err(),
+            FontError::NoFamily
+        );
+    }
+
+    /// A template's embedded fonts (base64) load; a bad one fails by
+    /// name.
+    #[test]
+    fn a_templates_embedded_fonts_load_from_base64() {
+        use crate::{CustomFont, FontError};
+        use base64::Engine as _;
+        let bytes = include_bytes!("../assets/fonts/NotoSansJP.ttf");
+        let font = |family: &str, data: String| pn_scene::TemplateFont {
+            family: family.into(),
+            format: "truetype".into(),
+            data,
+        };
+        let good = font(
+            "Brand Sans",
+            base64::engine::general_purpose::STANDARD.encode(bytes),
+        );
+        let loaded = CustomFont::from_template(std::slice::from_ref(&good)).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].family(), "Brand Sans");
+
+        let bad_b64 = font("Oops", "***".into());
+        assert_eq!(
+            CustomFont::from_template(&[good.clone(), bad_b64]).unwrap_err(),
+            FontError::BadBase64("Oops".into())
+        );
+        let not_a_font = font(
+            "Junk",
+            base64::engine::general_purpose::STANDARD.encode(b"junk"),
+        );
+        assert_eq!(
+            CustomFont::from_template(&[not_a_font]).unwrap_err(),
+            FontError::Unreadable("Junk".into())
+        );
+        assert!(CustomFont::from_template(&[]).unwrap().is_empty());
     }
 
     /// Left, center and right align the line at the box's left edge,

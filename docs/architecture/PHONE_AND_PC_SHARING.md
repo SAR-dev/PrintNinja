@@ -168,7 +168,8 @@ and the whole probe a few seconds, because on a home network a live PC answers
 in milliseconds. A render gets 30 seconds, well inside the PC's own limit.
 Fonts uploaded to the app are embedded in the document that is sent, within a
 size budget, so the PC renders what the template means rather than what its
-own fonts happen to look like.
+own fonts happen to look like. The same embedding now happens for this device's
+own prints (see "Custom fonts" in RENDERING_AND_LAYOUT.md).
 
 ## When the PC cannot help
 

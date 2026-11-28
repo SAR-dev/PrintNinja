@@ -108,6 +108,33 @@ as before. The UI holds a skeleton until each record's page count is
 measured rather than flashing a premature single page; re-edits keep the
 stale count (no flash while typing) until the new measurement lands.
 
+## Custom fonts
+
+Fonts uploaded in Settings → General reach both tracks the same way: as bytes
+that travel with the job, never as something installed on the machine.
+
+- **Document track.** The backend adds an `@font-face` rule with a base64
+  `data:` URI for every uploaded family the template names. The rule goes into
+  the page stylesheet, not the outer print document: each design page is its
+  own `srcdoc` iframe (`render/layout.rs`), and a font declared outside the
+  frame never reaches its text. Local print, a paired PC, the raster path and
+  the Designer/Print previews all see the same document. Because every page
+  carries its own copy, a job whose copies would add more than 8 MB of font
+  data falls back to the default font and says so in the print warnings
+  (`FONT_EMBED_BUDGET_BYTES`, under the shared renderer's 10 MB cap).
+- **Scene (label) track.** The raster renderer (`core/render`) still ships only
+  Noto Sans and Noto Sans JP, and picks nothing from the system. A template
+  can carry extra fonts in `Template.fonts` (TrueType/OpenType, base64);
+  `Renderer::with_custom_fonts` loads them and `style.font` selects one by
+  family name, case-insensitively. They sit after the Noto fonts in the
+  per-character fallback chain, so a character the custom font lacks still
+  draws. The label commands fill `fonts` in memory from the uploads for the
+  families a text element names (`attach_uploaded_fonts`); the saved scene
+  stays small. WOFF/WOFF2 uploads are web-only and are skipped, so text that
+  names one draws in the default font. A scene whose text names a font cannot
+  use the printer's built-in fonts, so the planner sends the whole job down the
+  raster path and records why.
+
 ## One logic, two implementations
 
 Placement is the one piece of logic that exists twice — once in the browser

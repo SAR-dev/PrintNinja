@@ -3537,12 +3537,14 @@ version = "2026.1124.0"
 dependencies = [
  "ab_glyph",
  "barcoders",
+ "base64 0.22.1",
  "flate2",
  "golden-harness",
  "pn-scene",
  "qrcode",
  "rxing",
  "swash",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

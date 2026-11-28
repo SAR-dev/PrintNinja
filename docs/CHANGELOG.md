@@ -45,6 +45,14 @@ Only use the headings you actually have entries for.
 
 ## Unreleased
 
+### Added
+
+- **Custom fonts on labels.** Pick any font you uploaded in Settings → General for a label's text, and it prints and previews in that font. Use TrueType or OpenType files.
+
+### Fixed
+
+- **Uploaded fonts now show up when you print documents on this PC.** Before, they only appeared when another PC did the printing. Previews show them too.
+
 ## [2026.1127.2] - 2026-11-27
 
 ### Changed

@@ -276,6 +276,19 @@ pub enum Element {
 }
 
 impl Element {
+    /// Every font family a text element in this tree names, in
+    /// document order (duplicates included).
+    pub fn font_families(&self) -> Vec<&str> {
+        match self {
+            Element::Text { style, .. } => style.font.as_deref().into_iter().collect(),
+            Element::Group { items, .. } => items.iter().flat_map(Element::font_families).collect(),
+            Element::Frame { children, .. } => {
+                children.iter().flat_map(Element::font_families).collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
     /// The data bindings `{{name}}` this element's text carries.
     pub fn bindings(&self) -> Vec<String> {
         match self {
@@ -383,29 +396,45 @@ pub struct Template {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fields: Vec<Field>,
     pub elements: Vec<Element>,
-    /// The document's embedded fonts (document track only; see
-    /// [`TemplateFont`]). Ignored by the scene track.
+    /// The template's embedded fonts (see [`TemplateFont`]). On the
+    /// document track they are `@font-face` sources for the browser; on
+    /// the scene track the renderer draws text with the ones named by an
+    /// element's `style.font`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fonts: Vec<TemplateFont>,
 }
 
-/// An embedded font for the document track (the previous app's
-/// "upload a font" feature): the UI turns each entry into an
-/// `@font-face` data URI before the HTML reaches the browser, so the
-/// rendered document carries its own font and nothing is installed on
-/// the machine.
+/// An embedded font (the previous app's "upload a font" feature).
+/// Document track: the UI turns each entry into an `@font-face` data URI
+/// before the HTML reaches the browser. Scene track: the renderer loads
+/// the bytes itself and draws text whose `style.font` names `family`
+/// (case-insensitive) with them. Either way the rendered output carries
+/// its own font and nothing is installed on the machine.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct TemplateFont {
     /// The `font-family` the template's CSS references.
     pub family: String,
     /// The `@font-face` format: `truetype`, `opentype`, `woff` or
-    /// `woff2`.
+    /// `woff2`. The scene track reads only `truetype` and `opentype`.
     pub format: String,
     /// The font file's bytes, base64.
     pub data: String,
 }
 
 impl Template {
+    /// The distinct font families the template's text elements name,
+    /// first-seen order, trimmed.
+    pub fn font_families(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for family in self.elements.iter().flat_map(Element::font_families) {
+            let family = family.trim();
+            if !family.is_empty() && !out.iter().any(|f| f.eq_ignore_ascii_case(family)) {
+                out.push(family.to_string());
+            }
+        }
+        out
+    }
+
     /// Structural checks that catch a bad template before a job is
     /// queued. Geometry checks use the media's page/label/cut size.
     pub fn validate(&self) -> Result<(), TemplateError> {
@@ -1655,5 +1684,34 @@ mod tests {
         // binding — the same text `binding_names` sees.
         let tricky = "{{ a }} {{x1}} {{{{title}}}}";
         assert_eq!(substitute(tricky, record), "{{ a }}  {{INVOICE 1042}}");
+    }
+
+    /// The families text elements name come back once each (case
+    /// ignored), through frames and groups, in first-seen order.
+    #[test]
+    fn a_templates_font_families_are_listed_once_through_nesting() {
+        let json = r#"{
+            "media": {"kind": "label", "width_mm": 50.0, "height_mm": 30.0},
+            "elements": [
+                {"type": "text", "at": {"x_mm": 0, "y_mm": 0}, "size": {"w_mm": 20, "h_mm": 5},
+                 "content": "a", "style": {"size_mm": 3, "font": "Brand Sans"}},
+                {"type": "text", "at": {"x_mm": 0, "y_mm": 6}, "size": {"w_mm": 20, "h_mm": 5},
+                 "content": "b", "style": {"size_mm": 3}},
+                {"type": "frame", "at": {"x_mm": 0, "y_mm": 12}, "size": {"w_mm": 40, "h_mm": 10},
+                 "border_mm": 0.0, "children": [
+                    {"type": "text", "at": {"x_mm": 0, "y_mm": 0}, "size": {"w_mm": 20, "h_mm": 5},
+                     "content": "c", "style": {"size_mm": 3, "font": " brand sans "}},
+                    {"type": "text", "at": {"x_mm": 0, "y_mm": 5}, "size": {"w_mm": 20, "h_mm": 5},
+                     "content": "d", "style": {"size_mm": 3, "font": "Display"}}
+                 ]},
+                {"type": "group", "at": {"x_mm": 0, "y_mm": 24}, "w_mm": 20.0,
+                 "item_gap_mm": 1.0, "bind": "rows", "items": [
+                    {"type": "text", "at": {"x_mm": 0, "y_mm": 0}, "size": {"w_mm": 20, "h_mm": 5},
+                     "content": "e", "style": {"size_mm": 3, "font": "Rows Font"}}
+                 ]}
+            ]
+        }"#;
+        let t = Template::from_json(json).unwrap();
+        assert_eq!(t.font_families(), ["Brand Sans", "Display", "Rows Font"]);
     }
 }

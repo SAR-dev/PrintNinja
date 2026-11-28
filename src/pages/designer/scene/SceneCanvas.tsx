@@ -24,7 +24,13 @@ import {
   type Selection,
 } from "@/lib/scene/editor-model";
 import {
+  cssFontFamily,
+  ensureFontFace,
+  useUploadedSceneFonts,
+} from "@/lib/scene/fonts";
+import {
   bindingNames,
+  fontFamilies,
   substituteBindings,
   type Element,
   type Template,
@@ -378,6 +384,11 @@ function glyph(el: Element, { scale, record, showSample, dpi }: GlyphArgs) {
           y={(el.at.y_mm + el.style.size_mm) * scale}
           textAnchor={anchor}
           fontSize={el.style.size_mm * scale}
+          fontFamily={
+            el.style.font?.trim()
+              ? cssFontFamily(el.style.font.trim())
+              : undefined
+          }
           fontWeight={el.style.bold ? 700 : 400}
           fontStyle={el.style.italic ? "italic" : undefined}
           fill={INK}
@@ -716,6 +727,19 @@ export function SceneCanvas({
   const height = hMm * scale;
   const drag = useRef<Drag | null>(null);
   const resize = useRef<Resize | null>(null);
+
+  // Fonts the template names: register the uploaded ones with the browser
+  // so the SVG text matches the backend's rendering.
+  const uploadedFonts = useUploadedSceneFonts();
+  useEffect(() => {
+    const used = fontFamilies(template.elements).map((f) => f.toLowerCase());
+    if (used.length === 0) return;
+    for (const row of uploadedFonts) {
+      if (used.includes(row.family.trim().toLowerCase())) {
+        void ensureFontFace(row);
+      }
+    }
+  }, [template.elements, uploadedFonts]);
 
   const beginDrag = (path: Path, e: ReactPointerEvent) => {
     if (!onSelect || !onMove || !onDragStart) return;

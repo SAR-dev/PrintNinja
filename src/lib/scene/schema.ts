@@ -161,10 +161,11 @@ export interface Field {
 export type FontFormat = "truetype" | "opentype" | "woff" | "woff2";
 
 /**
- * An embedded font for the document track (the previous app's "upload a
- * font"): the UI turns each entry into an `@font-face` data URI before the
- * HTML reaches the browser, so the rendered document carries its own font
- * and nothing is installed on the machine.
+ * An embedded font (the previous app's "upload a font"). Document track:
+ * the UI turns each entry into an `@font-face` data URI before the HTML
+ * reaches the browser. Scene track: the renderer reads TrueType/OpenType
+ * bytes and draws text whose `style.font` names `family`. Either way the
+ * output carries its own font and nothing is installed on the machine.
  */
 export interface TemplateFont {
   /** The `font-family` the template's CSS references. */
@@ -184,7 +185,7 @@ export interface Template {
   /** Declared data fields (optional). */
   fields?: Field[];
   elements: Element[];
-  /** The document's embedded fonts (document track only). */
+  /** Embedded fonts: `@font-face` sources (document) or text fonts (scene). */
   fonts?: TemplateFont[];
   /** Sample records saved with a label template for test prints. */
   sample_data?: unknown;
@@ -205,6 +206,27 @@ export function substituteBindings(
     (match, name: string) =>
       name in record ? String(record[name] ?? "") : match,
   );
+}
+
+/** The font families the text elements name, first-seen order, trimmed. */
+export function fontFamilies(elements: Element[]): string[] {
+  const out: string[] = [];
+  const walk = (els: Element[]) => {
+    for (const el of els) {
+      if (el.type === "text") {
+        const family = el.style.font?.trim();
+        if (
+          family &&
+          !out.some((f) => f.toLowerCase() === family.toLowerCase())
+        ) {
+          out.push(family);
+        }
+      } else if (el.type === "group") walk(el.items);
+      else if (el.type === "frame") walk(el.children);
+    }
+  };
+  walk(elements);
+  return out;
 }
 
 /** The data bindings `{{name}}` in a string, in order of first use. */

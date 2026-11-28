@@ -6,11 +6,13 @@ rust-version.workspace = true
 
 [dependencies]
 ab_glyph = { workspace = true }
+base64 = "0.22"
 barcoders = { workspace = true }
 flate2 = { workspace = true }
 pn-scene = { path = "../scene" }
 qrcode = { workspace = true }
 swash = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 golden-harness = { path = "../../tests/golden" }
